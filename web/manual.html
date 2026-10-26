@@ -134,7 +134,7 @@
       <tr><td>Space, Enter</td><td>PLAY, REC (held: FILL).</td></tr>
       <tr><td>- =</td><td>OCT− and OCT+; in GRID, the page; a held step's ratchet.</td></tr>
       <tr><td>; '</td><td>SELECT: the track; a held step's note.</td></tr>
-      <tr><td>, .</td><td>ALGORITHM: the machine; a held step's accent and slide.</td></tr>
+      <tr><td>, .</td><td>ALGORITHM: on EDIT, the machine; on the other pages, their pages; a held step's accent and slide.</td></tr>
       <tr><td>[ ]</td><td>PRESETS: the pattern; a held step's condition.</td></tr>
       <tr><td>/</td><td>A held step's trig type (MASTER on the FM-1).</td></tr>
       <tr><td>Tab, ↑ ↓</td><td>Picks KNOB 1–4, and turns it; Shift turns it faster.</td></tr>
@@ -407,7 +407,7 @@
     <thead><tr><th>Knob</th><th>Turned</th><th>A step held in GRID</th></tr></thead>
     <tbody>
       <tr><td>SELECT</td><td>The track, 1–6.</td><td>The step's note.</td></tr>
-      <tr><td>ALGORITHM</td><td>The track's machine.</td><td>Accent and slide.</td></tr>
+      <tr><td>ALGORITHM</td><td>On EDIT (SYN), the track's machine; on the other pages, their pages (LFO 1A to 3B, FX, GLO's TIME to MIDI).</td><td>Accent and slide.</td></tr>
       <tr><td>PRESETS</td><td>The pattern (queued to the end of the bar while playing).</td><td>The step's condition.</td></tr>
       <tr><td>KNOB 1–4</td><td>The four parameters on the page in view.</td><td>A lock on the step.</td></tr>
       <tr><td>MASTER</td><td>The volume.</td><td>The step's trig type.</td></tr>
@@ -464,7 +464,8 @@
   <h1>Tracks and machines</h1>
   <p class="sub">Six tracks, each one mono machine with its own sound, chain and steps.</p>
   <h2>Choosing a track and its machine</h2>
-  <p>SELECT picks the track; in GRID, the upper keys T1–T6 do. ALGORITHM changes the track's machine: its card comes up, and its eight knobs start from the machine's own settings while the rest of the track (the chain, the LFOs, the steps) stays as it was. The machines come in the Monomachine's order, its three FM+ machines together.</p>
+  <p>SELECT picks the track; in GRID, the upper keys T1–T6 do. On EDIT, ALGORITHM changes the track's machine: its card comes up, and its eight knobs start from the machine's own settings while the rest of the track (the chain, the LFOs, the steps) stays as it was. The machines come in the Monomachine's order, its three FM+ machines together.</p>
+  <p>On every other page, ALGORITHM turns through the page's own pages instead of tapping its button: LFO 1A to 3B, FX's four, AMP's and FILT's two, GLO's TIME, GLITCH, VERB, SET and MIDI. It stops at the first and the last.</p>
   <h2>Level, pitch and mute</h2>
   <p>On HOME, KNOB 1 and 2 are the track's level and pitch. In GRID the MUTE key mutes the track in view; GLO held with one of the six lower keys mutes that track from anywhere.</p>
   <h2>FX machines</h2>

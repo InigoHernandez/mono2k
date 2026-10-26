@@ -2153,6 +2153,24 @@ static int selftest(void)
             CHECK(entry && waits && still && started && rec0 && now && off && midi && ext,
                   "REC + PLAY stopped: Ready, the first note starts it on step 1, recorded; PLAY again now; REC off; MIDI; SYIN plays");
         }
+        /* ALGORITHM: only on EDIT (SYN) the track's machine; on the other pages their pages, to the ends (LFO 1A..3B);
+         * on a page of one (HOME), nothing */
+        {
+            m2k_init(41);
+            int m0 = PAT(cur_pat)->machine[ui.trk];
+            ui.page = PG_LFO; ui.sub = 0;
+            for (int i = 0; i < 8; i++) m2k_encoder(E_ALGO, 1);
+            int lfo_end = ui.sub == 5 && PAT(cur_pat)->machine[ui.trk] == m0;
+            for (int i = 0; i < 2; i++) m2k_encoder(E_ALGO, -1);
+            int lfo_back = ui.sub == 3;
+            ui.page = PG_HOME; ui.sub = 0;
+            m2k_encoder(E_ALGO, 1);
+            int home = ui.page == PG_HOME && ui.sub == 0 && PAT(cur_pat)->machine[ui.trk] == m0;
+            ui.page = PG_SYN; ui.sub = 0;
+            m2k_encoder(E_ALGO, 1);
+            int syn = PAT(cur_pat)->machine[ui.trk] != m0;
+            CHECK(lfo_end && lfo_back && home && syn, "ALGORITHM: the page's pages (LFO 1A..3B, to its ends), nothing on HOME, the machine on EDIT");
+        }
         /* GLO > SET: WIPE asks, OCT+ makes every pattern INIT (the sounds kept), OCT- or any other button keeps them;
          * DEMO asks, OCT+ brings bank A's back */
         m2k_init(38);

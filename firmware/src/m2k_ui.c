@@ -1928,6 +1928,12 @@ void m2k_encoder(int e, int d)
             ui.held_edit = 1;
             break;
         }
+        if (ui.page != PG_SYN) {                       /* ALGORITHM turns the page's pages (LFO 1A..3B, FX, GLO...), */
+            int n = nsub(ui.page);                     /* to its ends; only EDIT's (SYN) changes the machine (the owner's) */
+            int s = CLAMP(ui.sub + (d > 0 ? 1 : -1), 0, n - 1);
+            if (s != ui.sub) { ui.sub = (uint8_t)s; ui.focus_t = 0; start_trans(150); }
+            break;
+        }
         set_machine(M_ORDER[(m_place(p->machine[ui.trk]) + M_COUNT + (d > 0 ? 1 : -1)) % M_COUNT]);
         break;
     case E_PRESET: {
