@@ -2182,8 +2182,8 @@ static int32_t lp2_db(int32_t d, uint32_t k_q24)
     if (d < -510) return 0;
     if (d > 510) return -d * 30;                     /* -12 dB an octave */
     uint32_t u2 = iexp2_q16((d * 1286) >> 8);
-    int64_t a = 65536 - (int64_t)u2, k16 = k_q24 >> 8;
-    uint64_t den = (uint64_t)(a * a) + (uint64_t)((((k16 * k16) >> 16) * (int64_t)u2));
+    int32_t a = 65536 - (int32_t)u2, k16 = (int32_t)(k_q24 >> 8);   /* u2 under 2^27 (d within 510), k16 2^17 */
+    uint64_t den = (uint64_t)mul_sh(a, a, 0) + (uint64_t)mul_sh((int32_t)mul_sh(k16, k16, 16), (int32_t)u2, 0);
     return db_of(den);
 }
 
@@ -2289,7 +2289,7 @@ static void picture(void)
         if (ui.sub == 1) {
             /* distortion as a transfer curve, the volume as its height and a bar, the pan on a line, the glide
              * as a ramp between two notes; the part being turned is drawn heavy and its tag inverted */
-            int64_t dh = T_DIST_H[k[P_DIST]];
+            int32_t dh = (int32_t)T_DIST_H[k[P_DIST]];
             int32_t dc = T_DIST_C[k[P_DIST]], vol = T_VOL[k[P_VOL]];
             int bx = X + 2, by = Y + 2, bs = 58, mid = by + bs / 2;
             frame(bx, by, bs, bs, 1);
@@ -2297,7 +2297,8 @@ static void picture(void)
             int prev = mid;
             for (int i = 0; i < bs - 2; i++) {
                 int32_t in = (i - (bs - 2) / 2) * 65535 / (bs - 2);
-                int32_t c = (int32_t)CLAMP((in * dh) >> 24, -dc, dc);                  /* the headroom and the clip */
+                int64_t p = mul_sh(in, dh, 24);
+                int32_t c = (int32_t)CLAMP(p, -dc, dc);                                /* the headroom and the clip */
                 int32_t o = ((c * 128) / (T_DIST_C[64] >> 8)) * (vol >> 3) >> 12;   /* Q15, 32-bit division only */
                 int y = mid - (int)((o * (bs / 2 - 2)) >> 15);
                 if (i) { line(bx + i, prev, bx + 1 + i, y, 1); if (fk == 0) line(bx + i, prev + 1, bx + 1 + i, y + 1, 1); }

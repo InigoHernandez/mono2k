@@ -117,12 +117,13 @@ static void delay_block(int ti, const int32_t *restrict in, int32_t *restrict L,
         int32_t l, r;
         if (dual) {                    /* sum and difference: the echo crosses sides on every pass */
             /* the echo comes off its filters past 16 bits and DFB runs to 1.75: its product takes 64 bits */
-            t->dacc[0] += ((x * (gl + gr)) >> 15) + (int32_t)(((int64_t)e[0] * fb) >> 15);
-            t->dacc[1] += ((x * (gl - gr)) >> 15) - (int32_t)(((int64_t)e[1] * fb) >> 15);
+            uint64_t ef = mul2_q15(fb, e[0], e[1]);
+            t->dacc[0] += ((x * (gl + gr)) >> 15) + (int32_t)ef;
+            t->dacc[1] += ((x * (gl - gr)) >> 15) - (int32_t)(ef >> 32);
             l = (e[0] - e[1]) >> 1;
             r = (e[0] + e[1]) >> 1;
         } else {
-            t->dacc[0] += x + (int32_t)(((int64_t)e[0] * fb) >> 15);
+            t->dacc[0] += x + (int32_t)mul_sh(e[0], fb, 15);
             l = (e[0] * gl) >> 15;
             r = (e[0] * gr) >> 15;
         }
@@ -352,7 +353,7 @@ static void bus_block(int32_t *L, int32_t *R, const int32_t *rsend, int16_t *out
             /* the pitch a swing of the line makes grows with its rate: the flutter (6.3 Hz, 11x the wow's) takes 1/48
              * of the wow's swing, so it wobbles about a quarter as far in pitch (at TAPE 127: wow ~+-40 c, flutter ~+-10 c) */
             int32_t m = (sinp(bus.wow) * 48 + sinp(bus.flut)) >> 6;           /* +-24600 */
-            int32_t d = (420 << 8) + (int32_t)(((int64_t)m * tq * 3) >> 15);  /* Q8 samples */
+            int32_t d = (420 << 8) + (int32_t)mul_sh(m, tq * 3, 15);         /* Q8 samples */
             uint32_t pos = (bus.tw << 8) - (uint32_t)d;                       /* unsigned: it wraps after 3 minutes */
             uint32_t j = pos >> 8;
             int32_t f = (int32_t)(pos & 255);
@@ -392,8 +393,9 @@ static void bus_block(int32_t *L, int32_t *R, const int32_t *rsend, int16_t *out
             l += h;
             r += h;
         }
-        l = lim_soft((int32_t)(((int64_t)((l * drv) >> 8) * mvol) >> 15));
-        r = lim_soft((int32_t)(((int64_t)((r * drv) >> 8) * mvol) >> 15));
+        uint64_t lr = mul2_q15(mvol, (l * drv) >> 8, (r * drv) >> 8);
+        l = lim_soft((int32_t)lr);
+        r = lim_soft((int32_t)(lr >> 32));
         if (perf.kill != (perf.on[PF_KILL] ? 0 : 32767)) {   /* KILL: down and back over a millisecond, then exact */
             int32_t tgt = perf.on[PF_KILL] ? 0 : 32767;
             perf.kill += (tgt - perf.kill) >> 5;

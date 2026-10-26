@@ -5,8 +5,14 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
 
 ## Hard rules
 
-- Target: JieLi AC791N, no FPU, no libgcc: integer DSP only, **no 64-bit division** (64-bit multiply is fine),
-  no floats in `firmware/src`. Tables come from `tools/gen_tables.py`.
+- Target: JieLi AC791N, no FPU, no libgcc: integer DSP only, **no 64-bit division**, no floats in `firmware/src`.
+  Tables come from `tools/gen_tables.py`.
+- **64-bit multiplies only through m2k_core.c's helpers** (`mul_sh`, `mulu_hi`, `mul64_sh`, `dot`, `mul2_q15`): on the
+  FM-1 a 32 x 32 -> 64-bit multiply inlined beside a load now and then leaves a register a bit off (crashes, garbage:
+  felucca-bsp docs/CPU.md), so there (`M2K_MUL_OUT`) they are out of line and use the product at once, and
+  `tools/fm1/build.py` fails a build with any 64-bit multiply beside a load (`mul64_check`). A product that provably
+  fits 32 bits stays a plain multiply, its range in a comment. (The format conversions at load and `track_place` keep
+  a few inline, clear of loads as the check finds them.)
 - Memory: big buffers are `POOL` (Felucca's .pool section on the device). Keep RAM use in mind: delays 96 KB,
   glitch 64 KB, patterns ~31 KB.
 - Machines are clean-room. Never copy or decompile code from Elektron's OS (the gearmulator ROM is a reference to
@@ -80,7 +86,8 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   a package from a file meanwhile.
 - The FM-1's budget: Felucca's heaviest patch is ~1570 Mac instructions a sample (its tests/cpu_baseline.txt) and
   runs on one core; count MONO2K's the same way, built as the FM-1 builds it (`cc -O2 -fno-builtin -fno-vectorize
-  -fno-slp-vectorize`, `proc_pid_rusage` ri_instructions). The core's byte loops (m_set, m_cpy) are word-wise for it.
+  -fno-slp-vectorize -DM2K_MUL_OUT`, the 64-bit products out of line; `proc_pid_rusage` ri_instructions). The core's
+  byte loops (m_set, m_cpy) are word-wise for it.
   Two cores: the render hands the second tracks [split, 6) of each block through `m2k_par_begin` / `m2k_par_end` (the
   FM-1's glue fills them with CS-1's audio worker; elsewhere they are unset and the core does it all), the split keeping
   every FX machine with the track it hears; the self-test renders bank A with the second core's tracks first and last

@@ -20,7 +20,8 @@ package) and, on a Mac, a container runtime that runs linux/amd64 (colima with R
 `gen/sense_tables.h`.
 
 The build checks what Felucca's and CS-1's check: the entry at the XIP address, no code in RAM calling out of it, no
-reference to the chip's ROM, no float or 64-bit division helper (the FM-1 has no FPU and the build no libgcc), and
+reference to the chip's ROM, no float or 64-bit division helper (the FM-1 has no FPU and the build no libgcc), no
+64-bit multiply beside a load (the CPU's fault, felucca-bsp docs/CPU.md: the core's are out of line, `M2K_MUL_OUT`), and
 the sizes: the image within the app slot (581 KB), `.data + .bss` within 96 KiB, the pool within 336 KiB.
 
 ## How it runs
