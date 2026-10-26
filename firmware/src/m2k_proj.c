@@ -29,7 +29,7 @@ static int cur_proj;
 
 /* -------------------------------------------------------------------------------------- one pattern, packed */
 
-/* a pattern in the layout of a version (14, today's; the self-test writes the older ones, 3..13; 3..7 kits 70 wide) */
+/* a pattern in the layout of a version (16, today's; the self-test writes the older ones, 3..15; 3..7 kits 70 wide) */
 static int pat_pack_v(const m2k_pattern_t *p, uint8_t *o, int ver)
 {
     int n = 0, stride = ver >= 8 ? P_COUNT : P_WBNK;
@@ -39,7 +39,8 @@ static int pat_pack_v(const m2k_pattern_t *p, uint8_t *o, int ver)
                                         * 7: SWAV-ENS's page; 8: the wave bank's choice (kits 71 wide); 9: the bus's
                                         * controls on their new laws; 10: FM+STAT's and FM+DYN's pages; 11: SID's;
                                         * 12: GND-SIN's (TUNE on its eighth knob); 13: HOLD in beats; 14: VO-6's page;
-                                        * 15: the tracks' speeds, after the globals */
+                                        * 15: the tracks' speeds, after the globals; 16: the amp's ATK DEC REL and the
+                                        * LFOs' SPD and DPTH on the owner's laws */
     m_cpy(o + n, p->name, 8); n += 8;
     m_cpy(o + n, p->machine, M2K_TRACKS); n += M2K_TRACKS;
     int gl = ver >= 15 ? G_COUNT : G_COUNT_V14;
@@ -70,7 +71,7 @@ static int pat_pack_v(const m2k_pattern_t *p, uint8_t *o, int ver)
     return n;
 }
 
-static int pat_pack(const m2k_pattern_t *p, uint8_t *o) { return pat_pack_v(p, o, 15); }
+static int pat_pack(const m2k_pattern_t *p, uint8_t *o) { return pat_pack_v(p, o, 16); }
 
 static uint8_t tune_v5(int v)
 {
@@ -99,7 +100,7 @@ static void pat_clamp(m2k_pattern_t *p)
 static int pat_unpack(m2k_pattern_t *p, const uint8_t *o, int len)
 {
     int n = 0;
-    if (len < 2 || o[0] != 'P' || o[1] < 1 || o[1] > 15) return 0;
+    if (len < 2 || o[0] != 'P' || o[1] < 1 || o[1] > 16) return 0;
     int ver = o[1], stride = ver >= 8 ? P_COUNT : ver >= 3 ? P_WBNK : P_MODT;   /* before 3 a kit ended before the MOD
                                                                                * effect, before 8 before the bank */
     const int gl = ver >= 15 ? G_COUNT : G_COUNT_V14;                       /* before 15 no speeds */
@@ -177,6 +178,7 @@ static int pat_unpack(m2k_pattern_t *p, const uint8_t *o, int len)
     if (ver < 12) gsin_v11(p);        /* and GND-SIN's: TUNE on its eighth knob */
     if (ver < 13) hold_v12(p);        /* HOLD went from 14.6 ms a step to 1 / 32 beat */
     if (ver < 14) vox_v13(p);         /* VOX-6 took VO-6's page */
+    if (ver < 16) feel_v15(p);        /* the amp's and the LFOs' laws, the owner's */
     pat_clamp(p);
     return 1;
 }
@@ -377,25 +379,26 @@ static int pat_root(const m2k_pattern_t *p, int t)
 }
 
 /* a sound's category, guessed from its machine, its knobs and the notes it plays (lo > hi: none known), after bank A's
- * parts (docs/bank-a.md names each track's role) */
+ * parts (docs/bank-a.md names each track's role). The times on format 16's laws: DEC 19 55 ms, 30 0.12 s, 59 0.6 s; ATK
+ * 14 a 23 ms rise (format 15's 12, 24, 48 and 40) */
 static int sound_guess(int m, const uint8_t *k, int lo, int hi)
 {
     int none = lo > hi, mid = none ? 60 : (lo + hi) / 2, melodic = !none && hi - lo >= 5;
     switch (m) {
     case M_FXC: case M_FXR: case M_FXD: return CAT_FX;
-    case M_GNOI: return k[P_DEC] < 48 ? CAT_HATS : CAT_SNARE;
+    case M_GNOI: return k[P_DEC] < 59 ? CAT_HATS : CAT_SNARE;
     case M_DKIK: return mid >= 60 ? CAT_PERC : CAT_KICK;      /* a high drum voice: a tom, a perc */
     case M_DSNR: return CAT_SNARE;
     case M_DHAT: case M_DCYM: return CAT_HATS;
     case M_GPRC:                                     /* bright and filtered high: hats; metal and short: perc */
-        return k[P_SYN + 2] < 40 && k[P_BASE] >= 32 ? CAT_HATS : k[P_SYN + 2] >= 40 && k[P_DEC] <= 12 ? CAT_PERC : CAT_SNARE;
+        return k[P_SYN + 2] < 40 && k[P_BASE] >= 32 ? CAT_HATS : k[P_SYN + 2] >= 40 && k[P_DEC] <= 19 ? CAT_PERC : CAT_SNARE;
     case M_GSIN:                                     /* held or a line: a bass (or perc up high); one note: a kick */
         if (none) return CAT_PERC;
         if (k[P_DEC] == 127 || melodic) return mid < 48 ? CAT_BASS : CAT_PERC;
         return k[P_SYN + 3] < 40 && mid >= 55 ? CAT_SNARE : CAT_KICK;
     case M_ENS: return CAT_PAD;
     default:                                         /* short hits: perc; low: bass; a slow attack: a pad */
-        return k[P_DEC] <= 24 ? CAT_PERC : mid < 48 ? CAT_BASS : k[P_ATK] >= 40 ? CAT_PAD : CAT_LEAD;
+        return k[P_DEC] <= 30 ? CAT_PERC : mid < 48 ? CAT_BASS : k[P_ATK] >= 14 ? CAT_PAD : CAT_LEAD;
     }
 }
 
@@ -665,8 +668,9 @@ uint8_t *m2k_store_buf(int *max)
  * TENFOUR and A16 FOUNDRY, after Radiohead and Boards of Canada; 6: A06 CAROM, A07 VESPER, A12 CUTUP, A13 GRISTLE;
  * 7: A09 MAMMOTH (direction v5) for PYLONS; 8: the bank reordered by energy, MAMMOTH first; 9: CUTUP to A02,
  * RIVETS to A11; 10: a new bank, LO-BIT CLUB, whole; 11: four parts from the owner's sound sheets (CIRCUIT, TIDE,
- * SUSPEND, LANTERN), the rest of the bank blank (docs/bank-a.md) */
-#define FACTORY_REV 11
+ * SUSPEND, LANTERN), the rest of the bank blank (docs/bank-a.md); 12: the four on pattern format 16's amp and LFO laws,
+ * as they sounded */
+#define FACTORY_REV 12
 static const char *const OLD_DEMO[FACTORY_REV][16] = {
     {"LATEX", "PVC", "SPU RM", "ELECTRO", "GLITCH", "CHROME", "ACID", "2STEP", "GROOVE", "HYPRPOP", "DUB", "CHIP",
      "HARDGRV", "IDM", "DUBSTEP", "INIT"},
@@ -690,6 +694,8 @@ static const char *const OLD_DEMO[FACTORY_REV][16] = {
      "RIBBON", "MOTEL", "FOUNDRY", "SPLICE"},
     {"LUMEN", "PULSAR", "LATTICE", "SPUDUB", "PROCESS", "SQUELCH", "GROWL", "BREAKS", "SPRITES", "OPLL", "JUKE", "CHIPJNG",
      "VIOLET", "DUSKLIT", "FLUTE", "EMBERS"},
+    {"CIRCUIT", "TIDE", "SUSPEND", "LANTERN", "INIT", "INIT", "INIT", "INIT", "INIT", "INIT", "INIT", "INIT", "INIT", "INIT",
+     "INIT", "INIT"},
 };
 
 static int name_is(const char *a, const char *b)
@@ -708,6 +714,9 @@ static const struct { uint8_t rev; uint16_t len[16]; uint32_t fnv[16]; } OLD_PAC
       0xc3f1ae57u, 0x68a1d2c2u, 0xe71862c7u, 0x3e87034cu, 0x37721b15u, 0x91e00738u, 0xb7030f9du, 0xbefb958fu}},
     {11, {1091, 935, 879, 911},
      {0x73cc380fu, 0x0f86d30bu, 0xd0488ca5u, 0x507c3f8cu, 0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u,
+      0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u}},
+    {12, {1091, 935, 879, 911},
+     {0xacff2bd9u, 0x19e58dfau, 0xdce6eb49u, 0xfce8d719u, 0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u,
       0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u}},
 };
 
@@ -740,13 +749,14 @@ static void refresh_demos(m2k_img_t *im, int rev)
     for (int i = 0; i < FACTORY_DEMOS; i++) if (demo_shipped(im, i, rev)) img_put_pat(im, i, PAT(i));
 }
 
-/* the store, version 3: "M2K2" 3, the open project and pattern, the factory's revision, how many patterns a project and
+/* the store, version 4: "M2K2" 4, the open project and pattern, the factory's revision, how many patterns a project and
  * how many projects it holds; the settings; the working patterns; the projects; the sound library ('S', its count,
  * each slot; 'C' and 'R' so for their categories and notes). n and k as this build keeps them, or fewer (the browser
- * writing a store for the FM-1): an open project past k goes first, as the open one */
+ * writing a store for the FM-1): an open project past k goes first, as the open one. (3 is the same, its sounds on
+ * pattern format 15's amp and LFO laws) */
 static int store_pack_nk(int n, int k)
 {
-    uint8_t h[10] = {'M', '2', 'K', '2', 3, (uint8_t)cur_proj, (uint8_t)cur_pat, FACTORY_REV, (uint8_t)n, (uint8_t)k};
+    uint8_t h[10] = {'M', '2', 'K', '2', 4, (uint8_t)cur_proj, (uint8_t)cur_pat, FACTORY_REV, (uint8_t)n, (uint8_t)k};
     if (cur_proj >= k) h[5] = 0;
     if (cur_pat >= n) h[6] = 0;
     st_at = 0;
@@ -781,7 +791,7 @@ int m2k_store_unpack(int len)
     uint8_t o[10], set[S_COUNT];
     uint32_t n = (uint32_t)len;
     st_at = 0;
-    if (!st_get(o, 5, n) || o[0] != 'M' || o[1] != '2' || o[2] != 'K' || o[3] != '2' || o[4] < 1 || o[4] > 3) return 0;
+    if (!st_get(o, 5, n) || o[0] != 'M' || o[1] != '2' || o[2] != 'K' || o[3] != '2' || o[4] < 1 || o[4] > 4) return 0;
     int ver = o[4];
     if (!st_get(o + 5, ver == 1 ? 2 : ver == 2 ? 3 : 5, n)) return 0;
     int rev = ver >= 2 ? o[7] : 0;
@@ -819,6 +829,7 @@ int m2k_store_unpack(int len)
             snd[i].name[7] = 0;
             if (snd[i].machine >= M_COUNT) snd[i].name[0] = 0;
             for (int k = 0; k < P_COUNT; k++) if (snd[i].kit[k] > 127) snd[i].kit[k] = 127;
+            if (ver < 4) feel_kit_v15(snd[i].kit);   /* (3: the sounds on format 15's amp and LFO laws) */
         }
         if (st_get(sh, 2, n) && sh[0] == 'C') {         /* the categories (a store before them: guessed) */
             for (int i = 0; i < sh[1]; i++) { uint8_t c; if (!st_get(&c, 1, n)) break; if (i < M2K_SOUNDS) snd_cat[i] = c < CAT_COUNT ? c : 0; }

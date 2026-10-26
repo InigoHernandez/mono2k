@@ -848,15 +848,21 @@ def cases():
     onset = ("the Monomachine's sine starts each note where its free-running phase is, after a ~0.5 ms burst (up to"
              " +-0.7 of the peak): 14-28 dB more over 2 kHz in a kick's first 4 ms than MONO2K's, which starts at zero."
              " Not modelled (it may be the emulator's): MONO2K's CLIK is its kick's click")
+    # the amp's DEC on MONO2K's own law from pattern format 16 (the owner's choice, gen_tables.py): the same knob decays
+    # faster (40: 0.22 s to -60 dB, the Monomachine's 0.36 s; a pattern converted takes 49 for its 40), so each kick's
+    # level over 300 ms and its body (ms to -20 dB) are the shorter decay's: held at their size, the machine's rest as it was
+    amp = ("the amp's DEC is MONO2K's own law since pattern format 16, by the owner's choice: DEC 20 / 40 / 60 fall to"
+           " -60 dB in 61 / 218 / 650 ms, the Monomachine's 94 / 355 / 1341 ms (a format-15 pattern's DEC converts to the"
+           " value that times as it did: 26 / 49 / 74), so the kick's level over 300 ms and its body are shorter")
     clean, driven = [0.5, 1.0, 6.0, 10.0], [0.5, 1.0, 1.5, 10.0]
     for v in (64, 100, 127):
-        add("kick", "chain_kick40", f"k40_vel_{v:03d}", "kick", {}, clean)
+        add("kick", "chain_kick40", f"k40_vel_{v:03d}", "kick", {}, clean, xfail=amp)
     add("kick", "chain_kick40", "k40_tune_064", "level_at", {"hz": [2 * f0_of(60)]}, 3.0)
-    add("kick", "chain_kick40", "k40_init", "kick", {}, clean)
+    add("kick", "chain_kick40", "k40_init", "kick", {}, clean, xfail=amp)
     for d in (20, 40, 60):
         for x in (64, 100, 127):
             add("kick", "chain_kick40", f"k40_d{d:03d}_x{x:03d}", "kick", {}, clean if x == 64 else driven,
-                xfail=onset if d == 20 else None)
+                xfail=onset + "; and " + amp if d == 20 else amp)
     for c in ("k40_d040_x064", "k40_d040_x100", "k40_d060_x127"):
         add("kick", "chain_kick40", c, "onset_hf", {}, 3.0, xfail=onset)
     # SWAVE-PULS (chain_pul38): a pulse, its duty PW / 128, the sweep, the unison, the sine subs, its DIST ceiling

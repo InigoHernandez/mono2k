@@ -76,7 +76,7 @@ static const ev_t TOUR[] = {
 };
 
 /* the manual's scenes: B01's T1 with a trig of each of the eight types on every other step, in GRID (30); step 5's
- * FILTER trig held (31); the sound library, SYN > SND (25); GLO > IN (32) */
+ * FILTER trig held (31); the sound library, SYN > SND (25); GLO > IN (32); and on, T1's AMP and LFO pages (09b, 14b) */
 static const ev_t MANUAL[] = {
     {2600, 'b', B_SEQ, 1, 0}, {2620, 'b', B_SEQ, 0, 0},
     {3400, 's', 0, 0, "30_grid_trig_types"},
@@ -111,7 +111,18 @@ static const ev_t MANUAL[] = {
     {24600, 'b', B_GLO, 1, 0}, {24620, 'b', B_GLO, 0, 0}, {24800, 'e', E_K2, 1, 0},
     {25000, 'b', B_GLO, 1, 0}, {25020, 'b', B_GLO, 0, 0}, {25200, 'e', E_K2, 1, 0},
     {25750, 'm', M2K_TRS, 0xF8, 0}, {25800, 's', 0, 0, "32_glo_in"},
-    {25900, 'x', 0, 0, 0},
+    /* T1's AMP on a swell (ATK 48, 0.17 s, its square rising; HOLD a half beat, DEC 1.4 s, REL 1.8 s: from GND-SIN's
+     * INIT, HOLD 24 DEC 113 REL 37), ATK in focus (09b); its LFO 1 on BASE, a sine, SPD 60 (a bar, from 48) and DPTH 90
+     * (+17 %), SPD in focus (14b) */
+    {26000, 'b', B_ENV, 1, 0}, {26020, 'b', B_ENV, 0, 0},
+    {26200, 'e', E_K2, -8, 0}, {26250, 'e', E_K3, -37, 0}, {26300, 'e', E_K4, 43, 0}, {26350, 'e', E_K1, 48, 0},
+    {27100, 's', 0, 0, "09b_amp_swell"},
+    {27200, 'b', B_LFO, 1, 0}, {27220, 'b', B_LFO, 0, 0},
+    {27300, 'e', E_K2, 17, 0}, {27350, 'e', E_K3, 19, 0},
+    {27500, 'b', B_LFO, 1, 0}, {27520, 'b', B_LFO, 0, 0},
+    {27700, 'e', E_K4, 26, 0}, {27750, 'e', E_K2, 12, 0},
+    {28500, 's', 0, 0, "14b_lfo_cycle"},
+    {28600, 'x', 0, 0, 0},
 };
 
 static void manual_scene(void)
@@ -811,6 +822,30 @@ static const char LATTICE_R10[] =
     "001a0100001b0500001a0100001a01000026010000320100003201000030030000300300003001040030030000300300003001040000"
     "00";
 
+/* revision 11's A01 CIRCUIT (cfdd1da) as its stores keep it, packed in format 15: its amp and LFOs on the laws before
+ * 16 */
+static const char CIRCUIT_R11[] =
+    "500f43495243554954000f1011000603600a403c4f0000003e510a58525252525252000216080c221b484c00284e08404040001673333f"
+    "374a21385d2900404020007f0000000040480040000f0a000000002000400a000000002000400a000000002000406a7160000010000064"
+    "5040000600001c0e4040400008341209171c4040483500404020007f00000018407f0040001720222d0c48400028200000000020004020"
+    "00000000200040154129000077460a5464750c000007350d40645a00322817001514473c2d4700404031002d00000000407f0040001935"
+    "0b090c3820001c350000000020004035000000002000406a207e0000120000002800324000185a1e40404000007f000000204040404000"
+    "404020007f0000000040520040007f4a000000002000404a000000002000404a0000000020004000284000002d712c7f1856084000063e"
+    "01455e3a000c32140c292b2e331a4000404020007f00000000407f00400018600000000020004060000000002000406012090c08040056"
+    "40083a4500623f69086d1337400007414b42404000093607310a36404240400030582b005c0000001640570040001e7500000000200040"
+    "75000000002000407506090c0808004e0028400000810481048104812410101010101010d0444444644444444504490449044904594000"
+    "00a040000022a924a924a924a9242101000021010000210100002101000021010000210100002101000021010000210100002101000021"
+    "0100002101000021010e002f0110002f0110002f0110002f0110002f0110002f0110002f0110002f0110002f010e002f01070039011000"
+    "39011000390110003901100039011000390110003901100039010200390110003901100039011000390110003901100039011000390110"
+    "00390102003901100039010e002101000021010000280100002b0100002101000021010000240100001f0100001d0100001d0100002401"
+    "0000210100001f0100001f010000260100002b010e00230100003c0100003c0106003c010700400100003e0110003e0100003c01070047"
+    "01070047010d0043010700450107003c010d003c0107004701070047010d0043010700450107003c010d00400107004801070048010d00"
+    "410107004501070040010d003e0107004701070047010d0040010700430107003e010d003900013f0d24013e0d2c021d0d2202380d2202"
+    "3e071e0302092803020a5a0308090503080a2c030b0905030b0a2c030e0905030e0a2c0312092803120a5a0318090503180a2c031b0905"
+    "031b0a2c031e090c031e0a2c0322092803220a5a0328090503280a2c032b0905032b0a2c032e090c032e0a2c0332092803320a5a033809"
+    "0503380a2c033b0905033b0a2c033e090c033e0a2c033c0905033c0a2c040600320406016404060278041d0032041d0164041d0278041f"
+    "0032041f0164041f027804260017042601410426026c043900170439014504390270043d0017043d0145043d0270";
+
 /* the sound engine's tests: pattern 40 bare (bare()), the drive off; eng_go takes its kits up and plays it, eng_run
  * renders (the last block's output in eng_out) */
 static int16_t eng_out[2 * M2K_SUB];
@@ -828,6 +863,34 @@ static void eng_go(m2k_pattern_t *q)
     seq_play(1);
 }
 static void eng_run(double sec) { for (int i = 0; i < (int)(sec * M2K_SR) / M2K_SUB; i++) m2k_render(eng_out, M2K_SUB); }
+/* the amp heard: T1's clean sine (GND-SIN at C7, the filter open, alone) played with this ATK HOLD DEC REL, let go
+ * after gate blocks (never: -1), and if retrig a second note on it there; each 16-sample block's level (the most of it
+ * and the two before: two cycles and more) into lv, n blocks */
+static void amp_probe(int atk, int hold, int dec, int rel, int gate, int retrig, int32_t *lv, int n)
+{
+    m2k_pattern_t *q = eng_pat(41);
+    uint8_t *k = q->kit[0];
+    k[P_ATK] = (uint8_t)atk; k[P_HOLD] = (uint8_t)hold; k[P_DEC] = (uint8_t)dec; k[P_REL] = (uint8_t)rel;
+    k[P_VOL] = 100; k[P_LEVL] = 127;
+    m_cpy(trk[0].eff, k, P_COUNT);
+    voice_on(0, 96, 100, 0);
+    int32_t a = 0, b = 0;
+    for (int i = 0; i < n; i++) {
+        if (i == gate) voice_off(0);
+        if (i == retrig) voice_on(0, 96, 100, 0);
+        m2k_render(eng_out, M2K_SUB);
+        int32_t c = 0;
+        for (int j = 0; j < M2K_SUB; j++) c = abs(eng_out[2 * j]) > c ? abs(eng_out[2 * j]) : c;
+        lv[i] = c > a ? (c > b ? c : b) : a > b ? a : b;
+        b = a; a = c;
+    }
+}
+/* the first block at or past i0 where lv is at least (up 1) or under (up 0) the fraction f of ref: -1 if none */
+static int amp_when(const int32_t *lv, int n, int i0, int up, double f, int32_t ref)
+{
+    for (int i = i0; i < n; i++) if (up ? lv[i] >= f * ref : lv[i] < f * ref) return i;
+    return -1;
+}
 /* track 0's delay has nothing left, in its quiet test's terms: every entry of its line silent, its filters at rest */
 static int eng_dly_quiet(void)
 {
@@ -853,6 +916,34 @@ static int32_t eng_phaser(uint32_t *mph, int32_t *map, int32_t *mfb, int32_t x, 
     }
     *mfb = (int32_t)(v < -65536 ? -65536 : v > 65536 ? 65536 : v);
     return (int32_t)(x + (((v - x) * mix) >> 8));
+}
+
+/* today's store (m2k_store_pack, n bytes) with pattern slot s of its first two images, the work and P1, the bytes b:
+ * what a store saved by an older build holds, its demos packed as that build packed them. Its new length */
+static int store_splice(int n, int s, const uint8_t *b, int bn)
+{
+    static uint8_t o[STORE_MAX];
+    int np = store_buf[8], at = 10 + S_COUNT, w = at;
+    memcpy(o, store_buf, (size_t)at);
+    for (int im = 0; im < 2; im++) {
+        const uint8_t *h = store_buf + at, *ln = h + 12, *d = ln + 2 * np;
+        uint32_t used = h[8] | h[9] << 8 | h[10] << 16 | (uint32_t)h[11] << 24, off = 0, old = ln[2 * s] | ln[2 * s + 1] << 8;
+        for (int i = 0; i < s; i++) off += ln[2 * i] | ln[2 * i + 1] << 8;
+        uint32_t nu = used - old + (uint32_t)bn;
+        memcpy(o + w, h, 8);
+        for (int k = 0; k < 4; k++) o[w + 8 + k] = (uint8_t)(nu >> (8 * k));
+        memcpy(o + w + 12, ln, (size_t)(2 * np));
+        o[w + 12 + 2 * s] = (uint8_t)bn; o[w + 13 + 2 * s] = (uint8_t)(bn >> 8);
+        w += 12 + 2 * np;
+        memcpy(o + w, d, off); w += (int)off;
+        memcpy(o + w, b, (size_t)bn); w += bn;
+        memcpy(o + w, d + off + old, used - off - old); w += (int)(used - off - old);
+        at += 12 + 2 * np + (int)used;
+    }
+    memcpy(o + w, store_buf + at, (size_t)(n - at));
+    w += n - at;
+    memcpy(store_buf, o, (size_t)w);
+    return w;
 }
 
 static int selftest(void)
@@ -897,7 +988,7 @@ static int selftest(void)
         lk(&a, 0, 8, P_SYN + 1, 99);
         lk(&a, 0, 12, P_SYN, 65);
         int n = pat_pack(&a, bl);
-        CHECK(bl[1] == 15, "format: patterns are written as version 15");
+        CHECK(bl[1] == 16, "format: patterns are written as version 16");
         n = pat_pack_v(&a, bl, 4);
         CHECK(pat_unpack(&b, bl, n), "format: a version-4 pattern loads");
         CHECK(b.kit[0][P_DIST] == T_V5_DIST[34] && b.kit[0][P_DTIM] == 32 && b.kit[0][P_DSND] == 64 &&
@@ -905,7 +996,7 @@ static int selftest(void)
               "format: version 4 -> 5 converts the chain (DIST, DTIM, DSND, DFB, VOL)");
         CHECK(b.kit[0][P_BASE] == v5_base(T_V5_FPOS[40], 36), "format: the filter is placed against the track's note");
         /* (GND-SIN's page since version 12: TUNE on H, its other knobs one earlier, values as they were) */
-        CHECK(b.kit[0][P_SYN + 1] == 77 && b.kit[0][P_LFO + L_SPD] == 21 && b.kit[0][P_BITS] == 9 &&
+        CHECK(b.kit[0][P_SYN + 1] == 77 && b.kit[0][P_LFO + L_SPD] == T_SPD15[21] && b.kit[0][P_BITS] == 9 &&   /* (SPD's rate: 16) */
               !memcmp(b.kit[1], a.kit[1], 8) && b.step[0][4].note == 36 && b.step[0][4].flags == ST_TRIG,
               "format: machine, LFO and MONO2K's own settings, trigs untouched");
         int lock_ok = 0;
@@ -971,7 +1062,10 @@ static int selftest(void)
             for (int t = 0; t < M2K_TRACKS; t++) w.kit[t][P_HOLD] = 127;  /* INF: HOLD's conversion (13) leaves it */
             int wn = pat_pack_v(&w, wb, 7);
             int same = pat_unpack(&w2, wb, wn);
-            for (int t = 0; t < M2K_TRACKS; t++) same = same && !memcmp(w2.kit[t], w.kit[t], P_WBNK) && w2.kit[t][P_WBNK] == 0;
+            static m2k_pattern_t we;                                     /* (16 turns the amp's and the LFOs' alone) */
+            m_cpy(&we, &w, sizeof we);
+            feel_v15(&we);
+            for (int t = 0; t < M2K_TRACKS; t++) same = same && !memcmp(w2.kit[t], we.kit[t], P_WBNK) && w2.kit[t][P_WBNK] == 0;
             CHECK(same, "format: version 7 -> 8 keeps every kit value, the bank MONO2K's 32");
             w.kit[3][P_WBNK] = 127;
             wn = pat_pack(&w, wb);
@@ -1052,6 +1146,7 @@ static int selftest(void)
                 if (w2.machine[t] == M_GSIN || w2.machine[t] == M_SID || w2.machine[t] == M_VOX) w2.machine[t] = M_GPRC;
             wn = pat_pack_v(&w2, wb, 10);                   /* and a version-10 pattern: its FM pages already the new ones */
             wn2 = pat_unpack(&w, wb, wn) ? pat_pack(&w, wb2) : 0;
+            feel_v15(&w2);                                  /* (its amp and LFOs: 16's) */
             int wn3 = pat_pack(&w2, wb);
             CHECK(wn2 == wn3 && !memcmp(wb, wb2, (size_t)wn3), "format: version 10's FM pages load unconverted");
         }
@@ -1103,6 +1198,8 @@ static int selftest(void)
                     ok = ok && (v == 23 || v == 31 || v == 18 || v == 38 || v == 26 || v == 33);
                 }
             CHECK(ok && nl > 0, "factory, the bank before: its HOLDs in beats at each part's tempo (A01's T4: 263 ms, 23 steps at 164)");
+            CHECK(pat[0].kit[3][P_DEC] == 61, "factory, the bank before: its amp on format 16's laws (A01's T4 DEC 50, 0.69 s"
+                                              " to -60 dB, 61)");
         }
         /* VOX-6 onto VO-6's page (14): the old vowel to the nearest VOC1 VOC2 (an E, 400 and 2100 Hz, lands within 8 %
          * of both), BRTH to VOIC; a VOWL lock to VOC1's, a BRTH lock to VOIC's, the rest gone; an LFO on BRTH moves to
@@ -1145,6 +1242,39 @@ static int selftest(void)
             ok = ok && pat[1].machine[3] == M_VOX && pat[1].kit[3][P_SYN + 0] == T_VOX14[0][0] && pat[1].kit[3][P_SYN + 5] == 64;
             CHECK(ok, "format: version 13 -> 14, VOX-6 onto VO-6's page (the vowel to its F1 F2, BRTH to VOIC, their locks and"
                       " LFOs with them, the rest gone; its HOLD not turned again); version 14 as it is; CUTUP's voice turned at build");
+        }
+        /* the amp's and the LFOs' laws (16), each old value to the new one that sounds nearest: ATK 80 (0.61 s, straight)
+         * to 66 (0.44 s, squared: the same loudness against time), DEC 64 (1.75 s to -60 dB) to 79 (1.74 s), REL 100
+         * (19.1 s) to 126 (19.0 s), DEC's INF and ATK 0 as they were, a DEC lock 30 (0.18 s) to 37; an LFO's SPD to its
+         * rate (64 at x16, 4.06 / 16 beats, to 60, a sixteenth; a lock 16 to 36), its DPTH 72 (+-16 steps) to 86 (the same
+         * swing); an LFO on a DEC (64 -36: +-72 old steps, 25 ms to INF) to the swing that lands there on the new law's
+         * steps (11: +-88), not the plain 16; version 16 as it is */
+        {
+            static m2k_pattern_t w, w2;
+            static uint8_t wb[BLOB_MAX], wb2[BLOB_MAX];
+            pat_init(&w, "FEEL");
+            w.kit[0][P_ATK] = 80; w.kit[0][P_DEC] = 64; w.kit[0][P_REL] = 100; w.kit[2][P_DEC] = 127; w.kit[2][P_ATK] = 0;
+            w.kit[1][P_DEC] = 100;                                       /* (T2's own: its LFO reads T1's) */
+            uint8_t *b1 = &w.kit[0][P_LFO], *b2 = &w.kit[1][P_LFO + 8];
+            b1[L_DEST] = P_PAN + 1; b1[L_MULT] = enc(4, 8); b1[L_SPD] = 64; b1[L_DPTH] = 72;
+            b2[L_TRCK] = enc(0, M2K_TRACKS); b2[L_DEST] = P_DEC + 1; b2[L_DPTH] = 28;
+            lk(&w, 0, 4, P_DEC, 30);
+            lk(&w, 0, 8, P_LFO + L_SPD, 16);
+            int wn = pat_pack_v(&w, wb, 15);
+            int ok = pat_unpack(&w2, wb, wn), ld = 0, ls = 0;
+            const uint8_t *k = w2.kit[0];
+            for (int i = 0; i < M2K_LOCKS; i++) {
+                if (w2.lock[i].trk == 0 && w2.lock[i].step == 4) ld = w2.lock[i].param == P_DEC && w2.lock[i].val == 37;
+                if (w2.lock[i].trk == 0 && w2.lock[i].step == 8) ls = w2.lock[i].param == P_LFO + L_SPD && w2.lock[i].val == 36;
+            }
+            ok = ok && k[P_ATK] == 66 && k[P_DEC] == 79 && k[P_REL] == 126 && w2.kit[2][P_DEC] == 127 && w2.kit[2][P_ATK] == 0 &&
+                 ld && ls && k[P_LFO + L_SPD] == 60 && k[P_LFO + L_DPTH] == 86 && w2.kit[1][P_LFO + 8 + L_DPTH] == 11 &&
+                 fabs(T_ADEC_MS10[79] / 17495.0 - 1) < 0.03 && fabs(T_ADEC_MS10[126] / 191424.0 - 1) < 0.03 &&
+                 abs(T_LDPTH[86] - 8 * 256) < 128;
+            int wn2 = pat_unpack(&w, wb, pat_pack(&w2, wb)) ? pat_pack(&w, wb2) : 0;
+            ok = ok && wn2 > 0 && !memcmp(w.kit, w2.kit, sizeof w.kit);
+            CHECK(ok, "format: version 15 -> 16, ATK DEC REL (their locks too) to the value that sounds nearest, an LFO's SPD"
+                      " to its rate and DPTH to its swing (one on a DEC to the new law's steps); version 16 as it is");
         }
         /* HOLD in beats (13): a version-12 HOLD (14.6 ms a step) to the step nearest the time it held at the pattern's
          * tempo, its locks with it, INF kept; a version-13 pattern as it is */
@@ -1278,9 +1408,11 @@ static int selftest(void)
                 pat[fp].kit[1][P_SYN + 4] = (uint8_t)(c ? 127 : 0);      /* RAT */
                 pat[fp].kit[1][P_SYN + 2] = 40;                          /* THRS */
                 pat[fp].kit[1][P_SYN + 5] = (uint8_t)(c ? 90 : 0);       /* GAIN */
-                pat[fp].kit[0][P_DEC] = 30;
-                lk(&pat[fp], 0, 4, P_DIST, 46);                          /* the second and fourth hits lower at the source */
-                lk(&pat[fp], 0, 12, P_DIST, 46);
+                pat[fp].kit[0][P_DEC] = 37;                              /* 0.18 s (format 15's 30) */
+                /* the second and fourth hits 8 dB lower going in (INP 40 of 100): a DIST under 64 at the source lowered
+                 * them by 3 to 15 dB, as the sine's phase at the hit fell */
+                lk(&pat[fp], 1, 4, P_SYN + 7, 40);
+                lk(&pat[fp], 1, 12, P_SYN + 7, 40);
                 fx_measure(fp, 0x3F, 2.0, kb, &pk, &rm);
                 int a0 = 0, a1 = 0;
                 int step = M2K_SR / 8;                                   /* a sixteenth at the blank's 120 bpm, in frames */
@@ -1530,7 +1662,7 @@ static int selftest(void)
         char buf[64];
         const char *u;
         const pi_t *sets[] = {PI_COMMON, PI_LFO, PI_MOD, PI_GLOB, PI_SET};
-        const int counts[] = {P_LFO - 8, 8, 4, G_COUNT, 3};
+        const int counts[] = {P_LFO - 8, 24, 4, G_COUNT, 3};
         for (int m = 0; m < M_COUNT + 5; m++) {
             const pi_t *tab = m < M_COUNT ? MI[m].syn : sets[m - M_COUNT];
             int cnt = m < M_COUNT ? 8 : counts[m - M_COUNT];
@@ -1754,12 +1886,13 @@ static int selftest(void)
             m2k_init(15);
             m2k_pattern_t today = pat[2];
             for (int i = 0; i < 16; i++) { memset(pat[i].name, 0, 8); s_cpy(pat[i].name, OLD_DEMO[10][i]); }
-            int same = pat_unpack(&pat[2], lb, ln) && pat_pack(&pat[2], rb) == ln && !memcmp(rb, lb, (size_t)ln);
+            int same = pat_unpack(&pat[2], lb, ln) && pat_pack(&pat[2], rb) == ln;   /* (format 16's layout: as long) */
             if (k) pat[2].kit[3][P_VOL] ^= 1;         /* a knob turned a detent, the name kept */
             int vol = pat[2].kit[3][P_VOL], mine = 0;
             for (int s = 0; s < 64; s++) { pat[4].step[0][s].flags = ST_TRIG; pat[4].step[0][s].note = (uint8_t)(36 + s % 12); }
             project_save(0);
             int n = m2k_store_pack(), len;
+            if (!k) n = store_splice(n, 2, lb, ln);     /* untouched: its bytes as that build packed them */
             store_buf[7] = 10;
             m2k_init(16);
             int ok = m2k_store_unpack(n) == 1;
@@ -1775,6 +1908,48 @@ static int selftest(void)
                       "store: revision 10's LATTICE with a knob turned under its name is the owner's: kept");
             CHECK(ok && rest, "store: revision 10's A05 PROCESS with the owner's work and A06-A16 stay, none blanked");
         }
+    }
+    /* revision 11 (12: format 16's amp and LFO laws): A01 CIRCUIT as it shipped, packed in format 15, loads as today's
+     * (its conversion on load the one bank A takes at build) and, untouched in a revision-11 store, becomes today's in
+     * the work and in P1; a version-3 store's sounds take format 16's laws, a version-4 store's load as they are */
+    {
+        static uint8_t cb[BLOB_MAX], rb[BLOB_MAX];
+        static m2k_pattern_t q;
+        int cn = 0, len;
+        for (const char *h = CIRCUIT_R11; h[0] && h[1]; h += 2) { unsigned v; sscanf(h, "%2x", &v); cb[cn++] = (uint8_t)v; }
+        m2k_init(18);
+        m2k_pattern_t today = pat[0];
+        CHECK(today.kit[0][P_DEC] == 97 && today.kit[2][P_LFO + L_DPTH] == 11 && today.kit[1][P_LFO + L_SPD] == 60,
+              "factory: bank A turned at build onto format 16's laws (A01's kick DEC 78, 4.4 s, as 97; its hats' LFO on DEC)");
+        CHECK(cb[1] == 15 && fnv(cb, (uint32_t)cn) == 0x73cc380fu && pat_unpack(&q, cb, cn) && !memcmp(&q, &today, sizeof q),
+              "format: version 15 -> 16, A01 CIRCUIT as revision 11 shipped it loads as today's (the amp's and LFOs' laws)");
+        project_save(0);
+        int n = store_splice(m2k_store_pack(), 0, cb, cn);
+        store_buf[7] = 11;
+        m2k_init(19);
+        int ok = m2k_store_unpack(n) == 1;
+        const uint8_t *b = img_get(&proj[0], 0, &len);
+        CHECK(ok && !memcmp(&pat[0], &today, sizeof today) && len == pat_pack(&today, rb) && !memcmp(b, rb, (size_t)len),
+              "store: revision 11's A01 CIRCUIT as it shipped becomes today's, in the work and in P1");
+        m2k_init(20);
+        static uint8_t k0[M2K_SOUNDS][P_COUNT];
+        for (int i = 0; i < M2K_SOUNDS; i++) m_cpy(k0[i], snd[i].kit, P_COUNT);
+        n = m2k_store_pack();
+        int v4 = store_buf[4] == 4;
+        m2k_init(21);
+        ok = m2k_store_unpack(n) == 1;
+        for (int i = 0; i < M2K_SOUNDS; i++) ok &= !memcmp(k0[i], snd[i].kit, P_COUNT);
+        store_buf[4] = 3;
+        m2k_init(22);
+        int conv = m2k_store_unpack(n) == 1, moved = 0;
+        for (int i = 0; i < M2K_SOUNDS; i++) {
+            uint8_t e[P_COUNT];
+            m_cpy(e, k0[i], P_COUNT);
+            feel_kit_v15(e);
+            conv &= !memcmp(e, snd[i].kit, P_COUNT);
+            moved += memcmp(e, k0[i], P_COUNT) != 0;
+        }
+        CHECK(v4 && ok && conv && moved > 0, "store: version 4; a version-3 store's sounds take format 16's amp and LFO laws");
     }
     {   /* OLD_PACKED's row for this revision is today's bank A packed: a bank changed is a new revision */
         int row = -1, same = 1;
@@ -2301,7 +2476,8 @@ static int selftest(void)
         m2k_encoder(E_ALGO, 1);                                   /* -> SWAV-PUL: its page, the chain kept */
         kit_init(&w, 0, M_PUL);
         int page = pat[16].machine[0] == M_PUL && !memcmp(pat[16].kit[0], w.kit[0], 8) && !memcmp(pat[16].kit[0] + 8, shaped + 8, P_COUNT - 8);
-        kit_default(&pat[16], 0, M_PUL);                          /* the INIT before these */
+        kit_default(&pat[16], 0, M_PUL);                          /* the INIT before these, as an old pattern */
+        feel_kit_v15(pat[16].kit[0]);                             /* loads it: on format 16's laws */
         m2k_encoder(E_ALGO, 1);                                   /* -> SWAV-ENS, whole */
         kit_init(&w, 0, M_ENS);
         int old = pat[16].machine[0] == M_ENS && !memcmp(pat[16].kit[0], w.kit[0], P_COUNT);
@@ -3831,6 +4007,131 @@ static int selftest(void)
         CHECK(n2 == 4 && abs((int)t2[1] - (int)(8 * 5512.5)) <= 2 * M2K_SUB && abs((int)t2[2] - (int)(16 * 5512.5)) <= 2 * M2K_SUB && with == 2,
               "speeds: a track's speed turned while playing goes on from where the pattern is");
     }
+    /* the amp (format 16, the owner's laws): the time shown is the time heard on the output, ATK to full and DEC and
+     * REL to -60 dB (within two blocks and 3 %); the attack swells, half its level only after 0.62 of its time (a
+     * square of the time: 0.71; a straight rise is there at 0.5); the knob spent where the times are: ATK about 20 ms at
+     * 16, 67 ms at 32, 0.4 s at 64, 2.1 s at 96, 10 s at 127; DEC and REL 0.8 s at 64, 19 s at 126, REL 20 s at 127 */
+    {
+        static int32_t lv[M2K_SR * 12 / M2K_SUB];
+        const double blk = 1000.0 * M2K_SUB / M2K_SR;           /* ms */
+        int ok = 1;
+        static const int AV[5] = {16, 32, 64, 96, 127};
+        static const double AT[5] = {21, 67, 400, 2080, 10000};
+        for (int i = 0; i < 5; i++) {
+            int a = AV[i], n = (int)(T_AATK_MS10[a] / 10.0 / blk) + 400;
+            double shown = T_AATK_MS10[a] / 10.0;
+            amp_probe(a, 127, 127, 0, -1, -1, lv, n);
+            int32_t full = lv[n - 1];
+            double t_full = amp_when(lv, n, 0, 1, 0.99, full) * blk, t_half = amp_when(lv, n, 0, 1, 0.5, full) * blk;
+            int good = fabs(t_full - shown) <= 2 * blk + 0.03 * shown && t_half >= 0.62 * shown && fabs(shown / AT[i] - 1) < 0.1;
+            if (!good) printf("     ATK %d: shown %.1f ms, full at %.1f, half at %.1f\n", a, shown, t_full, t_half);
+            ok &= good;
+        }
+        static const int DV[3] = {32, 64, 96};
+        for (int i = 0; i < 3; i++) {
+            int d = DV[i], n = (int)(T_ADEC_MS10[d] / 10.0 / blk * 1.2) + 50;
+            double shown = T_ADEC_MS10[d] / 10.0;
+            amp_probe(0, 0, d, 0, -1, -1, lv, n);
+            int pk = 0;
+            for (int j = 0; j < 20; j++) if (lv[j] > lv[pk]) pk = j;
+            double t60 = (amp_when(lv, n, pk, 0, 1e-3, lv[pk]) - pk) * blk;
+            amp_probe(0, 127, 127, d, 20, -1, lv, n + 20);
+            double r60 = (amp_when(lv, n + 20, 20, 0, 1e-3, lv[19]) - 20) * blk;
+            int good = fabs(t60 - shown) <= 2 * blk + 0.03 * shown && fabs(r60 - shown) <= 2 * blk + 0.03 * shown;
+            if (!good) printf("     DEC / REL %d: shown %.1f ms, heard %.1f / %.1f\n", d, shown, t60, r60);
+            ok &= good;
+        }
+        ok &= fabs(T_ADEC_MS10[64] / 8020.0 - 1) < 0.05 && fabs(T_ADEC_MS10[126] / 190000.0 - 1) < 0.05 &&
+              fabs(T_ADEC_MS10[127] / 200000.0 - 1) < 0.05;
+        CHECK(ok, "AMP: the time shown is the time heard (ATK to full, DEC and REL to -60 dB), the attack swelling, on the "
+                  "owner's laws (ATK 0.4 s at 64, 10 s at 127; DEC and REL 0.8 s at 64, 20 s at 127)");
+        /* a trig over a sounding note: an attack goes on from where the note is (no step down); ATK 0 starts from
+         * zero, the percussive edge, as before */
+        int n = 260, cont = 1;
+        amp_probe(12, 127, 127, 30, 60, 160, lv, n);                    /* ATK 14 ms, REL 0.12 s: -18 dB at the trig */
+        for (int j = 160; j < n - 1; j++) cont &= lv[j + 1] >= lv[j] * 99 / 100;
+        CHECK(cont && lv[159] < lv[59] / 2 && lv[n - 1] > lv[59] * 98 / 100,
+              "AMP: a trig on a releasing note rises from where it is to full, no step down (ATK 12)");
+    }
+    /* the LFOs (format 16): DPTH squared about 64, fine near the middle (72 swings a quarter octave of BASE, two steps:
+     * format 15's 72 swung sixteen), full at the ends; the modulation glides between steps on what reads whole steps
+     * (VOL PAN LPQ HPQ DEC: a half step lands between); SPD a cycle in 2^((84 - SPD) / 12) beats at x1, as shown */
+    {
+        int32_t sw[3];
+        static const int DP[3] = {72, 0, 127};
+        for (int i = 0; i < 3; i++) {
+            m2k_init(42);
+            trk_t *t = &trk[0];
+            m_set(t->eff, 0, P_COUNT);
+            t->eff[P_LFO + L_DEST] = P_PAN + 1;
+            t->eff[P_LFO + L_WAVE] = enc(2, 7);                        /* a square: its whole swing at once */
+            t->eff[P_LFO + L_DPTH] = (uint8_t)DP[i];
+            modn = 0;
+            lfo_block(0);
+            sw[i] = modq[0].v < 0 ? -modq[0].v : modq[0].v;
+            modn = 0;
+        }
+        CHECK(abs(sw[0] - 512) < 16 && abs(sw[1] - 128 * 256) < 64 && abs(sw[2] - 126 * 256) < 64,
+              "LFO: DPTH 72 swings two steps (format 15's: sixteen), 0 and 127 the whole range");
+        /* a half step of modulation: VOL's gain, PAN's, LPQ's and HPQ's filters, DEC's fall between their whole steps */
+        int32_t vq[3], pq[3], lq[3], hq[3];
+        uint32_t dq[3];
+        for (int i = 0; i < 3; i++) {
+            m2k_pattern_t *q = eng_pat(43);
+            uint8_t *k = q->kit[0];
+            k[P_HOLD] = 127; k[P_DEC] = 127; k[P_VOL] = 60; k[P_PAN] = 40; k[P_LPQ] = 40; k[P_HPQ] = 40;
+            k[P_BASE] = 20; k[P_WDTH] = 40;
+            m_cpy(trk[0].eff, k, P_COUNT);
+            static const int P[4] = {P_VOL, P_PAN, P_LPQ, P_HPQ};
+            for (int j = 0; j < 4; j++) trk[0].mod[P[j]] = i * 128;   /* (no LFO: it stays) */
+            voice_on(0, 60, 100, 0);
+            m2k_render(eng_out, M2K_SUB);
+            m2k_render(eng_out, M2K_SUB);
+            int32_t l = 0, r = 0;
+            for (int j = 0; j < M2K_SUB; j++) { l += abs(eng_out[2 * j]); r += abs(eng_out[2 * j + 1]); }
+            vq[i] = l + r; pq[i] = (int32_t)((int64_t)l * 4096 / (r + 1));
+            lq[i] = trk[0].lp1.k; hq[i] = trk[0].hp2.k;
+            trk[0].mod[P_DEC] = i * 128;
+            trk[0].eff[P_DEC] = 60; trk[0].astage = 3; trk[0].aenv = 1u << 30;
+            env_block(&trk[0]);
+            dq[i] = trk[0].aenv;
+        }
+        #define BETWEEN(a) (((a)[1] > (a)[0] && (a)[1] < (a)[2]) || ((a)[1] < (a)[0] && (a)[1] > (a)[2]))
+        CHECK(BETWEEN(vq) && BETWEEN(pq) && BETWEEN(lq) && BETWEEN(hq) && BETWEEN(dq),
+              "LFO: half a step of modulation lands between the steps (VOL, PAN, LPQ, HPQ, DEC): it glides, no zipper");
+        #undef BETWEEN
+        /* SPD: 12 at x1 a cycle in 16 bars (32 s at 120 BPM), 60 a bar, 60 at x16 a sixteenth, 0 still; the screen says so
+         * (the LFOs' clock 1.45 % slow, as format 15's: its 32, 16 at x1 a bar and 64 at x16 converted exactly) */
+        int good = 1;
+        static const int SV[4] = {12, 60, 60, 0}, MU[4] = {0, 0, 4, 0};
+        static const double BEATS[4] = {64, 4, 0.25, 0};
+        static const char *const SHOWN[4] = {"16 BARS", "1 BAR", "1/16 NOTE", "STOP STILL"};
+        for (int i = 0; i < 4; i++) {
+            m2k_init(44);
+            trk_t *t = &trk[0];
+            m_set(t->eff, 0, P_COUNT);
+            t->eff[P_LFO + L_DEST] = P_PAN + 1;
+            t->eff[P_LFO + L_SPD] = (uint8_t)SV[i];
+            t->eff[P_LFO + L_MULT] = enc(MU[i], 8);
+            t->eff[P_LFO + L_DPTH] = 72;
+            bpm10 = 1200;
+            uint32_t ph0 = t->lph[0];
+            int nb = 0;
+            uint64_t moved = 0;
+            while (nb < 2000000 && moved < 4294967296ull) { uint32_t a = t->lph[0]; lfo_block(0); modn = 0; moved += (uint32_t)(t->lph[0] - a); nb++; }
+            double beats = nb * (double)M2K_SUB / M2K_SR * 2.0;
+            char o[24], w[40];
+            const char *u;
+            s_lfo_cycle(o, &u, SV[i], MU[i]);
+            snprintf(w, sizeof w, "%s %s", o, u);
+            int g = !strcmp(w, SHOWN[i]) && (SV[i] ? fabs(beats / (BEATS[i] * 1.01449) - 1) < 0.002 : t->lph[0] == ph0);
+            if (!g) printf("     SPD %d x%d: %.3f beats a cycle, shown %s\n", SV[i], 1 << MU[i], beats, w);
+            good &= g;
+        }
+        good &= T_SPD15[32] == 48 && T_SPD15[16] == 36 && T_SPD15[64] == 60 && T_LCYC[48] == 8116;   /* 8.116 beats: format 15's 32 */
+        CHECK(good, "LFO: SPD 12 cycles in 16 bars at x1, 60 in a bar, 60 at x16 in a sixteenth, 0 stands, as the screen says;"
+                    " format 15's speeds kept (32 as 48, 64 as 60)");
+    }
     /* LFO ONE and HALF: a whole cycle and half of one from the trig's phase (PHAS), whatever it is */
     {
         int ok = 1;
@@ -3845,7 +4146,7 @@ static int selftest(void)
                 t->eff[P_LFO + L_PHAS] = (uint8_t)ph;
                 t->eff[P_LFO + L_DPTH] = 127;
                 lfo_trig(t);
-                double inc = 64.0 * bpm10 * 10 / 4294967296.0, want = mode == 3 ? 1.0 : 0.5;
+                double inc = lfo_inc(64 * 256, 0, bpm10) / 4294967296.0, want = mode == 3 ? 1.0 : 0.5;
                 int n = 0;
                 while (!t->ldone[0] && n < 100000) { lfo_block(0); modn = 0; n++; }
                 ok &= n * inc >= want && n * inc < want + inc * 1.01;
@@ -3983,7 +4284,7 @@ static int selftest(void)
         int ph_same = 1;
         for (int i = 0; i < M2K_SR; i++) {
             int32_t x = ((i & 1) ? 90000 : -90000) * (((i / 3) & 1) ? -1 : 1);      /* near Nyquist, a driven track's 2.7 x full */
-            int32_t y = mod_tick(t, line, x, 2, T_MOD_INC[64], 127, 254, &side);
+            int32_t y = mod_tick(t, line, x, 2, T_MOD_INC[64], 127 * 206, 254, &side);   /* (MODD 127, the phaser's scale) */
             ph_same &= y == eng_phaser(&mph, map, &mfb, x, T_MOD_INC[64], 127, 254);
         }
         CHECK(gp <= 32401 && !flips && ph_same, "64-bit products: GND-PERC's METAL, DRM-SNAR's gain, the phaser's allpasses, on loud signals");
