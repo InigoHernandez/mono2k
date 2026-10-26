@@ -69,9 +69,10 @@ typedef struct {
     pi_t syn[8];
 } mi_t;
 
-/* the machines as the selector steps through them: the Monomachine's order (its FM+ STAT, PAR, DYN together) */
-static const uint8_t M_ORDER[M_COUNT] = {M_GSIN, M_GNOI, M_GPRC, M_DKIK, M_DSNR, M_DHAT, M_DCYM, M_SID, M_FMS, M_FMP, M_FMD, M_SAW,
-                                          M_PUL, M_ENS, M_WAV, M_VOX, M_FXC, M_FXD, M_FXR};
+/* the machines as the selector steps through them (patterns keep their numbers): the ten tonal ones first, the sine
+ * and the SWAV and FM+ families together, then the drums in a kit's order, the noises, the FX (silent alone) */
+static const uint8_t M_ORDER[M_COUNT] = {M_GSIN, M_SAW, M_PUL, M_ENS, M_FMS, M_FMP, M_FMD, M_VOX, M_WAV, M_SID,
+                                          M_DKIK, M_DSNR, M_DHAT, M_DCYM, M_GPRC, M_GNOI, M_FXC, M_FXD, M_FXR};
 static int m_place(int m) { for (int i = 0; i < M_COUNT; i++) if (M_ORDER[i] == m) return i; return 0; }
 
 static const mi_t MI[M_COUNT] = {
@@ -105,7 +106,7 @@ static const mi_t MI[M_COUNT] = {
     {"FM+PAR", "FM+", "TRIPLE", "SYNTH", {4, 5, 3},
      {{"1FRQ", "RATIO 1", K_FR24}, {"1ENV", "DEPTH / DECAY 1", K_BI}, {"2FRQ", "RATIO 2", K_FR24}, {"2ENV", "DEPTH / DECAY 2", K_BI},
       {"3FRQ", "RATIO 3", K_FR24}, {"3ENV", "DEPTH / DECAY 3", K_BI}, {"TONE", "TONE", K_NUM}, {"TUNE", "TUNE", K_TUN2}}},
-    {"SWAV-PUL", "SWAV", "PULSE", "SYNTH", {3, 1, 4},
+    {"SWAV-PUL", "SWV", "PULSE", "SYNTH", {3, 1, 4},
      {{"UNIL", "UNISON LEVEL", K_NUM}, {"UNIW", "UNISON WIDTH", K_NUM}, {"SUB1", "SINE SUB -1", K_NUM}, {"SUB2", "SINE SUB -2", K_NUM},
       {"PW", "PULSE WIDTH", K_NUM}, {"PWAD", "PW SWEEP", K_NUM}, {"PWRS", "SWEEP RESET", K_ONOFF}, {"TUNE", "TUNE", K_TUN2}}},
     {"FX-CHORS", "FX", "CHORUS", "FX", {1, 2, 3},
@@ -446,7 +447,7 @@ static void page_label(int page, int sub, char *o)
 static struct {
     uint32_t now, boot_t0;
     uint8_t page, sub, trk, grid, spage, follow;
-    int8_t oct;
+    int8_t oct[M2K_TRACKS];            /* each track's keyboard octave, from its home (OCT-/+: the track in view's) */
     uint8_t note[M2K_TRACKS];          /* the last note played on each track: new trigs take it */
     /* steps held in GRID */
     uint8_t held[8], nheld, held_added[8], held_edit;
@@ -513,6 +514,29 @@ static struct {
 
 static void ui_forget(void);
 
+/* a track at home on note n: its new trigs take n, its keys the octave whose lowest F is 1 to 12 semitones under n (a
+ * C on their first C), so a kick at C2 plays as a kick from the keys and a bass as a bass */
+static void track_home(int t, int n)
+{
+    ui.note[t] = (uint8_t)n;
+    ui.oct[t] = (int8_t)CLAMP((n + 66) / 12 - 10, -3, 3);      /* floor((n - 54) / 12), n from 0 */
+}
+
+/* every track of the open pattern at home: on its root (its trigs'), or its machine's home note without trigs (a
+ * pattern opened, a project or a store loaded, the boot) */
+static void keys_home(void)
+{
+    const m2k_pattern_t *p = PAT(cur_pat);
+    for (int t = 0; t < M2K_TRACKS; t++) {
+        int r = pat_root(p, t);
+        track_home(t, r >= 0 ? r : mach_home(p->machine[t]));
+    }
+}
+
+/* a track's root, the note PADS plays it at and the library keeps a sound made at (pat_root); a track without trigs
+ * plays the note new trigs take */
+static int track_root(const m2k_pattern_t *p, int t) { int r = pat_root(p, t); return r < 0 ? ui.note[t] : r; }
+
 static void ui_init(void)
 {
     m_set(&ui, 0, sizeof ui);
@@ -522,8 +546,7 @@ static void ui_init(void)
         ui.kw[k] = (int8_t)(black ? -1 : w++);
         ui.kb[k] = (int8_t)(black ? b++ : -1);
     }
-    for (int t = 0; t < M2K_TRACKS; t++) ui.note[t] = 60;
-    ui.note[0] = 36;
+    keys_home();
     ui.follow = 1;
     ui.page = PG_HOME;
     ui.icon_spd = 6 << 8;
@@ -620,13 +643,15 @@ static void sound_load(m2k_pattern_t *p)
 {
     m2k_sound_t *sd = &snd[ui.snd_sel];
     char o[16] = {'T', (char)('1' + ui.trk), ' ', 0};
-    if (sd->name[0]) {
+    if (sd->name[0]) {                           /* its keys and new trigs on the note it was made at */
         p->machine[ui.trk] = sd->machine;
         m_cpy(p->kit[ui.trk], sd->kit, P_COUNT);
+        track_home(ui.trk, snd_root[ui.snd_sel]);
         s_cpy(o + 3, sd->name);
         toast("SOUND LOADED", o);
     } else {                                     /* INIT: the track's machine as it starts */
-        kit_default(p, ui.trk, p->machine[ui.trk]);
+        kit_init(p, ui.trk, p->machine[ui.trk]);
+        track_home(ui.trk, mach_home(p->machine[ui.trk]));
         s_cpy(o + 3, MI[p->machine[ui.trk]].name);
         toast("SOUND INIT", o);
     }
@@ -722,7 +747,7 @@ static void edit(int k, int d)
         } else {
             undo_mark(N_PAT, 21);
             if (code >= 0x80) { pat_init(&pat_tmp, "X"); q->glob[code & 0x7F] = pat_tmp.glob[code & 0x7F]; }
-            else { kit_default(&pat_tmp, ui.trk, q->machine[ui.trk]); q->kit[ui.trk][code] = pat_tmp.kit[ui.trk][code]; trk[ui.trk].eff[code] = q->kit[ui.trk][code]; }
+            else { kit_init(&pat_tmp, ui.trk, q->machine[ui.trk]); q->kit[ui.trk][code] = pat_tmp.kit[ui.trk][code]; trk[ui.trk].eff[code] = q->kit[ui.trk][code]; }
             toast(pi0->s4, "BACK TO ITS START");
         }
         ui.focus = (uint8_t)k; ui.focus_t = ui.now | 1u;
@@ -779,7 +804,7 @@ static void edit(int k, int d)
         } else {
             char o[16] = {'S', 0};
             s_num3(o + 1, ui.snd_sel + 1);
-            sound_save(ui.snd_sel, p, ui.trk, ui.snd_cat);
+            sound_save(ui.snd_sel, p, ui.trk, ui.snd_cat, track_root(p, ui.trk));
             o[4] = ' ';
             s_cpy(o + 5, CAT_N[snd_cat[ui.snd_sel]]);
             toast("SOUND SAVED", o);
@@ -810,33 +835,37 @@ static void edit(int k, int d)
     ui.focus_t = ui.now | 1u;
 }
 
-static void set_machine(int m)
+static int kit_same(const uint8_t *a, const uint8_t *b)
+{
+    for (int k = 0; k < P_COUNT; k++) if (a[k] != b[k]) return 0;
+    return 1;
+}
+
+/* machine m on track t (ALGORITHM on EDIT, the Patch Editor's): a sound still its machine's INIT (or the INIT before
+ * these, kit_default's) takes m's whole INIT; one the player shaped takes m's page alone, its chain kept. Its new trigs
+ * and keys go to m's home note */
+static void machine_to(int t, int m)
 {
     m2k_pattern_t *p = PAT(cur_pat);
-    p->machine[ui.trk] = (uint8_t)m;
-    m_cpy(p->kit[ui.trk], MACH_DEF[m], 8);
-    m_cpy(trk[ui.trk].eff, p->kit[ui.trk], 8);
+    kit_init(&pat_tmp, t, p->machine[t]);
+    int fresh = kit_same(p->kit[t], pat_tmp.kit[t]);
+    kit_default(&pat_tmp, t, p->machine[t]);
+    fresh |= kit_same(p->kit[t], pat_tmp.kit[t]);
+    kit_init(&pat_tmp, t, m);
+    int n = fresh ? P_COUNT : 8;
+    m_cpy(p->kit[t], pat_tmp.kit[t], (uint32_t)n);
+    p->machine[t] = (uint8_t)m;
+    m_cpy(trk[t].eff, p->kit[t], (uint32_t)n);
+    track_home(t, mach_home(m));
+}
+
+static void set_machine(int m)
+{
+    machine_to(ui.trk, m);
     start_glitch(4);
     ui.card_t = ui.now | 1u;
     ui.focus_t = 0;
     syn_sub_check();
-}
-
-/* a track's root, the note PADS plays it at: the one its trigs sit on most within the pattern's length (the lowest
- * of equals), so a drum tuned to the key by its note keeps it and a line plays its home note; a track without trigs
- * plays the note new trigs take */
-static int track_root(const m2k_pattern_t *p, int t)
-{
-    uint8_t cnt[128];
-    m_set(cnt, 0, sizeof cnt);
-    int best = -1, len = seq_len();
-    for (int st = 0; st < len; st++) {
-        if (!(p->step[t][st].flags & ST_TRIG)) continue;
-        int n = p->step[t][st].note & 127;
-        if (cnt[n] < 255) cnt[n]++;
-        if (best < 0 || cnt[n] > cnt[best] || (cnt[n] == cnt[best] && n < best)) best = n;
-    }
-    return best < 0 ? ui.note[t] : best;
 }
 
 /* the keys let go of every note they hold: the keys' track changes, or the keys become steps or pads (a note left
@@ -1124,7 +1153,7 @@ static void key_event(int k, int down)
         return;
     }
     if (!ui.grid) {
-        int note = 53 + k + 12 * ui.oct;   /* (its release lets go of this note, whatever the octave is by then) */
+        int note = 53 + k + 12 * ui.oct[ui.trk];   /* (its release lets go of this note, whatever the octave is by then) */
         sq.ktrk = ui.trk;
         live_on(note, 100);
         ui.kact[k] = KA_NOTE; ui.karg[k] = (uint8_t)note;
@@ -1394,7 +1423,10 @@ static void verb(int noun, int v)
         if (v == V_PASTE && clipb.kind != 2) { toast("NOTHING", "EDIT + REC COPIES ONE"); break; }
         undo_mark(noun, v);
         if (v == V_PASTE) { p->machine[ui.trk] = clipb.machine; m_cpy(p->kit[ui.trk], clipb.kit, P_COUNT); }
-        else kit_default(p, ui.trk, p->machine[ui.trk]);   /* a sound cleared is INIT: its machine as it starts */
+        else {                                         /* a sound cleared is INIT: its machine as it starts, at home */
+            kit_init(p, ui.trk, p->machine[ui.trk]);
+            track_home(ui.trk, mach_home(p->machine[ui.trk]));
+        }
         m_cpy(trk[ui.trk].eff, p->kit[ui.trk], P_COUNT);
         s_cpy(s_cpy(o, t2), v == V_PASTE ? " SOUND PASTED" : " SOUND INIT");
         toast(o, undo_line);
@@ -1458,22 +1490,27 @@ static void ring_tick(void)
     ring.done = 1;
     m2k_pattern_t *p = PAT(cur_pat);
     char o[28];
+    int home = 1;                                      /* the open pattern INIT: its tracks' keys at their homes */
     if (ring.noun == N_PAT) {
         pattern_init_blank(p);
         s_cpy(s_pat(o, cur_pat), " INIT");
         toast(o, "BLANK. GLO+OCT- UNDO");
     } else if (ring.noun == N_TRK) {
-        kit_default(p, ui.trk, p->machine[ui.trk]);
+        kit_init(p, ui.trk, p->machine[ui.trk]);
+        track_home(ui.trk, mach_home(p->machine[ui.trk]));
+        home = 0;
         char t2[24] = {'T', (char)('1' + ui.trk), 0};
         s_cpy(t2 + 2, " STEPS AND SOUND INIT");
         toast(t2, "GLO+OCT- UNDO");
     } else {
         int n = 0;
+        home = pick_target(cur_pat);
         for (int i = 0; i < M2K_PATTERNS; i++) if (pick_target(i)) { pattern_init_blank(PAT(i)); n++; }
         s_cpy(s_int(o, n), n == 1 ? " PATTERN INIT" : " PATTERNS INIT");
         toast(o, "BLANK, AS INIT BANKS");
     }
     work_reset_current();
+    if (home) keys_home();
     start_glitch(4);
 }
 
@@ -1486,7 +1523,7 @@ static void ask_answer(int yes)
     char o[24];
     switch (k) {
     case ASK_SND_OVER:                                 /* what was asked: that slot, that track's sound */
-        sound_save(ask.slot, PAT(ask.pn), ask.trk, ask.cat);
+        sound_save(ask.slot, PAT(ask.pn), ask.trk, ask.cat, track_root(PAT(ask.pn), ask.trk));
         o[0] = 'S'; s_num3(o + 1, ask.slot + 1); o[4] = ' '; s_cpy(o + 5, CAT_N[snd_cat[ask.slot]]);
         toast("SOUND SAVED", o);
         dirty = 1;
@@ -1494,6 +1531,7 @@ static void ask_answer(int yes)
     case ASK_WIPE:
         for (int i = 0; i < M2K_PATTERNS; i++) pattern_init_blank(PAT(i));
         work_reset_current();
+        keys_home();
         toast("ALL PATTERNS INIT", "THE SOUND LIBRARY KEPT");
         start_glitch(5);
         dirty = 1;
@@ -1502,6 +1540,7 @@ static void ask_answer(int yes)
     case ASK_DEMO:
         factory();                                /* A01-A04, the slots with a demo (FACTORY_DEMOS) */
         work_reset_current();
+        if (cur_pat < FACTORY_DEMOS) keys_home();
         toast("DEMOS BACK", "A01-A04, THE REST KEPT");
         start_glitch(5);
         dirty = 1;
@@ -1537,7 +1576,7 @@ static void sound_keep(void)
     int slot = -1;
     for (int i = 0; i < M2K_SOUNDS && slot < 0; i++) if (!snd[i].name[0]) slot = i;
     if (slot < 0) { toast("LIBRARY FULL", "SYN > SND: REPLACE ONE"); return; }
-    sound_save(slot, p, ui.trk, 0);
+    sound_save(slot, p, ui.trk, 0, track_root(p, ui.trk));
     o[0] = 'S'; s_num3(o + 1, slot + 1); o[4] = ' '; s_cpy(o + 5, CAT_N[snd_cat[slot]]);
     toast("SOUND SAVED", o);
     ui.snd_sel = (uint8_t)slot;
@@ -1833,7 +1872,11 @@ static void button_event(int b, int down)
         int d = b == B_OCTU ? 1 : -1;
         if (ui.grid && ui.nheld) held_step_edit(0, d);
         else if (ui.grid) { ui.spage = (uint8_t)CLAMP(ui.spage + d, 0, (seq_len() - 1) / 16); ui.follow = 0; }   /* (the pattern's pages) */
-        else { ui.oct = (int8_t)CLAMP(ui.oct + d, -3, 3); char o[8]; char *e = s_cpy(o, "OCT "); if (ui.oct > 0) *e++ = '+'; s_int(e, ui.oct); toast(o, 0); }
+        else {                                       /* the track in view's octave (each track keeps its own) */
+            int8_t *oc = &ui.oct[ui.trk];
+            *oc = (int8_t)CLAMP(*oc + d, -3, 3);
+            char o[8]; char *e = s_cpy(o, "OCT "); if (*oc > 0) *e++ = '+'; s_int(e, *oc); toast(o, 0);
+        }
         break;
     }
     default: break;
@@ -1861,12 +1904,14 @@ static void select_pattern(int n)
         toast(a, n == cur_pat ? "" : "QUEUED");
         return;
     }
+    int other = n != cur_pat;
     cur_pat = n;
     sq.queued = (uint8_t)n;
     if (ui.spage * 16 >= seq_len()) ui.spage = 0;     /* a page this pattern does not reach shows nothing: its first */
     ui.follow = 1;
     lockmap_build();
     for (int t = 0; t < M2K_TRACKS; t++) m_cpy(trk[t].eff, PAT(n)->kit[t], P_COUNT);
+    if (other) keys_home();
     toast(a, PAT(n)->name);
     start_glitch(4);
 }
@@ -3330,7 +3375,7 @@ const uint8_t *m2k_leds(void)
             else if (w == 14) v = p->mute || sq.solo ? 90 : 16;
         } else if (lay == 2) {
             if (b >= 0 && b < PF_COUNT) v = perf.on[b] ? 255 : 24;
-            else if (w >= 0) { int note = 53 + k + 12 * ui.oct; v = ui.keys[k] ? 255 : trk[ui.trk].sounding && trk[ui.trk].note == note ? 120 : 0; }
+            else if (w >= 0) { int note = 53 + k + 12 * ui.oct[ui.trk]; v = ui.keys[k] ? 255 : trk[ui.trk].sounding && trk[ui.trk].note == note ? 120 : 0; }
         } else if (lay == 3) {
             if (w >= 0 && w < 8) v = 200;
         } else if (lay == 4) {
@@ -3363,7 +3408,7 @@ const uint8_t *m2k_leds(void)
                 v = (p->mute >> ui.trk) & 1 ? 255 : 16;
             }
         } else {
-            int note = 53 + k + 12 * ui.oct;
+            int note = 53 + k + 12 * ui.oct[ui.trk];
             if (ui.keys[k]) v = 255;
             else if (trk[ui.trk].sounding && trk[ui.trk].note == note) v = 120;
         }
@@ -3382,8 +3427,8 @@ const uint8_t *m2k_leds(void)
     B[B_SEQ] = ui.grid ? 255 : 0;
     B[B_PLAY] = sq.playing ? ((play_step() & 3) == 0 ? 255 : 70) : sq.ready && blink ? 255 : 0;   /* Ready: blinks */
     B[B_REC] = sq.rec ? 255 : 0;
-    B[B_OCTD] = ui.oct < 0 ? 200 : 0;
-    B[B_OCTU] = ui.oct > 0 ? 200 : 0;
+    B[B_OCTD] = ui.oct[ui.trk] < 0 ? 200 : 0;
+    B[B_OCTU] = ui.oct[ui.trk] > 0 ? 200 : 0;
     if (ui.latch) B[ui.latch - 1] = blink ? 255 : 0;   /* a latched layer's button blinks */
     return L;
 }

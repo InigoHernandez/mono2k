@@ -439,7 +439,9 @@
     if (pre._initialize) pre._initialize();
     pre.w_init(2000);
     n = pre.w_pcount();
-    $("ed-machine").innerHTML = Array.from({ length: pre.w_machines() }, (_, m) => `<option value="${m}">${esc(cstr(pre, pre.w_mi(m, 0)))}</option>`).join("");
+    /* the machines in ALGORITHM's order, each its number (an older m2k.wasm without w_morder: by number) */
+    $("ed-machine").innerHTML = Array.from({ length: pre.w_machines() }, (_, k) => pre.w_morder ? pre.w_morder(k) : k)
+      .map((m) => `<option value="${m}">${esc(cstr(pre, pre.w_mi(m, 0)))}</option>`).join("");
     keys();
   }
   async function start() {

@@ -463,7 +463,7 @@ static void tape_pitch_at(int tape, double *wow_c, double *flut_c)
 {
     m2k_init(7);
     open_b01();
-    pat[16].machine[0] = M_GSIN;
+    kit_default(&pat[16], 0, M_GSIN);              /* the plain sine the references were measured on */
     pat[16].kit[0][P_SYN + 3] = 0;                 /* no pitch envelope */
     pat[16].kit[0][P_SYN + 5] = 30;                /* the click the bus's references were measured with (GND-SIN's init before 12) */
     pat[16].kit[0][P_HOLD] = 127;
@@ -624,7 +624,7 @@ static int bus_measure(const char *dir)
             tape_pitch_at(v, &w, &fl);
             m2k_init(7);
             open_b01();
-            pat[16].machine[0] = M_GSIN;
+            kit_default(&pat[16], 0, M_GSIN);
             pat[16].kit[0][P_SYN + 3] = 0;
             pat[16].kit[0][P_SYN + 5] = 30;
             pat[16].kit[0][P_HOLD] = 127;
@@ -1279,6 +1279,27 @@ static int selftest(void)
             }
             printf("     FX-DYNAMIX: loud against soft %.1f dB at RAT 0, %.1f dB at RAT 127\n", spread[0], spread[1]);
             CHECK(spread[1] < spread[0] - 6, "FX-DYNAMIX: brings a soft hit up to a loud one");
+            /* its quick attack (MACH_DEF's ATK) holds a note's first peak as it holds the next: one note from silence on
+             * a plain SWAV-SAW (its high-pass leaves a spike at each of the saw's resets), the peak at its first reset
+             * against its second. A block's gain ramped from the block before passed the first ~6-10 dB over */
+            static const uint8_t DN[6] = {33, 40, 45, 48, 52, 57};
+            double first = -99;
+            for (int c = 0; c < 6; c++) {
+                FXPAT(M_FXD, M_SAW, 0);
+                for (int s_ = 4; s_ < 16; s_ += 4) pat[fp].step[0][s_].flags = pat[fp].step[1][s_].flags = 0;
+                pat[fp].step[0][0].note = pat[fp].step[1][0].note = DN[c];
+                fx_measure(fp, 0x3F, 0.25, kb, &pk, &rm);
+                double per = M2K_SR / (440.0 * pow(2, (DN[c] - 69) / 12.0));
+                int rs[2] = {0, 0};
+                for (int k = 0; k < 2; k++) {                           /* the reset's peak, within half a ms */
+                    int at = (int)((k + 1) * per);
+                    for (int i = at - 22; i < at + 22; i++) if (abs(kb[2 * i]) > rs[k]) rs[k] = abs(kb[2 * i]);
+                }
+                double d = 20 * log10((rs[0] + 1.0) / (rs[1] + 1.0));
+                if (d > first) first = d;
+            }
+            printf("     FX-DYNAMIX: a note's first peak over its second, at most %+.1f dB (A1 to A3)\n", first);
+            CHECK(first < 5, "FX-DYNAMIX: a note's first peak held as the next (its gain falls within the block, no ramp from the last)");
             /* the MOD effect's chorus across the stereo (MONO2K's own): a saw through it wide, a low sine through it still
              * in the middle (the side high-passed), the phaser and MIX 0 mono */
             double mc[4];
@@ -1548,8 +1569,9 @@ static int selftest(void)
         m2k_button(B_EDIT, 1); m2k_button(B_EDIT, 0);
         m2k_key(kw1, 1); m2k_key(kw1, 0);
         m2k_step_t *sp = pat[16].step[ui.trk];
-        CHECK(sp[c0].note == 53 + kw0 && sp[c0 + 1].note == 53 + kw2 && !(sp[c0 + 2].flags & ST_TRIG) &&
-              sp[c0 + 3].note == 53 + kw1 && (sp[c0 + 3].flags & ST_TRIG), "keys: step entry writes notes, EDIT a rest");
+        int lo = 53 + 12 * ui.oct[ui.trk];                       /* (the track's keys at its home's octave) */
+        CHECK(sp[c0].note == lo + kw0 && sp[c0 + 1].note == lo + kw2 && !(sp[c0 + 2].flags & ST_TRIG) &&
+              sp[c0 + 3].note == lo + kw1 && (sp[c0 + 3].flags & ST_TRIG), "keys: step entry writes notes, EDIT a rest");
         TAP_B(B_REC);
         pat[16] = keep;
         m2k_pattern(0);
@@ -1946,7 +1968,7 @@ static int selftest(void)
         m2k_init(31);
         CHECK(snd[0].name[0] && snd[0].machine == pat[0].machine[0] && !memcmp(snd[0].kit, pat[0].kit[0], P_COUNT),
               "sounds: the factory's library holds bank A's tracks, A01 T1 first");
-        sound_save(63, &pat[2], 4, 0);
+        sound_save(63, &pat[2], 4, 0, -1);
         s_cpy(snd[63].name, "MINE");
         int n = m2k_store_pack();
         m2k_init(32);
@@ -2005,10 +2027,10 @@ static int selftest(void)
         edit(1, 1);                                               /* an INIT slot: the machine afresh */
         m2k_pattern_t fresh;
         pat_init(&fresh, "X");
-        kit_default(&fresh, 4, mach);
+        kit_init(&fresh, 4, mach);
         int init = pat[16].machine[4] == mach && !memcmp(pat[16].kit[4], fresh.kit[4], P_COUNT);
         CHECK(saved && kept && replaced && loaded && init,
-              "sounds: SAVE into INIT at once, over a sound when OCT+ says YES, LOAD once, INIT afresh");
+              "sounds: SAVE into INIT at once, over a sound when OCT+ says YES, LOAD once, INIT afresh (its machine's INIT)");
         ui.snd_sel = 0;
         int c0 = snd_cat[0];
         edit(3, 1);                                               /* CAT: KICK */
@@ -2018,6 +2040,169 @@ static int selftest(void)
         for (int k = 0; k < 40; k++) edit(0, 1);                  /* SLOT through them */
         CHECK(ui.snd_cat == CAT_KICK && shown_ok && n >= 32 && snd_shown(ui.snd_sel) && (c0 || 1),
               "sounds: CAT shows one category and the INIT slots; SLOT steps through those alone");
+    }
+    /* the machines' INITs (MACH_INIT): each its own sound on its own chain, kit_default's left as it was; their home
+     * notes; rendered at those, no two alike (GND-PERC's INIT and GND-NOIS's were one white noise) */
+    {
+        m2k_pattern_t a, b;
+        pat_init(&a, "X"); pat_init(&b, "X");
+        int own = 1, apart = 1;
+        for (int m = 0; m < M_COUNT; m++) {
+            kit_init(&a, 0, m); kit_default(&b, 0, m);
+            if (a.machine[0] != m || !memcmp(&a.kit[0][P_ATK], &b.kit[0][P_ATK], P_COUNT - P_ATK)) own = 0;
+            for (int n = m + 1; n < M_COUNT; n++) {
+                kit_init(&b, 0, n);
+                if (!memcmp(&a.kit[0][P_ATK], &b.kit[0][P_ATK], P_COUNT - P_ATK)) apart = 0;
+            }
+        }
+        int homes = mach_home(M_DKIK) == 36 && mach_home(M_GSIN) == 48 && mach_home(M_FMD) == 48 && mach_home(M_SAW) == 60 &&
+                    mach_home(M_DSNR) == 60;
+        for (int m = 0; m < M_COUNT; m++) homes &= mach_home(m) >= 36 && mach_home(m) <= 60;
+        CHECK(own && apart && homes, "INIT: every machine's on its own chain (none kit_default's, no two alike); the kick's home C2, the basses' C3");
+        /* a sound's shape, its level aside: its zero crossings and its slope's (pitch or noise, brightness), and its
+         * first 100 ms against the rest (dB: a hit or a held note); 20 ln of a ratio, so 5 % a unit */
+        static int16_t ib[2 * M2K_SR + 512];
+        double fz[M_COUNT], fs[M_COUNT], fd[M_COUNT];
+        int alike = 0, ca = -1, cb = -1;
+        double close = 1e9;
+        for (int m = 0; m < M_COUNT; m++) {
+            if (m == M_FXC || m == M_FXR || m == M_FXD) continue;   /* (silent without a track before them) */
+            m2k_init(2000);
+            pat_init(&pat[47], "INI");
+            kit_init(&pat[47], 0, m);
+            pat[47].glob[G_DRIV] = 0;
+            pat[47].step[0][0] = (m2k_step_t){.note = (uint8_t)mach_home(m), .flags = ST_TRIG};
+            double pk, rm;
+            fx_measure(47, 1, 1.0, ib, &pk, &rm);
+            double e0 = 0, e1 = 0;
+            int zc = 0, zs = 0;
+            for (int i = 2; i < M2K_SR; i++) {
+                double v = ib[2 * i];
+                if (i < M2K_SR / 10) e0 += v * v; else e1 += v * v;
+                zc += (ib[2 * i] < 0) != (ib[2 * i - 2] < 0);
+                zs += (ib[2 * i] < ib[2 * i - 2]) != (ib[2 * i - 2] < ib[2 * i - 4]);
+            }
+            fz[m] = zc + 1; fs[m] = zs + 1; fd[m] = 10 * log10((e0 + 1) / (e1 + 1));
+            for (int n = 0; n < m; n++) {
+                if (n == M_FXC || n == M_FXR || n == M_FXD) continue;
+                double d = 20 * fabs(log(fz[m] / fz[n])) + 20 * fabs(log(fs[m] / fs[n])) + fabs(fd[m] - fd[n]);
+                if (d < close) { close = d; ca = n; cb = m; }
+                alike += d < 1.0;
+            }
+        }
+        printf("     INITs at their homes: the closest two %s and %s, %.1f apart (crossings, the slope's, decay)\n", MI[ca].name, MI[cb].name, close);
+        CHECK(!alike, "INIT: the sixteen machines with a sound of their own sound apart at their home notes");
+    }
+    /* ALGORITHM on EDIT: a sound still its machine's INIT (or kit_default's, the INIT before) takes the next machine's
+     * whole INIT, an FX its amp (HOLD 127) with it; a sound shaped keeps its chain and takes the page alone. The
+     * selector's order: the ten tonal machines first, then the drums, the noises, the FX */
+    {
+        static const uint8_t ORD[M_COUNT] = {M_GSIN, M_SAW, M_PUL, M_ENS, M_FMS, M_FMP, M_FMD, M_VOX, M_WAV, M_SID,
+                                             M_DKIK, M_DSNR, M_DHAT, M_DCYM, M_GPRC, M_GNOI, M_FXC, M_FXD, M_FXR};
+        int order = !memcmp(M_ORDER, ORD, M_COUNT), once = 1;
+        for (int m = 0; m < M_COUNT; m++) once &= M_ORDER[m_place(m)] == m;
+        CHECK(order && once, "ALGORITHM's order: tonal first (GND-SIN, the SWAV and FM+ families, VOX-6, DIGI-WAV, SID), drums, noises, FX");
+        CHECK(!strcmp(MI[M_SAW].badge, "SWV") && !strcmp(MI[M_PUL].badge, "SWV") && !strcmp(MI[M_ENS].badge, "SWV"),
+              "the SWAV family's badge: SWV, SWAV-PUL's too");
+        m2k_init(50);
+        m2k_pattern(16);                                          /* B01, the INIT pattern: T1 GND-SIN at its INIT */
+        ui.trk = 0; ui.page = PG_SYN; ui.sub = 0;
+        m2k_pattern_t w;
+        pat_init(&w, "X");
+        m2k_encoder(E_ALGO, 1);                                   /* -> SWAV-SAW */
+        kit_init(&w, 0, M_SAW);
+        int whole = pat[16].machine[0] == M_SAW && !memcmp(pat[16].kit[0], w.kit[0], P_COUNT) && !memcmp(trk[0].eff, w.kit[0], P_COUNT);
+        pat[16].kit[0][P_DEC] = 33; pat[16].kit[0][P_WDTH] = 77; pat[16].kit[0][P_SYN + 1] = 5;   /* shaped */
+        uint8_t shaped[P_COUNT];
+        m_cpy(shaped, pat[16].kit[0], P_COUNT);
+        m2k_encoder(E_ALGO, 1);                                   /* -> SWAV-PUL: its page, the chain kept */
+        kit_init(&w, 0, M_PUL);
+        int page = pat[16].machine[0] == M_PUL && !memcmp(pat[16].kit[0], w.kit[0], 8) && !memcmp(pat[16].kit[0] + 8, shaped + 8, P_COUNT - 8);
+        kit_default(&pat[16], 0, M_PUL);                          /* the INIT before these */
+        m2k_encoder(E_ALGO, 1);                                   /* -> SWAV-ENS, whole */
+        kit_init(&w, 0, M_ENS);
+        int old = pat[16].machine[0] == M_ENS && !memcmp(pat[16].kit[0], w.kit[0], P_COUNT);
+        kit_init(&pat[16], 0, M_GSIN);
+        m2k_encoder(E_ALGO, -1);                                  /* GND-SIN back to the end: FX-RING, whole */
+        kit_init(&w, 0, M_FXR);
+        int fx = pat[16].machine[0] == M_FXR && !memcmp(pat[16].kit[0], w.kit[0], P_COUNT) && pat[16].kit[0][P_HOLD] == 127 &&
+                 pat[16].kit[0][P_DEC] == 127;
+        CHECK(whole && page && old && fx, "ALGORITHM: an INIT sound takes the next machine's whole INIT (an FX its amp); a shaped one its page, the chain kept");
+    }
+    /* the notes that fit the sound: a machine picked or INITed puts its track's new trigs, pads and keys on its home
+     * note, each track's keyboard octave its own (OCT- / OCT+ the track in view's); an INIT pattern opened, every
+     * track at home: DRM-KICK at C2 from the keys' first C, not the zap of C4 */
+    {
+        m2k_init(51);
+        m2k_pattern(16);                                          /* B01 INIT: GND-SIN DRM-KICK DRM-SNAR DRM-HATS FM+STAT SWAV-ENS */
+        int blank = ui.note[0] == 48 && ui.oct[0] == -1 && ui.note[1] == 36 && ui.oct[1] == -2 && ui.note[2] == 60 &&
+                    ui.oct[2] == 0 && ui.note[4] == 60 && ui.oct[4] == 0;
+        m2k_track(1);
+        m2k_key(7, 1);                                            /* the keys' first C */
+        int kick = trk[1].note == 36;
+        m2k_key(7, 0);
+        ui.grid = 1;
+        m2k_key(ux_white(0), 1); m2k_key(ux_white(0), 0);         /* a trig on step 1 */
+        int trig = (pat[16].step[1][0].flags & ST_TRIG) && pat[16].step[1][0].note == 36;
+        ui.grid = 0;
+        m2k_track(0);
+        m2k_button(B_OCTU, 1); m2k_button(B_OCTU, 0);             /* T1's octave up, T2's kept */
+        const uint8_t *L = m2k_leds();                            /* OCT- lit for an octave down: the track in view's */
+        int own = ui.oct[0] == 0 && ui.oct[1] == -2 && !L[M2K_KEYS + B_OCTD] && !L[M2K_KEYS + B_OCTU];
+        m2k_track(1);
+        L = m2k_leds();
+        own &= L[M2K_KEYS + B_OCTD] && !L[M2K_KEYS + B_OCTU];
+        m2k_key(7, 1);
+        own &= trk[1].note == 36;
+        m2k_key(7, 0);
+        m2k_track(4);
+        ui.page = PG_SYN; ui.sub = 0;
+        set_machine(M_DKIK);                                      /* FM+STAT's track a kick: at C2 */
+        int picked = ui.note[4] == 36 && ui.oct[4] == -2;
+        set_machine(M_GSIN);                                      /* and on to a sine: at C3 */
+        int bass = ui.note[4] == 48 && ui.oct[4] == -1;
+        m2k_button(B_GLO, 1); m2k_button(B_ARP, 1); m2k_button(B_ARP, 0); m2k_button(B_GLO, 0);   /* PADS */
+        m2k_key(ux_white(1), 1); m2k_key(ux_white(1), 0);         /* T2's pad: its trig's note */
+        m2k_key(ux_white(4), 1); m2k_key(ux_white(4), 0);         /* T5's: no trigs, its home */
+        int pads = trk[1].note == 36 && trk[4].note == 48;
+        CHECK(blank && kick && trig && own && picked && bass && pads,
+              "notes: an INIT pattern's tracks at home (the kick's keys C2, a trig there); octaves per track; a machine picked, its home");
+    }
+    /* the library's notes: each sound kept with the note it was made at (the demos' roots; SAVE the track's root) and
+     * loaded there, its track's keys and new trigs with it (a kick saved at C2 plays at C2); kept in the store's 'R';
+     * a store before 'R' guesses by category (a kick at C2, a bass at C3, the rest C4); one cut inside it is refused */
+    {
+        m2k_init(52);
+        int fac = 1;
+        for (int i = 0; i < 6 * FACTORY_DEMOS; i++) fac &= snd_root[i] == pat_root(&pat[i / 6], i % 6);
+        fac &= pat[0].machine[0] == M_DKIK && snd_root[0] == 33;  /* A01's kick on A1 */
+        m2k_pattern(16);
+        for (int s = 0; s < 16; s += 4) pat[16].step[1][s] = (m2k_step_t){.note = 36, .flags = ST_TRIG};
+        m2k_track(1);
+        ui.page = PG_SYN; ui.sub = (uint8_t)(nsub(PG_SYN) - 1); ui.snd_cat = 0; ui.snd_sel = 100; ui.now = 5000;
+        edit(2, 1);                                               /* SAVE: the kick at C2 */
+        int saved = snd[100].machine == M_DKIK && snd_root[100] == 36 && snd_cat[100] == CAT_KICK;
+        m2k_track(4);
+        ui.now = 9000;
+        edit(1, 1);                                               /* LOAD onto T5 */
+        int loaded = pat[16].machine[4] == M_DKIK && ui.note[4] == 36 && ui.oct[4] == -2;
+        m2k_key(7, 1);
+        loaded &= trk[4].note == 36;
+        m2k_key(7, 0);
+        snd_root[101] = 77; s_cpy(snd[101].name, "HIGH"); snd[101].machine = M_SAW; snd_cat[101] = CAT_LEAD;
+        int n = m2k_store_pack();
+        m2k_init(53);
+        int kept = m2k_store_unpack(n) == 1 && snd_root[100] == 36 && snd_root[101] == 77;
+        int tag = n > 130 && store_buf[n - 130] == 'R' && store_buf[n - 129] == M2K_SOUNDS;
+        m2k_init(54);
+        int old = tag && m2k_store_unpack(n - 130) == 1 && snd_root[100] == 36 && snd_root[101] == 60 && !strcmp(snd[101].name, "HIGH");
+        for (int i = 0; i < M2K_SOUNDS; i++) if (snd[i].name[0]) old &= snd_root[i] == root_guess(snd_cat[i]);
+        old &= snd_root[3] == 48 && snd_cat[3] == CAT_BASS;       /* A01's sine bass */
+        m2k_init(55);
+        s_cpy(pat[0].name, "MINE");
+        int cut = !m2k_store_unpack(n - 10) && !strcmp(pat[0].name, "MINE");
+        CHECK(fac && saved && loaded && kept && old && cut,
+              "sounds: each kept with its note (the demos' roots, SAVE's), loaded there (a kick at C2); 'R' in the store, older ones guessed");
     }
     /* the verbs: GLO + SEQ clears the pattern's steps (the sounds stay), again within 3 s undoes it, held a second
      * makes it INIT; GLO + OCT- / OCT+ undo and redo; in GRID they act on the track; GLO + EDIT opens the library */
@@ -2124,9 +2309,9 @@ static int selftest(void)
             int waits = sq.ready && !sq.playing;
             for (int i = 0; i < 20; i++) m2k_render(rb, 128);                         /* nothing moves while it waits */
             int still = !sq.playing && !(pat[16].step[0][0].flags & ST_TRIG);
-            m2k_key(4, 1);                                                             /* A3: the first note */
+            m2k_key(4, 1);                                                             /* A: the first note */
             int started = sq.playing && !sq.ready;
-            int rec0 = (pat[16].step[0][0].flags & ST_TRIG) && pat[16].step[0][0].note == 57;
+            int rec0 = (pat[16].step[0][0].flags & ST_TRIG) && pat[16].step[0][0].note == 57 + 12 * ui.oct[0];
             m2k_key(4, 0);
             seq_play(0);
             ui.now += 200;
@@ -2281,9 +2466,9 @@ static int selftest(void)
         m2k_button(B_EDIT, 0);
         m2k_pattern_t fr;
         pat_init(&fr, "X");
-        kit_default(&fr, 2, pat[0].machine[2]);
-        CHECK(kept_snd && pat[0].kit[2][P_DEC] == fr.kit[2][P_DEC] && !ui.grid,
-              "EDIT held: SAVE keeps the sound in the first INIT slot, SEQ INITs it (no GRID)");
+        kit_init(&fr, 2, pat[0].machine[2]);
+        CHECK(kept_snd && !memcmp(pat[0].kit[2], fr.kit[2], P_COUNT) && !ui.grid,
+              "EDIT held: SAVE keeps the sound in the first INIT slot, SEQ INITs it (its machine's INIT; no GRID)");
         }
         /* SEQ: a tap is GRID; held, the white keys are tools on the track's steps (their locks with them), the knobs
          * LEN SWING ACCENT TEMPO, and letting go is not a tap */
@@ -2482,13 +2667,14 @@ static int selftest(void)
         /* a help card: OCT- held a second alone shows it and its release does nothing; held shorter, the octave; a key
          * meanwhile, no card */
         m2k_init(48);
+        int o0 = ui.oct[ui.trk];                      /* (T1, A01's kick: at home two octaves down) */
         ui.now = 1000; m2k_button(B_OCTD, 1); ui.now = 2100;
         int card = card_up();
         m2k_frame(ui.now);
         m2k_button(B_OCTD, 0);
-        int quiet = ui.oct == 0 && !ui.octd;
+        int quiet = ui.oct[ui.trk] == o0 && !ui.octd;
         ui.now = 3000; m2k_button(B_OCTD, 1); ui.now = 3300; m2k_button(B_OCTD, 0);
-        int oct = ui.oct == -1;
+        int oct = o0 == -2 && ui.oct[ui.trk] == o0 - 1;
         ui.now = 4000; m2k_button(B_PLAY, 1); m2k_key(wk[0], 1); ui.now = 5200;
         int nocard = !card_up();
         m2k_key(wk[0], 0); m2k_button(B_PLAY, 0);
@@ -2652,16 +2838,19 @@ static int selftest(void)
         int unlocked = lock_find(0, 0, P_DEC) < 0 && q->step[0][0].rtrg <= 1;
         m2k_key(0, 0);
         ui.grid = 0;
-        m2k_pattern_t fr;
+        m2k_pattern_t fr, fd;
         pat_init(&fr, "X");
-        kit_default(&fr, 0, q->machine[0]);
+        pat_init(&fd, "X");
+        kit_init(&fr, 0, q->machine[0]);              /* home: the machine's INIT (A01's kick: DEC 42), not kit_default's */
+        kit_default(&fd, 0, q->machine[0]);
         q->kit[0][P_DEC] = (uint8_t)(fr.kit[0][P_DEC] ^ 40);
+        int o0 = ui.oct[ui.trk];
         m2k_button(B_OCTD, 1); edit(2, 1); m2k_button(B_OCTD, 0);
-        int home = q->kit[0][P_DEC] == fr.kit[0][P_DEC] && ui.oct == 0;
+        int home = q->kit[0][P_DEC] == fr.kit[0][P_DEC] && fr.kit[0][P_DEC] != fd.kit[0][P_DEC] && ui.oct[ui.trk] == o0;
         m2k_button(B_OCTD, 1); m2k_button(B_OCTD, 0);
-        int oct = ui.oct == -1;
+        int oct = ui.oct[ui.trk] == o0 - 1;
         CHECK(tt && cd && locked && unlocked && home && oct,
-              "a held step: black 1-5 its trig type, 6-11 its condition; OCT- + knob: the lock away, else the value home; OCT- alone the octave");
+              "a held step: black 1-5 its trig type, 6-11 its condition; OCT- + knob: the lock away, else the INIT's value; OCT- alone the octave");
     }
     /* a key's release lets go of the note its press started, whatever is held by then (OCT+ tapped meanwhile, SEQ or
      * GLO held), and the keys let go of their notes when they become steps (SEQ tapped) or pads (GLO + ARP), or their
@@ -2899,9 +3088,9 @@ static int selftest(void)
     /* GLO + OCT- (undo), GLO let go first: OCT-'s own release does nothing (it turned the octave) */
     {
         ux_init(7);
-        int o0 = ui.oct;
+        int o0 = ui.oct[ui.trk];
         m2k_button(B_GLO, 1); m2k_button(B_OCTD, 1); m2k_button(B_GLO, 0); m2k_button(B_OCTD, 0);
-        CHECK(ui.oct == o0, "GLO + OCT-, GLO let go first: the octave stays");
+        CHECK(ui.oct[ui.trk] == o0, "GLO + OCT-, GLO let go first: the octave stays");
     }
     /* the drawing's byte-wise fills and type (rect, frame, a glyph a byte at a time) as a pixel at a time draws them:
      * random boxes and texts, in ink, paper and inverted, in each size, cut by random clips and the screen's edges */
@@ -3745,7 +3934,10 @@ static int selftest(void)
 
 /* the browser and the FM-1's stores, through the Patch Editor's link (host/m2k_link_test.c): --web-store PATH writes
  * a store as the browser sends it to the FM-1 (64 patterns, one project; A01 named WEB16, sound 6 WEBSND);
- * --fm1-store PATH reads one the FM-1 sent (the link test's: A01 LINKA, sound 6 SNDA) as the browser does */
+ * --fm1-store PATH reads one the FM-1 sent (the link test's: A01 LINKA, sound 6 SNDA) as the browser does. Sound 6's
+ * note goes with it, by its name (the link test's name_root) */
+static uint8_t name_root(const char *s) { unsigned h = 0; while (*s) h = h * 31u + (uint8_t)*s++; return (uint8_t)(24 + h % 72); }
+
 static int link_store(const char *mode, const char *path)
 {
     int max;
@@ -3754,6 +3946,7 @@ static int link_store(const char *mode, const char *path)
     if (!strcmp(mode, "--web-store")) {
         memset(pat[0].name, 0, 8); memcpy(pat[0].name, "WEB16", 5);
         memset(snd[5].name, 0, 8); memcpy(snd[5].name, "WEBSND", 6);
+        snd_root[5] = name_root("WEBSND");
         int n = m2k_store_pack_as(64, 1);
         FILE *f = fopen(path, "wb");
         if (!f || n <= 0 || b[8] != 64 || b[9] != 1) { printf("FAIL a store for the FM-1\n"); if (f) fclose(f); return 1; }
@@ -3767,8 +3960,8 @@ static int link_store(const char *mode, const char *path)
     int n = (int)fread(b, 1, (size_t)max, f);
     fclose(f);
     int ok = b[8] == 64 && b[9] == 1 && m2k_store_unpack(n) && !strcmp(pat[0].name, "LINKA") && !strcmp(snd[5].name, "SNDA") &&
-             !strcmp(pat[16].name, "INIT");
-    printf("%s the FM-1's store read in the browser: its 64 patterns, its sounds\n", ok ? "ok  " : "FAIL");
+             snd_root[5] == name_root("SNDA") && !strcmp(pat[16].name, "INIT");
+    printf("%s the FM-1's store read in the browser: its 64 patterns, its sounds and their notes\n", ok ? "ok  " : "FAIL");
     return !ok;
 }
 

@@ -839,6 +839,8 @@ static void mach_block(int ti, int m, int32_t pitch)
             int32_t gl = over > 0 ? -((over * (int32_t)T_DYN_K[P7(t, P_SYN + 4)]) >> 8) : 0;
             gl += (P7(t, P_SYN + 5) * 1020) / 127;                                         /* GAIN: up to +24 dB */
             uint32_t g1 = iexp2_q16(gl), g0 = (uint32_t)t->ms[3] ? (uint32_t)t->ms[3] : g1;
+            if (g1 < g0) g0 = g1;          /* down at once, ramped up: a peak in this block is not let through at the
+                                            * quieter block's gain (a note's first peak passed ~10 dB over) */
             for (int i = 0; i < M2K_SUB; i++) {
                 uint32_t g = g0 + (uint32_t)mul_sh((int32_t)(g1 - g0), i, 4);       /* both under 2^31 */
                 int32_t y = (int32_t)mul_sh(x[i], (int32_t)g, 16);

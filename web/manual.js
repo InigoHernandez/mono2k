@@ -142,11 +142,13 @@
     const x = new WebAssembly.Instance(new WebAssembly.Module(await r.arrayBuffer()), {}).exports;
     if (x._initialize) x._initialize();
     x.w_init(2000);
-    /* the machines: their marks drawn as the emulator's cards draw them */
+    /* the machines, in ALGORITHM's order (an older m2k.wasm without w_morder: by number): their marks drawn as the
+     * emulator's cards draw them */
     const ml = $("[data-machines]");
     if (ml) {
       ml.innerHTML = "";
-      for (let m = 0; m < x.w_machines(); m++) {
+      for (let i = 0; i < x.w_machines(); i++) {
+        const m = x.w_morder ? x.w_morder(i) : i;
         const name = cstr(x, x.w_mi(m, 0)), style = cstr(x, x.w_mi(m, 2)), cls = cstr(x, x.w_mi(m, 3));
         const knobs = Array.from({ length: 8 }, (_, i) => {
           const s4 = cstr(x, x.w_syn(m, i, 0)), ln = cstr(x, x.w_syn(m, i, 1));

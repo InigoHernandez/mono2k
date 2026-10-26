@@ -487,15 +487,7 @@ static void trim(m2k_pattern_t *p, int lev)
 /* the modulation effect: 0 chorus, 1 flanger, 2 phaser; rate (0.1..10 Hz), depth, mix */
 #define MOD(p, t, type, rate, dpth, mix) SET(p, t, P_MODT, enc(type, 3), P_MODR, rate, P_MODD, dpth, P_MODM, mix)
 
-/* the machines' A..H, by name */
-#define SA (P_SYN + 0)
-#define SB (P_SYN + 1)
-#define SC (P_SYN + 2)
-#define SD (P_SYN + 3)
-#define SE (P_SYN + 4)
-#define SF (P_SYN + 5)
-#define SG (P_SYN + 6)
-#define SH (P_SYN + 7)
+/* (the machines' A..H by name, SA..SH, and the LFOs' pages, L1..L3: m2k_seq.c, with the machines' inits) */
 /* choices */
 #define WAVE(i) ((uint8_t)((i) * 127 / 31))   /* DIGI-WAV: 5 BELL 6 GLAS 7 PLST 8 LTEX 19 MTL1 20 MTL2 25 BITS 26 8BIT 30 CRSH */
 #define GSIZE(i) enc(i, 5)             /* 1/64 1/32 1/16 1/8 1/4 */
@@ -577,9 +569,6 @@ static void locks(m2k_pattern_t *p, const uint8_t *v, int n)
 {
     for (int i = 0; i + 3 < n; i += 4) lk(p, v[i], v[i + 1], v[i + 2], v[i + 3]);
 }
-#define L1 (P_LFO)                     /* the three LFOs' pages */
-#define L2 (P_LFO + 8)
-#define L3 (P_LFO + 16)
 
 /* bank A: four parts (docs/bank-a.md, written to docs/composing.md): every sound picked by the owner from the sound
  * sheets (tools/sheet/), each 4-bar pattern a 16-bar form (what enters after the first pass, what alternates, what comes

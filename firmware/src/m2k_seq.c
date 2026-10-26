@@ -355,6 +355,8 @@ static inline int pat_coming_in(void) { return sq.queued != cur_pat && (sq.jump 
 /* the step that plays next */
 static inline int step_due(void) { return sq.step >= seq_len() || (sq.jump && sq.queued != cur_pat) ? 0 : sq.step; }
 
+static void keys_home(void);           /* (m2k_ui.c) each track's keys and new trigs where the open pattern plays it */
+
 /* right before the pattern's next step, the wrap: past the end (or a length made shorter), or a pattern jumped to,
  * it starts over, the queued pattern in. So the last step plays out on its own pattern, kit and locks, and a note
  * recorded in it stays there */
@@ -376,6 +378,7 @@ static void step_wrap(void)
         for (int t = 0; t < M2K_TRACKS; t++) m_cpy(trk[t].eff, PAT(cur_pat)->kit[t], P_COUNT);
         m_set(sq.loops, 0, sizeof sq.loops);       /* its conditions count its own loops */
         tracks_restart();
+        keys_home();
     }
 }
 
@@ -687,6 +690,19 @@ void m2k_midi(int status, int d1, int d2)
 
 static inline uint8_t enc(int i, int n) { return (uint8_t)((i * 128 + 64) / n); }
 
+/* the machines' A..H by name, and the three LFOs' pages (the inits below, the factory's parts) */
+#define SA (P_SYN + 0)
+#define SB (P_SYN + 1)
+#define SC (P_SYN + 2)
+#define SD (P_SYN + 3)
+#define SE (P_SYN + 4)
+#define SF (P_SYN + 5)
+#define SG (P_SYN + 6)
+#define SH (P_SYN + 7)
+#define L1 (P_LFO)
+#define L2 (P_LFO + 8)
+#define L3 (P_LFO + 16)
+
 static const uint8_t MACH_DEF[M_COUNT][8] = {
     /* GND-SIN  */ {0, 0, 0, 0, 40, 0, 0, 64},     /* the Monomachine's init: a sine (its page TUNE alone, on H) */
     /* GND-PERC */ {64, 0, 0, 40, 0, 40, 0, 0},
@@ -708,6 +724,72 @@ static const uint8_t MACH_DEF[M_COUNT][8] = {
                                                    * a clap's hits 8 ms apart */
     /* DRM-HATS */ {54, 60, 127, 127, 127, 0, 5, 0},  /* its hats: a sine under a sine and the noise, 60 ms closed */
     /* DRM-CYMB */ {127, 64, 0, 64, 0, 110, 0, 107}, /* its cymbal: noise held at the top, a long fall */
+};
+
+/* each machine's INIT, a sound for its purpose: kit_default's chain and MACH_DEF's page, then these (param, value)
+ * pairs, levelled to about -18 LUFS (the INIT sheet's A takes: its B or C replaces a row whole); and its home note,
+ * the note it was made at, where a machine picked or INITed puts its track's new trigs and keys */
+#define KV_END 0xFF
+#define KV(...) ((const uint8_t[]){__VA_ARGS__, KV_END})
+static const struct { uint8_t home; const uint8_t *kv; } MACH_INIT[M_COUNT] = {
+    /* the sine bass: round and warm, a touch of fold and 2nd harmonic */
+    [M_GSIN] = {48, KV(SA, 18, SG, 50, P_HOLD, 24, P_DEC, 90, P_REL, 30, P_LEVL, 104)},
+    /* the supersaw: a wide, lush pad */
+    [M_SAW] = {60, KV(SA, 100, SB, 60, SC, 80, SD, 10, P_ATK, 40, P_HOLD, 127, P_DEC, 127, P_REL, 70, P_GATE, 56,
+                      P_BASE, 8, P_WDTH, 40, P_LPQ, 20, P_SPU, 40, P_LEVL, 127, P_VOL, 112)},
+    /* the pulse: a hollow reed lead, a vibrato on TUNE */
+    [M_PUL] = {60, KV(P_ATK, 36, P_HOLD, 127, P_DEC, 127, P_REL, 44, P_GATE, 48, P_BASE, 8, P_WDTH, 36, P_LPQ, 12,
+                      P_SPU, 24, L1 + L_DEST, 8, L1 + L_WAVE, 27, L1 + L_MULT, 72, L1 + L_SPD, 40, L1 + L_DPTH, 67,
+                      P_LEVL, 127, P_VOL, 127)},
+    /* chords on one key: a minor-7 pad, chorused */
+    [M_ENS] = {60, KV(SA, 73, SC, 116, SD, 82, SE, 56, SF, 44, SG, 71, P_ATK, 37, P_HOLD, 127, P_DEC, 127, P_REL, 90,
+                      P_BASE, 10, P_WDTH, 46, P_LPQ, 40, P_GATE, 60, P_SPU, 52, P_MODT, 21, P_MODR, 18, P_MODD, 83,
+                      P_MODM, 58, P_LEVL, 127, P_VOL, 124)},
+    /* FM keys: an e-piano */
+    [M_FMS] = {60, KV(SA, 98, SB, 63, SC, 105, SD, 8, SE, 109, SF, 19, SG, 55, P_HOLD, 7, P_DEC, 65, P_REL, 75,
+                      P_BASE, 9, P_WDTH, 54, P_HPQ, 7, P_LPQ, 49, P_DTIM, 48, P_DSND, 88, P_DFB, 43, P_DWID, 92,
+                      P_SPU, 22, P_LEVL, 127, P_VOL, 81)},
+    /* FM metal: a gong-like bell */
+    [M_FMP] = {60, KV(SA, 120, SB, 80, SC, 98, SD, 76, SE, 88, SF, 72, P_DEC, 74, P_REL, 74, P_SPU, 40, P_LEVL, 127,
+                      P_VOL, 67)},
+    /* the FM bass: a modulator whose depth moves */
+    [M_FMD] = {48, KV(SC, 32, SD, 96, SE, 127, SF, 90, SG, 0, P_HOLD, 10, P_DEC, 56, P_REL, 40, P_WDTH, 40, P_LPQ, 16,
+                      P_LEVL, 127, P_VOL, 72)},
+    /* the voice: an 'aah' choir */
+    [M_VOX] = {60, KV(SA, 120, SB, 56, SD, 10, P_ATK, 40, P_HOLD, 127, P_DEC, 127, P_REL, 70, P_GATE, 60, P_SPU, 50,
+                      P_MODT, 21, P_MODR, 30, P_MODD, 80, P_MODM, 60, L1 + L_DEST, 8, L1 + L_WAVE, 27, L1 + L_MULT, 72,
+                      L1 + L_SPD, 40, L1 + L_DPTH, 66, P_LEVL, 127, P_VOL, 115)},
+    /* the wavetable voice: a pluck that scans as it falls */
+    [M_WAV] = {60, KV(SA, 13, SB, 70, SC, 76, SF, 65, SG, 40, P_DEC, 58, P_REL, 50, P_BASE, 8, P_WDTH, 52, P_SPU, 30,
+                      P_LEVL, 127, P_VOL, 99)},
+    /* the chip voice: a sync lead */
+    [M_SID] = {60, KV(SD, 38, SE, 80, SG, 80, P_ATK, 12, P_HOLD, 127, P_DEC, 127, P_REL, 50, P_GATE, 48, P_BASE, 8,
+                      P_WDTH, 36, P_LPQ, 20, P_SPU, 30, P_LEVL, 105)},
+    /* the kick, at C2 */
+    [M_DKIK] = {36, KV(SA, 16, SB, 18, SC, 10, SD, 12, SG, 30, SH, 30, P_HOLD, 10, P_DEC, 42, P_REL, 20, P_LEVL, 127,
+                       P_VOL, 68)},
+    /* the snare */
+    [M_DSNR] = {60, KV(SA, 16, SB, 0, SC, 0, SD, 100, SE, 80, P_DEC, 28, P_REL, 14, P_BASE, 8, P_WDTH, 52, P_HPQ, 18,
+                       P_LPQ, 9, P_EQF, 72, P_EQG, 53, P_SPU, 24, P_LEVL, 127, P_VOL, 105)},
+    /* the closed hat */
+    [M_DHAT] = {60, KV(SA, 127, SB, 70, SC, 10, SD, 84, SE, 100, SF, 117, SG, 12, P_HOLD, 7, P_DEC, 53, P_REL, 13,
+                       P_VOL, 121, P_BASE, 46, P_WDTH, 40, P_HPQ, 23, P_FATK, 21, P_FDEC, 20, P_BOF, 71, P_EQF, 108,
+                       P_EQG, 80, P_LEVL, 127)},
+    /* the crash */
+    [M_DCYM] = {60, KV(SA, 94, SB, 83, SC, 90, SD, 119, SE, 100, SF, 65, SH, 90, P_DEC, 80, P_REL, 60, P_BASE, 36,
+                       P_WDTH, 20, P_SPU, 30, P_LEVL, 127, P_VOL, 101)},
+    /* a metal hit */
+    [M_GPRC] = {60, KV(SC, 127, P_DEC, 34, P_BASE, 24, P_WDTH, 48, P_SPU, 20, P_LEVL, 127, P_VOL, 103)},
+    /* noise played: wind, its filter on the key */
+    [M_GNOI] = {60, KV(SA, 64, SB, 64, SC, 127, P_ATK, 50, P_HOLD, 127, P_DEC, 127, P_REL, 70, P_GATE, 48, P_BASE, 12,
+                       P_WDTH, 20, P_HPQ, 20, P_LPQ, 56, P_SPU, 40, P_LEVL, 78)},
+    /* the FX open from a trig to the gate's end and long after (kit_default's HOLD 127): the track before made wide,
+     * punched and held, turned to metal; at the basses' octave, as they were made */
+    [M_FXC] = {48, KV(SB, 60, SD, 127, SF, 127, SG, 100, SH, 127, P_DEC, 127, P_REL, 80, P_GATE, 127, P_LEVL, 127,
+                      P_VOL, 127)},
+    [M_FXD] = {48, KV(SA, 70, SB, 30, SC, 50, SE, 120, SF, 100, P_WDTH, 48, P_DEC, 127, P_REL, 80, P_GATE, 127,
+                      P_LEVL, 127, P_VOL, 78)},
+    [M_FXR] = {48, KV(P_PTCH, 70, P_DEC, 127, P_REL, 80, P_GATE, 127, P_LEVL, 127, P_VOL, 82)},
 };
 
 static void kit_default(m2k_pattern_t *p, int t, int m)
@@ -739,6 +821,16 @@ static void kit_default(m2k_pattern_t *p, int t, int m)
     m_cpy(k, MACH_DEF[m], 8);
     if (m == M_FXC || m == M_FXR || m == M_FXD) k[P_HOLD] = 127;     /* an FX track stays open from its trig to the gate's end */
 }
+
+/* a machine as INIT starts it: its chain and page, then its own sound (MACH_INIT). kit_default stays as it was: bank A
+ * and the format conversions are written on it */
+static void kit_init(m2k_pattern_t *p, int t, int m)
+{
+    kit_default(p, t, m);
+    for (const uint8_t *kv = MACH_INIT[m].kv; kv[0] != KV_END; kv += 2) p->kit[t][kv[0]] = kv[1];
+}
+
+static int mach_home(int m) { return MACH_INIT[m].home; }
 
 static void pat_init(m2k_pattern_t *p, const char *name)
 {

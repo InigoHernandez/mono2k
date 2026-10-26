@@ -160,6 +160,8 @@ int main(int argc, char **argv)
         for (int i = 0; i < 200; i++) m2k_frame(ms += 16);   /* past the splash */
         m2k_pattern(16);                                       /* B01, a blank pattern */
         m2k_pattern_t *p = &pat[cur_pat];
+        kit_default(p, 0, M_GSIN);                             /* its T1 as the references were made on: kit_default's
+                                                                * chain, not GND-SIN's INIT */
         p->machine[0] = (uint8_t)m;
         m_cpy(p->kit[0], MACH_DEF[m], 8);
         m_cpy(trk[0].eff, p->kit[0], P_COUNT);
