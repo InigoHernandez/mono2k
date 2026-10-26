@@ -108,9 +108,12 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   Monomachine's; MONO2K's own FOLD..HARM on A..G, nothing at init: `gsin_v11`); 13 HOLD in beats, v / 32 of one at the
   pattern's tempo, as the Monomachine's (`hold_v12` takes 14.6 ms steps to the nearest at the part's tempo; bank A is
   written in them and turned at build); 14 VOX-6 on VO-6's page (VOC1 VOC2 V-SW VOIC | CONS CLEN CVOL TUNE: `vox_v13`
-  takes the old vowel to the nearest F1 F2, BRTH to VOIC; A02 CUTUP's voice turned at build). Older ones are
-  converted on load. The Monomachine's tempo is set on its panel
-  (TEMPO, the LEVEL knob a BPM a detent; `chain_hold46.panel`): the loop and spec modes leave it at 120.
+  takes the old vowel to the nearest F1 F2, BRTH to VOIC; A02 CUTUP's voice turned at build); 15 the tracks' speeds;
+  16 the amp's ATK DEC REL and the LFOs' SPD and DPTH on the owner's laws (`feel_v15`: T_AMP15 by the time heard,
+  ATK's rise by its loudness, T_SPD15 by the rate, T_DPTH15 by the swing, an LFO on a DEC or REL by the new law's
+  steps; the store's version 4 converts a version-3 store's sounds alike). Older ones are converted on load. The
+  Monomachine's tempo is set on its panel (TEMPO, the LEVEL knob a BPM a detent; `chain_hold46.panel`): the loop and
+  spec modes leave it at 120.
   A step's flags bits 3..5 are its trig types (`ST_NOAMP`, `ST_NOFLT`, `ST_NOLFO`; clear is ALL, as every older pattern
   has them: no format change). FM+'s 24 ratio steps decode as the Monomachine's sound does, `fr24` (v * 24 + 8) >> 7,
   not as its screen labels them (`chain_fmstep43`, FM+STAT's 2FRQ `chain_fmstep44`). The owner's sheet (FM MACHINE
@@ -119,12 +122,13 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   are not what it plays: FM+STAT steps the same 24 as FM+PAR, both ratios. MONO2K matched at every value.
   GND-NOIS is the Monomachine's (ST RED STON, TUNE on H; machine 14, the newest); MONO2K's own noise is GND-PERC and
   keeps machine number 1 (`M_GPRC`), so no conversion: patterns store machine numbers, new machines go last.
-  Bank A is four parts, CIRCUIT TIDE SUSPEND LANTERN (factory revision 11, `docs/bank-a.md`), written on today's
-  pages with `part()` in `factory()` (their kits as `SET`, their steps and locks as tables, from `cdump`): nothing is
-  converted at build. The bank before it (MAMMOTH .. SPLICE, written on the old pages and
-  turned at build) is kept only as a test fixture, `host/m2k_bank_rev9.c` (`factory_rev9()`), so the format tests
-  and the conversions' mutants still run on real old parts; it is never built into the instrument. A batch that
-  replaces demos bumps `FACTORY_REV`, adds the names it replaced to `OLD_DEMO` and the new revision's row to
+  Bank A is four parts, CIRCUIT TIDE SUSPEND LANTERN (factory revision 12, `docs/bank-a.md`), written on today's
+  pages with `part()` in `factory()` (their kits as `SET`, their steps and locks as tables, from `cdump`), their amp
+  and LFO values on format 15's laws, as the owner approved them, turned at build (`feel_v15`; revision 12's bytes).
+  The bank before it (MAMMOTH .. SPLICE, written on the old pages and turned at build) is kept only as a test fixture,
+  `host/m2k_bank_rev9.c` (`factory_rev9()`), so the format tests and the conversions' mutants still run on real old
+  parts; it is never built into the instrument. A batch that replaces demos bumps `FACTORY_REV`, adds the names it
+  replaced to `OLD_DEMO` and the new revision's row to
   `OLD_PACKED` (m2k_proj.c: each demo's packed length and FNV-1a; the self-test prints the row wanted), so a saved
   store takes the new parts only in the slots whose bytes are still the ones that revision shipped: a demo the owner
   edited, and A05 onwards, are kept. The reference renderer writes 32-bit float WAVs; `tools/ref/sweep.py`'s `load` reads

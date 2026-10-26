@@ -108,6 +108,7 @@ typedef struct {
     int32_t pitch, ptarget;            /* 1/64 semitones */
     uint8_t astage, fstage;
     uint32_t aenv, fenv;               /* Q30 */
+    uint32_t aph;                      /* the attack's way through, Q30, straight in time: aenv its square */
     int32_t hold;                      /* control blocks left in hold */
     int32_t amp0, amp1;                /* Q15, this block's ramp */
     int32_t gate_left;                 /* control blocks until the sequencer's note-off; <0: none */
@@ -184,6 +185,26 @@ static inline int32_t P7(const trk_t *t, int id) { return P8(t, id) >> 8; }
 static inline int32_t PB8(const trk_t *t, int id) { return P8(t, id) - 64 * 256; }
 /* a choice of n */
 static inline int32_t PN(const trk_t *t, int id, int n) { return (P7(t, id) * n) >> 7; }
+/* a table between its entries at a parameter's Q8 (its LFO's share in it): an LFO glides through a law, never steps;
+ * a whole value reads the entry itself, as the knob always has */
+static uint32_t tq_u32_mid(const uint32_t *T, int32_t q8)       /* (out of line: a modulated value's, rare) */
+{
+    uint32_t a = T[q8 >> 8], b = T[(q8 >> 8) + 1], f = (uint32_t)q8 & 255u;
+    return b >= a ? a + mulu_hi(b - a, f, 8) : a - mulu_hi(a - b, f, 8);
+}
+static inline uint32_t tq_u32(const uint32_t *T, int32_t q8) { return q8 & 255 ? tq_u32_mid(T, q8) : T[q8 >> 8]; }
+static inline int32_t tq_u16(const uint16_t *T, int32_t q8)    /* (16-bit steps by a byte's share: a word) */
+{
+    int32_t a = T[q8 >> 8], f = q8 & 255;
+    return f ? a + ((((int32_t)T[(q8 >> 8) + 1] - a) * f) >> 8) : a;
+}
+static inline int32_t tq_i16(const int16_t *T, int32_t q8)
+{
+    int32_t a = T[q8 >> 8], f = q8 & 255;
+    return f ? a + ((((int32_t)T[(q8 >> 8) + 1] - a) * f) >> 8) : a;
+}
+/* a parameter times k, its share of a step too (P7 x k on a whole value; P8 x k under 2^31: k under 66000) */
+static inline int32_t PK(const trk_t *t, int id, int32_t k) { return (P8(t, id) * k) >> 8; }
 
 /* ------------------------------------------------------------------------------------------------ machines */
 
@@ -360,6 +381,12 @@ static void machine_reset(int ti, int m)
     t->mach = (uint8_t)m;
 }
 
+/* GND-PERC's COLR (-64..63) to its one-pole's coefficient, on its low-pass side or its high-pass side */
+static inline int32_t gprc_colr(int32_t c, int low)
+{
+    return low ? T_OP[CLAMP(127 + c * 3 / 2, 20, 127)] : T_OP[CLAMP(c * 8 / 5, 0, 102)];
+}
+
 /* the machines: fill blk with 16 samples */
 static void mach_block(int ti, int m, int32_t pitch)
 {
@@ -371,12 +398,13 @@ static void mach_block(int ti, int m, int32_t pitch)
     case M_GSIN: {                     /* FOLD SUB NOIS PDEP PDEC CLIK HARM TUNE: the Monomachine's page is TUNE alone, on
                                         * H (CC 55); A..G are MONO2K's own, nothing at init (a sine, as its) */
         int32_t env = (int32_t)(t->menv[0] >> 15);
-        int32_t pq = pitch + (PB8(t, P_SYN + 7) >> 7) + ((P7(t, P_SYN + 3) * 24 * env) >> 15);   /* TUNE: +-2 semitones */
+        int32_t pq = pitch + (PB8(t, P_SYN + 7) >> 7) + ((PK(t, P_SYN + 3, 24) * env) >> 15);   /* TUNE: +-2 semitones */
         uint32_t inc = inc_of(pq);
-        t->menv[0] = mulu_hi(t->menv[0], T_ENV_COEF[P7(t, P_SYN + 4)], 31);
-        int32_t fold = P8(t, P_SYN + 0), sub = T_VOL[P7(t, P_SYN + 1)], noi = T_VOL[P7(t, P_SYN + 2)] >> 1;
-        int32_t harm = T_VOL[P7(t, P_SYN + 6)];
-        int32_t clk = (int32_t)(t->menv[1] >> 15) * P7(t, P_SYN + 5) >> 7;
+        t->menv[0] = mulu_hi(t->menv[0], tq_u32(T_ENV_COEF, P8(t, P_SYN + 4)), 31);
+        int32_t fold = P8(t, P_SYN + 0), sub = tq_u16(T_VOL, P8(t, P_SYN + 1));
+        int32_t noi = tq_u16(T_VOL, P8(t, P_SYN + 2)) >> 1;
+        int32_t harm = tq_u16(T_VOL, P8(t, P_SYN + 6));
+        int32_t clk = ((int32_t)(t->menv[1] >> 15) * P8(t, P_SYN + 5)) >> 15;  /* 2^15 by 2^15 */
         t->menv[1] = mulu_hi(t->menv[1], 1700000000u, 31);
         for (int i = 0; i < M2K_SUB; i++) {
             int32_t s = sinp(t->ph[0]);
@@ -394,16 +422,17 @@ static void mach_block(int ti, int m, int32_t pitch)
     }
     case M_GPRC: {                     /* COLR S&H META MSPR PDEP PDEC GRIT - */
         int32_t env = (int32_t)(t->menv[0] >> 15);
-        int32_t pq = pitch + ((P7(t, P_SYN + 4) * 24 * env) >> 15);
-        t->menv[0] = mulu_hi(t->menv[0], T_ENV_COEF[P7(t, P_SYN + 5)], 31);
-        int32_t colr = PB8(t, P_SYN + 0) >> 8;       /* -64..63: darker (a lowpass falling to ~300 Hz) or thinner
-                                                       * (a highpass rising to ~5 kHz) */
-        int32_t a = colr < 0 ? T_OP[CLAMP(127 + colr * 3 / 2, 20, 127)] : T_OP[CLAMP(colr * 8 / 5, 0, 102)];
-        int32_t sh = P7(t, P_SYN + 1);
-        uint32_t shinc = sh ? inc_of(pq - 24 * 64 + sh * 32) : 0;
-        int32_t meta = T_VOL[P7(t, P_SYN + 2)];
-        int32_t spread = 256 + P7(t, P_SYN + 3) * 6;
-        int32_t grit = P7(t, P_SYN + 6);
+        int32_t pq = pitch + ((PK(t, P_SYN + 4, 24) * env) >> 15);
+        t->menv[0] = mulu_hi(t->menv[0], tq_u32(T_ENV_COEF, P8(t, P_SYN + 5)), 31);
+        /* COLR -64..63: darker (a lowpass falling to ~300 Hz) or thinner (a highpass rising to ~5 kHz); between steps too */
+        int32_t c8 = PB8(t, P_SYN + 0), colr = c8 >> 8, cf = c8 & 255;
+        int32_t a = gprc_colr(colr, c8 < 0);
+        if (cf) a += ((gprc_colr(colr + 1, c8 < 0) - a) * cf) >> 8;
+        int32_t sh = P8(t, P_SYN + 1);
+        uint32_t shinc = sh ? inc_of(pq - 24 * 64 + (sh >> 3)) : 0;
+        int32_t meta = tq_u16(T_VOL, P8(t, P_SYN + 2));
+        int32_t spread = 256 + PK(t, P_SYN + 3, 6);
+        int32_t grit = P8(t, P_SYN + 6) >> 1;                               /* Q7 of a step */
         uint32_t minc[6];
         if (meta) {
             uint32_t base = inc_of(pq) >> 2;                     /* 1 at C4-ish: scale the 808's set by the note */
@@ -426,14 +455,14 @@ static void mach_block(int ti, int m, int32_t pitch)
                     x = (x >> 1) | (bit << 14);
                     t->ms[2] = (int32_t)x;
                     int32_t nes = (x & 1u) ? 24000 : -24000;
-                    w += ((nes - w) * grit) >> 7;
+                    w += ((nes - w) * grit) >> 14;                          /* 2^17 by 2^14 */
                 }
                 t->ms[0] = w;
             }
             n = t->ms[0];
             /* colour: one-pole low (below 64) or the rest of it (above) */
             t->ms[1] += ((n - t->ms[1]) * a) >> 15;
-            int32_t s = colr < 0 ? t->ms[1] : colr > 0 ? n - t->ms[1] : n;
+            int32_t s = c8 < 0 ? t->ms[1] : c8 > 0 ? n - t->ms[1] : n;
             if (meta) {
                 int32_t m6 = 0;
                 for (int k = 0; k < 6; k++) { t->ph[2 + k] += minc[k]; m6 += (t->ph[2 + k] >> 31) ? 5400 : -5400; }
@@ -449,8 +478,12 @@ static void mach_block(int ti, int m, int32_t pitch)
          * 127 (white, pink and brown from the same noise, weights fitted, T_RED_W). ST mixes in a second noise coloured
          * alike, ST / 127 of it: in the middle (3 dB louder at 127), or with STON across the stereo, the left hearing
          * the first plus the second and the right the first less it (L/R 0.88 0.60 0.29 0.01 at ST 32 64 96 127) */
-        const int16_t *rw = &T_RED_W[3 * P7(t, P_SYN + 1)];
-        int32_t st = P7(t, P_SYN + 0) * 258, on = P7(t, P_SYN + 2) >= 64;      /* st Q15 */
+        int32_t r8 = P8(t, P_SYN + 1), rf = r8 & 255, rw[3];
+        for (int k = 0; k < 3; k++) {                                      /* RED's weights, between steps too */
+            const int16_t *w = &T_RED_W[3 * (r8 >> 8) + k];
+            rw[k] = rf ? w[0] + (((w[3] - w[0]) * rf) >> 8) : w[0];
+        }
+        int32_t st = PK(t, P_SYN + 0, 258), on = P7(t, P_SYN + 2) >= 64;      /* st Q15 */
         int16_t *es = eside[ti];
         if (!st && !rw[1] && !rw[2]) {     /* white, the second noise unheard: the first's white alone, the second's
                                             * generator kept in step; the colours' filters stand (ms[0] says so) */
@@ -491,11 +524,11 @@ static void mach_block(int ti, int m, int32_t pitch)
          * ON starting it again at each trig. A second oscillator at MFRQ (C3 at 0, an octave every 32 steps, the same
          * at every note) or on the previous track's note (MSRC): SYNC plays it in the wave, hard-synced to the note;
          * RING multiplies the two triangles, unipolar, whatever the wave; R+S rings with the second synced */
-        uint32_t inc1 = inc_of(pitch + (P7(t, P_SYN + 7) - 64) * 2);
+        uint32_t inc1 = inc_of(pitch + (PB8(t, P_SYN + 7) >> 7));
         int mod = P7(t, P_SYN + 4) >> 5, wave = (P7(t, P_SYN + 3) * 5) >> 7;
         uint32_t inc2 = P7(t, P_SYN + 5) >= 64 ? inc_of(trk[(ti + M2K_TRACKS - 1) % M2K_TRACKS].pitch)
-                                                : inc_of(48 * 64 + P7(t, P_SYN + 6) * 24);
-        t->ms[4] = (int32_t)(((uint32_t)t->ms[4] + (uint32_t)P7(t, P_SYN + 1) * 64u) & 0x7FFFFFu);   /* the sweep, Q16 */
+                                                : inc_of(48 * 64 + PK(t, P_SYN + 6, 24));
+        t->ms[4] = (int32_t)(((uint32_t)t->ms[4] + (uint32_t)PK(t, P_SYN + 1, 64)) & 0x7FFFFFu);   /* the sweep, Q16 */
         int32_t pw = ((P8(t, P_SYN + 0) << 8) + t->ms[4]) & 0x7FFFFF;                             /* PW, Q16, 0..128 */
         pw -= 64 << 16;
         uint32_t duty = (uint32_t)(pw < 0 ? -pw : pw) << 9;                  /* of a cycle (2^32): |PW - 64| / 128 */
@@ -545,19 +578,19 @@ static void mach_block(int ti, int m, int32_t pitch)
          * (index 0 .. 1.56), above 64 that depth decaying from the trig (10 s .. 5 ms); 2VOL the second's depth, the same
          * law to 64 and on to index 14 at 127; both through a lowpass, TONE its cutoff (30 Hz at 0, 1.37 kHz at 64, open at
          * 127), so a high modulator goes in shallower; TUNE +-2 semitones */
-        uint32_t inc = inc_of(pitch + (P7(t, P_SYN + 7) - 64) * 2);
-        uint32_t r1 = (T_FMR24[fr24(P7(t, P_SYN + 0))] * (uint32_t)(192 + P7(t, P_SYN + 1))) >> 8;
+        uint32_t inc = inc_of(pitch + (PB8(t, P_SYN + 7) >> 7));
+        uint32_t r1 = mulu_hi(T_FMR24[fr24(P7(t, P_SYN + 0))], 192 * 256 + (uint32_t)P8(t, P_SYN + 1), 16);
         uint32_t r2 = T_FMR24[fr24(P7(t, P_SYN + 4))];
         uint32_t i1 = mulu_hi(inc, r1, 16), i2 = mulu_hi(inc, r2, 16);
-        int env = P7(t, P_SYN + 2), tone = P7(t, P_SYN + 6);
-        uint32_t k1 = T_FMB[env];
-        if (env > 64) {                /* the depth from the trig, decaying (T_FMB[64] 32837: a word) */
+        int32_t env = P8(t, P_SYN + 2);
+        uint32_t k1 = tq_u32(T_FMB, env < 64 * 256 ? env : 64 * 256);
+        if (env >= 65 * 256) {         /* the depth from the trig, decaying (T_FMB[64] 32837: a word) */
             k1 = (T_FMB[64] * (t->menv[0] >> 15)) >> 15;
-            t->menv[0] = mulu_hi(t->menv[0], T_FMEC[env - 64], 31);
+            t->menv[0] = mulu_hi(t->menv[0], tq_u32(T_FMEC, env - 64 * 256), 31);
         }
-        uint32_t k2 = T_FMB[P7(t, P_SYN + 5)];
-        int32_t lp = T_FMLP[tone];
-        uint32_t kf = T_FMFB[P7(t, P_SYN + 3)];
+        uint32_t k2 = tq_u32(T_FMB, P8(t, P_SYN + 5));
+        int32_t lp = tq_u16(T_FMLP, P8(t, P_SYN + 6));
+        uint32_t kf = tq_u32(T_FMFB, P8(t, P_SYN + 3));
         for (int i = 0; i < M2K_SUB; i++) {
             int32_t m1 = sinp(t->ph[1] + (uint32_t)((t->ms[0] + t->ms[1]) >> 1) * kf);   /* the low word alone */
             t->ms[1] = t->ms[0];
@@ -586,33 +619,36 @@ static void mach_block(int ti, int m, int32_t pitch)
          * back on 1FEN's time (under 64's depth the push adds twice as fast, and stops there). The second's ratio
          * (2FRQ / 64)^2 (4 at 127), 2ENV its depth or its decay as FM+STAT's 1ENV, 2FB its feedback as FM+STAT's 1FB;
          * TUNE +-2 semitones */
-        uint32_t inc = inc_of(pitch + (P7(t, P_SYN + 7) - 64) * 2);
-        int f1 = P7(t, P_SYN + 0), f2 = P7(t, P_SYN + 4);
-        int32_t r1 = (f1 == 127 ? 128 : f1) << 10;                          /* Q16 */
-        uint32_t r2 = (uint32_t)(f2 == 127 ? 128 * 128 : f2 * f2) << 4;
-        int fen = P7(t, P_SYN + 1), ven = P7(t, P_SYN + 3), env = P7(t, P_SYN + 5);
+        uint32_t inc = inc_of(pitch + (PB8(t, P_SYN + 7) >> 7));
+        int32_t f1 = P8(t, P_SYN + 0), f2 = P8(t, P_SYN + 4);              /* Q8: between steps too */
+        int32_t r1 = (f1 << 2) + (f1 > 126 * 256 ? (f1 - 126 * 256) << 2 : 0);   /* Q16, v / 64, 2 at 127 */
+        uint32_t r2 = f2 <= 126 * 256 ? ((uint32_t)f2 * (uint32_t)f2) >> 12          /* (v / 64)^2, 4 at 127 */
+                                      : (126u * 126u << 4) + ((508u << 4) * (uint32_t)(f2 - 126 * 256) >> 8);   /* to 128^2 */
+        int32_t fen = P8(t, P_SYN + 1), ven = P8(t, P_SYN + 3), env = P8(t, P_SYN + 5);
         int64_t b1 = inc;
-        if (fen != 64) {
-            b1 += mul_sh(T_FMFEN[fen], (int32_t)(t->menv[1] >> 15), 15);
-            t->menv[1] = mulu_hi(t->menv[1], T_FMDEC[fen > 64 ? fen - 64 : 64 - fen], 31);
+        if (fen != 64 * 256) {
+            int32_t fe = T_FMFEN[fen >> 8];
+            if (fen & 255) fe += (int32_t)mul_sh(T_FMFEN[(fen >> 8) + 1] - fe, fen & 255, 8);
+            b1 += mul_sh(fe, (int32_t)(t->menv[1] >> 15), 15);
+            t->menv[1] = mulu_hi(t->menv[1], tq_u32(T_FMDEC, fen > 64 * 256 ? fen - 64 * 256 : 64 * 256 - fen), 31);
         }
         uint32_t i1 = (uint32_t)(int32_t)mul64_sh(b1, r1, 16), i2 = mulu_hi(inc, r2, 16);
         int32_t vol8 = P8(t, P_SYN + 2);
         int32_t k1 = (int32_t)fmd_at(vol8);
         /* the envelope's 2^15 by a step count, a knob or 64's depth (T_FMDV[64] 32691) fits a word; the turn's not */
-        if (ven > 64) {                /* a push from the trig: 4 steps of the law a step, to 128 */
-            int32_t e8 = ((ven < 96 ? 4 * (ven - 64) : 128) * 256 * (int32_t)(t->menv[0] >> 15)) >> 15;
-            t->menv[0] = mulu_hi(t->menv[0], T_FMDEC[ven - 64], 31);
+        if (ven > 64 * 256) {          /* a push from the trig: 4 steps of the law a step, to 128 */
+            int32_t e8 = ((ven < 96 * 256 ? 4 * (ven - 64 * 256) : 128 * 256) * (int32_t)(t->menv[0] >> 15)) >> 15;
+            t->menv[0] = mulu_hi(t->menv[0], tq_u32(T_FMDEC, ven - 64 * 256), 31);
             if (vol8 + e8 >= 64 * 256) {
                 k1 = (int32_t)fmd_at(vol8 + e8);
             } else {                   /* under 64's depth it adds linearly, twice as fast, and stops there */
                 k1 += (int32_t)((T_FMDV[64] * (uint32_t)e8) >> 13);
                 if (k1 > (int32_t)T_FMDV[64]) k1 = (int32_t)T_FMDV[64];
             }
-        } else if (ven < 64) {         /* a cut from the trig, 1/32 of 1VOL a step; on 64's depth, past half of it the
+        } else if (ven < 64 * 256) {   /* a cut from the trig, 1/32 of 1VOL a step; on 64's depth, past half of it the
                                         * operator turns over (to its whole depth, inverted, at 0) */
-            int32_t c = ((64 - ven) * (int32_t)(t->menv[0] >> 15)) >> 5;                       /* Q15 of 1VOL */
-            t->menv[0] = mulu_hi(t->menv[0], T_FMDEC[64 - ven], 31);
+            int32_t c = ((64 * 256 - ven) * (int32_t)(t->menv[0] >> 15)) >> 13;                /* Q15 of 1VOL */
+            t->menv[0] = mulu_hi(t->menv[0], tq_u32(T_FMDEC, 64 * 256 - ven), 31);
             int32_t f = 32768 - c;                                               /* Q15, -1 .. 1 */
             int32_t v8 = ((f < 0 && vol8 > 64 * 256 ? 64 * 256 : vol8) * f) >> 15;
             if (v8 >= 64 * 256) {
@@ -627,12 +663,12 @@ static void mach_block(int ti, int m, int32_t pitch)
                 k1 = (int32_t)mul_sh(k1, 2 * f - 32768, 15);
             }
         }
-        uint32_t k2 = T_FMDV[env];
-        if (env > 64) {
+        uint32_t k2 = fmd_at(env < 64 * 256 ? env : 64 * 256);
+        if (env >= 65 * 256) {
             k2 = (T_FMDV[64] * (t->menv[2] >> 15)) >> 15;
-            t->menv[2] = mulu_hi(t->menv[2], T_FMEC[env - 64], 31);
+            t->menv[2] = mulu_hi(t->menv[2], tq_u32(T_FMEC, env - 64 * 256), 31);
         }
-        uint32_t kf = T_FMFB[P7(t, P_SYN + 6)];
+        uint32_t kf = tq_u32(T_FMFB, P8(t, P_SYN + 6));
         for (int i = 0; i < M2K_SUB; i++) {
             int32_t m2 = sinp(t->ph[2] + (uint32_t)((t->ms[0] + t->ms[1]) >> 1) * kf);
             t->ms[1] = t->ms[0];
@@ -649,20 +685,19 @@ static void mach_block(int ti, int m, int32_t pitch)
         /* after the Monomachine's FM+PAR, measured on its OS (tools/ref/chain_fm26.spec): FM+STAT's carrier, lowpass and
          * laws with three operators side by side, each on the 24 steps; an ENV up to 64 its depth, over 64 the depth of
          * FM+STAT's 2VOL at that value, falling from the trig on 1ENV's time; TONE as FM+STAT's; TUNE +-2 semitones */
-        uint32_t inc = inc_of(pitch + (P7(t, P_SYN + 7) - 64) * 2);
-        int tone = P7(t, P_SYN + 6);
+        uint32_t inc = inc_of(pitch + (PB8(t, P_SYN + 7) >> 7));
         uint32_t ii[3], kk[3];
         for (int j = 0; j < 3; j++) {
             ii[j] = mulu_hi(inc, T_FMR24[fr24(P7(t, P_SYN + 2 * j))], 16);
-            int env = P7(t, P_SYN + 2 * j + 1);
-            uint32_t k = T_FMB[env];
-            if (env > 64) {
+            int32_t env = P8(t, P_SYN + 2 * j + 1);
+            uint32_t k = tq_u32(T_FMB, env);
+            if (env >= 65 * 256) {
                 k = mulu_hi(k, t->menv[j] >> 15, 15);
-                t->menv[j] = mulu_hi(t->menv[j], T_FMEC[env - 64], 31);
+                t->menv[j] = mulu_hi(t->menv[j], tq_u32(T_FMEC, env - 64 * 256), 31);
             }
             kk[j] = k;
         }
-        int32_t lp = T_FMLP[tone];
+        int32_t lp = tq_u16(T_FMLP, P8(t, P_SYN + 6));
         for (int i = 0; i < M2K_SUB; i++) {
             uint32_t pm = 0;
             for (int j = 0; j < 3; j++) {
@@ -683,25 +718,25 @@ static void mach_block(int ti, int m, int32_t pitch)
          * half that distance, UNIL x UNIX; a square an octave down on its own curve; all through one pole of highpass
          * that follows the note (cutoff 1.0 .. 2.6 x f0: the saw's hollow fundamental); then sines an octave and two
          * down. Against GND-SIN's sine the saw stands at 0.158, SUB1 at 0.217, SUB2 at 0.082. DRFT is MONO2K's own. */
-        int unil = P7(t, P_SYN + 0), uniw = P7(t, P_SYN + 1), drift = P7(t, P_SYN + 3);
-        int32_t pq = pitch + (P7(t, P_SYN + 7) - 64) * 2;               /* TUNE: +-2 semitones, 3.125 c a step */
+        int32_t unil = P8(t, P_SYN + 0), uniw = P8(t, P_SYN + 1), drift = P8(t, P_SYN + 3);   /* Q8 */
+        int32_t pq = pitch + (PB8(t, P_SYN + 7) >> 7);                  /* TUNE: +-2 semitones, 3.125 c a step */
         if (drift) {
             if (!t->drng) t->drng = 0x6C8E9CF5u ^ ((uint32_t)ti + 1u) * 0x9E3779B9u;   /* its own: either core, any order */
-            t->ms[4] += (((int32_t)(noise_step(&t->drng) >> 20) - 2048) * drift) >> 9;
-            t->ms[4] = CLAMP(t->ms[4], -drift * 8, drift * 8);
+            t->ms[4] += (((int32_t)(noise_step(&t->drng) >> 20) - 2048) * drift) >> 17;   /* 2^11 by 2^15 */
+            t->ms[4] = CLAMP(t->ms[4], -(drift >> 5), drift >> 5);
             pq += t->ms[4] >> 6;
         }
         uint32_t inc[5], inv[5];
         inc[0] = inc_of(pq);
-        inc[1] = mulu_hi(inc[0], T_SW1LO[uniw], 24);
-        inc[2] = mulu_hi(inc[0], T_SW1HI[uniw], 24);
-        inc[3] = mulu_hi(inc[0], T_SW2LO[uniw], 24);
-        inc[4] = mulu_hi(inc[0], T_SW2HI[uniw], 24);
+        inc[1] = mulu_hi(inc[0], tq_u32(T_SW1LO, uniw), 24);
+        inc[2] = mulu_hi(inc[0], tq_u32(T_SW1HI, uniw), 24);
+        inc[3] = mulu_hi(inc[0], tq_u32(T_SW2LO, uniw), 24);
+        inc[4] = mulu_hi(inc[0], tq_u32(T_SW2HI, uniw), 24);
         int nv = unil ? 5 : 1;
         for (int k = 0; k < nv; k++) inv[k] = 0xFFFFFFFFu / (inc[k] | 1);
-        int32_t g1 = 5166 * unil / 127, g2 = (g1 * P7(t, P_SYN + 2)) / 127;
-        int32_t gx = (3369 * T_SWSUBX[P7(t, P_SYN + 4)]) >> 15;
-        int32_t gs1 = 7097 * P7(t, P_SYN + 5) / 127, gs2 = 2701 * P7(t, P_SYN + 6) / 127;
+        int32_t g1 = 5166 * unil / (127 * 256), g2 = (g1 * P8(t, P_SYN + 2)) / (127 * 256);   /* (2^13 by 2^15) */
+        int32_t gx = (3369 * tq_u16(T_SWSUBX, P8(t, P_SYN + 4))) >> 15;
+        int32_t gs1 = 7097 * P8(t, P_SYN + 5) / (127 * 256), gs2 = 2701 * P8(t, P_SYN + 6) / (127 * 256);
         uint32_t ih = inc[0] >> 1, invh = 0xFFFFFFFFu / (ih | 1);
         int32_t a = T_SWHP[CLAMP(pq >> 6, 0, 127)];
         for (int i = 0; i < M2K_SUB; i++) {
@@ -730,17 +765,18 @@ static void mach_block(int ti, int m, int32_t pitch)
          * started together, its duty PW / 128 (a square at 64, silent at 0 and 127), against GND-SIN's sine at 0.105;
          * PWAD sweeps PW on, 5.38 steps a second a step, round and round, PWRS ON starting it again at each trig; a
          * unison pair -+0.211 c a step of UNIW off, each as loud as UNIL says; sines an octave and two down */
-        int unil = P7(t, P_SYN + 0), uniw = P7(t, P_SYN + 1);
+        int32_t unil = P8(t, P_SYN + 0), uniw = P8(t, P_SYN + 1);         /* Q8 */
         uint32_t inc[3], inv[3];
-        inc[0] = inc_of(pitch + (P7(t, P_SYN + 7) - 64) * 2);
-        inc[1] = mulu_hi(inc[0], T_SW2LO[uniw], 24);                    /* SWAV-SAW's extended pair's spread */
-        inc[2] = mulu_hi(inc[0], T_SW2HI[uniw], 24);
+        inc[0] = inc_of(pitch + (PB8(t, P_SYN + 7) >> 7));
+        inc[1] = mulu_hi(inc[0], tq_u32(T_SW2LO, uniw), 24);            /* SWAV-SAW's extended pair's spread */
+        inc[2] = mulu_hi(inc[0], tq_u32(T_SW2HI, uniw), 24);
         int nv = unil ? 3 : 1;
         for (int k = 0; k < nv; k++) inv[k] = 0xFFFFFFFFu / (inc[k] | 1);
-        t->ms[4] = (int32_t)(((uint32_t)t->ms[4] + (uint32_t)P7(t, P_SYN + 5) * 128u) & 0x7FFFFFu);  /* the sweep, Q16 */
+        t->ms[4] = (int32_t)(((uint32_t)t->ms[4] + (uint32_t)PK(t, P_SYN + 5, 128)) & 0x7FFFFFu);  /* the sweep, Q16 */
         uint32_t duty = (uint32_t)(((P8(t, P_SYN + 4) << 8) + t->ms[4]) & 0x7FFFFF) << 9;
-        int32_t g1 = PUL_A * unil / 127;
-        int32_t gs1 = PUL_S1 * P7(t, P_SYN + 2) / 127, gs2 = PUL_S2 * P7(t, P_SYN + 3) / 127;
+        int32_t g1 = PUL_A * unil / (127 * 256);
+        int32_t gs1 = PUL_S1 * P8(t, P_SYN + 2) / (127 * 256);              /* (2^15 by 2^15) */
+        int32_t gs2 = PUL_S2 * P8(t, P_SYN + 3) / (127 * 256);
         int32_t dc = 32768 - (int32_t)(duty >> 16);
         for (int i = 0; i < M2K_SUB; i++) {
             int32_t s = (blep_saw(t->ph[0], inc[0], inv[0]) - blep_saw(t->ph[0] - duty, inc[0], inv[0]) + dc) * PUL_A;
@@ -762,20 +798,24 @@ static void mach_block(int ti, int m, int32_t pitch)
          * INP its level (100 as it is). MONO2K's own designs on the Monomachine's pages: the emulator it is measured on
          * passes no neighbour into its FX machines */
         int32_t x[M2K_SUB];
-        int32_t inp = P7(t, P_SYN + 7) * 328;                                        /* Q15, 100: unity */
+        int32_t inp = PK(t, P_SYN + 7, 328);                                         /* Q15, 100: unity */
         for (int i = 0; i < M2K_SUB; i++) x[i] = ti ? (tout[ti - 1][i] * inp) >> 15 : 0;
-        int32_t mix = P7(t, P_SYN + 3) * 258;                                        /* Q15 */
+        int32_t mix = PK(t, P_SYN + 3, 258);                                         /* Q15 */
         if (m == M_FXC) {          /* DEL DEP SPD MIX FB WID LP INP: two taps swept in opposite ways off one line, their
                                     * mean the chorus, their difference its width, fed back through the first */
             int16_t *ln = ens_mem[ti];
-            int32_t base = 22 + P7(t, P_SYN + 0) * 4, dep = (P7(t, P_SYN + 1) * (base < 400 ? base : 400)) >> 7;   /* to 12 ms, +-9 */
-            uint32_t linc = T_CHO_INC[P7(t, P_SYN + 2)];
+            /* (DEL, DEP and LP between their steps too: an LFO glides them) */
+            int32_t b8 = (22 << 8) + P8(t, P_SYN + 0) * 4, bm = b8 < 400 << 8 ? b8 >> 8 : 400;   /* to 12 ms, +-9 */
+            int32_t d8 = P8(t, P_SYN + 1), dv = d8 >> 8, dep = ((dv * bm) >> 7) << 4;   /* Q4 samples */
+            if (d8 & 255) dep += ((((dv + 1) * bm >> 7) - (dv * bm >> 7)) * (d8 & 255)) >> 4;
+            uint32_t linc = tq_u32(T_CHO_INC, P8(t, P_SYN + 2));
             int32_t fb = (PB8(t, P_SYN + 4) * 58) >> 5;                              /* Q15 of +-0.9, from Q8 steps */
-            int32_t wid = P7(t, P_SYN + 5) * 258, lp = T_FMLP[64 + (P7(t, P_SYN + 6) >> 1)];
+            int32_t l8 = P8(t, P_SYN + 6), wid = PK(t, P_SYN + 5, 258), lp = T_FMLP[64 + ((l8 >> 8) >> 1)];
+            if (l8 & 255) lp += ((T_FMLP[64 + (((l8 >> 8) + 1) >> 1)] - lp) * (l8 & 255)) >> 8;
             for (int i = 0; i < M2K_SUB; i++) {
                 uint32_t p = t->ph[6] += linc;
                 int32_t tri = (int32_t)((p ^ (uint32_t)((int32_t)p >> 31)) >> 15) - 32768;   /* -32768 .. 32767 */
-                int32_t da = (base << 8) + ((dep * tri) >> 7), db = (base << 8) - ((dep * tri) >> 7);   /* Q8 samples */
+                int32_t da = b8 + ((dep * tri) >> 11), db = b8 - ((dep * tri) >> 11);     /* Q8 samples (2^13 by 2^15) */
                 uint32_t w = t->ph[5];
                 uint32_t ja = w - (uint32_t)(da >> 8), jb = w - (uint32_t)(db >> 8);
                 int32_t fa = da & 255, fb2 = db & 255;
@@ -797,11 +837,11 @@ static void mach_block(int ti, int m, int32_t pitch)
                                     * wet. EXT fades the carrier to the track before the input (the Monomachine fades
                                     * it to its audio input, which the FM-1 has not); out RG_HR down, taken back */
             uint32_t inc = inc_of(pitch);
-            int wv = P7(t, P_SYN + 0), ext = P7(t, P_SYN + 1) * 258, iv = P7(t, P_SYN + 7);
-            int wi = wv >> 3;
-            int32_t wf = wi < 15 ? (wv & 7) << 12 : ((wv - 120) << 15) / 7;
+            int32_t wv = P8(t, P_SYN + 0), ext = PK(t, P_SYN + 1, 258), iv = P8(t, P_SYN + 7);   /* Q8 */
+            int wi = wv >> 11;
+            int32_t wf = wi < 15 ? (wv & 2047) << 4 : ((wv - 120 * 256) << 7) / 7;
             const int16_t *ca = T_RINGW[wi], *cb = T_RINGW[wi + 1];
-            int32_t g = iv * iv * 2;                                               /* Q12, (INP / 45.25)^2 */
+            int32_t g = (iv * iv) >> 15;                                           /* Q12, (INP / 45.25)^2 */
             for (int i = 0; i < M2K_SUB; i++) {
                 int32_t xi = ti ? CLAMP((tvol[ti - 1][i] * g) >> 12, -RG_CEIL, RG_CEIL) : 0;
                 uint32_t ph = t->ph[0] += inc;
@@ -823,15 +863,16 @@ static void mach_block(int ti, int m, int32_t pitch)
                 ms += (uint32_t)(x[i] * x[i]);                                  /* x under 41656: a word */
             }
             int32_t lp = ilog2_q8(pk), lr = ilog2_q8((uint32_t)(ms >> 4) | 1) >> 1;        /* log2 of the peak, the RMS */
-            int rmsv = P7(t, P_SYN + 6);
-            int32_t lv = lp + (((lr - lp) * rmsv) >> 7);
+            int32_t rmsv = P8(t, P_SYN + 6);
+            int32_t lv = lp + (((lr - lp) * rmsv) >> 15);                                  /* 2^13 by 2^15 */
             int32_t *env = &t->ms[2];
             if (*env == 0) *env = lv;
-            *env += ((lv - *env) * (lv > *env ? T_DYN_A[P7(t, P_SYN + 0)] : T_DYN_R[P7(t, P_SYN + 1)])) >> 15;  /* lv under 2^12 */
-            int32_t thr = 15 * 256 - ((127 - P7(t, P_SYN + 2)) * 2549) / 127;            /* -60 .. 0 dB of full, log2 Q8 */
+            int32_t ar = lv > *env ? tq_u16(T_DYN_A, P8(t, P_SYN + 0)) : tq_u16(T_DYN_R, P8(t, P_SYN + 1));
+            *env += ((lv - *env) * ar) >> 15;                                                /* lv under 2^12 */
+            int32_t thr = 15 * 256 - ((127 * 256 - P8(t, P_SYN + 2)) * 2549) / (127 * 256);   /* -60 .. 0 dB, log2 Q8 */
             int32_t over = *env - thr;
-            int32_t gl = over > 0 ? -((over * (int32_t)T_DYN_K[P7(t, P_SYN + 4)]) >> 8) : 0;
-            gl += (P7(t, P_SYN + 5) * 1020) / 127;                                         /* GAIN: up to +24 dB */
+            int32_t gl = over > 0 ? -((over * tq_u16(T_DYN_K, P8(t, P_SYN + 4))) >> 8) : 0;
+            gl += (P8(t, P_SYN + 5) * 1020) / (127 * 256);                                 /* GAIN: up to +24 dB */
             uint32_t g1 = iexp2_q16(gl), g0 = (uint32_t)t->ms[3] ? (uint32_t)t->ms[3] : g1;
             for (int i = 0; i < M2K_SUB; i++) {
                 uint32_t g = g0 + (uint32_t)mul_sh((int32_t)(g1 - g0), i, 4);       /* both under 2^31 */
@@ -852,19 +893,21 @@ static void mach_block(int ti, int m, int32_t pitch)
          * CHRL their mix (dry 1 - 0.83 x, wet 0.85 x). CHRW sets them apart across the stereo: the left hears
          * (1 + w) / 2 of the first and (1 - w) / 2 of the second, the right the other way round (w = 0.355
          * (CHRW / 127)^1.15, T_ENS_W), so at 0 both hear their mean (mono); out as the mid here and the side (eside) */
-        int32_t base = pitch + (P7(t, P_SYN + 7) - 64) * 2 - 12 * 64;
-        int32_t wa = 32768 - (P7(t, P_SYN + 3) * 12124) / 127, wb = 32768 - (P7(t, P_SYN + 3) * 53412) / 127;   /* Q15 */
-        uint32_t off = (uint32_t)P7(t, P_SYN + 4) << 25;
+        int32_t base = pitch + (PB8(t, P_SYN + 7) >> 7) - 12 * 64;
+        int32_t w8 = P8(t, P_SYN + 3);
+        int32_t wa = 32768 - (w8 * 12124) / (127 * 256);                   /* Q15 (2^15 by 2^16) */
+        int32_t wb = 32768 - (w8 * 53412) / (127 * 256);
+        uint32_t off = (uint32_t)P8(t, P_SYN + 4) << 17;
         uint32_t inc[4], inv[4];
         for (int k = 0; k < 4; k++) {
             int32_t iv = k ? T_ENS_PCH[P7(t, P_SYN + k - 1)] : 0;
             inc[k] = iv == ENS_OFF ? 0 : inc_of(base + iv);
             inv[k] = 0xFFFFFFFFu / (inc[k] | 1);
         }
-        int chrl = P7(t, P_SYN + 5), chrw = P7(t, P_SYN + 6);
-        int32_t dry = 32768 - (chrl * 27197) / 127, wet = (chrl * 27853) / 127;    /* Q15 */
-        wet = (wet * (int32_t)T_ENS_G[chrw]) >> 15;                                /* each channel at one copy's level */
-        int32_t wside = (wet * (int32_t)T_ENS_W[chrw]) >> 15;                       /* the side's share, Q15 */
+        int32_t chrl = P8(t, P_SYN + 5), chrw = P8(t, P_SYN + 6);                  /* Q8 */
+        int32_t dry = 32768 - (chrl * 27197) / (127 * 256), wet = (chrl * 27853) / (127 * 256);    /* Q15 */
+        wet = (wet * tq_u16(T_ENS_G, chrw)) >> 15;                                 /* each channel at one copy's level */
+        int32_t wside = (wet * tq_u16(T_ENS_W, chrw)) >> 15;                        /* the side's share, Q15 */
         int16_t *cm = ens_mem[ti];
         int16_t *es = eside[ti];
         for (int i = 0; i < M2K_SUB; i++) {
@@ -900,7 +943,7 @@ static void mach_block(int ti, int m, int32_t pitch)
     }
     case M_WAV: {                      /* WAVE SCAN STIM SYNC BITS DTUN MIX2 STEP */
         int32_t env = (int32_t)(t->menv[0] >> 15);
-        if (P7(t, P_SYN + 2) < 127) t->menv[0] = mulu_hi(t->menv[0], T_ENV_COEF[P7(t, P_SYN + 2)], 31);
+        if (P8(t, P_SYN + 2) < 127 * 256) t->menv[0] = mulu_hi(t->menv[0], tq_u32(T_ENV_COEF, P8(t, P_SYN + 2)), 31);
         /* the bank: MONO2K's 32 across WAVE's range (as it always was), or the owner's 64 two values a wave (an even
          * WAVE is one exactly, an odd one between two) */
         int big = PN(t, P_WBNK, 2), last = big ? 63 : 31;
@@ -919,10 +962,10 @@ static void mach_block(int ti, int m, int32_t pitch)
         int32_t dc = dca + (((dcb - dca) * (pos & 255)) >> 8), g = ga + (((gb - ga) * (pos & 255)) >> 8);
         int32_t wf = pos & 255;
         uint32_t inc = inc_of(pitch);
-        uint32_t sinc = mulu_hi(inc, 256 + (uint32_t)P7(t, P_SYN + 3) * 14, 8);
+        uint32_t sinc = mulu_hi(inc, 256 + (uint32_t)PK(t, P_SYN + 3, 14), 8);
         uint32_t inc2 = inc_of(pitch + (PB8(t, P_SYN + 5) >> 5));
-        int bits = 16 - (P7(t, P_SYN + 4) * 14 >> 7);
-        int32_t mix2 = T_VOL[P7(t, P_SYN + 6)];
+        int bits = 16 - (P7(t, P_SYN + 4) * 14 >> 7);                      /* (bits and STEP are steps) */
+        int32_t mix2 = tq_u16(T_VOL, P8(t, P_SYN + 6));
         int stp = P7(t, P_SYN + 7) * 6 >> 7;   /* 0: smooth .. 5: 8 steps per cycle */
         uint32_t qmask = stp ? ~((1u << (24 + stp)) - 1) : 0xFFFFFFFFu;
         for (int i = 0; i < M2K_SUB; i++) {
@@ -954,11 +997,13 @@ static void mach_block(int ti, int m, int32_t pitch)
          * the attack, pure in the tail); the snap a blip of pitch, s^2 x 24 x SNAP over 7 ms; a 1 ms click on top */
         int w = PN(t, P_SYN + 0, 4);
         if (!(t->ms[2]++ & 3)) {       /* the sweep and the snap a step every 64 samples, as the LXR's (its attack) */
-            int32_t pc = drm_curve((int32_t)(t->menv[0] >> 15), drm_c(P7(t, P_SYN + 3)));
-            t->menv[0] = drm_fall(t->menv[0], 4 * T_DRM_RA[P7(t, P_SYN + 2)]);
+            int32_t c8 = P8(t, P_SYN + 3), e = (int32_t)(t->menv[0] >> 15);
+            int32_t pc = drm_curve(e, drm_c(c8 >> 8));
+            if (c8 & 255) pc += ((drm_curve(e, drm_c((c8 >> 8) + 1)) - pc) * (c8 & 255)) >> 8;   /* PCRV between steps */
+            t->menv[0] = drm_fall(t->menv[0], 4 * tq_u32(T_DRM_RA, P8(t, P_SYN + 2)));
             int32_t sn = t->ms[0];
-            t->menv[2] = 65536u + (uint32_t)((T_DRM_PAMT[P7(t, P_SYN + 1)] * pc) >> 7)
-                         + (uint32_t)((((sn * sn) >> 15) * 48 * P7(t, P_SYN + 6)) >> 7);
+            t->menv[2] = 65536u + (uint32_t)((tq_u16(T_DRM_PAMT, P8(t, P_SYN + 1)) * pc) >> 7)
+                         + (uint32_t)((((sn * sn) >> 15) * PK(t, P_SYN + 6, 48)) >> 7);
             t->ms[0] = sn > 6552 ? sn - 6552 : 0;
             t->ms[3] = pc;
         }
@@ -966,8 +1011,8 @@ static void mach_block(int ti, int m, int32_t pitch)
         uint32_t mul = t->menv[2];
         int64_t ic = mul64_sh(inc_of(pitch), (int32_t)mul, 16);            /* (an increment up to 2^32, mul 2^30) */
         uint32_t inc = ic > 0x7FFF0000u ? 0x7FFF0000u : (uint32_t)ic, inv = 0xFFFFFFFFu / (inc | 1u);
-        uint32_t minc = inc_of(pitch + (P7(t, P_SYN + 5) - 64) * 64);
-        int32_t amt = P7(t, P_SYN + 4) * 258;
+        uint32_t minc = inc_of(pitch + (PB8(t, P_SYN + 5) >> 2));
+        int32_t amt = PK(t, P_SYN + 4, 258);
         int32_t fmd = (amt * pc) >> 15;                                     /* both Q15 */
         int sh = w ? 4 : 2;                                /* a cycle of phase at full on the sine, four on the others */
         int32_t clk = t->ms[1];
@@ -991,18 +1036,20 @@ static void mach_block(int ti, int m, int32_t pitch)
         int w = PN(t, P_SYN + 0, 4);
         if (!(t->ms[5]++ & 3)) {       /* the sweep a step every 64 samples, as the drum's */
             int32_t pc = drm_curve((int32_t)(t->menv[0] >> 15), 15);
-            t->menv[0] = drm_fall(t->menv[0], 4 * T_DRM_RA[P7(t, P_SYN + 2)]);
-            t->menv[2] = 65536u + (uint32_t)((T_DRM_PAMT[P7(t, P_SYN + 1)] * pc) >> 7);
+            t->menv[0] = drm_fall(t->menv[0], 4 * tq_u32(T_DRM_RA, P8(t, P_SYN + 2)));
+            t->menv[2] = 65536u + (uint32_t)((tq_u16(T_DRM_PAMT, P8(t, P_SYN + 1)) * pc) >> 7);
         }
         int64_t ic = mul64_sh(inc_of(pitch), (int32_t)t->menv[2], 16);
         uint32_t inc = ic > 0x7FFF0000u ? 0x7FFF0000u : (uint32_t)ic, inv = 0xFFFFFFFFu / (inc | 1u);
-        uint32_t ninc = (uint32_t)(P7(t, P_SYN + 3) | 1) * 16870877u;     /* 22050 v / 127 Hz */
-        int32_t mix = P7(t, P_SYN + 4) * 258;
-        int nf = P7(t, P_SYN + 5) - 64;
-        if (nf) zsvf_set(&t->vo[0], fg_at(T_FG, nf < 0 ? DRM_LP0 + nf * 9 * 256 : DRM_HP0 + nf * 10 * 256), DRM_K);
+        int32_t n8 = P8(t, P_SYN + 3);
+        uint32_t ninc = (uint32_t)((n8 >> 8) | 1) * 16870877u;                /* 22050 v / 127 Hz */
+        if (n8 & 255) ninc += mulu_hi((uint32_t)(((n8 >> 8) + 1) | 1) * 16870877u - ninc, (uint32_t)(n8 & 255), 8);
+        int32_t mix = PK(t, P_SYN + 4, 258);
+        int32_t nf = PB8(t, P_SYN + 5);                                     /* Q8 */
+        if (nf) zsvf_set(&t->vo[0], fg_at(T_FG, nf < 0 ? DRM_LP0 + nf * 9 : DRM_HP0 + nf * 10), DRM_K);
         int32_t g0 = t->ms[4], g1 = 32768;
         if (t->ms[3] > 0) {
-            t->menv[1] = drm_fall(t->menv[1], T_DRM_RA[P7(t, P_SYN + 7)]);
+            t->menv[1] = drm_fall(t->menv[1], tq_u32(T_DRM_RA, P8(t, P_SYN + 7)));
             g1 = drm_curve((int32_t)(t->menv[1] >> 15), 20);
             if (!t->menv[1] && --t->ms[3] > 0) t->menv[1] = 1u << 30;
         }
@@ -1027,18 +1074,18 @@ static void mach_block(int ti, int m, int32_t pitch)
          * amp on its decay law (the track's AMP left open), a hit taking it from where it is. The hats: CDEC, or OPEN's
          * when not 0 (lock it on the open steps), the carrier at half; the cymbal: a rise at ATK's, then DEC's */
         int cym = m == M_DCYM, w = PN(t, P_SYN + 5, 5), slp = cym ? 2 : 6;   /* their curves: the LXR's inits' */
-        uint32_t inc = inc_of(pitch + (P7(t, P_SYN + 0) - 64) * 64), inv = 0xFFFFFFFFu / (inc | 1u);
-        uint32_t i1 = inc_of(pitch + (P7(t, P_SYN + 1) - 64) * 64), i2 = inc_of(pitch + (P7(t, P_SYN + 3) - 64) * 64);
-        int32_t g1 = P7(t, P_SYN + 2) * 258, g2 = P7(t, P_SYN + 4) * 258;
+        uint32_t inc = inc_of(pitch + (PB8(t, P_SYN + 0) >> 2)), inv = 0xFFFFFFFFu / (inc | 1u);
+        uint32_t i1 = inc_of(pitch + (PB8(t, P_SYN + 1) >> 2)), i2 = inc_of(pitch + (PB8(t, P_SYN + 3) >> 2));
+        int32_t g1 = PK(t, P_SYN + 2, 258), g2 = PK(t, P_SYN + 4, 258);
         int32_t a0 = t->ms[4], a1;
         if (t->ms[5]) {
-            uint32_t r = t->menv[1] + T_DRM_RA[P7(t, P_SYN + 6)];
+            uint32_t r = t->menv[1] + tq_u32(T_DRM_RA, P8(t, P_SYN + 6));
             t->menv[1] = r >= 1u << 30 ? 1u << 30 : r;
             if (t->menv[1] >= 1u << 30) t->ms[5] = 0;
             a1 = 32768 - drm_curve(32768 - (int32_t)(t->menv[1] >> 15), 127 - slp);       /* the decay's mirror */
         } else {
-            int dv = cym ? P7(t, P_SYN + 7) : P7(t, P_SYN + 7) ? P7(t, P_SYN + 7) : P7(t, P_SYN + 6);
-            t->menv[1] = drm_fall(t->menv[1], T_DRM_RD[dv]);
+            int32_t dv = cym || P7(t, P_SYN + 7) ? P8(t, P_SYN + 7) : P8(t, P_SYN + 6);
+            t->menv[1] = drm_fall(t->menv[1], tq_u32(T_DRM_RD, dv));
             a1 = drm_curve((int32_t)(t->menv[1] >> 15), slp);
         }
         t->ms[4] = a1;
@@ -1068,17 +1115,17 @@ static void mach_block(int ti, int m, int32_t pitch)
          * vowels is the cascade's at a tenth of the dB, 10:1, residual 0.9 dB): the cascade's mean square followed
          * (25 ms), the gain down at once and up at most 0.23 dB a ms, from the same low gain at each trig (the
          * Monomachine's fade-in, straight in dB, 35 dB at C3 and longer where its gain is higher). CONS CLEN CVOL and V-SW's switch: still to come (their knobs kept) */
-        uint32_t hz = mulu_hi(inc_of(pitch + (P7(t, P_SYN + 7) - 64) * 2), M2K_SR, 32);
+        uint32_t hz = mulu_hi(inc_of(pitch + (PB8(t, P_SYN + 7) >> 7)), M2K_SR, 32);
         if (hz < 8) hz = 8;
         uint32_t inc = (uint32_t)mul64_sh((int64_t)VO_INC_Q16, (int32_t)hz, 16), inv = 0xFFFFFFFFu / inc;
         int32_t sg = (int32_t)iexp2_q16((ilog2_q8(130) - ilog2_q8(hz)) >> 1);      /* Q16: sqrt(130 / hz) */
-        int v1 = P7(t, P_SYN + 0), v2 = P7(t, P_SYN + 1), vc = P7(t, P_SYN + 3);
-        zsvf_set(&t->vo[0], T_VO_G1[v1], T_VO_K1[v1]);
-        zsvf_set(&t->vo[1], T_VO_G2[v2], T_VO_K2[v2]);
+        int32_t v1 = P8(t, P_SYN + 0), v2 = P8(t, P_SYN + 1), vc = P8(t, P_SYN + 3);   /* Q8: the vowels glide */
+        zsvf_set(&t->vo[0], tq_u32(T_VO_G1, v1), tq_u32(T_VO_K1, v1));
+        zsvf_set(&t->vo[1], tq_u32(T_VO_G2, v2), tq_u32(T_VO_K2, v2));
         zsvf_set(&t->vo[2], T_VO_GK34[0], T_VO_GK34[1]);
         zsvf_set(&t->vo[3], T_VO_GK34[2], T_VO_GK34[3]);
         t->vohp.G = VO_HP_G;
-        int32_t gv = (int32_t)mul_sh(T_VO_GV[vc], sg, 16), gn = (T_VO_GN[vc] * VO_NZ) >> 12;
+        int32_t gv = (int32_t)mul_sh(tq_u16(T_VO_GV, vc), sg, 16), gn = (tq_u16(T_VO_GN, vc) * VO_NZ) >> 12;
         /* the compressor: its target from the cascade's level so far, the gain to it at once down, slewed up */
         int32_t lv = (ilog2_q8((uint32_t)((t->vo_pw >> 16) | 1)) + 16 * 256) >> 1;  /* the rms, Q8 log2 */
         int32_t gt = ((VO_T - lv) * (VO_R - 1) * 16) / VO_R;                       /* Q12, 10:1 over everything */
@@ -1116,15 +1163,25 @@ static uint32_t hold_bpm = 120;       /* the pattern's tempo, for HOLD (set by e
 static uint32_t ext_bpm;               /* the clock in's tempo (GLO > MIDI SYNC IN), 0 when the pattern's rules */
 static void mx_gate_end(int ti);       /* the sequencer's: a track's note ends (NOTES out) */
 
+/* the amp's attack from a level (a trig over a sounding note): its phase where its square is that level, so the rise
+ * goes on from there, no step */
+static uint32_t atk_from(uint32_t lv)
+{
+    uint32_t r = 0, b = 1u << 14;                   /* the square root, Q15, of a Q30 level (2^30 at most) */
+    for (; b; b >>= 1) if ((r + b) * (r + b) <= lv) r += b;
+    return lv >= (1u << 30) ? 1u << 30 : r << 15;
+}
+
 static void env_block(trk_t *t)
 {
-    /* amp: attack, hold (127: while the gate is open), decay (127: none), release on note-off, timed as the
-     * Monomachine times them (measured, tools/ref) */
+    /* amp (format 16, gen_tables.py): the attack a square of its time to full (an even swell to the ear), hold (127:
+     * while the gate is open), decay (127: none) and release on note-off straight in dB to -60 at their times */
     switch (t->astage) {
     case 1:
-        t->aenv += T_AATK_INC[t->eff[P_ATK]];
-        if (t->aenv >= (1u << 30)) {
-            t->aenv = 1u << 30;
+        t->aph += T_AATK_INC[t->eff[P_ATK]];        /* (2^30 at most, twice: a word) */
+        t->aenv = t->eff[P_ATK] ? mulu_hi(t->aph, t->aph, 30) : t->aph;   /* 0: the Monomachine's straight 1 ms */
+        if (t->aph >= (1u << 30)) {
+            t->aenv = t->aph = 1u << 30;
             t->astage = 2;
             int h = t->eff[P_HOLD];                         /* v / 32 of a beat at the pattern's tempo, as the
                                                              * Monomachine's (measured at 60, 120 and 240 BPM) */
@@ -1138,14 +1195,14 @@ static void env_block(trk_t *t)
         break;
     case 3: {
         if (t->let_go) { t->astage = 4; break; }            /* and the decay */
-        int d = P7(t, P_DEC);
-        if (d < 127) t->aenv = mulu_hi(t->aenv, T_ADEC_COEF[d], 31);
+        int32_t d8 = P8(t, P_DEC);
+        if (d8 < 127 * 256) t->aenv = mulu_hi(t->aenv, tq_u32(T_ADEC_COEF, d8), 31);
         else if (!t->gate) t->astage = 4;
         if (t->aenv < (1u << 15)) { t->aenv = 0; t->astage = 0; }
         break;
     }
     case 4:
-        t->aenv = mulu_hi(t->aenv, T_ADEC_COEF[P7(t, P_REL)], 31);
+        t->aenv = mulu_hi(t->aenv, tq_u32(T_ADEC_COEF, P8(t, P_REL)), 31);
         if (t->aenv < (1u << 15)) { t->aenv = 0; t->astage = 0; }
         break;
     default:
@@ -1158,7 +1215,7 @@ static void env_block(trk_t *t)
         t->fenv += T_FATK_INC[t->eff[P_FATK]];
         if (t->fenv >= (1u << 30)) { t->fenv = 1u << 30; t->fstage = 2; }
     } else if (t->fstage == 2) {
-        uint32_t d = T_FDEC_DEC[P7(t, P_FDEC)];
+        uint32_t d = tq_u32(T_FDEC_DEC, P8(t, P_FDEC));
         t->fenv = t->fenv > d ? t->fenv - d : 0;
     }
 }
@@ -1185,6 +1242,16 @@ static int32_t lfo_shape(int w, uint32_t ph, int32_t *rnd)
 }
 
 static uint32_t bpm10;                 /* tempo in 1/10 bpm, set by the sequencer */
+
+/* an LFO's phase a control block (format 16, T_LSPD): SPD (Q8) a cycle in 2^((84 - SPD) / 12) beats of its clock (format
+ * 15's, 1.45 % slow: saved LFOs keep their speed), 0 still, MULT (0..7) doubling it; at most 1/8 of a cycle a block
+ * (345 Hz, about format 15's fastest): past it, a shape no more */
+#define LFO_MAX (1u << 29)
+static uint32_t lfo_inc(int32_t spd8, int mult, uint32_t b10)
+{
+    uint32_t base = mulu_hi(tq_u32(T_LSPD, spd8), b10, 8);
+    return base > (LFO_MAX >> mult) ? LFO_MAX : base << mult;
+}
 
 /* the LFOs' modulation: at most three a track, so only what they touch is set, and cleared the block after */
 typedef struct { uint8_t t, p; int32_t v; } modq_t;
@@ -1213,8 +1280,7 @@ static void lfo_block(int ti)
         int dest = P7(t, b + L_DEST);
         if (dest == 0 || dest > P_COUNT) { t->lval[l] = 0; mon.lfo[ti][l] = 0; continue; }
         int wave = PN(t, b + L_WAVE, 7), trig = PN(t, b + L_TRIG, 5);
-        uint32_t mult = 1u << PN(t, b + L_MULT, 8);
-        uint32_t inc = (uint32_t)P7(t, b + L_SPD) * mult * bpm10 * 10u;    /* about SPD * MULT * bpm / 15360 Hz */
+        uint32_t inc = lfo_inc(P8(t, b + L_SPD), PN(t, b + L_MULT, 8), bpm10);
         uint32_t p = t->lph[l];
         if (!t->ldone[l]) {
             t->lph[l] += inc;
@@ -1225,14 +1291,16 @@ static void lfo_block(int ti)
                 if (trig == 4 && z >= 0x80000000u && a < 0x80000000u) { t->ldone[l] = 1; t->lph[l] = s + 0x80000000u; }
             }
         }
-        int32_t depth = PB8(t, b + L_DPTH) >> 8;    /* -64..63 */
+        /* the depth (format 16): DPTH's distance from 64 squared, fine near 0, full at the ends (T_LDPTH: the old
+         * -64..63 x 256), so a step of DPTH near the middle swings a fraction of a step, not two */
+        int32_t depth = tq_i16(T_LDPTH, P8(t, b + L_DPTH));
         if (!depth && ti != mon.lfo_view) { t->lval[l] = 0; mon.lfo[ti][l] = 0; continue; }   /* its phase runs on; no
                                                                                              * shape for nothing */
         int32_t v = lfo_shape(wave, t->lph[l], &t->lrnd[l]);
         if (trig == 2) v = t->lhold[l];
         t->lval[l] = v;
         mon.lfo[ti][l] = v;
-        if (depth) mod_add(PN(t, b + L_TRCK, M2K_TRACKS), dest - 1, (v * depth) >> 6);
+        if (depth) mod_add(PN(t, b + L_TRCK, M2K_TRACKS), dest - 1, (v * depth) >> 14);   /* 2^15 by 2^14: a word */
     }
 }
 
@@ -1303,7 +1371,9 @@ static void voice_trig(int ti, int note, int vel, int slide, unsigned skip)
         t->let_go = 0;
         t->sounding = 1;
         t->astage = 1;
-        if (t->eff[P_ATK] == 0) t->aenv = 0;  /* percussive: start from zero, the click is the point */
+        /* ATK 0: percussive, from zero (its 1 ms rise the hit's edge, as bank A's drums have it); a slower attack goes
+         * on from where the last note is, no step */
+        t->aph = t->eff[P_ATK] ? atk_from(t->aenv) : 0;
         mach_trig(t, PAT(cur_pat)->machine[ti]);
     }
     if (!(skip & ST_NOFLT)) {
@@ -1339,7 +1409,7 @@ static inline int32_t mod_tick(trk_t *t, int16_t *buf, int32_t x, int type, uint
     tri = tri < 32768 ? tri : 65535 - tri;                       /* 0..32767 */
     int32_t y;
     if (type == 2) {
-        int32_t a = 3277 + ((tri * (dep * 206)) >> 15);             /* under 2^30: 32 bits */
+        int32_t a = 3277 + ((tri * dep) >> 15);                     /* dep: MODD x 206, under 2^30: 32 bits */
         int32_t v = x + (t->mfb >> 1);
         for (int k = 0; k < 4; k++) {
             int32_t u = v - ((a * t->map[k]) >> 15);
@@ -1352,8 +1422,8 @@ static inline int32_t mod_tick(trk_t *t, int16_t *buf, int32_t x, int type, uint
         int32_t ys[2];
         for (int c = 0; c < 2; c++) {                                /* the taps: the sweep and its mirror */
             int32_t tr = c ? 32767 - tri : tri;
-            int32_t d8 = type == 0 ? (309 << 8) + ((tr * (dep * 441)) >> 14)   /* Q8 samples (under 2^31: 32 bits) */
-                                   : (20 << 8) + ((tr * (dep * 200)) >> 14);
+            int32_t d8 = type == 0 ? (309 << 8) + ((tr * dep) >> 14)   /* Q8 samples, dep MODD x 441 or x 200 (under */
+                                   : (20 << 8) + ((tr * dep) >> 14);    /* 2^31: 32 bits) */
             int32_t pos = ((int32_t)t->mw << 8) - d8;
             uint32_t j = (uint32_t)(pos >> 8);
             int32_t f = pos & 255;
@@ -1458,9 +1528,9 @@ static void track_block(int ti, int32_t *restrict L, int32_t *restrict R, int32_
     if (t->mach != m) machine_reset(ti, m);
     /* pitch: the note, its glide, the track's PTCH. A step's size rounded away from zero both ways (the shift alone
      * rounds down: a glide up stopped short of its note, or never left at a slow PORT) */
-    int g = t->slide && t->eff[P_PORT] == 0 ? 40 : P7(t, P_PORT);
+    int32_t g = t->slide && t->eff[P_PORT] == 0 ? T_GLIDE[40] : tq_u16(T_GLIDE, P8(t, P_PORT));
     int32_t gd = t->ptarget - t->pitch;
-    int32_t gs = gd * T_GLIDE[g];                                          /* notes 0..255 apart: under 2^31 */
+    int32_t gs = gd * g;                                                   /* notes 0..255 apart: under 2^31 */
     t->pitch += gd > 0 ? (gs + 65535) >> 16 : gs >> 16;
     int32_t pitch = t->pitch + (PB8(t, P_PTCH) >> 2);
     PROF(2);
@@ -1477,16 +1547,18 @@ static void track_block(int ti, int32_t *restrict L, int32_t *restrict R, int32_
     int32_t key = t->note * 8 * 256;
     if (m == M_GSIN || m == M_GNOI) key += (PB8(t, P_SYN + 7) >> 7) * 32;   /* and their TUNE (chain_tune13, gnoi42) */
     int32_t ph = key + 12 * (sb - 16 * 256), pl = key + 12 * (sl - 16 * 256);
-    int lq = P7(t, P_LPQ), hq = P7(t, P_HPQ);
-    zsvf_set(&t->lp1, fg_at(T_FG, pl + T_LPC[lq]), T_LPK[lq]);
-    zsvf_set(&t->hp2, fg_at(T_FG, ph + T_HPC[hq]), T_HPK[hq]);
+    int32_t lq = P8(t, P_LPQ), hq = P8(t, P_HPQ);                        /* (an LFO glides the resonances too) */
+    int32_t lpc = pl + tq_i16(T_LPC, lq), hpc = ph + tq_i16(T_HPC, hq);
+    uint32_t lpk = tq_u32(T_LPK, lq), hpk = tq_u32(T_HPK, hq);
+    zsvf_set(&t->lp1, fg_at(T_FG, lpc), lpk);
+    zsvf_set(&t->hp2, fg_at(T_FG, hpc), hpk);
     t->lp2a.G = t->lp2b.G = (int32_t)fg_at(T_FG1, pl + F_LP2 * 256);
     t->hp1.G = (int32_t)fg_at(T_FG1, ph + F_HP1 * 256);
-    int side = (m == M_ENS && P7(t, P_SYN + 5) && P7(t, P_SYN + 6))       /* SWAV-ENS's chorus across the stereo, */
-               || (m == M_GNOI && P7(t, P_SYN + 2) >= 64 && P7(t, P_SYN + 0));    /* GND-NOIS's second noise */
+    int side = (m == M_ENS && P8(t, P_SYN + 5) && P8(t, P_SYN + 6))       /* SWAV-ENS's chorus across the stereo, */
+               || (m == M_GNOI && P7(t, P_SYN + 2) >= 64 && P8(t, P_SYN + 0));    /* GND-NOIS's second noise */
     if (side) {
-        zsvf_set(&t->lp1s, fg_at(T_FG, pl + T_LPC[lq]), T_LPK[lq]);
-        zsvf_set(&t->hp2s, fg_at(T_FG, ph + T_HPC[hq]), T_HPK[hq]);
+        zsvf_set(&t->lp1s, fg_at(T_FG, lpc), lpk);
+        zsvf_set(&t->hp2s, fg_at(T_FG, hpc), hpk);
         t->lp2as.G = t->lp2bs.G = t->lp2a.G;
         t->hp1s.G = t->hp1.G;
     }
@@ -1500,34 +1572,37 @@ static void track_block(int ti, int32_t *restrict L, int32_t *restrict R, int32_
     int32_t ceil = ((T_DIST_C[di] + (((T_DIST_C[dn] - T_DIST_C[di]) * df) >> 8)) * T_DIST_M[m]) >> 12;   /* 2^17 by 2^13 */
     /* EQ: a band added to the signal, Q 2.2, +36 / -31 dB; a cut is the inverse of a boost as deep (its band widened
      * by the gain) */
-    int eqv = P7(t, P_EQG), eq_on = eqv != 64;
+    int32_t eqv = P8(t, P_EQG);
+    int eq_on = eqv != 64 * 256;
     if (eq_on) {
-        uint32_t gb = T_EQGAIN[eqv];
-        uint32_t k = eqv > 64 ? EQ_K : mulu_hi(EQ_K, gb, 16);
-        zsvf_set(&t->eq, T_EQG[P7(t, P_EQF)], k);
-        if (side) zsvf_set(&t->eqs, T_EQG[P7(t, P_EQF)], k);
+        uint32_t gb = tq_u32(T_EQGAIN, eqv), ef = tq_u32(T_EQG, P8(t, P_EQF));
+        uint32_t k = eqv > 64 * 256 ? EQ_K : mulu_hi(EQ_K, gb, 16);
+        zsvf_set(&t->eq, ef, k);
+        if (side) zsvf_set(&t->eqs, ef, k);
         int32_t c = (int32_t)mul_sh((int32_t)(gb - 65536), EQ_K, 16);
-        t->eqc = eqv > 64 ? c : -c;
+        t->eqc = eqv > 64 * 256 ? c : -c;
     }
     /* amp */
     t->amp0 = t->amp1;
     t->amp1 = (int32_t)(t->aenv >> 15);
     mon.aenv[ti] = t->amp1;
     mon.astage[ti] = t->astage;
-    int32_t vol = T_VOLK[P7(t, P_VOL)];
+    /* the rest between their table's steps too (an LFO on VOL, PAN, a send: no zipper); BITS and XOR are steps */
+    int32_t vol = tq_u16(T_VOLK, P8(t, P_VOL));
     int32_t acc = 256 + (t->vel > 100 ? (pp->glob[G_ACNT] * 2) : 0);
     vol = (vol * acc) >> 8;
-    int32_t lev = T_VOL[P7(t, P_LEVL)];
-    int srr = P7(t, P_SRR);
-    uint32_t sinc = T_SRR_INC[srr];
+    int32_t lev = tq_u16(T_VOL, P8(t, P_LEVL));
+    int32_t srr = P8(t, P_SRR);
+    uint32_t sinc = tq_u32(T_SRR_INC, srr);
     int bits = 16 - (P7(t, P_BITS) * 14 >> 7);
-    int32_t fold = P7(t, P_FOLD), xr = P7(t, P_XOR), xm = (xr * xr * 2) & 0x7FFF;
-    int pan = P7(t, P_PAN);
-    int32_t gl = T_PAN[pan], gr = T_PAN[127 - pan];
-    int32_t sd = P7(t, P_DSND) - 64, ds = sd * sd * 8;                      /* the send: (d / 64)^2, Q15 */
-    int32_t rs = T_VOL[P7(t, P_SPU)];
-    int mtype = PN(t, P_MODT, 3), mmix = P7(t, P_MODM) * 2, mdep = P7(t, P_MODD);
-    uint32_t minc = T_MOD_INC[P7(t, P_MODR)];
+    int32_t fold = PK(t, P_FOLD, 6), xr = P7(t, P_XOR), xm = (xr * xr * 2) & 0x7FFF;
+    int32_t pan = P8(t, P_PAN);
+    int32_t gl = tq_u16(T_PAN, pan), gr = tq_u16(T_PAN, 127 * 256 - pan);
+    int32_t sd = P8(t, P_DSND) - 64 * 256, ds = (sd * sd) >> 13;           /* the send: (d / 64)^2, Q15 */
+    int32_t rs = tq_u16(T_VOL, P8(t, P_SPU));
+    int mtype = PN(t, P_MODT, 3);
+    int32_t mmix = PK(t, P_MODM, 2), mdep = PK(t, P_MODD, mtype == 2 ? 206 : mtype ? 200 : 441);
+    uint32_t minc = tq_u32(T_MOD_INC, P8(t, P_MODR));
     int32_t pk = 0;
     int ish = m == M_GNOI ? 24 - GN_HR : m == M_FXR ? 24 - RG_HR : 24;       /* GND-NOIS's, FX-RING's headroom, taken back */
     t->dsent = ds != 0;
@@ -1555,7 +1630,7 @@ static void track_block(int ti, int32_t *restrict L, int32_t *restrict R, int32_
     int32_t a0 = t->amp0, da = t->amp1 - t->amp0;
     for (int i = 0; i < M2K_SUB; i++) {               /* MONO2K's own breakage, then the amp */
         int32_t s = x[i];
-        if (fold) s = fold16((sat16(s) * (256 + fold * 6)) >> 8);
+        if (fold) s = fold16((sat16(s) * (256 + fold)) >> 8);
         if (xr) s = (int32_t)(int16_t)((uint16_t)sat16(s) ^ (uint16_t)xm);
         x[i] = (int32_t)mul_sh(s, a0 + ((da * i) >> 4), 15);
     }

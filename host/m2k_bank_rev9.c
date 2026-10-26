@@ -778,4 +778,6 @@ static void factory_rev9(void)
     for (int i = 0; i < 16; i++) hold_v12(PAT(i));
     /* and its VOX-6 tracks (A02 CUTUP's), written on MONO2K's old page: onto VO-6's, once */
     for (int i = 0; i < 16; i++) vox_v13(PAT(i));
+    /* and every part's amp and LFOs, on format 15's laws: onto 16's, once */
+    for (int i = 0; i < 16; i++) feel_v15(PAT(i));
 }

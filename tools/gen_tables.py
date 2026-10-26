@@ -43,19 +43,80 @@ out.append(arr("T_ENV_COEF", "uint32_t",
 # the times as the screen shows them, in ms (0.1 ms below 10)
 out.append(arr("T_ENV_MS10", "uint32_t", [round(etime(v) * 10000) for v in range(128)], 8))
 
-# the amp envelope, after the Monomachine's, measured on OS 1.32B in gearmulator (tools/ref, amp.spec, hold.spec):
-#   the attack rises in a straight line, in 0.90 ms * e^(0.0814 v); decay and release fall 20 dB in 8.3 ms * e^(0.0665 v)
-#   (here: to -60 dB, three times that); the hold lasts 14.6 ms a step. 127: hold and decay last while the gate is open.
+# the amp envelope of formats 2..15, after the Monomachine's, measured on OS 1.32B in gearmulator (tools/ref, amp.spec,
+#   hold.spec): the attack rises in a straight line, in 0.90 ms * e^(0.0814 v); decay and release fall 20 dB in
+#   8.3 ms * e^(0.0665 v) (to -60 dB, three times that); the hold lasted 14.6 ms a step. Half of ATK's knob was under
+#   0.17 s, and a straight rise is near full to the ear in its first few ms. Kept for the conversions (amp_v15)
 def a_atk(v):
     return 0.000903 * math.exp(0.0814 * v)
 def a_dec(v):
     return 3 * 0.00829 * math.exp(0.06646 * v)
 def a_hold(v):                         # HOLD up to format 12, 14.6 ms a step (format 13: 1 / 32 beat, in the engine)
     return 0.0146 * v
-out.append(arr("T_AATK_INC", "uint32_t", [min(1 << 30, round((1 << 30) * SUB / (a_atk(v) * SR))) for v in range(128)], 8))
-out.append(arr("T_ADEC_COEF", "uint32_t", [round((2 ** 31 - 1) * math.exp(-6.9078 * SUB / (a_dec(v) * SR))) for v in range(128)], 8))
-out.append(arr("T_AATK_MS10", "uint32_t", [round(a_atk(v) * 10000) for v in range(128)], 8))
-out.append(arr("T_ADEC_MS10", "uint32_t", [round(a_dec(v) * 10000) for v in range(128)], 8))
+# the amp envelope from format 16, the owner's: the knob spent where the times are useful, the time shown the one heard.
+#   ATK to full level, the level the square of the time gone (loudness goes about as the level^0.6: a near even swell,
+#   where a straight rise is at -6 dB half way and sounds instant): 1 ms + 16.4 ms (e^(0.0505 v) - 1), 9 ms at 8, 21 ms
+#   at 16, 67 ms at 32, 0.4 s at 64, 2.1 s at 96, 10 s at 127. 0 is the old 0, the Monomachine's straight 1 ms (the
+#   engine's): a percussive start, as bank A's drums were made on.
+#   DEC and REL to -60 dB, falling straight in dB as before: 4 ms + twice ATK's, 45 ms at 16, 0.14 s at 32, 0.8 s at 64,
+#   4.2 s at 96, 19 s at 126 (DEC's 127: INF), 20 s at 127. Each a whole count of control blocks, as the engine runs it
+A_K, A_B = 0.016379, 0.050519         # t(64) = 0.4 s, t(127) = 10 s
+def n_atk(v):
+    return 0.001 + A_K * (math.exp(A_B * v) - 1)
+def n_dec(v):
+    return 0.004 + 2 * A_K * (math.exp(A_B * v) - 1)
+BLK = SUB / SR
+def blocks(t):
+    return max(1, round(t / BLK))
+ATK0 = round((1 << 30) * SUB / (a_atk(0) * SR))                 # ATK 0's straight rise a block: full in its third
+out.append(arr("T_AATK_INC", "uint32_t", [ATK0] + [-(-(1 << 30) // blocks(n_atk(v))) for v in range(1, 128)], 8))   # the phase a block
+out.append(arr("T_ADEC_COEF", "uint32_t", [round((2 ** 31 - 1) * 10 ** (-3 / blocks(n_dec(v)))) for v in range(128)], 8))
+out.append(arr("T_AATK_MS10", "uint32_t", [round(-(-(1 << 30) // ATK0) * BLK * 10000)] +
+               [round(blocks(n_atk(v)) * BLK * 10000) for v in range(1, 128)], 8))
+out.append(arr("T_ADEC_MS10", "uint32_t", [round(blocks(n_dec(v)) * BLK * 10000) for v in range(128)], 8))
+# a format-15 pattern's ATK DEC REL to format 16 (amp_v15). DEC and REL: the value whose time to -60 dB is nearest (on a
+# log scale; DEC's INF stays INF). ATK: the one whose rise sounds nearest the old straight one, its loudness (level^0.6)
+# against time closest (least area between them): about 0.73 of the old time; 0 stays 0 (the same straight 1 ms)
+def near_log(t, f, lo, hi):
+    return min(range(lo, hi + 1), key=lambda v: abs(math.log(f(v) / t)))
+def atk_v15(o):
+    if o == 0:
+        return 0
+    To = -(-(1 << 30) // round((1 << 30) * SUB / (a_atk(o) * SR))) * BLK   # the old rise as the engine ran it
+    q = [To * 3 * i / 600 for i in range(601)]
+    lo = [min(x / To, 1) ** 0.6 for x in q]
+    def err(v):                        # (the new 0: straight; the rest squared)
+        Tn = -(-(1 << 30) // ATK0) * BLK if v == 0 else blocks(n_atk(v)) * BLK
+        return sum(abs(a - min(x / Tn, 1) ** (0.6 if v == 0 else 1.2)) for a, x in zip(lo, q))
+    c = near_log(0.73 * To, n_atk, 1, 127)
+    return min(range(max(0, c - 3), min(127, c + 3) + 1), key=err)
+amp15 = [[atk_v15(v) for v in range(128)],
+         [127 if v == 127 else near_log(a_dec(v), n_dec, 0, 126) for v in range(128)],
+         [near_log(a_dec(v), n_dec, 0, 127) for v in range(128)]]
+out.append("static const uint8_t T_AMP15[3][128] = {\n" + "".join("    {" + ",".join(str(x) for x in r) + "},\n" for r in amp15) + "};\n")
+# the LFOs' depth (format 16): DPTH's distance from 64 squared, fine near 0, full at the ends (as format 15's -64..63), as
+# the old depth x 256: the modulation is (shape x this) >> 14, in 1/256 steps. Format 15's depth d to the nearest
+def ldepth(v):
+    d = v - 64
+    return -d * d * 4 if d < 0 else round(d * d * 256 / 63)
+out.append(arr("T_LDPTH", "int16_t", [ldepth(v) for v in range(128)]))
+out.append(arr("T_DPTH15", "uint8_t", [min(range(128), key=lambda n: abs(ldepth(n) - (v - 64) * 256)) for v in range(128)]))
+# the LFOs' speed (format 16, the owner's: slow first, it can be very fast): 0 stands still, as before; 1..127 a cycle in
+# 2^((84 - SPD) / 12) beats at MULT x1 (on MONO2K's LFO clock, below), whatever the tempo: 30 bars at 1, 16 at 12, a bar
+# at 60, a beat at 84, a 1/32 note at 120. Twelve steps an octave: every twelfth a power of two of a bar, 7 slower a
+# dotted one, 7 faster a triplet (to 0.1 %). MULT doubles it, as before. The clock is format 15's, 1.45 % slow (its
+# SPD x MULT = 256 took 259.7 / 256 of a beat): so each of its powers of two of SPD lands on one of these exactly, and
+# bank A's LFOs and every saved pattern's keep their speed (and their drift against the steps) as they were.
+# T_LSPD: the phase a control block at 0.1 BPM, Q8 (x bpm10 >> 8, then x MULT); T_LCYC: the cycle at x1 in 1/1000
+# beat, for the screen. Format 15's: linear, a cycle in 259.7 / SPD beats (T_SPD15: each to the nearest rate, within
+# 2.9 %; 1 and 2, 65 and 32 bars, to the slowest, 30)
+LCLK = 2 ** 32 * SUB / (10 * SR * 600) / 256          # format 15's beat, 1.0145 of one
+def lspd_beats(s):
+    return LCLK * 2 ** ((84 - s) / 12)
+out.append(arr("T_LSPD", "uint32_t", [0] + [round(2 ** 32 * SUB / SR / 600 / lspd_beats(s) * 256) for s in range(1, 128)], 8))
+out.append(arr("T_LCYC", "uint32_t", [0] + [round(1000 * lspd_beats(s)) for s in range(1, 128)], 8))
+spd15 = [0] + [min(range(1, 128), key=lambda n: abs(math.log(lspd_beats(n) * o * 10 * SR * 600 / (2 ** 32 * SUB)))) for o in range(1, 128)]
+out.append(arr("T_SPD15", "uint8_t", spd15))
 # the modulation effect's sweep: 0.1 Hz .. 10 Hz, as a phase step per sample, and for the screen in 0.1 Hz
 def mod_hz(v):
     return 0.1 * 100 ** (v / 127.0)

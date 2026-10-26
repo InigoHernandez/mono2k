@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
-# Mutation tests of the pattern format's conversions (fm_v9, sid_v10, gsin_v11, hold_v12, vox_v13): each mutant is one small change to a conversion;
+# Mutation tests of the pattern format's conversions (fm_v9, sid_v10, gsin_v11, hold_v12, vox_v13, feel_v15): each mutant is one small change to a conversion;
 # the self-test must fail on every one. A survivor is a conversion the self-test does not hold.
 #   .venv/bin/python tools/ref/mutate_formats.py [TREE]     (default: this checkout; it restores each file it touches)
 import subprocess, sys, os
@@ -78,6 +78,20 @@ M = [
  ("VOX other locks kept", F, "            else l->trk = 0xFF;\n        }\n    }\n    for (int t = 0; t < M2K_TRACKS; t++)\n        for (int l = 0; l < 3; l++) {\n            uint8_t *b = &p->kit[t][P_LFO + 8 * l];\n            int to = ens_target(b[L_TRCK]), dest = b[L_DEST] - 1;\n            if (p->machine[to] != M_VOX", "            else (void)0;\n        }\n    }\n    for (int t = 0; t < M2K_TRACKS; t++)\n        for (int l = 0; l < 3; l++) {\n            uint8_t *b = &p->kit[t][P_LFO + 8 * l];\n            int to = ens_target(b[L_TRCK]), dest = b[L_DEST] - 1;\n            if (p->machine[to] != M_VOX"),
  ("VOX LFOs not followed", F, "            b[L_DEST] = (uint8_t)(dest == P_SYN ? P_SYN + 1 : dest == P_SYN + 4 ? P_SYN + 3 + 1 : 0);", "            (void)b;"),
  ("VOX bank A not converted at build", H, "    for (int i = 0; i < 16; i++) vox_v13(PAT(i));", "    (void)0;"),
+ ("FEEL not converted", P, "    if (ver < 16) feel_v15(p);", "    if (ver < 1) feel_v15(p);"),
+ ("FEEL converted on a version-16 pattern", P, "    if (ver < 16) feel_v15(p);", "    if (ver < 17) feel_v15(p);"),
+ ("FEEL REL left", F, "        for (int prm = P_ATK; prm <= P_REL; prm++) p->kit[t][prm] = feel_val(prm, old[t][prm]);",
+                      "        for (int prm = P_ATK; prm < P_REL; prm++) p->kit[t][prm] = feel_val(prm, old[t][prm]);"),
+ ("FEEL SPD left", F, "            p->kit[t][P_LFO + 8 * l + L_SPD] = T_SPD15[b[L_SPD] & 127];", "            (void)b;"),
+ ("FEEL an LFO on a DEC by the plain table", F, "    if ((prm - P_LFO) % 8 == L_DPTH && row > 0) return feel_lfo(row, tk[dest], v);", "    (void)tk; (void)row;"),
+ ("FEEL an LFO's target read on its own track", F, "                                                             old[ens_target(b[L_TRCK])]);",
+                                                  "                                                             old[t]);"),
+ ("FEEL the old swing on half its law", F, "((v * ((d & 127) - 64)) >> 6)", "((v * ((d & 127) - 64)) >> 7)"),
+ ("FEEL locks left", F, "        } else l->val = feel_val(l->param, l->val);", "        } else (void)0;"),
+ ("FEEL an LFO page lock left", F, "            l->val = feel_lfo_val(l->param, l->val, b[L_DEST] - 1, old[ens_target(b[L_TRCK])]);", "            (void)b;"),
+ ("FEEL bank A not converted at build", F, "    for (int i = 0; i < 4; i++) feel_v15(PAT(i));", "    (void)0;"),
+ ("FEEL the old bank not converted at build", H, "    for (int i = 0; i < 16; i++) feel_v15(PAT(i));", "    (void)0;"),
+ ("FEEL a version-3 store's sounds left", P, "            if (ver < 4) feel_kit_v15(snd[i].kit);", "            if (ver < 3) feel_kit_v15(snd[i].kit);"),
 ]
 def run():
     r = subprocess.run("cc -O2 -w -Ifirmware/src -Ifirmware/gen -o build/host/m2k_mut host/m2k_host.c -lm && build/host/m2k_mut --selftest",

@@ -451,7 +451,7 @@
     <figure class="fig"><canvas data-scr="10_filt"></canvas><figcaption>FILT: the high-pass and low-pass as a band.</figcaption></figure>
     <figure class="fig"><canvas data-scr="12_fx_delay"></canvas><figcaption>FX, DELAY: its echoes as they fall.</figcaption></figure>
     <figure class="fig"><canvas data-scr="13_fx_destroy"></canvas><figcaption>FX, DSTR: bits, wavefold, XOR and the reverb's send.</figcaption></figure>
-    <figure class="fig"><canvas data-scr="14_lfo"></canvas><figcaption>LFO 1: where it goes, its wave, how it trigs.</figcaption></figure>
+    <figure class="fig"><canvas data-scr="14_lfo"></canvas><figcaption>LFO 1: where it goes, its wave, how it trigs; its cycle and depth.</figcaption></figure>
     <figure class="fig"><canvas data-scr="20_arp"></canvas><figcaption>ARP: mode, speed, range and gate.</figcaption></figure>
     <figure class="fig"><canvas data-scr="15_glo_time"></canvas><figcaption>GLO, TIME: tempo, swing, length, accent.</figcaption></figure>
   </div>
@@ -615,18 +615,23 @@
   <h1>The track chain</h1>
   <p class="sub">Every track has the Monomachine's chain after its machine, then MONO2K's destroy effects.</p>
   <div class="figs">
-    <figure class="fig"><canvas data-scr="09_amp"></canvas><figcaption>AMP.</figcaption></figure>
+    <figure class="fig"><canvas data-scr="09b_amp_swell"></canvas><figcaption>AMP: ATCK 0.17 s, the swell drawn as you hear it.</figcaption></figure>
     <figure class="fig"><canvas data-scr="10_filt"></canvas><figcaption>FILT.</figcaption></figure>
     <figure class="fig"><canvas data-scr="11_fx_eq"></canvas><figcaption>FX: EQ, rate reduction, delay time.</figcaption></figure>
   </div>
   <h2>Amp</h2>
-  <p>ATCK, HOLD, DEC and REL shape each note, on the Monomachine's measured curves: HOLD keeps the note at full level before it decays, so most sounds need no note-off; it counts in beats at the pattern's tempo (32 is a beat, 8 a sixteenth), as on the Monomachine. DIST drives the machine into a clip of its own, VOL sets the track's level into the chain, PAN places it, PORT glides between notes.</p>
+  <p>ATCK, HOLD, DEC and REL shape each note, and each shows the time you hear: ATCK to full level, DEC and REL down to silence (60 dB under). The attack swells as the square of its time, so it grows evenly to the ear instead of jumping up in its first milliseconds; 0 is the Monomachine's percussive 1 ms. The knobs spend their travel where the times are useful: ATCK is 20 ms at 16, 67 ms at 32, 0.4 s at 64, 2 s at 96 and 10 s at 127; DEC and REL are 0.14 s at 32, 0.8 s at 64, 4 s at 96 and 20 s at the top, and DEC at 127 holds while the note is held. A note played over one still sounding rises from where that one is. The picture draws the same curves. HOLD keeps the note at full level before it decays, so most sounds need no note-off; it counts in beats at the pattern's tempo (32 is a beat, 8 a sixteenth), as on the Monomachine. DIST drives the machine into a clip of its own, VOL sets the track's level into the chain, PAN places it, PORT glides between notes.</p>
   <h2>Filter</h2>
   <p>A high-pass and a low-pass as one band: BASE is the bottom of the band, WDTH its width (at the top, BASE alone is a high-pass; at the bottom, WDTH alone is a low-pass), HPQ and LPQ their resonance. The filter follows the note. Its envelope (ATCK, DEC) moves the base and the width by B-OF and W-OF.</p>
   <h2>FX</h2>
   <p>EQF and EQG are one band of EQ; SRR reduces the sample rate; the delay (DTIM, DSND, DFB, DBAS, DWID) is the track's own, in 8-bit mu-law. DSTR: BITS crushes, FOLD folds the wave over itself, XOR mangles the samples, VERB sends the track to the bus's reverb. MOD is a chorus, a flanger or a phaser across the stereo.</p>
   <h2>LFOs</h2>
-  <p>Three per track, two pages each: TRCK and DEST say which track and parameter it moves (any track's), WAVE its shape, TRIG what a trig does to it (FREE runs on, TRIG starts it over, HOLD samples it until the next trig, ONE runs one cycle, HALF half a cycle), MULT and SPD its rate in time with the tempo, PHAS where it starts, DPTH how far, either way. An LFO on pitch moves it in coarse steps; for vibrato aim it at the machine's TUNE.</p>
+  <div class="figs">
+    <figure class="fig"><canvas data-scr="14b_lfo_cycle"></canvas><figcaption>LFO 1B: SPD as the time a cycle takes, a bar; DPTH against full.</figcaption></figure>
+  </div>
+  <p>Three per track, two pages each: TRCK and DEST say which track and parameter it moves (any track's), WAVE its shape, TRIG what a trig does to it (FREE runs on, TRIG starts it over, HOLD samples it until the next trig, ONE runs one cycle, HALF half a cycle), MULT and SPD its rate in time with the tempo, PHAS where it starts, DPTH how far, either way.</p>
+  <p>SPD shows the time one cycle takes, in bars and notes at any tempo, slow at the bottom and fast at the top: 0 stands still, 1 is 30 bars, 12 is 16 bars, 60 a bar, 84 a quarter note and 120 a 1/32 note. Every twelve steps it doubles; seven steps slower than a note is that note dotted, seven faster its triplet. MULT multiplies it (x1 to x128), and past a 1/64 note it shows hertz at the pattern's tempo. The LFOs run on MONO2K's own clock, 1.5 % slower than the bars they are named after, as they always have: a FREE LFO drifts slowly against the pattern, and TRIG starts it with each note.</p>
+  <p>DPTH is squared around its middle, so the first steps away from 64 are fine (66 swings an eighth of a step, 72 two steps, 80 eight) and the ends sweep the whole range; the screen shows it as a share of full, and the LFO's picture draws its wave as deep as it goes. Whatever an LFO moves glides between the knob's steps, with no zipper. A little DPTH on PTCH is a vibrato (66 is about 12 cents).</p>
   <h2>Arpeggiator</h2>
   <p>On ARP: MODE (OFF, UP, DOWN, U/D, RND, ORDR, the order you played them), SPD (1/32 to 1/4), RNG (one to four octaves) and GATE. Hold keys and it plays them in turn.</p>
 </article>

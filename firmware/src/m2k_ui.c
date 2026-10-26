@@ -15,7 +15,8 @@ enum {
     K_ALGO, K_VOIC, K_WAVE, K_VOF1, K_VOF2, K_CONS, K_TRK, K_DEST, K_LWAV, K_LTRG, K_MULT, K_AMOD, K_ASPD, K_ARNG, K_GATE,
     K_BPM, K_SWNG, K_LEN, K_GLCH, K_GSIZ, K_FINE, K_TUN2, K_SCRN, K_PROJ, K_LOAD, K_MCH, K_SSEL, K_SLOAD, K_SSAVE, K_SCAT, K_WIPE, K_DEMO, K_SPD,
     K_FOCT, K_FWID, K_FATK, K_FDEC, K_EQHZ, K_DBHZ, K_SRR, K_PCH, K_WBNK, K_FR24, K_FR64, K_FRSQ, K_ONOFF, K_MSRC, K_MFRQ,
-    K_DWV4, K_DWV5, K_DRA, K_DRD, K_DOPN, K_DMUL, K_DNHZ, K_DCNT          /* the DRM- drums' */
+    K_DWV4, K_DWV5, K_DRA, K_DRD, K_DOPN, K_DMUL, K_DNHZ, K_DCNT,         /* the DRM- drums' */
+    K_LSPD, K_LDPT                                                         /* the LFOs' speed and depth */
 };
 typedef struct { const char *s4, *name; uint8_t kind; } pi_t;
 
@@ -30,10 +31,11 @@ static const pi_t PI_COMMON[P_LFO - 8] = {
     {"PTCH", "TRACK PITCH", K_SEMI}, {"LEVL", "TRACK LEVEL", K_NUM}, {"MODE", "ARP MODE", K_AMOD}, {"SPD", "ARP SPEED", K_ASPD},
     {"RNG", "ARP RANGE", K_ARNG}, {"GATE", "GATE LENGTH", K_GATE},
 };
-static const pi_t PI_LFO[8] = {
-    {"TRCK", "LFO TRACK", K_TRK}, {"DEST", "LFO DESTINATION", K_DEST}, {"WAVE", "LFO WAVE", K_LWAV}, {"TRIG", "LFO TRIG MODE", K_LTRG},
-    {"MULT", "LFO MULTIPLIER", K_MULT}, {"SPD", "LFO SPEED", K_NUM}, {"PHAS", "START PHASE", K_NUM}, {"DPTH", "LFO DEPTH", K_BI},
-};
+/* each LFO's own (its speed is shown with its MULT: which LFO, from where in here) */
+#define PI_LFO1 \
+    {"TRCK", "LFO TRACK", K_TRK}, {"DEST", "LFO DESTINATION", K_DEST}, {"WAVE", "LFO WAVE", K_LWAV}, {"TRIG", "LFO TRIG MODE", K_LTRG}, \
+    {"MULT", "LFO MULTIPLIER", K_MULT}, {"SPD", "LFO CYCLE", K_LSPD}, {"PHAS", "START PHASE", K_NUM}, {"DPTH", "LFO DEPTH", K_LDPT}
+static const pi_t PI_LFO[24] = {PI_LFO1, PI_LFO1, PI_LFO1};
 static const pi_t PI_WBNK = {"BANK", "WAVE BANK", K_WBNK};
 static const pi_t PI_MOD[4] = {
     {"TYPE", "MOD TYPE", K_MODT}, {"RATE", "MOD RATE", K_MHZ}, {"DPTH", "MOD DEPTH", K_NUM}, {"MIX", "MOD MIX", K_NUM},
@@ -172,7 +174,7 @@ static const pi_t *pinfo(int t, int id)
     if (id < P_LFO) return &PI_COMMON[id - 8];
     if (id == P_WBNK) return &PI_WBNK;
     if (id >= P_MODT) return &PI_MOD[(id - P_MODT) & 3];
-    return &PI_LFO[(id - P_LFO) & 7];
+    return &PI_LFO[(id - P_LFO) % 24];
 }
 
 static int kind_choices(int k);
@@ -274,6 +276,40 @@ static int filt_q3(int t, int32_t steps_q8)
     return CLAMP((pos * 1087 >> 10) - 132, 0, 1016);
 }
 
+/* an LFO's cycle at SPD v and MULT 2^mu (format 16: 2^((84 - v) / 12 - mu) beats of the LFOs' clock, whatever the
+ * tempo), as a player counts it: bars, a note (dotted, a triplet) where it is one (the clock's: 1.45 % long), else
+ * beats; hertz past a 1/64 note (or past the LFO's fastest, lfo_inc's) */
+static void s_lfo_cycle(char *out, const char **unit, int v, int mu)
+{
+    *unit = "";
+    if (!v) { s_cpy(out, "STOP"); *unit = "STILL"; return; }
+    uint32_t inc = lfo_inc(v * 256, mu, seq_bpm() * 10);
+    int n = 84 - v, r = ((n % 12) + 12) % 12, k = (n - r) / 12 - mu;     /* 2^k beats, times 2^(r / 12) */
+    if (inc >= LFO_MAX || k < -4 || (k == -4 && r)) {
+        int h10 = (int)mulu_hi(inc, 27563, 32);                              /* inc x 44100 / 16 / 2^32, in 0.1 Hz */
+        if (h10 < 1000) s_dec1(out, h10); else s_int(out, (h10 + 5) / 10);
+        *unit = "HZ";
+        return;
+    }
+    if (k >= 2 && (r == 0 || r == 7)) {                                      /* a bar or more: 1, 1.5, 2, 3, 4 .. 32 */
+        int b2 = (r ? 3 : 2) << (k - 2);                                     /* half bars */
+        if (b2 & 1) s_dec1(out, b2 * 5); else s_int(out, b2 / 2);
+        *unit = b2 == 2 ? "BAR" : "BARS";
+        return;
+    }
+    if (k < 2 && (r == 0 || r == 7 || (r == 5 && k <= 0))) {                 /* a note: 1/2 .. 1/64, dotted, triplets */
+        char *e = s_cpy(out, "1/");
+        e = s_int(e, r == 5 ? 2 << -k : k >= 0 ? 4 >> k : 4 << -k);
+        if (r) s_cpy(e, r == 7 ? "." : "T");
+        *unit = r == 7 ? "NOTE DOTTED" : r == 5 ? "NOTE TRIPLET" : "NOTE";
+        return;
+    }
+    uint32_t c = T_LCYC[v] >> mu;                                            /* 1/1000 beat */
+    if (c >= 4000) { s_dec1(out, (int)(c / 400)); *unit = "BARS"; }
+    else if (c >= 1000) { s_dec1(out, (int)(c / 100)); *unit = "BEATS"; }
+    else { char *e = s_cpy(out, "0."); e[0] = (char)('0' + c / 100); e[1] = (char)('0' + c / 10 % 10); e[2] = 0; *unit = "BEAT"; }
+}
+
 /* the value as the screen shows it, and its unit */
 static void s_num3(char *o, int v) { o[0] = (char)('0' + v / 100); o[1] = (char)('0' + v / 10 % 10); o[2] = (char)('0' + v % 10); o[3] = 0; }
 static int snd_sel_get(void);                        /* SYN > SND's slot (the screen's state, below) */
@@ -310,6 +346,19 @@ static void fmt(const pi_t *pi, int t, int v, char *out, const char **unit)
         break;
     }
     case K_DWV4: case K_DWV5: s_cpy(out, DWAV_N[c]); break;
+    case K_LSPD: {                                  /* with its own LFO's MULT */
+        int l = (int)(pi - PI_LFO) >> 3;
+        s_lfo_cycle(out, unit, v, choice_of(K_MULT, PAT(cur_pat)->kit[t][P_LFO + 8 * l + L_MULT]));
+        break;
+    }
+    case K_LDPT: {                                  /* its swing against full (format 16: squared about 64) */
+        int d = T_LDPTH[v & 127], p10 = d < 0 ? -((-d * 1000 + 8192) >> 14) : (d * 1000 + 8064) / 16128;
+        if (!p10) s_cpy(out, "0");
+        else if (p10 > -100 && p10 < 100) s_sdec1(out, p10);
+        else { char *e = s_cpy(out, p10 < 0 ? "-" : "+"); s_int(e, (p10 < 0 ? -p10 : p10) / 10); }
+        *unit = "%";
+        break;
+    }
     case K_DMUL: s_dec1(out, (256 + T_DRM_PAMT[v]) * 10 / 256); *unit = "X PITCH"; break;   /* at the start: 1 + A */
     case K_DNHZ: s_hz(out, unit, (22050 * (v | 1)) / 127); break;
     case K_DCNT: if (!c) s_cpy(out, "OFF"); else { s_int(out, c); *unit = "HITS"; } break;
@@ -2257,15 +2306,16 @@ static void filt_curve(int X, int W, int top, int yb, int hp, int lp, int hq, in
     *yl = filt_row(filt_db(lp, hp, lp, hq, lq), top, yb);
 }
 
-/* the amp's level at a point of its picture: Q8, 0..256. A straight attack, the hold, the decay falling 48 dB over its
- * segment (straight in dB, as T_ADEC_COEF falls), to the release from where the key is let go (a quarter: -12 dB) */
-static int env_level(int seg, int q, int dec_inf)
+/* the amp's level at a point of its picture (q 0..256 along its segment): Q8, 0..256, on the sound's own curves
+ * (env_block): the attack the square of its time (ATK 0 straight), the hold, the decay straight in dB to where the key
+ * is let go (a quarter: -12 dB), the release on down 48 dB (-60 under full) */
+static int env_level(int seg, int q, int dec_inf, int atk0)
 {
-    if (seg == 0) return q;
+    if (seg == 0) return atk0 ? q : (q * q) >> 8;
     if (seg == 1) return 256;
-    if (seg == 2) return dec_inf ? 256 : 64 + (int)((192u * (iexp2_q16(-(q * 6)) >> 8)) >> 8);   /* to a quarter */
+    if (seg == 2) return dec_inf ? 256 : (int)(iexp2_q16(-(q * 2)) >> 8);                      /* two halvings */
     int from = dec_inf ? 256 : 64;
-    return (int)(((uint32_t)from * (iexp2_q16(-(q * 8)) >> 8)) >> 8);                          /* 48 dB down */
+    return (int)(((uint32_t)from * (iexp2_q16(-(q * 8)) >> 8)) >> 8);                          /* eight */
 }
 
 /* the right column: what the page is about, live */
@@ -2361,9 +2411,9 @@ static void picture(void)
             break;
         }
         /* attack, hold, decay, release as lengths on a log scale (a long decay does not crowd the attack out), the level
-         * as the voice runs it (env_level): the segment being turned fills solid and draws heavy, the others hatched;
-         * dotted lines and handles where each ends, the 50 % level dotted, the letters under their segments, and the
-         * live voice runs on it */
+         * on the voice's own curves (env_level): the segment being turned fills solid and draws heavy, the others
+         * hatched; dotted lines and handles where each ends, the 50 % level dotted, the letters under their segments,
+         * and the live voice runs on it, where its level is on the curve */
         int dec_inf = k[P_DEC] == 127;
         int wa = 6 + k[P_ATK] * 24 / 127, wh = k[P_HOLD] == 127 ? 18 : 2 + k[P_HOLD] * 18 / 127;
         int wd = dec_inf ? 18 : 12 + k[P_DEC] * 30 / 127, wr = 8 + k[P_REL] * 24 / 127;
@@ -2377,7 +2427,7 @@ static void picture(void)
             int seg = x < xs[1] ? 0 : x < xs[2] ? 1 : x < xs[3] ? 2 : 3;
             int len = xs[seg + 1] - xs[seg];
             int q = (x - xs[seg]) * 256 / (len ? len : 1);
-            int y = yb - hgt * env_level(seg, q, dec_inf) / 256;
+            int y = yb - hgt * env_level(seg, q, dec_inf, !k[P_ATK]) / 256;
             int tone = seg == fk ? PT_SOLID : fk < 0 ? PT_VLINES : PT_HATCH;
             for (int j = y + 1; j <= yb; j++) if (pat_ink(tone, x, j)) px(x, j, 1);
             line(x - 1, py, x, y, 1);
@@ -2406,7 +2456,13 @@ static void picture(void)
         int st = mon.astage[ui.trk], lv = mon.aenv[ui.trk];
         if (st) {
             int y = yb - (hgt * lv >> 15);
-            int x = st == 1 ? xs[0] + wa * lv / 32768 : st == 2 ? xs[1] + wh / 2 : st == 3 ? xs[2] + wd - wd * lv / 32768 : xs[3] + 2;
+            /* along its segment as its level says: the attack's square root (ATK 0: straight), the decay's and the
+             * release's halvings (two to a quarter, eight on) */
+            int dn = lv ? (ilog2_q8(32768) - ilog2_q8((uint32_t)lv)) : 8 * 256;          /* halvings under full, Q8 */
+            int ra = !k[P_ATK] ? lv : (int)(atk_from((uint32_t)lv << 15) >> 15);
+            int x = st == 1 ? xs[0] + wa * ra / 32768 : st == 2 ? xs[1] + wh / 2
+                  : st == 3 ? xs[2] + wd * CLAMP(dn, 0, 512) / 512
+                  : xs[3] + wr * CLAMP(dn - (dec_inf ? 0 : 512), 0, 2048) / 2048;
             vline(x, top - 4, yb - top + 4, 2);
             disc(x, y, 3, 1);
         }
@@ -2556,14 +2612,25 @@ static void picture(void)
         const uint8_t *b = &k[P_LFO + 8 * l];
         int wave = (b[L_WAVE] * 7) >> 7, prev = 0;
         int32_t r = 0;
-        for (int i = 0; i < W; i++) {           /* the shape, dotted */
+        for (int i = 0; i < W; i++) {           /* the shape, dotted: a cycle */
             int32_t v = lfo_shape(wave, (uint32_t)i * (0xFFFFFFFFu / W), &r);
             if (wave == 6) v = ((i / 11) * 7919 % 64 - 32) * 1000;
-            int y = Y0 + 32 - (v * 28 >> 15);
+            int y = Y0 + 26 - (v * 22 >> 15);
             if ((i & 1) == 0) px(X + i, y, 1);
         }
-        for (int i = 0; i < W; i++) {           /* the live value, scrolling */
-            int v = ui.lfo_hist[(ui.lfo_w + i) % W];
+        /* under it the time the cycle takes (as SPD shows it) and how deep it goes, against full */
+        char o[24], dp[12];
+        const char *u;
+        s_lfo_cycle(o, &u, b[L_SPD], choice_of(K_MULT, b[L_MULT]));
+        if (*u) { char *e = o; while (*e) e++; *e++ = ' '; s_cpyn(e, u, (int)(o + sizeof o - e)); }
+        fmt(&PI_LFO[8 * l + L_DPTH], ui.trk, b[L_DPTH], dp, &u);
+        { char *e = dp; while (*e) e++; s_cpy(e, u); }
+        int dw = text_w(&F_S, dp, 0);
+        text_fit(X, Y0 + 52, o, 0, W - dw - 6, 1);
+        text(&F_S, X + W - dw, Y0 + 52, dp, 1, 0);
+        int32_t ad = T_LDPTH[b[L_DPTH]] < 0 ? -T_LDPTH[b[L_DPTH]] : T_LDPTH[b[L_DPTH]];
+        for (int i = 0; i < W; i++) {           /* the live value, scrolling, as deep as DPTH swings it */
+            int v = (int)((ui.lfo_hist[(ui.lfo_w + i) % W] * ad) >> 14);
             int y = Y0 + H - 34 - (v * 26 >> 15);
             if (i) line(X + i - 1, prev, X + i, y, 1);
             prev = y;

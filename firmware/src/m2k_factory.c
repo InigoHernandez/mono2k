@@ -373,6 +373,83 @@ static void vox_v13(m2k_pattern_t *p)
         }
 }
 
+/* format 16: the amp and the LFOs on the owner's laws (gen_tables.py). ATK DEC REL to the value that sounds nearest
+ * (T_AMP15: DEC and REL by their time to -60 dB, ATK by its rise's loudness), an LFO's SPD to the nearest rate (T_SPD15)
+ * and its DPTH, now squared about 64, to the same swing (T_DPTH15); in the kit and in the locks. An LFO on a DEC or a
+ * REL swings over the new law's steps: its depth the one that lands where the old swing did (feel_lfo) */
+static int amp_row(int prm) { return prm == P_ATK ? 0 : prm == P_DEC ? 1 : prm == P_REL ? 2 : -1; }
+
+static uint8_t feel_val(int prm, int v)
+{
+    v &= 127;
+    if (amp_row(prm) >= 0) return T_AMP15[amp_row(prm)][v];
+    if (prm >= P_LFO && prm < P_LFO + 24 && (prm - P_LFO) % 8 == L_SPD) return T_SPD15[v];
+    if (prm >= P_LFO && prm < P_LFO + 24 && (prm - P_LFO) % 8 == L_DPTH) return T_DPTH15[v];
+    return (uint8_t)v;
+}
+
+/* an old depth d on a DEC or REL (row 1, 2) whose old value is c: the new depth whose swing, at 17 points across it,
+ * lands nearest (in the new law's Q8 steps) to where the old one's (whole steps, as the old engine read them) sound */
+static uint8_t feel_lfo(int row, int c, int d)
+{
+    int best = 64;
+    int32_t be = -1, cn = T_AMP15[row][c & 127] * 256;
+    for (int n = 0; n < 128; n++) {
+        int32_t e = 0;
+        for (int32_t v = -32767; v <= 32767; v += 4095) {   /* (the shape by the depth: 2^15 by 2^14 at most) */
+            int32_t po = CLAMP((c & 127) * 256 + ((v * ((d & 127) - 64)) >> 6), 0, 127 * 256) >> 8;
+            int32_t x = T_AMP15[row][po] * 256 - CLAMP(cn + ((v * T_LDPTH[n]) >> 14), 0, 127 * 256);
+            e += x < 0 ? -x : x;
+        }
+        if (be < 0 || e < be) { be = e; best = n; }
+    }
+    return (uint8_t)best;
+}
+
+/* a kit's LFO page value (DPTH or SPD) at index prm, the LFO aiming at kit tk's parameter dest (tk the old one) */
+static uint8_t feel_lfo_val(int prm, int v, int dest, const uint8_t *tk)
+{
+    int row = amp_row(dest);
+    if ((prm - P_LFO) % 8 == L_DPTH && row > 0) return feel_lfo(row, tk[dest], v);
+    return feel_val(prm, v);
+}
+
+static void feel_v15(m2k_pattern_t *p)
+{
+    static uint8_t old[M2K_TRACKS][P_COUNT];        /* the kits before: an LFO's depth reads its target's old value */
+    m_cpy(old, p->kit, sizeof old);
+    for (int t = 0; t < M2K_TRACKS; t++) {
+        for (int prm = P_ATK; prm <= P_REL; prm++) p->kit[t][prm] = feel_val(prm, old[t][prm]);
+        for (int l = 0; l < 3; l++) {
+            const uint8_t *b = &old[t][P_LFO + 8 * l];
+            p->kit[t][P_LFO + 8 * l + L_SPD] = T_SPD15[b[L_SPD] & 127];
+            p->kit[t][P_LFO + 8 * l + L_DPTH] = feel_lfo_val(P_LFO + 8 * l + L_DPTH, b[L_DPTH], b[L_DEST] - 1,
+                                                             old[ens_target(b[L_TRCK])]);
+        }
+    }
+    for (int i = 0; i < M2K_LOCKS; i++) {
+        m2k_lock_t *l = &p->lock[i];
+        if (l->trk >= M2K_TRACKS) continue;
+        if (l->param >= P_LFO && l->param < P_LFO + 24) {
+            const uint8_t *b = &old[l->trk][P_LFO + (l->param - P_LFO) / 8 * 8];
+            l->val = feel_lfo_val(l->param, l->val, b[L_DEST] - 1, old[ens_target(b[L_TRCK])]);
+        } else l->val = feel_val(l->param, l->val);
+    }
+}
+
+/* a sound of the library saved before format 16: its kit on the same laws (its LFOs aiming at its own values) */
+static void feel_kit_v15(uint8_t *k)
+{
+    uint8_t o[P_COUNT];
+    m_cpy(o, k, P_COUNT);
+    for (int prm = P_ATK; prm <= P_REL; prm++) k[prm] = feel_val(prm, o[prm]);
+    for (int l = 0; l < 3; l++) {
+        uint8_t *b = &k[P_LFO + 8 * l];
+        b[L_SPD] = T_SPD15[b[L_SPD] & 127];
+        b[L_DPTH] = feel_lfo_val(P_LFO + 8 * l + L_DPTH, b[L_DPTH], b[L_DEST] - 1, o);
+    }
+}
+
 /* format 13: HOLD in beats, as the Monomachine's (v / 32 of a beat, measured at 60, 120 and 240 BPM), no longer 14.6 ms
  * a step: the kit's and its locks' HOLD to the step nearest the time they held, at the pattern's tempo (INF stays) */
 static uint8_t hold_to(int v, int bpm) { return v >= 127 ? 127 : (uint8_t)CLAMP((v * bpm * 146 + 9375) / 18750, 0, 126); }
@@ -806,4 +883,6 @@ static void factory(void)
     };
     locks(p, A04_LOCKS, sizeof A04_LOCKS);
     /* (A05-A16 have none: blank at the factory, the player's after; DEMO brings these four back alone) */
+    /* the four as the owner approved them, written on format 15's amp and LFO laws: onto 16's, once */
+    for (int i = 0; i < 4; i++) feel_v15(PAT(i));
 }

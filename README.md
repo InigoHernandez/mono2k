@@ -105,7 +105,12 @@ Done so far, all measured on OS 1.32B:
 - **The amp envelope.** The attack rises in a straight line in 0.90 ms × e^(0.0814·v), decay and release fall 20 dB
   in 8.3 ms × e^(0.0665·v), the hold lasts v / 32 of a beat at the tempo (32 is a beat, 8 a sixteenth: measured at 60,
   120 and 240 BPM within 0.3 %, `tools/ref/chain_hold46`, group `hold`; it was a fixed 14.6 ms a step until format 13,
-  fit at one tempo); a key let go ends the hold and the decay. MONO2K follows within a few percent from 0 to 127.
+  fit at one tempo); a key let go ends the hold and the decay. MONO2K followed within a few percent from 0 to 127 until
+  pattern format 16, when the owner chose laws of MONO2K's own for ATK, DEC and REL (gen_tables.py): the knob spent
+  where the times are useful (ATK 0.4 s at 64, 10 s at 127; DEC and REL 0.8 s at 64, 20 s at 127), the attack the
+  square of its time, the time shown the one heard (ATK to full, DEC and REL to -60 dB). Older patterns convert to the
+  value that sounds nearest; the kick cases measured against the Monomachine's DEC are XFAIL for it (group `kick`).
+  The LFOs too: SPD a cycle in 2^((84 − SPD) / 12) beats, DPTH squared about 64.
 - **SWAV-SAW** on SWAVE-SAW's page: the unison pairs' detune and levels, the square and sine subs, within 0.2 c and
   0.5 dB (`tools/ref/swave_saw*.spec`).
 - **SWAV-ENS** on SWAVE-ENS's page (`tools/ref/chain_ens15..20.spec`, `ensacc`): PCH2–4 off its interval table (−12
