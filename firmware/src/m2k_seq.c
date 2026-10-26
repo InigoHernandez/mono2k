@@ -5,6 +5,7 @@
 
 static struct {
     uint8_t playing, step, queued, rec;   /* step: the next to play (at the end, the wrap waits for it) */
+    uint8_t ready;                     /* REC on, PLAY tapped stopped: the first note starts it, recorded (Demake's) */
     uint8_t full;                      /* a pattern queued could not open (the FM-1's patterns full): for the screen */
     uint8_t jump;                      /* the queued pattern now, at the next step (HOME + its key again) */
     uint8_t solo;                      /* the tracks soloed while GLO + white 9-14 are held (0 none) */
@@ -490,6 +491,7 @@ static void seq_reset(void)
 
 static void seq_play(int on)
 {
+    sq.ready = 0;                      /* (started, by a note or PLAY, or stopped: no longer waiting) */
     if (on && !sq.playing) {
         seq_reset();
         if (!mx.ext && set_on(S_SYNO)) {   /* a pulse with the first step */
@@ -561,8 +563,12 @@ static int rec_step(int t)
     return nx;
 }
 
+/* Ready: the first note (a key, a pad, MIDI in) starts the pattern from its first step, and is recorded there */
+static void ready_go(void) { if (sq.ready && !sq.playing) seq_play(1); }
+
 static void live_on(int note, int vel)
 {
+    ready_go();
     int t = sq.ktrk;
     for (int i = 0; i < sq.nheld; i++) if (sq.held[i] == note) return;
     if (sq.nheld < 8) sq.held[sq.nheld++] = (uint8_t)note;
@@ -587,6 +593,7 @@ static void live_on(int note, int vel)
  * the nearest step of that track */
 static void pad_hit(int t, int note)
 {
+    ready_go();
     m_cpy(trk[t].eff, PAT(cur_pat)->kit[t], P_COUNT);
     voice_trig(t, note, 100, 0, 0);
     trk[t].gate_left = gate_blocks(t);
@@ -664,6 +671,7 @@ void m2k_midi(int status, int d1, int d2)
         return;
     }
     if (cmd == 0x90 && d2) {
+        ready_go();
         if (t == sq.ktrk) { live_on(d1, d2); return; }
         m_cpy(trk[t].eff, PAT(cur_pat)->kit[t], P_COUNT);
         voice_on(t, d1, 100, 0);                    /* any velocity alike, as the Monomachine's (no accent) */

@@ -165,6 +165,7 @@ static void ta_check(int ms)
 static int text_sweep(void)
 {
     m2k_init(2000);
+    sq.rec = 1; sq.ready = 1; ui.pads = 1; sq.fill = 1;   /* the header at its fullest: REC, READY, PADS, FILL */
     uint32_t now = 4000;
     static int16_t b[256];
     for (int f = 0; f < 44100 * 3; f += 128) m2k_render(b, 128);
@@ -2108,6 +2109,50 @@ static int selftest(void)
         m2k_button(B_GLO, 1); m2k_button(B_ARP, 1); m2k_button(B_ARP, 0); m2k_button(B_GLO, 0);
         int arp = ui.pads;
         CHECK(m1 && m2 && m3 && stay && arp, "GLO + HOME: the keys' mode in turn, KEYS PADS GRID; the page kept; GLO + ARP still PADS");
+        /* Ready (Demake's): stopped, REC on, PLAY: it waits; the first key starts the pattern from its first step and
+         * is recorded there; PLAY again starts it now; REC off ends the wait; a MIDI note starts it; SYIN on: PLAY plays */
+        {
+            static int16_t rb[256];
+            m2k_init(40);
+            open_b01();
+            for (int t = 0; t < M2K_TRACKS; t++) for (int st = 0; st < M2K_STEPS; st++) pat[16].step[t][st].flags = 0;
+            ui.trk = 0; ui.page = PG_AMP; ui.now = 40000;
+            m2k_button(B_REC, 1); ui.now += 50; m2k_button(B_REC, 0);                 /* REC tapped: step entry */
+            int entry = sq.rec && !sq.playing;
+            ui.now += 200;
+            m2k_button(B_PLAY, 1); m2k_button(B_PLAY, 0);
+            int waits = sq.ready && !sq.playing;
+            for (int i = 0; i < 20; i++) m2k_render(rb, 128);                         /* nothing moves while it waits */
+            int still = !sq.playing && !(pat[16].step[0][0].flags & ST_TRIG);
+            m2k_key(4, 1);                                                             /* A3: the first note */
+            int started = sq.playing && !sq.ready;
+            int rec0 = (pat[16].step[0][0].flags & ST_TRIG) && pat[16].step[0][0].note == 57;
+            m2k_key(4, 0);
+            seq_play(0);
+            ui.now += 200;
+            m2k_button(B_PLAY, 1); m2k_button(B_PLAY, 0);                             /* ready again */
+            m2k_button(B_PLAY, 1); m2k_button(B_PLAY, 0);                             /* PLAY again: now */
+            int now = sq.playing && !sq.ready;
+            seq_play(0);
+            m2k_button(B_PLAY, 1); m2k_button(B_PLAY, 0);
+            ui.now += 400;
+            m2k_button(B_REC, 1); ui.now += 50; m2k_button(B_REC, 0);                 /* REC off: no wait */
+            int off = !sq.rec && !sq.ready && !sq.playing;
+            m2k_button(B_REC, 1); ui.now += 50; m2k_button(B_REC, 0);
+            ui.now += 200;
+            m2k_button(B_PLAY, 1); m2k_button(B_PLAY, 0);
+            m2k_midi(0x90 | (midi_ch() & 15), 60, 100);                               /* a MIDI note starts it */
+            int midi = sq.playing && !sq.ready;
+            m2k_midi(0x80 | (midi_ch() & 15), 60, 0);
+            seq_play(0);
+            m2k_setting(S_SYNI, 127);
+            m2k_button(B_PLAY, 1); m2k_button(B_PLAY, 0);                             /* following a clock: no wait */
+            int ext = sq.playing && !sq.ready;
+            seq_play(0);
+            m2k_setting(S_SYNI, 0);
+            CHECK(entry && waits && still && started && rec0 && now && off && midi && ext,
+                  "REC + PLAY stopped: Ready, the first note starts it on step 1, recorded; PLAY again now; REC off; MIDI; SYIN plays");
+        }
         /* GLO > SET: WIPE asks, OCT+ makes every pattern INIT (the sounds kept), OCT- or any other button keeps them;
          * DEMO asks, OCT+ brings bank A's back */
         m2k_init(38);

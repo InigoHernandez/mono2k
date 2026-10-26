@@ -905,7 +905,7 @@ static int page_length(int pg)
 }
 
 /* step entry: REC armed while stopped, the keys playing: each note is the next step */
-static int step_entry(void) { return sq.rec && !sq.playing && !ui.grid; }
+static int step_entry(void) { return sq.rec && !sq.playing && !ui.grid && !sq.ready; }
 
 static void entry_show(const char *what)
 {
@@ -1762,6 +1762,7 @@ static void button_event(int b, int down)
         if (down) { ui.rec_t0 = ui.now | 1u; ui.rec_used = 0; return; }
         if (!ui.rec_used && ui.now - ui.rec_t0 < 300) {
             sq.rec ^= 1;
+            if (!sq.rec) sq.ready = 0;     /* (REC off: no longer waiting for a note) */
             if (sq.rec && !sq.playing) {   /* stopped: step entry from the page in view */
                 ui.cursor = (uint8_t)(ui.spage * 16 < seq_len() ? ui.spage * 16 : 0);
                 if (ui.grid) toast("REC", "SEQ: KEYS WRITE STEPS");
@@ -1816,7 +1817,12 @@ static void button_event(int b, int down)
         break;
     case B_ARP: go(PG_ARP); break;
 
-    case B_PLAY: seq_play(!sq.playing); break;
+    case B_PLAY:
+        if (!sq.playing && sq.rec && !ui.grid && !sq.ready && !set_on(S_SYNI)) {   /* Ready (Demake's): the first */
+            sq.ready = 1;                                                        /* note starts it, recorded */
+            toast("READY", "THE FIRST NOTE STARTS IT");
+        } else seq_play(!sq.playing);  /* (Ready: PLAY again starts it now) */
+        break;
     case B_OCTD: case B_OCTU: {
         int d = b == B_OCTU ? 1 : -1;
         if (ui.grid && ui.nheld) held_step_edit(0, d);
@@ -2000,6 +2006,7 @@ static void header(void)
     }
     if (ui.grid) { int w = text_w(&F_S, "GRID", 1) + 6; tag(xr - w, 0, "GRID", 0); xr -= w + 4; }
     if (ui.pads) { int w = text_w(&F_S, "PADS", 1) + 6; tag(xr - w, 0, "PADS", 0); xr -= w + 4; }
+    if (sq.ready) { int w = text_w(&F_S, "READY", 1) + 6; tag(xr - w, 0, "READY", 1); xr -= w + 4; }
     if (sq.fill) { int w = text_w(&F_S, "FILL", 1) + 6; tag(xr - w, 0, "FILL", 1); xr -= w + 4; }
     /* left: the page, the track, its machine; what does not fit is left out */
     char o[24];
@@ -2017,6 +2024,7 @@ static void header(void)
     const mi_t *mi = &MI[p->machine[ui.trk]];
     clip(0, 0, xr - 2, 15);
     char t[4] = {'T', (char)('1' + ui.trk), 0, 0};
+    if (x + text_w(&F_S, t, 1) >= xr - 2) { noclip(); hline(0, 15, 240, 1); return; }   /* no room: whole, or not at all */
     x += text(&F_S, x, 2, t, 1, 1) + 4;
     if (x + text_w(&F_S, mi->badge, 1) + 12 < xr - 2) {
         badge(x, 1, mi->badge);
@@ -2213,6 +2221,8 @@ static int32_t filt_db(int q, int hp, int lp, int hq, int lq)
 }
 
 #define FDB_TOP (18 * 256)                           /* the picture's range: +18 dB .. -42 dB */
+#define FQ_MAX 1118                                  /* the axis: 20 Hz to an octave past 20 kHz (1016), so a
+                                                        high LP's slope shows falling, not cut at the edge */
 #define FDB_SPAN (60 * 256)
 
 static int filt_row(int32_t db, int top, int yb)     /* a gain to its row; past the top it rides the top */
@@ -2227,7 +2237,7 @@ static void filt_curve(int X, int W, int top, int yb, int hp, int lp, int hq, in
 {
     int prev = yb, y0 = filt_row(0, top, yb);
     for (int i = 0; i < W; i++) {
-        int q = i * 1016 / (W - 1);
+        int q = i * FQ_MAX / (W - 1);
         int y = filt_row(filt_db(q, hp, lp, hq, lq), top, yb);
         for (int j = y + 1; j <= yb; j++) if (pat_ink(dense, X + i, j)) px(X + i, j, 1);
         if (i) { line(X + i - 1, prev, X + i, y, 1); if (heavy) line(X + i - 1, prev - 1, X + i, y - 1, 1); }
@@ -2235,7 +2245,7 @@ static void filt_curve(int X, int W, int top, int yb, int hp, int lp, int hq, in
         prev = y;
     }
     static const int16_t DEC[3] = {236, 575, 913};   /* 100 Hz, 1 kHz, 10 kHz on the axis */
-    for (int d = 0; d < 3; d++) vline(X + DEC[d] * (W - 1) / 1016, yb + 1, 3, 1);
+    for (int d = 0; d < 3; d++) vline(X + DEC[d] * (W - 1) / FQ_MAX, yb + 1, 3, 1);
     hline(X, yb + 1, W, 1);
     *yh = filt_row(filt_db(hp, hp, lp, hq, lq), top, yb);
     *yl = filt_row(filt_db(lp, hp, lp, hq, lq), top, yb);
@@ -2397,6 +2407,7 @@ static void picture(void)
         break;
     }
     case PG_FILT: {
+        const int FW = W - 6;          /* (the curve and its handles clear of the screen's edge, which the bezel hides) */
         int fk = ui.focus_t && ui.now - ui.focus_t < 2500 ? ui.focus : -1;
         int db = k[P_BOF] - 64, dw = k[P_WOF] - 64, ob = 7 * db * (db < 0 ? -db : db), ow = 7 * dw * (dw < 0 ? -dw : dw);
         int hp0 = filt_q3(ui.trk, k[P_BASE] << 8), lp0 = filt_q3(ui.trk, (k[P_BASE] + k[P_WDTH]) << 8);
@@ -2407,14 +2418,14 @@ static void picture(void)
             int hp1 = filt_q3(ui.trk, (k[P_BASE] << 8) + ob);
             int lp1 = filt_q3(ui.trk, ((k[P_BASE] + k[P_WDTH]) << 8) + ob + ow);
             int top = Y0 + 10, yb2 = Y0 + H - 52, yh, yl, prev = yb2;
-            filt_curve(X, W, top, yb2, hp1, lp1, hq, lq, fk >= 2 ? PT_VLINES : PT_HATCH, fk >= 2, &yh, &yl);
-            for (int i = 0; i < W; i++) {
-                int y = filt_row(filt_db(i * 1016 / (W - 1), hp0, lp0, hq, lq), top, yb2);
+            filt_curve(X, FW, top, yb2, hp1, lp1, hq, lq, fk >= 2 ? PT_VLINES : PT_HATCH, fk >= 2, &yh, &yl);
+            for (int i = 0; i < FW; i++) {
+                int y = filt_row(filt_db(i * FQ_MAX / (FW - 1), hp0, lp0, hq, lq), top, yb2);
                 if (i && ((i >> 1) & 1)) line(X + i - 1, prev, X + i, y, 2);   /* the band at rest, dashed */
                 prev = y;
             }
             /* how far the envelope takes the base: an arrow over the band */
-            int xh0 = X + hp0 * (W - 1) / 1016, xh1 = X + hp1 * (W - 1) / 1016, ay = top - 5;
+            int xh0 = X + hp0 * (FW - 1) / FQ_MAX, xh1 = X + hp1 * (FW - 1) / FQ_MAX, ay = top - 5;
             if (xh1 != xh0) {
                 hline(xh0 < xh1 ? xh0 : xh1, ay, (xh1 > xh0 ? xh1 - xh0 : xh0 - xh1) + 1, 1);
                 if (fk == 2) hline(xh0 < xh1 ? xh0 : xh1, ay + 1, (xh1 > xh0 ? xh1 - xh0 : xh0 - xh1) + 1, 1);
@@ -2425,7 +2436,7 @@ static void picture(void)
             tag(X, yb2 + 7, "BO", fk == 2);
             tag(X, yb2 + 22, "WO", fk == 3);
             /* the envelope: a straight attack up, a straight decay down (as the chain's) */
-            int ex = X + 30, ew = W - 32, eb = yb2 + 34, et = yb2 + 8;
+            int ex = X + 30, ew = FW - 32, eb = yb2 + 34, et = yb2 + 8;
             int a = 2 + k[P_FATK] * (ew / 3 - 2) / 127, d = 3 + k[P_FDEC] * (ew - a - 4) / 127, pe = eb;
             for (int x = 0; x <= a + d; x++) {
                 int y = x <= a ? eb - (eb - et) * x / (a ? a : 1) : eb - (eb - et) * (a + d - x) / (d ? d : 1);
@@ -2442,8 +2453,8 @@ static void picture(void)
         int hp = hp0, lp = lp0, yh, yl;
         if (t->sounding) { hp = mon.cut_hp[ui.trk]; lp = mon.cut_lp[ui.trk]; }
         int top = Y0 + 10, yb = Y0 + H - 36;
-        filt_curve(X, W, top, yb, hp, lp, hq, lq, fk >= 0 ? PT_VLINES : PT_HATCH, fk >= 0, &yh, &yl);
-        int xh = X + hp * (W - 1) / 1016, xl = X + lp * (W - 1) / 1016;
+        filt_curve(X, FW, top, yb, hp, lp, hq, lq, fk >= 0 ? PT_VLINES : PT_HATCH, fk >= 0, &yh, &yl);
+        int xh = X + hp * (FW - 1) / FQ_MAX, xl = X + lp * (FW - 1) / FQ_MAX;
         dotted_v(xh, top - 6, yb - top + 6);
         dotted_v(xl, top - 6, yb - top + 6);
         int hot_h = fk == 0 || fk == 2, hot_l = fk == 3;
@@ -2455,7 +2466,7 @@ static void picture(void)
         if (fk == 1) rect(xh, wy + 1, xl - xh + 1, 3, 1); else dotted_h(xh, wy + 2, xl - xh + 1);
         /* the names, under their cutoffs and inside the column, apart */
         int wH = text_w(&F_S, "HP", 1) + 6, wL = text_w(&F_S, "LP", 1) + 6;
-        int th = CLAMP(xh - wH / 2, X, X + W - wH - wL - 2), tl = CLAMP(xl - wL / 2, th + wH + 2, X + W - wL);
+        int th = CLAMP(xh - wH / 2, X, X + FW - wH - wL - 2), tl = CLAMP(xl - wL / 2, th + wH + 2, X + FW - wL);
         tag(th, wy + 8, "HP", hot_h);
         tag(tl, wy + 8, "LP", hot_l);
         break;
@@ -3357,7 +3368,7 @@ const uint8_t *m2k_leds(void)
     B[B_ARP] = ui.page == PG_ARP ? 255 : 0;
     B[B_SAVE] = ui.save_t && ui.now - ui.save_t < 300 ? 255 : 0;
     B[B_SEQ] = ui.grid ? 255 : 0;
-    B[B_PLAY] = sq.playing ? ((play_step() & 3) == 0 ? 255 : 70) : 0;
+    B[B_PLAY] = sq.playing ? ((play_step() & 3) == 0 ? 255 : 70) : sq.ready && blink ? 255 : 0;   /* Ready: blinks */
     B[B_REC] = sq.rec ? 255 : 0;
     B[B_OCTD] = ui.oct < 0 ? 200 : 0;
     B[B_OCTU] = ui.oct > 0 ? 200 : 0;

@@ -7,8 +7,10 @@ window.M2K_KINDS = {
 };
 window.M2K_CHANGES = [
   {
-    date: "2026-10-26", title: "MONO2K 1.0.3: the MIDI clock in, a fix for the FM-1's chip, GLO + HOME for the keys",
+    date: "2026-10-26", title: "MONO2K 1.0.3: the MIDI clock in, a fix for the FM-1's chip, GLO + HOME for the keys; Ready",
     items: [
+      ["screen", "FILT's picture no longer runs off the screen's edge: the curve keeps clear of it, and its axis runs an octave past 20 kHz, so a high LP shows its slope falling instead of a cut."],
+      ["sequencer", "Ready, as in Demake: stopped with REC on, tap PLAY and MONO2K waits (READY in the header, PLAY blinking); your first note, from a key, a pad or MIDI, starts the pattern on its first step and is recorded there. PLAY again starts it at once. In the emulator now; on the FM-1 with the next update."],
       ["workflow", "GLO + HOME turns the keys to the next mode, a tap each: KEYS (play the track), PADS (a key per track, each at its root), GRID (the steps), then KEYS again. GLO + ARP still turns PADS on and off, and SEQ still goes to GRID."],
       ["fixes", "On the FM-1, a fault in its chip could now and then corrupt a value during the sound engine's arithmetic: a crash, a freeze or a click, at random. Every calculation it hit now runs the safe way, the sound exactly the same; the FM-1 build refuses the risky form from now on."],
       ["fixes", "The MIDI clock, start, continue and stop now come through over USB however the sending device packs them (some hosts send them in a form MONO2K threw away), and also in the middle of a SysEx dump."],

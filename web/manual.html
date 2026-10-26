@@ -174,7 +174,7 @@
       <tr><td>GLO</td><td>GLO, then its next pages</td><td>FUNC: the combinations below</td></tr>
       <tr><td>SEQ</td><td>GRID: the keys become the steps; again, notes</td><td>The step tools (below)</td></tr>
       <tr><td>PLAY</td><td>Start, stop</td><td>A second: its card</td></tr>
-      <tr><td>REC</td><td>Record (playing: live; stopped: step entry)</td><td>FILL; with SEQ, clear the track (below)</td></tr>
+      <tr><td>REC</td><td>Record (playing: live; stopped: step entry, then PLAY: Ready, the first note starts it)</td><td>FILL; with SEQ, clear the track (below)</td></tr>
       <tr><td>SAVE</td><td>Keep the pattern</td><td>Keep the project</td></tr>
       <tr><td>OCT− OCT+</td><td>The octave; in GRID the page; a held step's ratchet. In a question, NO and YES</td><td>OCT− and a knob: that knob back to its default. A second alone: its card</td></tr>
     </tbody>
@@ -601,6 +601,8 @@
   <p class="sub">Live while the pattern plays, or step by step while it is stopped.</p>
   <h2>Live</h2>
   <p>With the keys playing notes (not GRID), press PLAY and tap REC. Notes you play land on the nearest step; a hard key records an accent. Knobs turned while recording lock their value to the step just played. Tap REC again to stop recording. A take you don't want: hold REC and tap SEQ, and the track's steps are gone (SEQ again brings them back).</p>
+  <h2>Ready: the first note starts it</h2>
+  <p>With the sequencer stopped and REC on, tap PLAY: READY in the header, PLAY blinks, and nothing moves yet. The first note you play (a key, a pad, or a note over MIDI) starts the pattern from its first step and is recorded there; play on as the pattern loops. PLAY again starts it at once; REC off stops waiting. Following a MIDI clock (SYIN on), PLAY plays as ever.</p>
   <h2>Step entry</h2>
   <p>With the keys playing notes and the sequencer stopped, tap REC: STEP ENTRY. Each note you play is written to the next step and the cursor moves on. EDIT leaves a rest; PRESETS moves the cursor back and on. Tap REC to leave.</p>
   <h2>FILL</h2>
@@ -761,7 +763,7 @@
 </footer>
 <script src="site.js?v=3"></script>
 <script src="panel.js?v=2"></script>
-<script src="changelog.js?v=26"></script>
-<script src="manual.js?v=27"></script>
+<script src="changelog.js?v=27"></script>
+<script src="manual.js?v=28"></script>
 </body>
 </html>
