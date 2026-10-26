@@ -94,10 +94,15 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   every FX machine with the track it hears; the self-test renders bank A with the second core's tracks first and last
   and holds both to the one-core render, sample for sample. `--diag` packages show CPU (the first core's render, the
   waits included), W (the second's) and F (drawing) in % over the screen's top.
-- MIDI (GLO > MIDI, settings S_MCH S_SYNI S_SYNO S_NOTO): `m2k_midi_out(msg, played)` hands out what is due once the
-  sound has reached sample `played` (`m2k_samples`); the FM-1 sends it as the ISR takes the ring, the worklet as it
-  renders (the page stamps it with the audio latency). The self-test holds the clock out, the clock in, the notes out
-  and the channel.
+- MIDI (GLO > MIDI, settings S_MCH S_SYNI S_SYNO S_NOTO; GLO > IN, S_NTIN S_THRU): `m2k_midi_out(msg, played)` hands
+  out what is due once the sound has reached sample `played` (`m2k_samples`); the FM-1 sends it as the ISR takes the
+  ring, the worklet as it renders (the page stamps it with the audio latency). In: `m2k_midi_from(src, ...)`, USB or
+  TRS (the platform's ring marks the jack's as cable `MIDI_TRS`, USB's forced to 0; `m2k_midi` is USB, the browser's
+  and the host's): the clock and transport from SYIN's (OFF USB TRS BOTH: `syin_choice`, an old switch's OFF and ON
+  kept), notes, CCs and mutes from NOTE IN's, THRU the jack's out over USB (not its clock while SYNC OUT is on). The
+  update loader is built from the same usb.c: platform changes there go under `#ifndef FELUCCA_LOADER`, and its
+  loader.bin / ota.bin are compared with an untouched build's. The self-test holds the clock out, the clock in, the
+  notes out, the channel and each source rule.
 - Calibration (README, Calibration): `tools/ref/mm_ref` (gearmulator, the user's OS image at a path, never in the
   repo; it logs to stdout, so send stdout to /dev/null) against `host/m2k_ref.c`, same specs in `tools/ref/*.spec`.
   Pattern format: 2 amp ATK/HOLD/DEC/REL on the measured curve; 4 SWAV-SAW's page; 5 the track chain on the

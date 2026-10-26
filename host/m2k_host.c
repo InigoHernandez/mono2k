@@ -38,7 +38,8 @@ static void pbm_write(const char *path, const uint8_t *fbuf)
 
 typedef struct { int ms; char kind; int a, b; const char *shot; } ev_t;
 
-/* the tour: kind b button (a, b = down), e encoder (a, delta), k key (a, down), s screenshot */
+/* the tour: kind b button (a, b = down), e encoder (a, delta), k key (a, down), m MIDI in (a from, b status), s
+ * screenshot */
 static const ev_t TOUR[] = {
     {900, 's', 0, 0, "00_boot"},
     {2400, 's', 0, 0, "01_home_stopped"},
@@ -75,7 +76,7 @@ static const ev_t TOUR[] = {
 };
 
 /* the manual's scenes: B01's T1 with a trig of each of the eight types on every other step, in GRID (30); step 5's
- * FILTER trig held (31); the sound library, SYN > SND (25) */
+ * FILTER trig held (31); the sound library, SYN > SND (25); GLO > IN (32) */
 static const ev_t MANUAL[] = {
     {2600, 'b', B_SEQ, 1, 0}, {2620, 'b', B_SEQ, 0, 0},
     {3400, 's', 0, 0, "30_grid_trig_types"},
@@ -106,7 +107,11 @@ static const ev_t MANUAL[] = {
     {22600, 's', 0, 0, "29i_seq_latched"}, {22700, 'b', B_SEQ, 1, 0}, {22720, 'b', B_SEQ, 0, 0},
     {23000, 'b', B_PLAY, 1, 0}, {24200, 's', 0, 0, "29j_play_card"}, {24300, 'b', B_PLAY, 0, 0},
     {24400, 'b', B_PLAY, 1, 0}, {24420, 'b', B_PLAY, 0, 0},
-    {24500, 'x', 0, 0, 0},
+    /* GLO > MIDI: SYIN to USB; GLO > IN: THRU on, a pulse in on the TRS jack (its square lit, not followed) (32) */
+    {24600, 'b', B_GLO, 1, 0}, {24620, 'b', B_GLO, 0, 0}, {24800, 'e', E_K2, 1, 0},
+    {25000, 'b', B_GLO, 1, 0}, {25020, 'b', B_GLO, 0, 0}, {25200, 'e', E_K2, 1, 0},
+    {25750, 'm', M2K_TRS, 0xF8, 0}, {25800, 's', 0, 0, "32_glo_in"},
+    {25900, 'x', 0, 0, 0},
 };
 
 static void manual_scene(void)
@@ -182,13 +187,17 @@ static int text_sweep(void)
                     int code = knob_param(pg, sub, k);
                     if (code == NONE) continue;
                     static const int V[3] = {0, 64, 127};
+                    const int set = code >= 0xC0 && (code & 0x3F) < S_COUNT ? code & 0x3F : -1;   /* (not PROJ, SLOT ...) */
+                    const uint8_t kept = set >= 0 ? store_.set[set] : 0;
                     for (int vi = 0; vi < 3; vi++) {
                         if (code < 0x80) PAT(cur_pat)->kit[0][code] = (uint8_t)V[vi];
                         else if (code < 0xC0) PAT(cur_pat)->glob[code & 0x7F] = (uint8_t)V[vi];
+                        else if (set >= 0) store_.set[set] = (uint8_t)V[vi];
                         ui.focus = (uint8_t)k; ui.focus_t = now; ui.roll_t = now - 2000;
                         now += 40; ui.trans_t = 0; ui.toast_t = 0;
                         m2k_frame(now); ta_check((int)now);
                     }
+                    if (set >= 0) store_.set[set] = kept;
                 }
             }
     }
@@ -237,6 +246,7 @@ static void run_events(const ev_t *E, const char *out)
             if (e->kind == 'b') m2k_button(e->a, e->b);
             if (e->kind == 'e') m2k_encoder(e->a, e->b);
             if (e->kind == 'k') m2k_key(e->a, e->b);
+            if (e->kind == 'm') m2k_midi_from(e->a, e->b, 0, 0);
             if (e->kind == 's') {
                 snprintf(path, sizeof path, "%s/%s.pbm", out, e->shot);
                 pbm_write(path, m2k_frame((uint32_t)now));
@@ -1939,6 +1949,179 @@ static int selftest(void)
         m2k_midi(0x82, 64, 0);
         CHECK(t0, "MIDI: CHAN puts track 1 on its channel");
         m2k_setting(S_MCH, 0); m2k_setting(S_SYNI, 0);
+    }
+    /* MIDI in by where it comes from (the FM-1's USB or TRS jack): the clock and transport only from SYNC IN's; with
+     * SYNC IN off the transport from NOTE IN's; notes, CCs and mutes only from NOTE IN's; THRU passes the jack's on over
+     * USB (its clock not while SYNC OUT sends MONO2K's), never USB's */
+    {
+        static int16_t mb[2 * 128];
+        static const uint8_t OLDV[4] = {0, 32, 96, 127}, OLDC[4] = {0, 0, 3, 3}, NTC[4] = {3, 1, 2, 0};
+        static const char *const SRC_N[4] = {"OFF", "USB", "TRS", "BOTH"};
+        const int U = M2K_USB, T = M2K_TRS;
+        uint8_t m[3];
+        char o[16];
+        const char *u;
+        m2k_init(15);
+        open_b01();
+        /* an old store: SYNC IN's switch OFF (0 at first, 32 turned) or ON (96, the page's 127); NOTE IN and THRU 0 */
+        int old = notes_from() == 3 && !set_on(S_THRU);
+        for (int i = 0; i < 4; i++) { store_.set[S_SYNI] = OLDV[i]; old &= clk_from() == OLDC[i]; }
+        /* SYIN turned on the panel from an old OFF: USB, TRS, BOTH, and no further; from an old ON down: TRS */
+        ui.page = PG_GLO; ui.sub = 4;
+        store_.set[S_SYNI] = 32;
+        int turn = knob_param(PG_GLO, 4, 1) == SETTING(S_SYNI);
+        for (int i = 1; i <= 4; i++) {
+            edit(1, 1);
+            fmt(pinfo(0, SETTING(S_SYNI)), 0, store_.set[S_SYNI], o, &u);
+            turn &= clk_from() == (i < 3 ? i : 3) && !strcmp(o, SRC_N[i < 3 ? i : 3]);
+        }
+        store_.set[S_SYNI] = 96;
+        edit(1, -1);
+        turn &= clk_from() == 2;
+        /* GLO > IN: NOTE IN (BOTH USB TRS OFF) and THRU */
+        int page = knob_param(PG_GLO, 5, 0) == SETTING(S_NTIN) && knob_param(PG_GLO, 5, 1) == SETTING(S_THRU) &&
+                   knob_param(PG_GLO, 5, 2) == NONE && knob_param(PG_GLO, 5, 3) == NONE;
+        for (int i = 0; i < 4; i++) {
+            store_.set[S_NTIN] = enc(i, 4);
+            fmt(pinfo(0, SETTING(S_NTIN)), 0, store_.set[S_NTIN], o, &u);
+            page &= notes_from() == NTC[i] && !strcmp(o, SRC_N[NTC[i]]);
+        }
+        CHECK(old && turn && page, "MIDI in: an old store's SYNC IN off stays OFF, on takes USB and TRS (BOTH), NOTE IN "
+                                   "BOTH, THRU off; SYIN turns OFF USB TRS BOTH; GLO > IN's NOTE IN and THRU");
+        /* SYNC IN USB: the jack's song position, start, pulses and stop pass it by; TRS: the other way; BOTH: either */
+        m2k_setting(S_NTIN, enc(0, 4));
+        m2k_setting(S_SYNI, enc(1, 4));
+        m2k_midi_from(T, 0xF2, 5, 0);
+        m2k_midi_from(T, 0xFA, 0, 0);
+        int usb = !sq.playing && sq.step == 0;
+        m2k_midi_from(U, 0xF2, 5, 0);
+        usb &= sq.step == 5;
+        m2k_midi_from(U, 0xFA, 0, 0);
+        usb &= sq.playing && mx.ext;
+        m2k_midi_from(T, 0xF8, 0, 0);
+        usb &= mx.pulses == 0;
+        m2k_midi_from(U, 0xF8, 0, 0);
+        usb &= mx.pulses == 1;
+        m2k_midi_from(T, 0xFC, 0, 0);
+        usb &= sq.playing;
+        m2k_midi_from(U, 0xFC, 0, 0);
+        usb &= !sq.playing;
+        m2k_setting(S_SYNI, enc(2, 4));
+        m2k_midi_from(U, 0xFA, 0, 0);
+        int trs = !sq.playing;
+        m2k_midi_from(T, 0xFA, 0, 0);
+        trs &= sq.playing && mx.ext;
+        m2k_midi_from(U, 0xF8, 0, 0);
+        trs &= mx.pulses == 0;
+        m2k_midi_from(T, 0xF8, 0, 0);
+        trs &= mx.pulses == 1;
+        m2k_midi_from(U, 0xFC, 0, 0);
+        trs &= sq.playing;
+        m2k_midi_from(T, 0xFC, 0, 0);
+        trs &= !sq.playing;
+        m2k_setting(S_SYNI, enc(3, 4));
+        m2k_midi_from(T, 0xFA, 0, 0);
+        int both = sq.playing && mx.ext;
+        m2k_midi_from(U, 0xFC, 0, 0);
+        both &= !sq.playing;
+        m2k_midi_from(U, 0xFB, 0, 0);
+        both &= sq.playing && mx.ext;
+        m2k_midi_from(T, 0xFC, 0, 0);
+        both &= !sq.playing;
+        CHECK(usb && trs && both, "MIDI in: the clock, start, continue, stop and song position only from SYNC IN's (USB, TRS, both)");
+        /* SYNC IN off: start, continue and stop from NOTE IN's, at MONO2K's tempo */
+        m2k_setting(S_SYNI, enc(0, 4));
+        m2k_setting(S_NTIN, enc(1, 4));
+        m2k_midi_from(T, 0xFA, 0, 0);
+        int off = !sq.playing;
+        m2k_midi_from(U, 0xFA, 0, 0);
+        off &= sq.playing && !mx.ext;
+        m2k_midi_from(T, 0xFC, 0, 0);
+        off &= sq.playing;
+        m2k_midi_from(U, 0xFC, 0, 0);
+        off &= !sq.playing;
+        m2k_setting(S_NTIN, enc(2, 4));
+        m2k_midi_from(U, 0xFB, 0, 0);
+        off &= !sq.playing;
+        m2k_midi_from(T, 0xFB, 0, 0);
+        off &= sq.playing;
+        m2k_midi_from(T, 0xFC, 0, 0);
+        off &= !sq.playing;
+        m2k_setting(S_NTIN, enc(3, 4));
+        m2k_midi_from(U, 0xFA, 0, 0);
+        m2k_midi_from(T, 0xFA, 0, 0);
+        off &= !sq.playing;
+        CHECK(off, "MIDI in: SYNC IN off, start, continue and stop only from NOTE IN's");
+        /* notes, CCs (SYN A on 48) and mutes (3) only from NOTE IN's: both, USB, TRS, none */
+        m2k_setting(S_MCH, 0);
+        ui.trk = 4; sq.ktrk = 4;
+        int notes = 1;
+        for (int c = 0; c < 4; c++) {
+            m2k_setting(S_NTIN, enc(c, 4));
+            for (int s = 0; s < 2; s++) {
+                int src = s ? T : U, want = NTC[c] >> s & 1;
+                m2k_midi_from(src, 0x90, 64, 100);
+                int on = trk[0].note == 64 && trk[0].gate;
+                voice_off(0);
+                PAT(cur_pat)->kit[0][P_SYN] = 0;
+                m2k_midi_from(src, 0xB0, 48, 99);
+                int cc = PAT(cur_pat)->kit[0][P_SYN] == 99;
+                PAT(cur_pat)->mute = 0;
+                m2k_midi_from(src, 0xB0, 3, 127);
+                int mute = PAT(cur_pat)->mute & 1;
+                notes &= on == want && cc == want && mute == want;
+            }
+        }
+        PAT(cur_pat)->mute = 0;
+        CHECK(notes, "MIDI in: notes, CCs and mutes only from NOTE IN's (both, USB, TRS, none)");
+        /* THRU: the jack's out over USB as they came, stamped with the sample they came in at, as the core's own are;
+         * USB's never back; with SYNC OUT on, one clock: following the jack, MONO2K passes its start, pulses and stop
+         * on once; following USB, the jack's are not passed */
+        m2k_setting(S_NTIN, enc(0, 4));
+        m2k_setting(S_SYNI, enc(0, 4));
+        m2k_setting(S_SYNO, 0);
+        while (m2k_midi_out(m, m2k_samples()) > 0) {}
+        m2k_midi_from(T, 0x93, 60, 100);
+        int thru = m2k_midi_out(m, m2k_samples()) == 0;
+        m2k_midi_from(T, 0x83, 60, 0);
+        m2k_setting(S_THRU, 127);
+        m2k_render(mb, 128);
+        m2k_midi_from(T, 0x93, 60, 100);
+        thru &= m2k_midi_out(m, m2k_samples() - 1) == 0;
+        thru &= m2k_midi_out(m, m2k_samples()) == 3 && m[0] == 0x93 && m[1] == 60 && m[2] == 100;
+        m2k_midi_from(T, 0x83, 60, 0);
+        thru &= m2k_midi_out(m, m2k_samples()) == 3 && m[0] == 0x83 && m[1] == 60 && m[2] == 0;
+        m2k_midi_from(T, 0xC5, 7, 0);
+        thru &= m2k_midi_out(m, m2k_samples()) == 2 && m[0] == 0xC5 && m[1] == 7;
+        m2k_midi_from(T, 0xF2, 3, 1);
+        thru &= m2k_midi_out(m, m2k_samples()) == 3 && m[0] == 0xF2 && m[1] == 3 && m[2] == 1;
+        m2k_midi_from(T, 0xF8, 0, 0);
+        thru &= m2k_midi_out(m, m2k_samples()) == 1 && m[0] == 0xF8;
+        m2k_midi_from(U, 0x93, 62, 100);
+        m2k_midi_from(U, 0x83, 62, 0);
+        m2k_midi_from(U, 0xF8, 0, 0);
+        thru &= m2k_midi_out(m, m2k_samples()) == 0;
+        m2k_setting(S_SYNO, 127);
+        m2k_setting(S_SYNI, enc(2, 4));
+        m2k_midi_from(T, 0xFA, 0, 0);
+        for (int i = 0; i < 3; i++) m2k_midi_from(T, 0xF8, 0, 0);
+        m2k_midi_from(T, 0xFC, 0, 0);
+        int fa = 0, f8 = 0, fc = 0, k;
+        while ((k = m2k_midi_out(m, m2k_samples())) > 0) { fa += m[0] == 0xFA; f8 += m[0] == 0xF8; fc += m[0] == 0xFC; }
+        int one = fa == 1 && f8 == 3 && fc == 1;
+        m2k_setting(S_SYNI, enc(1, 4));
+        m2k_midi_from(T, 0xFA, 0, 0);
+        m2k_midi_from(T, 0xF8, 0, 0);
+        one &= !sq.playing && m2k_midi_out(m, m2k_samples()) == 0;
+        CHECK(thru && one, "MIDI in: THRU passes the TRS jack's notes, programs, position and clock on over USB as they "
+                           "came, stamped as the core's own, never USB's; with SYNC OUT on, one clock");
+        CHECK(mx.in_seen == 3 && mx.in_at[1] == m2k_samples(), "MIDI in: each port's last message kept, for GLO > IN");
+        /* NOTE IN and THRU kept with the store */
+        m2k_setting(S_NTIN, enc(2, 4));
+        int n = m2k_store_pack();
+        m2k_init(16);
+        CHECK(m2k_store_unpack(n) == 1 && notes_from() == 2 && set_on(S_THRU) && clk_from() == 1,
+              "MIDI in: SYNC IN's source, NOTE IN and THRU come back with the store");
     }
     /* the store, version 3: the sound library with it; a store for the FM-1 (16 patterns, one project) read here (64,
      * four): bank A as it was, the rest blank, the sounds kept; a project file of version 1 still imported */

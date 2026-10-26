@@ -110,9 +110,13 @@ typedef struct {
 
 /* settings: the instrument's, not a pattern's; saved with the store. 0..127 */
 /* S_SCREEN: below 64 light (ink on paper), from 64 dark (the negative). GLO > MIDI: S_MCH track 1's channel (the
- * others on the ones after it; (v * 16) >> 7), S_SYNI the clock in, S_SYNO the clock out, S_NOTO the notes out (from
- * 64 on) */
-enum { S_SCREEN, S_MCH, S_SYNI, S_SYNO, S_NOTO, S_COUNT = 16 };
+ * others on the ones after it; (v * 16) >> 7), S_SYNI where the clock in comes from (OFF USB TRS BOTH, m2k_seq.c's
+ * syin_choice: an old OFF stays OFF, an old ON is BOTH), S_SYNO the clock out, S_NOTO the notes out (from 64 on).
+ * GLO > IN: S_NTIN where notes and CCs come from (BOTH USB TRS OFF, (v * 4) >> 7: an old store's 0 is BOTH), S_THRU
+ * the TRS jack's MIDI out over USB (from 64 on) */
+enum { S_SCREEN, S_MCH, S_SYNI, S_SYNO, S_NOTO, S_NTIN, S_THRU, S_COUNT = 16 };
+/* where a message came in (m2k_midi_from): the FM-1's USB or its TRS jack */
+enum { M2K_USB, M2K_TRS };
 
 /* the API */
 void m2k_init(uint32_t seed);
@@ -120,7 +124,8 @@ void m2k_render(int16_t *lr, int frames);           /* interleaved stereo, frame
 void m2k_key(int k, int down);
 void m2k_button(int b, int down);
 void m2k_encoder(int e, int delta);
-void m2k_midi(int status, int d1, int d2);
+void m2k_midi(int status, int d1, int d2);          /* as from USB (the browser's, the host's) */
+void m2k_midi_from(int src, int status, int d1, int d2);   /* src M2K_USB or M2K_TRS: GLO > MIDI and IN pick by it */
 const uint8_t *m2k_frame(uint32_t ms);              /* draws the screen: 240 x 240, 1 bit, MSB first, 1 = ink */
 const uint8_t *m2k_leds(void);                      /* 27 key LEDs then 14 button LEDs, 0..255 */
 /* the store: everything the instrument keeps (settings, working patterns, projects) as one blob */
