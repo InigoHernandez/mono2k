@@ -2171,6 +2171,33 @@ static int selftest(void)
             int syn = PAT(cur_pat)->machine[ui.trk] != m0;
             CHECK(lfo_end && lfo_back && home && syn, "ALGORITHM: the page's pages (LFO 1A..3B, to its ends), nothing on HOME, the machine on EDIT");
         }
+        /* SWAV-PUL's PW sweep (PWAD) bounces between 4 % and 96 %: no dropout through the silent ends every cycle
+         * (the owner's "clip every few seconds, like looping": its level fell to a tenth); PWAD 0 as it was */
+        {
+            static int16_t pb[2 * 44100 * 8];
+            m2k_init(42);
+            m2k_pattern(16);
+            m2k_pattern_t *q = PAT(cur_pat);
+            for (int t = 0; t < M2K_TRACKS; t++) for (int st = 0; st < M2K_STEPS; st++) q->step[t][st].flags = 0;
+            kit_default(q, 0, M_PUL);
+            q->kit[0][P_HOLD] = 127; q->kit[0][P_DEC] = 127; q->kit[0][P_SYN + 5] = 8;
+            q->mute = 0x3E;
+            for (int t = 0; t < M2K_TRACKS; t++) m_cpy(trk[t].eff, q->kit[t], P_COUNT);
+            ui.trk = 0; sq.ktrk = 0;
+            live_on(57, 100);
+            int n = (44100 * 8) & ~127;
+            for (int f = 0; f < n; f += 128) m2k_render(pb + 2 * f, 128);
+            live_off(57);
+            double lo = 1e9, sum = 0; int nw = 0;
+            for (int w = 10; w < n / 882; w++) {
+                double m = 0, a = 0;
+                for (int i = 0; i < 882; i++) m += pb[2 * (w * 882 + i)];
+                m /= 882;
+                for (int i = 0; i < 882; i++) { double x = pb[2 * (w * 882 + i)] - m; a += x * x; }
+                a = sqrt(a / 882); sum += a; nw++; if (a < lo) lo = a;
+            }
+            CHECK(lo > 0.25 * sum / nw, "SWAV-PUL: PWAD's sweep bounces between 4 % and 96 %, no dropout every cycle");
+        }
         /* GLO > SET: WIPE asks, OCT+ makes every pattern INIT (the sounds kept), OCT- or any other button keeps them;
          * DEMO asks, OCT+ brings bank A's back */
         m2k_init(38);

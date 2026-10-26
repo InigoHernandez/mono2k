@@ -739,6 +739,12 @@ static void mach_block(int ti, int m, int32_t pitch)
         for (int k = 0; k < nv; k++) inv[k] = 0xFFFFFFFFu / (inc[k] | 1);
         t->ms[4] = (int32_t)(((uint32_t)t->ms[4] + (uint32_t)P7(t, P_SYN + 5) * 128u) & 0x7FFFFFu);  /* the sweep, Q16 */
         uint32_t duty = (uint32_t)(((P8(t, P_SYN + 4) << 8) + t->ms[4]) & 0x7FFFFF) << 9;
+        if (P7(t, P_SYN + 5)) {        /* swept: back and forth between 4 % and 96 % (the owner: wrapping round, it
+                                        * passed through the silent ends, a dropout every sweep "like looping") */
+            uint32_t x = (uint32_t)(((P8(t, P_SYN + 4) << 8) + t->ms[4]) & 0x7FFFFF);
+            uint32_t tri = x < 0x400000u ? x << 1 : (0x800000u - x) << 1;   /* 0..2^23, no jump where x wraps */
+            duty = 0x0A3D70A4u + mulu_hi(tri, 0xEB851EB8u, 23);             /* 4 % + 92 % of the triangle: to 96 % */
+        }
         int32_t g1 = PUL_A * unil / 127;
         int32_t gs1 = PUL_S1 * P7(t, P_SYN + 2) / 127, gs2 = PUL_S2 * P7(t, P_SYN + 3) / 127;
         int32_t dc = 32768 - (int32_t)(duty >> 16);
