@@ -392,7 +392,13 @@ static void fmt(const pi_t *pi, int t, int v, char *out, const char **unit)
         else { s_dec1(out, (int)((ms + 50) / 100)); *unit = "S"; }
         break;
     }
-    case K_DAMP: s_int(out, (int)((25600u + 128u + T_RV_DA[v & 127] / 2) / (256u + T_RV_DA[v & 127]))); *unit = "% TOP'S TIME"; break;
+    case K_DAMP: {                     /* the top's RT60 a share of the bottom's: 1/1 .. 1/30 */
+        int n10 = (int)((10u * (256u + T_RV_DA[v & 127]) + 128u) >> 8);
+        char *e = s_cpy(out, "1/");
+        if (n10 < 100) s_dec1(e, n10); else s_int(e, (n10 + 5) / 10);
+        *unit = "TOP'S TIME";
+        break;
+    }
     case K_GSIZ: s_cpy(out, GSIZ_N[(v * 5) >> 7]); *unit = "NOTE"; break;
     case K_SCRN: s_cpy(out, c ? "DARK" : "LIGHT"); *unit = "DISPLAY"; break;
     case K_MCH: { char *e = s_cpy(out, "CH"); s_int(e, c + 1); *unit = "T1; T2 NEXT"; break; }

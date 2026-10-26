@@ -106,7 +106,10 @@ static const ev_t MANUAL[] = {
     {22600, 's', 0, 0, "29i_seq_latched"}, {22700, 'b', B_SEQ, 1, 0}, {22720, 'b', B_SEQ, 0, 0},
     {23000, 'b', B_PLAY, 1, 0}, {24200, 's', 0, 0, "29j_play_card"}, {24300, 'b', B_PLAY, 0, 0},
     {24400, 'b', B_PLAY, 1, 0}, {24420, 'b', B_PLAY, 0, 0},
-    {24500, 'x', 0, 0, 0},
+    /* GLO tapped to its VERB page: the reverb's decay drawn (16b) */
+    {24600, 'b', B_GLO, 1, 0}, {24620, 'b', B_GLO, 0, 0}, {24900, 'b', B_GLO, 1, 0}, {24920, 'b', B_GLO, 0, 0},
+    {25200, 'b', B_GLO, 1, 0}, {25220, 'b', B_GLO, 0, 0}, {25500, 'e', E_ALGO, 1, 0}, {26200, 's', 0, 0, "16b_glo_verb"},
+    {26300, 'x', 0, 0, 0},
 };
 
 static void manual_scene(void)
