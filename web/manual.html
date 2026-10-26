@@ -723,6 +723,9 @@
     </tbody>
   </table>
   <p>These are the Monomachine's numbers, so a controller set up for one plays the other. MONO2K's own parameters (the destroy effects, MOD, the arpeggiator, pitch) have no controller: set them on the panel or in the <a href="editor.html">Patch Editor</a>.</p>
+  <h2>Clock and sync</h2>
+  <p>GLO &gt; MIDI. <b>SYIN</b> (sync in) follows a MIDI clock: its tempo, start, continue, stop and the song position. <b>SYOU</b> (sync out) sends MONO2K's clock, 24 pulses a beat, with start and stop. <b>NOTE</b> (notes out) sends each track's trigs on its channel. With SYIN off, start and continue still play and stop still stops, at MONO2K's own tempo.</p>
+  <p>The clock comes in over USB, from a computer, phone or iPad, or on the TRS jack from any MIDI device. The FM-1's USB port is a device, like a keyboard's, and its TRS jack is an input only, so two FM-1s cabled to each other don't hear each other. Put a host between them: a computer or an iPad with a DAW or a MIDI router, or a USB MIDI host box. The one that leads must send a clock: MONO2K does (SYOU on); set the other to follow its USB clock.</p>
 </article>
 
 <!-- ============================================================================================= reference -->
