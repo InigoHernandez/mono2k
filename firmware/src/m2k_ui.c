@@ -905,6 +905,16 @@ static int page_length(int pg)
 }
 
 /* step entry: REC armed while stopped, the keys playing: each note is the next step */
+/* a trig taken away: its condition (chance, A:B...), ratchet and locks go with it, so a trig put there later
+ * starts plain (the owner: "when I removed the note or trigger, the probability should be removed too") */
+static void step_remove(int t, int s)
+{
+    m2k_step_t *st = &PAT(cur_pat)->step[t][s];
+    st->flags = 0;
+    st->cond = 0;
+    st->rtrg = 0;
+    lock_clear_step(t, s);
+}
 static int step_entry(void) { return sq.rec && !sq.playing && !ui.grid && !sq.ready; }
 
 static void entry_show(const char *what)
@@ -1015,10 +1025,7 @@ static void key_release(int k)
         int added = 1, was = 0;
         for (int i = 0; i < ui.nheld; i++) if (ui.held[i] == arg) { added = ui.held_added[i]; was = 1; }
         held_remove(arg);
-        if (was && !added && !ui.held_edit && ui.now - ui.kt0[k] < 300) {
-            PAT(cur_pat)->step[ui.trk][arg].flags = 0;
-            lock_clear_step(ui.trk, arg);
-        }
+        if (was && !added && !ui.held_edit && ui.now - ui.kt0[k] < 300) step_remove(ui.trk, arg);
         break;
     }
     default: break;
@@ -1799,8 +1806,7 @@ static void button_event(int b, int down)
     case B_ENV: go(PG_AMP); break;
     case B_EDIT:
         if (step_entry()) {                            /* step entry: a rest, and on */
-            PAT(cur_pat)->step[ui.trk][ui.cursor].flags = 0;
-            lock_clear_step(ui.trk, ui.cursor);
+            step_remove(ui.trk, ui.cursor);
             ui.cursor = (uint8_t)((ui.cursor + 1) % seq_len());
             entry_show("REST");
             ui.edit_t0 = 0;

@@ -2744,6 +2744,30 @@ static int selftest(void)
         int tapped = !(q->step[t][s].flags & ST_TRIG) && lock_find(t, s, P_DEC) < 0;
         CHECK(s >= 0 && kept && tapped, "GRID: a trig held 2 s and let go keeps itself and its locks; a quick tap removes it");
     }
+    /* a trig taken away takes its condition and ratchet with it: tapped again, the new trig is plain (100 %, no
+     * ratchet); step entry's rest the same (the owner: "the probability should be removed too") */
+    {
+        ux_init(7);
+        ux_tap(B_SEQ);
+        m2k_pattern_t *q = PAT(cur_pat);
+        int t = ui.trk, s = -1;
+        for (int i = 0; i < 16 && s < 0; i++) if (q->step[t][i].flags & ST_TRIG) s = i;
+        q->step[t][s].cond = C_P50; q->step[t][s].rtrg = 2;
+        m2k_key(ux_white(s), 1); ux_ms(100); m2k_key(ux_white(s), 0);       /* a quick tap: removed */
+        int gone = !(q->step[t][s].flags & ST_TRIG) && q->step[t][s].cond == 0 && q->step[t][s].rtrg == 0;
+        ux_ms(400);
+        m2k_key(ux_white(s), 1); ux_ms(100); m2k_key(ux_white(s), 0);       /* again: a plain trig */
+        int plain = (q->step[t][s].flags & ST_TRIG) && q->step[t][s].cond == 0 && q->step[t][s].rtrg == 0;
+        ux_tap(B_SEQ);                                                        /* KEYS; step entry and its rest */
+        ux_ms(400);
+        q->step[t][0].flags = ST_TRIG; q->step[t][0].cond = C_1_2; q->step[t][0].rtrg = 3;
+        ux_tap(B_REC);
+        ui.cursor = 0;
+        ux_tap(B_EDIT);
+        int rest = !(q->step[t][0].flags & ST_TRIG) && q->step[t][0].cond == 0 && q->step[t][0].rtrg == 0;
+        ux_tap(B_REC);
+        CHECK(s >= 0 && gone && plain && rest, "a trig taken away (GRID's tap, step entry's rest) takes its condition and ratchet with it");
+    }
     /* a question does what it asked: REPLACE S001 answered YES after SLOT moved on saves the track's sound into S001,
      * S002 untouched; LOAD P2 answered YES after PROJ moved on loads P2 */
     {

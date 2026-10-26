@@ -9,6 +9,7 @@ window.M2K_CHANGES = [
   {
     date: "2026-10-26", title: "MONO2K 1.0.3: the MIDI clock in, a fix for the FM-1's chip, GLO + HOME for the keys; Ready",
     items: [
+      ["fixes", "A trig taken away (a quick tap in GRID, or a rest in step entry) now takes its probability or condition and its ratchet with it: a trig put there later starts plain."],
       ["fixes", "SWAV-PUL: with the pulse-width sweep on (PWAD), the width wrapped round through its silent ends, a dropout every few seconds that sounded like a loop. It now bounces between 4 % and 96 %. PWAD at 0 is as it was."],
       ["workflow", "ALGORITHM changes the track's machine only on EDIT now. On every other page it turns through the page's own pages, instead of tapping its button again and again: LFO 1A to 3B, FX's four, AMP's and FILT's two, GLO's five."],
       ["screen", "FILT's picture no longer runs off the screen's edge: the curve keeps clear of it, and its axis runs an octave past 20 kHz, so a high LP shows its slope falling instead of a cut."],
