@@ -205,7 +205,7 @@ static struct {
     int32_t ad_pred[2], ad_idx[2], ad_hold[2];
     uint16_t ad_acc;                   /* Q8 samples since the 4-bit sample was taken */
     int32_t ad_mixq;                   /* the mix now, Q8 of the 0..127 one (around CRUSH it glides) */
-    uint8_t ad_perf;
+    uint8_t ad_perf, ad_warm;          /* CRUSH held (until its mix is back); blocks of its coder running unheard */
     /* drive: PERFORM's, glided, its level held to the dry's */
     int32_t dv, dv_e0, dv_e1, dv_g;    /* the gain now, Q8; the two levels; the hold, Q15 */
     /* hiss */
@@ -592,36 +592,43 @@ static void bus_block(int32_t *L, int32_t *R, const int32_t *rsend, int16_t *out
      * line, then fades the tape in, and out again once its depth is back down */
     int32_t tq_t = T_TAPE_Q8[perf.on[PF_WOW] ? 127 : g[G_TAPE]];
     int tape_on = g[G_TAPE] || perf.on[PF_WOW] || bus.tp_mix;
+    int32_t tq0 = bus.tq, tqd = 0;                  /* (gliding, the depth moves sample by sample over the block) */
     if (!tape_on) bus.tq = 0;
     else if (!bus.tq && g[G_TAPE] && !perf.on[PF_WOW]) bus.tq = tq_t;          /* TAPE turned up: at once */
-    else { int32_t d = tq_t - bus.tq; bus.tq = d > -256 && d < 256 ? tq_t : bus.tq + (d >> 8); }
+    else { int32_t d = tq_t - bus.tq; bus.tq = d > -256 && d < 256 ? tq_t : bus.tq + (d >> 8); tqd = bus.tq - tq0; }
     if (g[G_TAPE]) bus.tp_mix = 32767;
     else if (tape_on) {
         if (!bus.tp_fill && !bus.tp_mix) bus.tlp_l = bus.tlp_r = 0;   /* (from off: the head loss from rest) */
         bus.tp_fill += M2K_SUB;
         int32_t want = perf.on[PF_WOW] || bus.tq > 64 ? 32767 : 0;
-        if (bus.tp_fill > 512) bus.tp_mix = want > bus.tp_mix ? (bus.tp_mix + 1024 > 32767 ? 32767 : bus.tp_mix + 1024)
-                                                               : (bus.tp_mix > 1024 ? bus.tp_mix - 1024 : 0);
+        if (bus.tp_fill > 1024 && want != bus.tp_mix)     /* (the line read 420 +- 285 samples back: filled) */
+            bus.tp_mix = want > bus.tp_mix ? (bus.tp_mix + 1024 > 32767 ? 32767 : bus.tp_mix + 1024)
+                                           : (bus.tp_mix > 1024 ? bus.tp_mix - 1024 : 0);
         if (!bus.tp_mix && !perf.on[PF_WOW]) bus.tp_fill = 0;
     } else bus.tp_fill = 0;
     int32_t tq = bus.tq, tpm = bus.tp_mix;
-    /* the crush: its control's at once; CRUSH glides in and out over 6 ms, the coder taking up the sound it meets */
+    /* the crush: its control's at once; CRUSH glides in and out over 10 ms, the coder (idle under ADPC 0) first taking
+     * up the sound it meets for 2 ms, unheard, so it comes in tracking it */
     int adpc = perf.on[PF_CRSH] ? 127 : g[G_ADPC];
     int32_t ad_t = (adpc * 2 > 127 ? 127 : adpc * 2) << 8;
     if (perf.on[PF_CRSH] && !bus.ad_perf) {
         bus.ad_perf = 1;
-        if (!bus.ad_mixq) { bus.ad_pred[0] = sat16(L[0]); bus.ad_pred[1] = sat16(R[0]); bus.ad_idx[0] = bus.ad_idx[1] = 40; }
+        if (!bus.ad_mixq) {
+            bus.ad_pred[0] = sat16(L[0]); bus.ad_pred[1] = sat16(R[0]); bus.ad_idx[0] = bus.ad_idx[1] = 40;
+            bus.ad_warm = 6;
+        }
     }
     if (!bus.ad_perf) bus.ad_mixq = ad_t;
+    else if (bus.ad_warm) bus.ad_warm--;
     else {
         int32_t d = ad_t - bus.ad_mixq;
         bus.ad_mixq += d > 1200 ? 1200 : d < -1200 ? -1200 : d;
         if (!perf.on[PF_CRSH] && bus.ad_mixq == ad_t) bus.ad_perf = 0;
     }
-    int32_t ad_mix = bus.ad_mixq >> 8, ad_div = T_ADPC_DIV[adpc];
-    /* the drive: its control's; DRIVE glides up and down over 20 ms, and while it is in its output is held to the
-     * level the control's would give (one-poles on both, ~23 ms: never louder, never at full scale), the hold let go
-     * as gently once it is back */
+    int32_t ad_mix = bus.ad_mixq >> 8, ad_div = T_ADPC_DIV[adpc], ad_run = ad_mix || bus.ad_warm;
+    /* the drive: its control's; DRIVE glides up and down over 20 ms, its output held to the level the control's would
+     * give: while it glides, by the gain's own ratio (a small sound's level, a loud one's a little under), then by the
+     * two outputs measured (one-poles on both, ~23 ms), rising to it; never louder, never at full scale */
     int32_t drv0 = T_DRIV[g[G_DRIV]], drv_t = perf.on[PF_DRIV] ? T_DRIV[127] : drv0;
     if (!bus.dv) bus.dv = drv0;
     { int32_t d = drv_t - bus.dv; bus.dv += d > 24 ? 24 : d < -24 ? -24 : d; }
@@ -669,6 +676,7 @@ static void bus_block(int32_t *L, int32_t *R, const int32_t *rsend, int16_t *out
             /* the pitch a swing of the line makes grows with its rate: the flutter (6.3 Hz, 11x the wow's) takes 1/48
              * of the wow's swing, so it wobbles about a quarter as far in pitch (at TAPE 127: wow ~+-40 c, flutter ~+-10 c) */
             int32_t m = (sinp(bus.wow) * 48 + sinp(bus.flut)) >> 6;           /* +-24600 */
+            if (tqd) tq = tq0 + ((tqd * (i + 1)) >> 4);
             int32_t d = (420 << 8) + (int32_t)mul_sh(m, tq * 3, 15);         /* Q8 samples */
             uint32_t pos = (bus.tw << 8) - (uint32_t)d;                       /* unsigned: it wraps after 3 minutes */
             uint32_t j = pos >> 8;
@@ -684,7 +692,7 @@ static void bus_block(int32_t *L, int32_t *R, const int32_t *rsend, int16_t *out
             else { l += (int32_t)mul_sh(bus.tlp_l - l, tpm, 15); r += (int32_t)mul_sh(bus.tlp_r - r, tpm, 15); }
         }
         /* the 4-bit crunch, its rate falling to a third at the top */
-        if (ad_mix) {
+        if (ad_run) {
             bus.ad_acc += 256;
             if (bus.ad_acc >= ad_div) {
                 bus.ad_acc -= (uint16_t)ad_div;
@@ -738,10 +746,11 @@ static void bus_block(int32_t *L, int32_t *R, const int32_t *rsend, int16_t *out
         if (drv != drv0) {                                /* (at least the small signal's: drv0 / drv) */
             uint32_t w = bus.dv_e1 > 0 ? isqrt32(((uint32_t)bus.dv_e0 << 9) / ((uint32_t)bus.dv_e1 >> 11 | 1u)) << 5 : 32767;
             int32_t lo = (drv0 << 15) / drv;
-            want = CLAMP((int32_t)w, lo, 31743);
+            want = drv != drv_t ? lo : CLAMP((int32_t)w, lo, 31743);
         }
-        bus.dv_g += (want - bus.dv_g) >> 3;
-        if (want == 32767 && bus.dv_g > 32767 - 8) bus.dv_g = 32767;
+        if (want < bus.dv_g) bus.dv_g = want;             /* down at once, up gently */
+        else bus.dv_g += (want - bus.dv_g) >> 4;
+        if (want == 32767 && bus.dv_g > 32767 - 16) bus.dv_g = 32767;
     }
     bus.g_phase = g_phase;
     bus.hgain = hgain;
@@ -780,7 +789,7 @@ static void par_job(void)
  * instructions a sample, measured as T_MCOST is */
 #define C_CORE1 140                    /* the sequencer, the mix, the bus dry */
 #define C_LFO 8                        /* an LFO that moves something */
-#define C_VERB 72
+#define C_VERB 85                      /* (the feedback delay network; the combs were 72) */
 #define C_TAPE 97
 #define C_ADPC 129
 #define C_HISS 34
