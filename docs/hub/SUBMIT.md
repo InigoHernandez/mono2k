@@ -46,9 +46,9 @@ after the tests below have passed and the v0.1 release is on GitHub: its Reposit
 
 ## The package
 
-- **File:** MONO2K 1.0.2, the installer's `mono2k.fwsc` (596 KB, SHA-256
-  `ed4ad891e05bfac294f4d0451630a81e150d70d953577194ef42123c6e902440`); the release v1.0.2 attaches the same file as
-  `mono2k-1.0.2.fwsc` (v1.0 had `mono2k-1.0.fwsc`, SHA-256 48a923b7...; v0.1.1 was never released). The hub listed v0.1 on 2026-10-25 (`mono2k-0.1.fwsc`, SHA-256 27790d06...).
+- **File:** MONO2K 1.0.3, the installer's `mono2k.fwsc` (596 KB, SHA-256
+  `18090b08a338d0aab91d8232d8b002c5ccafd3a0fdd7565ce9b1818aa0dc1f23`); the release v1.0.3 attaches the same file as
+  `mono2k-1.0.3.fwsc` (v1.0 had `mono2k-1.0.fwsc`, SHA-256 48a923b7...; v0.1.1 was never released). The hub listed v0.1 on 2026-10-25 (`mono2k-0.1.fwsc`, SHA-256 27790d06...).
 - **Release:** GitHub releases `v0.1` (beta on the card), then `v1.0` (out of beta), `v1.0.1` (PADS at each track's root). The hub takes every later release by itself,
   within three hours.
 - **Identity:** FM-1_980. No other firmware on the hub uses it (its table, 2026-10-24), and it is of the form
