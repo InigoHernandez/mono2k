@@ -57,7 +57,30 @@ static inline uint32_t inc_of(int32_t pq6)
     return v > (0x7FFFFFFFu >> (-sh - 1)) ? 0x7FFFFFFFu : v << -sh;
 }
 
-static inline uint32_t mulu_hi(uint32_t a, uint32_t b, int sh) { return (uint32_t)(((uint64_t)a * b) >> sh); }
+/* 64-bit products. On the FM-1 a 32 x 32 -> 64-bit multiply inlined beside a load now and then leaves a register a
+ * bit off (felucca-bsp docs/CPU.md): there (M2K_MUL_OUT) these are out of line and use the product at once (their
+ * shift), so the multiply completes before any load; tools/fm1/build.py fails a build with a 64-bit multiply beside a
+ * load anywhere. Elsewhere they inline, the same results. A product that provably fits 32 bits is a plain multiply */
+#ifdef M2K_MUL_OUT
+#define MUL_FN static __attribute__((noinline))
+#else
+#define MUL_FN static inline
+#endif
+MUL_FN int64_t mul_sh(int32_t a, int32_t b, int sh) { return ((int64_t)a * b) >> sh; }
+MUL_FN uint32_t mulu_hi(uint32_t a, uint32_t b, int sh) { return (uint32_t)(((uint64_t)a * b) >> sh); }
+MUL_FN int64_t mul64_sh(int64_t a, int32_t b, int sh) { return (a * b) >> sh; }
+/* a b + c d: out of the helper shifted up two (the shift its use), back here (|a b + c d| < 2^61) */
+MUL_FN uint64_t dot_x4(int32_t a, int32_t b, int32_t c, int32_t d)
+{
+    return (uint64_t)((int64_t)a * b + (int64_t)c * d) << 2;
+}
+static inline int64_t dot(int32_t a, int32_t b, int32_t c, int32_t d) { return (int64_t)dot_x4(a, b, c, d) >> 2; }
+/* s a >> 15 and s b >> 15 in one call, each its low word (as a cast to int32_t takes it), the second's high; whole
+ * when |a|, |b| < 2^15 */
+MUL_FN uint64_t mul2_q15(int32_t s, int32_t a, int32_t b)
+{
+    return (uint64_t)(uint32_t)(((int64_t)s * b) >> 15) << 32 | (uint32_t)(((int64_t)s * a) >> 15);
+}
 
 /* soft saturation: -131072..131072 in, full scale out */
 static inline int32_t sat_soft(int32_t x)
