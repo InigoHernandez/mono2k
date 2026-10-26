@@ -5,7 +5,8 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
 
 ## Hard rules
 
-- Target: JieLi AC791N, no FPU, no libgcc: integer DSP only, **no 64-bit division**, no floats in `firmware/src`.
+- Target: JieLi AC791N (a single-precision FPU, by fm1-base's flags, but no libgcc): integer DSP only, so the FM-1,
+  the browser and the host render bit for bit alike, **no 64-bit division**, no floats in `firmware/src`.
   Tables come from `tools/gen_tables.py`.
 - **64-bit multiplies only through m2k_core.c's helpers** (`mul_sh`, `mulu_hi`, `mul64_sh`, `dot`, `mul2_q15`): on the
   FM-1 a 32 x 32 -> 64-bit multiply inlined beside a load now and then leaves a register a bit off (crashes, garbage:

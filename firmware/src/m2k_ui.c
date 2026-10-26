@@ -156,6 +156,9 @@ static int ttype_of(uint8_t flags)
 
 static const char *const COND_N[C_COUNT] = {"100%", "75%", "50%", "33%", "25%", "12%", "1:2", "2:2", "1:3", "2:3", "3:3",
                                            "1:4", "2:4", "3:4", "4:4", "1ST", "!1ST", "PRE", "!PRE", "FILL", "!FIL"};
+#ifndef M2K_VER
+#define M2K_VER ""                         /* the version the build is made as: tools/fm1/build.py, web/build.sh */
+#endif
 static const char *const NOTE_N[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
 
 static const pi_t PI_NONE = {"-", "-", K_NUM};     /* a knob a page leaves free (NONE) */
@@ -2918,7 +2921,7 @@ static void boot(uint32_t t)
     text(&F_S, 4, y0 + LOGO_H + 28, o, 1, 2);
     if (t > 1100) {
         text(&F_S, 4, 6, "FM-1", 1, 1);
-        text_r(&F_S, 236, 6, "V0.2", 1, 1);
+        if (M2K_VER[0]) text_r(&F_S, 236, 6, "V" M2K_VER, 1, 1);   /* (it said V0.2, whatever the build) */
         text(&F_S, 4, 222, "LOFI 2000", 1, 1);
         text_r(&F_S, 236, 222, "6 X 64", 1, 1);
     }

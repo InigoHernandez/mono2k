@@ -348,6 +348,7 @@ def main():
         if not re.fullmatch(r"\d+\.\d+(\.\d+)?", a.release):
             raise SystemExit(f"--release {a.release}: X.Y or X.Y.Z")
         VERSION, name = a.release, f"mono2k-{a.release}.fwsc"
+    CORE.append(f'-DM2K_VER="{VERSION}"')     # the boot screen's version (0.0 for a build that is no release)
     fm1pkg_make.SDK = a.sdk or os.environ.get("AC79_SDK") or str(Path.home() / "fw-AC79_AIoT_SDK")
     for rel, sha in SDK_SHA256.items():
         if hashlib.sha256(fm1pkg_make.sdk_file(rel)).hexdigest() != sha:
