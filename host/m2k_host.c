@@ -2088,6 +2088,26 @@ static int selftest(void)
         m2k_key(2, 1); m2k_key(2, 0);                 /* T2: no trigs */
         CHECK(trk[0].note == 45 && trk[2].note == 59 && trk[1].note == ui.note[1],
               "PADS: a pad plays its track's root (its trigs' most common note, the lowest of equals, within the length)");
+        /* GLO + HOME: the keys' mode in turn, KEYS -> PADS -> GRID -> KEYS, on the page it was (no HOME), HOME's
+         * release no latch; GLO + ARP still toggles PADS */
+        m2k_init(39);
+        ui.page = PG_AMP;
+        ui.now = 30000;
+        m2k_button(B_GLO, 1);
+        m2k_button(B_HOME, 1); m2k_button(B_HOME, 0);
+        int m1 = ui.pads && !ui.grid;
+        ui.now += 300;
+        m2k_button(B_HOME, 1); m2k_button(B_HOME, 0);
+        int m2 = !ui.pads && ui.grid;
+        ui.now += 300;
+        m2k_button(B_HOME, 1); m2k_button(B_HOME, 0);
+        int m3 = !ui.pads && !ui.grid;
+        m2k_button(B_GLO, 0);
+        int stay = ui.page == PG_AMP && !ui.latch;
+        ui.now += 300;
+        m2k_button(B_GLO, 1); m2k_button(B_ARP, 1); m2k_button(B_ARP, 0); m2k_button(B_GLO, 0);
+        int arp = ui.pads;
+        CHECK(m1 && m2 && m3 && stay && arp, "GLO + HOME: the keys' mode in turn, KEYS PADS GRID; the page kept; GLO + ARP still PADS");
         /* GLO > SET: WIPE asks, OCT+ makes every pattern INIT (the sounds kept), OCT- or any other button keeps them;
          * DEMO asks, OCT+ brings bank A's back */
         m2k_init(38);

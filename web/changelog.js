@@ -7,8 +7,9 @@ window.M2K_KINDS = {
 };
 window.M2K_CHANGES = [
   {
-    date: "2026-10-26", title: "MONO2K 1.0.2: the MIDI clock in, and a fix for the FM-1's chip",
+    date: "2026-10-26", title: "MONO2K 1.0.2: the MIDI clock in, and a fix for the FM-1's chip; GLO + HOME for the keys",
     items: [
+      ["workflow", "GLO + HOME turns the keys to the next mode, a tap each: KEYS (play the track), PADS (a key per track, each at its root), GRID (the steps), then KEYS again. GLO + ARP still turns PADS on and off, and SEQ still goes to GRID. In the emulator now; on the FM-1 with the next update."],
       ["fixes", "On the FM-1, a fault in its chip could now and then corrupt a value during the sound engine's arithmetic: a crash, a freeze or a click, at random. Every calculation it hit now runs the safe way, the sound exactly the same; the FM-1 build refuses the risky form from now on."],
       ["fixes", "The MIDI clock, start, continue and stop now come through over USB however the sending device packs them (some hosts send them in a form MONO2K threw away), and also in the middle of a SysEx dump."],
       ["sequencer", "The song position comes in over USB and the TRS jack: a continue starts where the DAW says."],

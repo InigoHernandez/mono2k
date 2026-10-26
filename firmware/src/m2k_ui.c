@@ -1623,9 +1623,10 @@ static void button_event(int b, int down)
     }
     if (down && latch_frees(b)) latch_off();
     /* GLO held (FUNC): the verbs on the pattern (the track's steps in GRID); OCT- UNDO, OCT+ REDO; SAVE reload; EDIT
-     * the sound library; ARP pads */
+     * the sound library; HOME the keys' mode in turn (KEYS, PADS, GRID); ARP pads */
     if (b != B_GLO && ui.btn[B_GLO] &&          /* (the combos want GLO itself held, latched or not) */
-        (b == B_REC || b == B_PLAY || b == B_SEQ || b == B_SAVE || b == B_EDIT || b == B_ARP || b == B_OCTD || b == B_OCTU)) {
+        (b == B_REC || b == B_PLAY || b == B_SEQ || b == B_SAVE || b == B_EDIT || b == B_HOME || b == B_ARP ||
+         b == B_OCTD || b == B_OCTU)) {
         if (!down) return;
         ui.glo_used = 1;
         int noun = ui.grid ? N_TRK : N_PAT;
@@ -1635,6 +1636,20 @@ static void button_event(int b, int down)
         case B_SEQ: verb(noun, V_CLEAR); break;
         case B_SAVE: undo_mark(N_PAT, 9); if (pattern_reload()) { char a[8]; s_pat(a, cur_pat); toast("RELOAD", a); } start_glitch(3); break;
         case B_EDIT: ui.page = PG_SYN; ui.sub = (uint8_t)(nsub(PG_SYN) - 1); start_trans(200); break;
+        case B_HOME:                       /* the keys' mode, a tap each: KEYS, PADS, GRID, KEYS (the owner's combo) */
+            keys_off();
+            ui.hold_t0 = 0;                /* (HOME's own release: no page, no latch) */
+            if (ui.grid) ui.grid = 0;
+            else if (ui.pads) {
+                ui.pads = 0;
+                ui.grid = 1;
+                ui.nheld = 0;
+                if (ui.spage * 16 >= seq_len()) ui.spage = 0;
+            } else ui.pads = 1;
+            if (ui.grid) toast("GRID: OCT-/+ PAGES", "HOLD G#4-D#5: LENGTH");
+            else toast(ui.pads ? "PADS" : "KEYS", ui.pads ? "WHITE 1-6, 9-14: T1-T6" : "PLAY THE TRACK");
+            start_trans(250);
+            break;
         case B_ARP:
             keys_off();                    /* (the keys become pads, or keys again) */
             ui.pads = (uint8_t)!ui.pads;
@@ -2960,7 +2975,7 @@ static void glo_help(void)
         return;
     }
     static const char *const L[16] = {"REC", "COPY", "PLAY", "PASTE", "SEQ", "CLEAR", "SAVE", "RELOAD",
-                                      "OCT-", "UNDO", "OCT+", "REDO", "EDIT", "SOUNDS", "ARP", "PADS"};
+                                      "OCT-", "UNDO", "OCT+", "REDO", "EDIT", "SOUNDS", "HOME", "KEYS"};
     for (int i = 0; i < 8; i++) {                      /* two columns of key, what it does */
         int cx = x + 4 + (i & 1) * 110, cy = y + 22 + (i >> 1) * 16;
         int kw = tag(cx, cy, L[2 * i], 0);

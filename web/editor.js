@@ -433,7 +433,7 @@
 
   // -------------------------------------------------------------------------------------------- the core
   async function boot() {
-    const r = await fetch("m2k.wasm?v=80");
+    const r = await fetch("m2k.wasm?v=81");
     wasmBytes = await r.arrayBuffer();
     pre = new WebAssembly.Instance(new WebAssembly.Module(wasmBytes), {}).exports;
     if (pre._initialize) pre._initialize();

@@ -188,7 +188,8 @@
       <tr><td>OCT− / OCT+</td><td>UNDO / REDO the last edit.</td></tr>
       <tr><td>SAVE</td><td>Reload the saved pattern.</td></tr>
       <tr><td>EDIT</td><td>The sound library (SYN &gt; SND).</td></tr>
-      <tr><td>ARP</td><td>PADS on or off (below).</td></tr>
+      <tr><td>HOME</td><td>The keys' mode, a tap each: KEYS, PADS, GRID, then KEYS again (below).</td></tr>
+      <tr><td>ARP</td><td>PADS on or off.</td></tr>
       <tr><td>White 1–6</td><td>Mute or unmute tracks 1–6.</td></tr>
       <tr><td>White 7</td><td>FILL for the pattern's next loop, and only it.</td></tr>
       <tr><td>White 8</td><td>Tap the tempo: two taps or more, on the beat.</td></tr>
@@ -282,12 +283,13 @@
   <p>Hold SEL, ENV, ARP, PLAY, OCT− or OCT+ a second, touching nothing else, and the screen shows what it does alone and with the others; letting go then does nothing more.</p>
   <p>The keys light for the layer held: with GLO, white 1–6 for the tracks heard and 9–14 for those soloed; with HOME, the bank's patterns (lit used, the open one winking, the queued one blinking) and the bank on the black keys; with FX, the effects on; with SEQ, the eight tools. In GRID, steps with a trig are lit, the playhead too.</p>
   <h2>The keys</h2>
+  <p>GLO + HOME turns the keys to the next mode, a tap each: KEYS, PADS, GRID, then KEYS again. The header and a message say which.</p>
   <table>
     <thead><tr><th>Mode</th><th>White keys</th><th>Black keys</th></tr></thead>
     <tbody>
       <tr><td>KEYS</td><td colspan="2">Play the track in view (REC: record it; stopped, step entry: EDIT a rest, PRESETS the cursor).</td></tr>
-      <tr><td>GRID (SEQ)</td><td>The 16 steps of the page; hold one to edit it</td><td>T1–T6 the track, P1–P4 the page (held: the length), F#5 mute</td></tr>
-      <tr><td>PADS (GLO + ARP)</td><td>1–6 and 9–14 hit tracks 1–6, each at its root: the note its trigs sit on most (REC: written to the nearest step)</td><td>T1–T6 the track, F#5 mute</td></tr>
+      <tr><td>GRID (SEQ, or GLO + HOME)</td><td>The 16 steps of the page; hold one to edit it</td><td>T1–T6 the track, P1–P4 the page (held: the length), F#5 mute</td></tr>
+      <tr><td>PADS (GLO + HOME, or GLO + ARP)</td><td>1–6 and 9–14 hit tracks 1–6, each at its root: the note its trigs sit on most (REC: written to the nearest step)</td><td>T1–T6 the track, F#5 mute</td></tr>
     </tbody>
   </table>
   <h2>Knobs that act</h2>
@@ -349,9 +351,9 @@
   </ol>
   <h2>Play the tracks as drum pads</h2>
   <ol class="steps">
-    <li>GLO + ARP: PADS in the header. White keys 1–6 (and 9–14 for the other hand) hit tracks 1–6, each at its root: the note its trigs sit on most in the pattern, so a drum stays in the key it is tuned to (a track with no trigs plays the note you last played on it).</li>
+    <li>GLO + HOME (or GLO + ARP): PADS in the header. White keys 1–6 (and 9–14 for the other hand) hit tracks 1–6, each at its root: the note its trigs sit on most in the pattern, so a drum stays in the key it is tuned to (a track with no trigs plays the note you last played on it).</li>
     <li>Press PLAY, tap REC and play: each hit is written to the nearest step of its track.</li>
-    <li>GLO + ARP again, or SEQ, ends it.</li>
+    <li>GLO + HOME again goes on to GRID, then KEYS; GLO + ARP or SEQ leaves PADS at once.</li>
   </ol>
   <h2>Add a bar</h2>
   <ol class="steps">
@@ -759,7 +761,7 @@
 </footer>
 <script src="site.js?v=3"></script>
 <script src="panel.js?v=2"></script>
-<script src="changelog.js?v=24"></script>
-<script src="manual.js?v=25"></script>
+<script src="changelog.js?v=25"></script>
+<script src="manual.js?v=26"></script>
 </body>
 </html>
