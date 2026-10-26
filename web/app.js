@@ -354,7 +354,7 @@
   const status = (s) => console.info("MONO2K:", s);   /* the page keeps no status line: messages go to the console */
 
   async function boot() {
-    const r = await fetch("m2k.wasm?v=79");
+    const r = await fetch("m2k.wasm?v=80");
     wasmBytes = await r.arrayBuffer();
     pre = new WebAssembly.Instance(new WebAssembly.Module(wasmBytes), {}).exports;
     if (pre._initialize) pre._initialize();

@@ -7,13 +7,14 @@ window.M2K_KINDS = {
 };
 window.M2K_CHANGES = [
   {
-    date: "2026-10-26", title: "The MIDI clock in, and a fix for the FM-1's chip (MONO2K 1.0.2, being tried on the FM-1)",
+    date: "2026-10-26", title: "MONO2K 1.0.2: the MIDI clock in, and a fix for the FM-1's chip",
     items: [
       ["fixes", "On the FM-1, a fault in its chip could now and then corrupt a value during the sound engine's arithmetic: a crash, a freeze or a click, at random. Every calculation it hit now runs the safe way, the sound exactly the same; the FM-1 build refuses the risky form from now on."],
       ["fixes", "The MIDI clock, start, continue and stop now come through over USB however the sending device packs them (some hosts send them in a form MONO2K threw away), and also in the middle of a SysEx dump."],
       ["sequencer", "The song position comes in over USB and the TRS jack: a continue starts where the DAW says."],
       ["sequencer", "With SYIN off, a continue now plays too, as start does (a DAW starting mid-song sends continue)."],
       ["screen", "The boot screen shows the firmware's own version (it said V0.2 whatever was installed)."],
+      ["web", "The installer offers MONO2K 1.0.2, tried on the FM-1; it reaches The Firmware Hub with its GitHub release."],
       ["web", "The manual's MIDI page explains the clock and sync: SYIN, SYOU, NOTE, and why two FM-1s need a computer, an iPad or a USB MIDI host box between them."],
     ],
   },
