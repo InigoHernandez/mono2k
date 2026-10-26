@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # MONO2K's lookup tables: everything the integer DSP would otherwise need floating point for.
 # Writes firmware/gen/m2k_tables.h.
-import cmath, math, os, sys, random
+import cmath, json, math, os, sys, random
 
 SR = 44100
 SUB = 16
@@ -540,7 +540,6 @@ def adpc_div(v):            # samples a 4-bit sample is held, Q8
     return 256 if v <= 64 else round(256 + 256 * (v - 64) / 32) if v <= 96 else round(512 + 256 * (v - 96) / 31)
 def v9_conv(f, o):          # the new value that sounds as old value o: nearest on a log scale
     return 0 if o == 0 else nearest_v(lambda v: math.log(max(f(v), 1e-9)), math.log(o), 1)
-out.append(arr("T_GLCH_P", "uint16_t", [round(256 * bus_exp(v, 10)) for v in range(128)]))       # a sixteenth's chance, Q16
 out.append(arr("T_DRIV", "uint16_t", [round(256 + 10 * bus_exp(v, 10)) for v in range(128)]))    # the bus's gain, Q8
 out.append(arr("T_TAPE_Q8", "uint16_t", [round(256 * bus_exp(v, 20)) for v in range(128)]))    # the old TAPE, Q8
 out.append(arr("T_HISS_G", "uint16_t", [round(hiss_old_v(v) ** 2) for v in range(128)]))        # the hiss's gain, Q15
@@ -552,6 +551,60 @@ out.append(arr("T_V9_DRIV", "uint8_t", [v9_conv(lambda v: bus_exp(v, 10), o) for
 out.append(arr("T_V9_HISS", "uint8_t", [v9_conv(lambda v: bus_exp(v, 10), o) for o in range(128)], 16))
 out.append(arr("T_V9_TAPE", "uint8_t", [v9_conv(lambda v: bus_exp(v, 20), o) for o in range(128)], 16))
 out.append(arr("T_V9_ADPC", "uint8_t", [o if o <= 64 else 64 if o < 86 else 96 if o < 108 else 127 for o in range(128)], 16))
+
+# The reverb (pattern format 17): a feedback delay network at 22 kHz (m2k_fx.c). DCAY its decay, an RT60 of 0.3 s at 1
+# to 24 s at 127, a ratio a step. The room grows with it (its lines x0.3 at 0.3 s, whole from 3.3 s: a short room is a
+# small one, dense), and so does its lines' swing (a long tail's modes smeared, 0.25 to 3 samples); its level as the
+# time's fourth root (a long tail fuller, not as much louder as its energy would be). DAMP how much sooner the top
+# dies: the RT60 at the top 1 (0) down to 1/30 (127) of the bottom's (the lines' one-poles),
+# and the input's top from 14 kHz down to 2 kHz with it. Per line attenuation in log2 units a sample, Q24
+RV_FS = SR / 2
+def rv_t60(v):
+    return 0.3 * 80 ** ((v - 1) / 126.0)
+def rv_size(v):
+    return min(1.0, math.sqrt(rv_t60(v) / (0.3 / 0.09)))
+out.append(arr("T_RV_K", "uint32_t", [0] + [round(2 ** 24 * 60 / (20 * math.log10(2)) / (RV_FS * rv_t60(v))) for v in range(1, 128)], 8))
+def rv_s(v):                # the lines' build-up (rms) under a steady input, at the mean line and the room's size
+    g = 2 ** (-60 / (20 * math.log10(2)) * 854.5 * rv_size(v) / (RV_FS * rv_t60(v)))
+    return math.sqrt(1 / (1 - g * g))
+RV_C = 5.0                  # the level, set against the old reverb's at the same RT60
+out.append(arr("T_RV_GI", "uint16_t", [0] + [round(32767 * min(1.0, 3 / rv_s(v))) for v in range(1, 128)]))   # into the lines: their headroom
+out.append(arr("T_RV_GO", "uint16_t", [0] + [round(4096 * RV_C * rv_t60(v) ** 0.25 / (min(1.0, 3 / rv_s(v)) * rv_s(v))) for v in range(1, 128)]))   # out, Q12
+out.append(arr("T_RV_SZ", "uint16_t", [256] + [round(256 * rv_size(v)) for v in range(1, 128)]))
+def rv_swing(v):            # the swing's angle, radians: 0.01 at 0.3 s to 0.15 at 24 s
+    return 0.01 + 0.14 * math.log(rv_t60(v) / 0.3) / math.log(80)
+out.append(arr("T_RV_MD", "uint16_t", [0] + [round(rv_swing(v) / (2 * math.pi) * 2 ** 32 / 32767) for v in range(1, 128)]))   # x sinp: a phase
+out.append(arr("T_RV_MS", "uint16_t", [0] + [round(1000 * rv_t60(v)) for v in range(1, 128)]))
+out.append(arr("T_RV_DA", "uint16_t", [round(256 * (30 ** (v / 127.0) - 1)) for v in range(128)]))   # 1 / a - 1, Q8
+out.append(arr("T_RV_BW", "uint16_t", [round(32767 * (1 - math.exp(-2 * math.pi * 14000 * (5000 / 14000) ** (v / 127.0) / RV_FS))) for v in range(128)]))
+# GLCH (pattern format 17): one knob for how much glitch, u = (v - 1) / 126. Low, a rare repeat (a sixteenth's chance
+# 0.4 %, one in 16 bars at 1), short (two times round a slice of at most 1/32), mixed in 18 dB under the dry and
+# leaving it whole, no other mode; up the knob, a ratio a step more often (50 % a sixteenth at 127), louder (all of
+# it from 3/4 up), longer (2 to 8 times round; SIZE's slice from half way), the dry giving way (from 0.3, gone by 0.85)
+# and the modes coming in (reversed, gated, an octave up, down, a roll, slowing: one by one, an event's chance of one
+# to 85 %). The sixteenth's chance Q16, the wet's and the dry's levels Q15, the times round Q4, the longest slice
+# (0 1/64 .. 4 1/4), an artifact's chance Q8, how many of the modes it draws from
+def gl_u(v):
+    return (v - 1) / 126.0
+out.append(arr("T_GLCH_P", "uint16_t", [0] + [round(65536 * 0.004 * 125 ** gl_u(v)) for v in range(1, 128)]))
+out.append(arr("T_GL_WET", "uint16_t", [0] + [round(32767 * 10 ** (-18 * (1 - min(1.0, gl_u(v) / 0.75)) / 20)) for v in range(1, 128)]))
+out.append(arr("T_GL_DRY", "uint16_t", [32767] + [round(32767 * clamp(1 - (gl_u(v) - 0.3) / 0.55, 0, 1)) for v in range(1, 128)]))
+out.append(arr("T_GL_REP", "uint8_t", [0] + [round(16 * (2 + 6 * gl_u(v))) for v in range(1, 128)], 16))
+out.append(arr("T_GL_CAP", "uint8_t", [0] + [1 if gl_u(v) < 0.12 else 2 if gl_u(v) < 0.3 else 3 if gl_u(v) < 0.5 else 4 for v in range(1, 128)], 16))
+out.append(arr("T_GL_ART", "uint16_t", [0] + [round(256 * clamp((gl_u(v) - 0.1) / 0.8, 0, 0.85)) for v in range(1, 128)]))
+out.append(arr("T_GL_NM", "uint8_t", [1] + [max(1, min(6, round(gl_u(v) * 7.5))) for v in range(1, 128)], 16))
+
+# the sends, the track's reverb (VERB) and its delay (DSND): straight in level, half way -6 dB (format 17; before, the
+# square: a quarter way was -24 dB, a third of the knob near nothing)
+out.append(arr("T_SEND", "uint16_t", [round(32767 * v / 127.0) for v in range(128)]))
+# pattern format 17's conversions, measured (tools/conv17.py, into tools/ref/conv17.json): the reverb's grid, old DCAY
+# by old DAMP, to the new pair and the level each send makes up (Q8), read between by the conversion; GLCH's values
+C17 = json.load(open(os.path.join(os.path.dirname(__file__), "ref", "conv17.json")))
+out.append(arr("T_V17_RVV", "uint8_t", C17["verb"], 9))
+out.append(arr("T_V17_RVD", "uint8_t", C17["damp"], 9))
+out.append("static const uint8_t T_V17_RV[81][2] = {%s};\n" % ", ".join("{%d, %d}" % (n[0], n[1]) for n in C17["nodes"]))
+out.append(arr("T_V17_RVL", "uint16_t", [round(256 * 10 ** (n[2] / 20)) for n in C17["nodes"]], 9))
+out.append(arr("T_V17_GLCH", "uint8_t", C17["glch"], 16))
 
 # vowels: F1 F2 F3 (Hz) -> cutoff index (Q3), and levels (Q8). A E I O U, then the in-betweens
 vowels = [("A", 800, 1150, 2900), ("AE", 660, 1700, 2400), ("E", 400, 2100, 2800), ("I", 280, 2400, 3200),

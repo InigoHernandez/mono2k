@@ -245,7 +245,7 @@ static void fire_track(int t, int s, int32_t len)
 static void fire_step(int s)                         /* the pattern's step: the tracks at 1x */
 {
     for (int t = 0; t < M2K_TRACKS; t++) if (spd_of(t) == 4) fire_track(t, s, step_len(s));
-    bus_step();
+    bus_step(s);
 }
 
 /* the tracks off 1x start over with the pattern, from their first step with its first */
@@ -803,8 +803,7 @@ void m2k_init(uint32_t seed)
     m_set(mod_mem, 0, sizeof mod_mem);           /* the MOD effect's lines too: a reset hears no old chorus */
     m_set(gl_buf, 0, sizeof gl_buf);
     m_set(tp_buf, 0, sizeof tp_buf);
-    m_set(cb_buf, 0, sizeof cb_buf);
-    m_set(ap_buf, 0, sizeof ap_buf);
+    m_set(rv_buf, 0, sizeof rv_buf);
     for (int t = 0; t < M2K_TRACKS; t++) {
         trk[t].dl = dl_mem[t];
         trk[t].dquiet = DL_LEN;        /* the lines start silent */
@@ -814,6 +813,7 @@ void m2k_init(uint32_t seed)
         trk[t].dt_q8 = 400 << 8;
     }
     bus.hs = 0xACE1u;
+    bus.grng = 0x6C078965u ^ seed;
     for (int i = 0; i < M2K_TRACKS; i++) sq.rec_skip[i] = -1;
     m_set(store_.set, 0, sizeof store_.set);
     projects_factory();

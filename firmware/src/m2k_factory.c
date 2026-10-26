@@ -203,6 +203,64 @@ static void bus_v9(m2k_pattern_t *p)
     g[G_ADPC] = T_V9_ADPC[g[G_ADPC] & 127];
 }
 
+/* format 17: the bus's effects rebuilt, each old value to the new one that measures nearest (tools/conv17.py). The
+ * reverb is a new one: an old DCAY and DAMP to the pair whose octaves' RT60s are nearest (T_V17_RV, a 9 x 9 grid of
+ * the old values, read between), and each track's VERB send, now straight in level, to the old one's level times what
+ * makes up the two reverbs' difference (their energy in the octaves 250 Hz .. 1 kHz; T_V17_RVL); DSND, straight
+ * too, to the old one's level, |d| / 64 for (d / 64)^2; GLCH by its glitch's energy and events (T_V17_GLCH). A lock
+ * goes with its parameter; a send on at all stays on; an LFO on a send keeps its depth */
+static uint8_t spu_v16(int v, int32_t gain)            /* gain Q8 */
+{
+    int n = v ? (v * v * gain + 127 * 128) / (127 * 256) : 0;     /* (16129 x 1700 < 2^31) */
+    return (uint8_t)(v && n < 1 ? 1 : n > 127 ? 127 : n);
+}
+
+static uint8_t dsnd_v16(int v)
+{
+    int d = v - 64, a = d < 0 ? -d : d, n = (a * a + 32) / 64;
+    if (a && !n) n = 1;
+    return (uint8_t)(d < 0 ? 64 - n : 64 + n);
+}
+
+/* where an old value sits on one of the grid's axes: its cell, and how far into it (Q8) */
+static int grid_at(const uint8_t *axis, int v, int *f)
+{
+    int i = 0;
+    while (i < 7 && v > axis[i + 1]) i++;
+    if (v < axis[0]) v = axis[0];
+    *f = ((v - axis[i]) * 256) / (axis[i + 1] - axis[i]);
+    return i;
+}
+
+static void fx_v16(m2k_pattern_t *p)
+{
+    uint8_t *g = p->glob;
+    int ov = g[G_VERB] & 127, fv, fd;
+    int iv = grid_at(T_V17_RVV, ov ? ov : 64, &fv), id = grid_at(T_V17_RVD, g[G_DAMP] & 127, &fd);
+    int32_t w[4] = {(256 - fv) * (256 - fd), (256 - fv) * fd, fv * (256 - fd), fv * fd};   /* Q16 */
+    const int at[4] = {iv * 9 + id, iv * 9 + id + 1, (iv + 1) * 9 + id, (iv + 1) * 9 + id + 1};
+    int32_t dc = 0, dm = 0, lv = 0;
+    for (int k = 0; k < 4; k++) {
+        dc += w[k] * T_V17_RV[at[k]][0];
+        dm += w[k] * T_V17_RV[at[k]][1];
+        lv += (w[k] >> 4) * T_V17_RVL[at[k]];                          /* (2^12 x 1700) */
+    }
+    g[G_VERB] = (uint8_t)(ov ? CLAMP((dc + 32768) >> 16, 1, 127) : 0);
+    g[G_DAMP] = (uint8_t)CLAMP((dm + 32768) >> 16, 0, 127);
+    int32_t gain = ov ? (lv + 2048) >> 12 : 256;
+    for (int t = 0; t < M2K_TRACKS; t++) {
+        p->kit[t][P_SPU] = spu_v16(p->kit[t][P_SPU] & 127, gain);
+        p->kit[t][P_DSND] = dsnd_v16(p->kit[t][P_DSND] & 127);
+    }
+    for (int i = 0; i < M2K_LOCKS; i++) {
+        m2k_lock_t *l = &p->lock[i];
+        if (l->trk == 0xFF) continue;
+        if (l->param == P_SPU) l->val = spu_v16(l->val & 127, gain);
+        if (l->param == P_DSND) l->val = dsnd_v16(l->val & 127);
+    }
+    g[G_GLCH] = T_V17_GLCH[g[G_GLCH] & 127];
+}
+
 /* FM+STAT and FM+DYN took the Monomachine's pages (version 10). The old ones were MONO2K's own: RAT1 DEP1 DEC1 RAT2
  * DEP2 DEC2 FDBK, then ALGO (STAT) or SWEP (DYN), the second operator fed back and modulating the first in series.
  * Both new machines run their operators side by side, so an old sound is carried over as near as the pages go, not
@@ -583,7 +641,10 @@ static void locks(m2k_pattern_t *p, const uint8_t *v, int n)
 
 /* bank A: four parts (docs/bank-a.md, written to docs/composing.md): every sound picked by the owner from the sound
  * sheets (tools/sheet/), each 4-bar pattern a 16-bar form (what enters after the first pass, what alternates, what comes
- * on the third and fourth, LFOs over 16 bars), at the bank's loudness. The rest of the bank blank */
+ * on the third and fourth, LFOs over 16 bars), at the bank's loudness. The rest of the bank blank. Their reverbs and
+ * sends are on format 17's: each part's old DCAY and DAMP (62 81, 96 68, 96 68, 26 56) the new pair measured nearest
+ * at those very values (tools/conv17.py's points), its sends the old levels with what that pair makes up (-0.6, +0.5,
+ * +0.5, -1.4 dB), the delay's on the straight law */
 static void factory(void)
 {
     m2k_pattern_t *p;
@@ -599,7 +660,7 @@ static void factory(void)
         P_BASE, 22, P_WDTH, 115, P_HPQ, 51, P_LPQ, 63, P_FATK, 55, P_FDEC, 74, P_BOF, 33, P_WOF, 56, P_EQF, 93,
         P_EQG, 41, P_LEVL, 72, P_GATE, 15, P_MODT, 106, P_MODR, 113, P_MODD, 96);
     SET(p, 1, SA, 16, SB, 0, SC, 0, SD, 100, SE, 80, P_DEC, 28, P_REL, 14, P_BASE, 8, P_WDTH, 52, P_HPQ, 18, P_LPQ, 9,
-        P_FATK, 23, P_FDEC, 28, P_EQF, 72, P_EQG, 53, P_SPU, 24, P_LEVL, 127, P_GATE, 23, L1 + L_DEST, 34,
+        P_FATK, 23, P_FDEC, 28, P_EQF, 72, P_EQG, 53, P_SPU, 4, P_LEVL, 127, P_GATE, 23, L1 + L_DEST, 34,
         L1 + L_WAVE, 45, L1 + L_TRIG, 12, L1 + L_MULT, 72, L1 + L_SPD, 64, L1 + L_DPTH, 40, P_MODT, 21, P_MODR, 65,
         P_MODD, 41);
     SET(p, 2, SA, 119, SB, 70, SC, 10, SD, 84, SE, 100, SF, 117, SG, 12, P_HOLD, 7, P_DEC, 53, P_REL, 13, P_VOL, 100,
@@ -612,13 +673,13 @@ static void factory(void)
         P_WOF, 51, P_EQF, 26, P_LEVL, 127, P_GATE, 24, L3 + L_DEST, 18, L3 + L_WAVE, 9, L3 + L_TRIG, 12,
         L3 + L_MULT, 8, L3 + L_SPD, 4, L3 + L_DPTH, 86, P_MODT, 64, P_MODR, 8, P_MODD, 58, P_MODM, 69);
     SET(p, 5, SA, 98, SB, 63, SC, 105, SD, 8, SE, 109, SF, 19, SG, 55, P_HOLD, 7, P_DEC, 65, P_REL, 75, P_DIST, 66,
-        P_BASE, 9, P_WDTH, 54, P_HPQ, 7, P_LPQ, 49, P_FATK, 10, P_FDEC, 54, P_WOF, 66, P_DTIM, 48, P_DSND, 88,
-        P_DFB, 43, P_DWID, 92, P_SPU, 22, P_LEVL, 87, P_GATE, 30, L3 + L_DEST, 6, L3 + L_WAVE, 9, L3 + L_TRIG, 12,
+        P_BASE, 9, P_WDTH, 54, P_HPQ, 7, P_LPQ, 49, P_FATK, 10, P_FDEC, 54, P_WOF, 66, P_DTIM, 48, P_DSND, 73,
+        P_DFB, 43, P_DWID, 92, P_SPU, 4, P_LEVL, 87, P_GATE, 30, L3 + L_DEST, 6, L3 + L_WAVE, 9, L3 + L_TRIG, 12,
         L3 + L_MULT, 8, L3 + L_SPD, 8, L3 + L_DPTH, 78);
     p->glob[G_SWNG] = 10;
     p->glob[G_TAPE] = 79;
-    p->glob[G_VERB] = 62;
-    p->glob[G_DAMP] = 81;
+    p->glob[G_VERB] = 33;
+    p->glob[G_DAMP] = 112;
     p->glob[G_HISS] = 10;
     static const uint8_t A01_TRIGS[] = {   /* track, step, note, flags, condition, retrigs */
         0,0,33,1,0,0, 0,7,33,1,0,0, 0,10,33,1,0,0, 0,16,33,1,0,0, 0,23,33,1,0,0, 0,26,33,1,0,0, 0,32,33,1,0,0,
@@ -654,7 +715,7 @@ static void factory(void)
      * answering, ending two ways; the hats on the third and fourth passes */
     p = part(1, "TIDE", 122, MACHINES(M_ENS, M_DKIK, M_DSNR, M_FMD, M_FMS, M_DHAT));
     SET(p, 0, SD, 82, SE, 56, SF, 44, SG, 71, P_ATK, 37, P_HOLD, 127, P_DEC, 127, P_REL, 114, P_BASE, 10, P_WDTH, 46,
-        P_LPQ, 51, P_FATK, 18, P_FDEC, 95, P_WOF, 80, P_SPU, 52, P_LEVL, 112, P_GATE, 127, L1 + L_DEST, 18,
+        P_LPQ, 51, P_FATK, 18, P_FDEC, 95, P_WOF, 80, P_SPU, 22, P_LEVL, 112, P_GATE, 127, L1 + L_DEST, 18,
         L1 + L_WAVE, 27, L1 + L_TRIG, 12, L1 + L_MULT, 24, L1 + L_SPD, 16, L1 + L_DPTH, 52, L3 + L_DEST, 18,
         L3 + L_WAVE, 9, L3 + L_TRIG, 12, L3 + L_MULT, 8, L3 + L_SPD, 4, L3 + L_DPTH, 84, P_MODT, 21, P_MODR, 18,
         P_MODD, 83, P_MODM, 58);
@@ -662,22 +723,22 @@ static void factory(void)
         P_BASE, 22, P_WDTH, 115, P_HPQ, 51, P_LPQ, 63, P_FATK, 55, P_FDEC, 74, P_BOF, 33, P_WOF, 56, P_EQF, 93,
         P_EQG, 41, P_LEVL, 61, P_GATE, 15, P_MODT, 106, P_MODR, 113, P_MODD, 96);
     SET(p, 2, SA, 16, SB, 0, SC, 0, SD, 100, SE, 80, P_DEC, 28, P_REL, 14, P_BASE, 8, P_WDTH, 52, P_HPQ, 18, P_LPQ, 9,
-        P_FATK, 23, P_FDEC, 28, P_EQF, 72, P_EQG, 53, P_SPU, 24, P_LEVL, 115, P_GATE, 23, L1 + L_DEST, 34,
+        P_FATK, 23, P_FDEC, 28, P_EQF, 72, P_EQG, 53, P_SPU, 5, P_LEVL, 115, P_GATE, 23, L1 + L_DEST, 34,
         L1 + L_WAVE, 45, L1 + L_TRIG, 12, L1 + L_MULT, 72, L1 + L_SPD, 64, L1 + L_DPTH, 40, P_MODT, 21, P_MODR, 65,
         P_MODD, 41);
     SET(p, 3, SA, 96, SC, 112, SD, 28, SE, 64, SF, 59, SG, 111, P_HOLD, 8, P_DEC, 109, P_REL, 75, P_VOL, 112,
         P_BASE, 4, P_WDTH, 46, P_LPQ, 20, P_FATK, 51, P_FDEC, 117, P_BOF, 35, P_WOF, 18, P_EQF, 125, P_EQG, 51,
         P_LEVL, 127, P_GATE, 37, P_MODT, 21, P_MODR, 48, P_MODD, 47);
     SET(p, 4, SA, 98, SB, 63, SC, 105, SD, 8, SE, 109, SF, 19, SG, 55, P_HOLD, 7, P_DEC, 65, P_REL, 75, P_DIST, 66,
-        P_BASE, 9, P_WDTH, 54, P_HPQ, 7, P_LPQ, 49, P_FATK, 10, P_FDEC, 54, P_WOF, 66, P_DTIM, 48, P_DSND, 88,
-        P_DFB, 43, P_DWID, 92, P_SPU, 22, P_LEVL, 85, P_GATE, 30);
+        P_BASE, 9, P_WDTH, 54, P_HPQ, 7, P_LPQ, 49, P_FATK, 10, P_FDEC, 54, P_WOF, 66, P_DTIM, 48, P_DSND, 73,
+        P_DFB, 43, P_DWID, 92, P_SPU, 4, P_LEVL, 85, P_GATE, 30);
     SET(p, 5, SA, 119, SB, 70, SC, 10, SD, 84, SE, 100, SF, 117, SG, 12, P_HOLD, 7, P_DEC, 53, P_REL, 13, P_VOL, 76,
         P_PAN, 90, P_BASE, 50, P_WDTH, 40, P_HPQ, 23, P_FATK, 21, P_FDEC, 20, P_BOF, 71, P_WOF, 60, P_EQF, 45,
         P_EQG, 71, P_DFB, 49, P_DWID, 45, P_LEVL, 127, P_GATE, 25, L1 + L_DEST, 11, L1 + L_WAVE, 9, L1 + L_TRIG, 12,
         L1 + L_MULT, 56, L1 + L_DPTH, 28, P_MODT, 106, P_MODR, 32, P_MODD, 126);
     p->glob[G_SWNG] = 20;
-    p->glob[G_VERB] = 96;
-    p->glob[G_DAMP] = 68;
+    p->glob[G_VERB] = 61;
+    p->glob[G_DAMP] = 127;
     p->glob[G_HISS] = 10;
     static const uint8_t A02_TRIGS[] = {   /* track, step, note, flags, condition, retrigs */
         0,0,64,1,0,0, 0,8,64,1,0,0, 0,16,64,1,0,0, 0,24,64,1,0,0, 0,32,61,1,0,0, 0,40,61,1,0,0, 0,48,61,1,0,0,
@@ -710,7 +771,7 @@ static void factory(void)
      * pass; the cymbal on the second and fourth */
     p = part(2, "SUSPEND", 110, MACHINES(M_ENS, M_DKIK, M_GSIN, M_GSIN, M_FMS, M_DCYM));
     SET(p, 0, SD, 82, SE, 56, SF, 44, SG, 71, P_ATK, 20, P_HOLD, 127, P_DEC, 127, P_REL, 114, P_BASE, 10, P_WDTH, 42,
-        P_LPQ, 51, P_FATK, 18, P_FDEC, 95, P_WOF, 80, P_SPU, 52, P_LEVL, 110, P_GATE, 127, L1 + L_DEST, 18,
+        P_LPQ, 51, P_FATK, 18, P_FDEC, 95, P_WOF, 80, P_SPU, 22, P_LEVL, 110, P_GATE, 127, L1 + L_DEST, 18,
         L1 + L_WAVE, 27, L1 + L_TRIG, 12, L1 + L_MULT, 24, L1 + L_SPD, 16, L1 + L_DPTH, 52, L3 + L_DEST, 18,
         L3 + L_WAVE, 9, L3 + L_TRIG, 12, L3 + L_MULT, 8, L3 + L_SPD, 4, L3 + L_DPTH, 82, P_MODT, 21, P_MODR, 18,
         P_MODD, 83, P_MODM, 58);
@@ -722,15 +783,15 @@ static void factory(void)
         P_FOLD, 34, P_XOR, 8, P_LEVL, 104, P_GATE, 23, P_MODT, 106, P_MODR, 36, P_MODD, 74, P_MODM, 46);
     SET(p, 3, P_ATK, 10, P_HOLD, 127, P_DEC, 127, P_REL, 70, P_LEVL, 77, P_GATE, 127);
     SET(p, 4, SA, 82, SB, 62, SC, 74, SD, 6, SF, 22, SG, 49, P_DEC, 57, P_REL, 78, P_DIST, 86, P_BASE, 1, P_WDTH, 59,
-        P_HPQ, 10, P_LPQ, 54, P_FATK, 19, P_FDEC, 90, P_DTIM, 32, P_DSND, 87, P_DFB, 33, P_DWID, 65, P_SPU, 63,
+        P_HPQ, 10, P_LPQ, 54, P_FATK, 19, P_FDEC, 90, P_DTIM, 32, P_DSND, 72, P_DFB, 33, P_DWID, 65, P_SPU, 33,
         P_LEVL, 90, P_GATE, 12, L1 + L_DEST, 7, L1 + L_WAVE, 9, L1 + L_TRIG, 12, L1 + L_MULT, 8, L1 + L_DPTH, 38,
         P_MODT, 21, P_MODR, 24, P_MODD, 90, P_MODM, 86);
     SET(p, 5, SA, 73, SB, 124, SC, 51, SD, 104, SE, 65, SF, 6, SG, 58, SH, 9, P_HOLD, 8, P_DEC, 81, P_REL, 69,
         P_PAN, 86, P_BASE, 77, P_WDTH, 78, P_HPQ, 55, P_LPQ, 73, P_FATK, 19, P_FDEC, 9, P_BOF, 44, P_WOF, 88,
-        P_EQF, 113, P_EQG, 85, P_FOLD, 30, P_SPU, 40, P_LEVL, 51, P_GATE, 36);
+        P_EQF, 113, P_EQG, 85, P_FOLD, 30, P_SPU, 13, P_LEVL, 51, P_GATE, 36);
     p->glob[G_SWNG] = 20;
-    p->glob[G_VERB] = 96;
-    p->glob[G_DAMP] = 68;
+    p->glob[G_VERB] = 61;
+    p->glob[G_DAMP] = 127;
     p->glob[G_HISS] = 10;
     static const uint8_t A03_TRIGS[] = {   /* track, step, note, flags, condition, retrigs */
         0,0,57,1,6,0, 0,1,57,1,7,0, 0,16,58,1,6,0, 0,17,58,1,7,0, 0,32,62,1,6,0, 0,33,57,1,7,0, 0,48,62,1,6,0,
@@ -771,16 +832,16 @@ static void factory(void)
         P_FOLD, 34, P_XOR, 8, P_LEVL, 117, P_GATE, 23, P_MODT, 106, P_MODR, 36, P_MODD, 74, P_MODM, 46);
     SET(p, 3, P_ATK, 10, P_HOLD, 127, P_DEC, 127, P_REL, 60, P_LEVL, 70, P_GATE, 100);
     SET(p, 4, SA, 82, SB, 62, SC, 74, SD, 6, SF, 22, SG, 49, P_DEC, 57, P_REL, 78, P_DIST, 86, P_BASE, 1, P_WDTH, 59,
-        P_HPQ, 10, P_LPQ, 54, P_FATK, 19, P_FDEC, 90, P_DTIM, 32, P_DSND, 87, P_DFB, 33, P_DWID, 65, P_SPU, 63,
+        P_HPQ, 10, P_LPQ, 54, P_FATK, 19, P_FDEC, 90, P_DTIM, 32, P_DSND, 72, P_DFB, 33, P_DWID, 65, P_SPU, 27,
         P_LEVL, 98, P_GATE, 12, L1 + L_DEST, 7, L1 + L_WAVE, 9, L1 + L_TRIG, 12, L1 + L_MULT, 8, L1 + L_DPTH, 38,
         P_MODT, 21, P_MODR, 24, P_MODD, 90, P_MODM, 86);
     SET(p, 5, SA, 73, SB, 124, SC, 51, SD, 104, SE, 65, SF, 6, SG, 58, SH, 9, P_HOLD, 8, P_DEC, 81, P_REL, 69,
         P_PAN, 86, P_BASE, 77, P_WDTH, 78, P_HPQ, 55, P_LPQ, 73, P_FATK, 19, P_FDEC, 9, P_BOF, 44, P_WOF, 88,
-        P_EQF, 113, P_EQG, 85, P_FOLD, 30, P_SPU, 40, P_LEVL, 56, P_GATE, 36);
+        P_EQF, 113, P_EQG, 85, P_FOLD, 30, P_SPU, 11, P_LEVL, 56, P_GATE, 36);
     p->glob[G_SWNG] = 30;
     p->glob[G_ADPC] = 7;
-    p->glob[G_VERB] = 26;
-    p->glob[G_DAMP] = 56;
+    p->glob[G_VERB] = 25;
+    p->glob[G_DAMP] = 88;
     p->glob[G_HISS] = 10;
     static const uint8_t A04_TRIGS[] = {   /* track, step, note, flags, condition, retrigs */
         0,0,61,1,0,0, 0,6,61,1,0,0, 0,16,60,1,0,0, 0,22,60,1,0,0, 0,32,62,1,0,0, 0,38,62,1,0,0, 0,48,62,1,0,0,

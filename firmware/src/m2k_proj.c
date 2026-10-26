@@ -29,7 +29,7 @@ static int cur_proj;
 
 /* -------------------------------------------------------------------------------------- one pattern, packed */
 
-/* a pattern in the layout of a version (14, today's; the self-test writes the older ones, 3..13; 3..7 kits 70 wide) */
+/* a pattern in the layout of a version (17, today's; the self-test writes the older ones, 3..15; 3..7 kits 70 wide) */
 static int pat_pack_v(const m2k_pattern_t *p, uint8_t *o, int ver)
 {
     int n = 0, stride = ver >= 8 ? P_COUNT : P_WBNK;
@@ -39,7 +39,8 @@ static int pat_pack_v(const m2k_pattern_t *p, uint8_t *o, int ver)
                                         * 7: SWAV-ENS's page; 8: the wave bank's choice (kits 71 wide); 9: the bus's
                                         * controls on their new laws; 10: FM+STAT's and FM+DYN's pages; 11: SID's;
                                         * 12: GND-SIN's (TUNE on its eighth knob); 13: HOLD in beats; 14: VO-6's page;
-                                        * 15: the tracks' speeds, after the globals */
+                                        * 15: the tracks' speeds, after the globals; 17: the bus's effects
+                                        * rebuilt (the reverb, its and the delay's sends, the glitch) */
     m_cpy(o + n, p->name, 8); n += 8;
     m_cpy(o + n, p->machine, M2K_TRACKS); n += M2K_TRACKS;
     int gl = ver >= 15 ? G_COUNT : G_COUNT_V14;
@@ -70,7 +71,7 @@ static int pat_pack_v(const m2k_pattern_t *p, uint8_t *o, int ver)
     return n;
 }
 
-static int pat_pack(const m2k_pattern_t *p, uint8_t *o) { return pat_pack_v(p, o, 15); }
+static int pat_pack(const m2k_pattern_t *p, uint8_t *o) { return pat_pack_v(p, o, 17); }
 
 static uint8_t tune_v5(int v)
 {
@@ -99,7 +100,7 @@ static void pat_clamp(m2k_pattern_t *p)
 static int pat_unpack(m2k_pattern_t *p, const uint8_t *o, int len)
 {
     int n = 0;
-    if (len < 2 || o[0] != 'P' || o[1] < 1 || o[1] > 15) return 0;
+    if (len < 2 || o[0] != 'P' || o[1] < 1 || o[1] > 17) return 0;
     int ver = o[1], stride = ver >= 8 ? P_COUNT : ver >= 3 ? P_WBNK : P_MODT;   /* before 3 a kit ended before the MOD
                                                                                * effect, before 8 before the bank */
     const int gl = ver >= 15 ? G_COUNT : G_COUNT_V14;                       /* before 15 no speeds */
@@ -177,6 +178,7 @@ static int pat_unpack(m2k_pattern_t *p, const uint8_t *o, int len)
     if (ver < 12) gsin_v11(p);        /* and GND-SIN's: TUNE on its eighth knob */
     if (ver < 13) hold_v12(p);        /* HOLD went from 14.6 ms a step to 1 / 32 beat */
     if (ver < 14) vox_v13(p);         /* VOX-6 took VO-6's page */
+    if (ver < 17) fx_v16(p);          /* the bus's effects rebuilt: the reverb, the sends, the glitch */
     pat_clamp(p);
     return 1;
 }
@@ -636,8 +638,9 @@ uint8_t *m2k_store_buf(int *max)
  * TENFOUR and A16 FOUNDRY, after Radiohead and Boards of Canada; 6: A06 CAROM, A07 VESPER, A12 CUTUP, A13 GRISTLE;
  * 7: A09 MAMMOTH (direction v5) for PYLONS; 8: the bank reordered by energy, MAMMOTH first; 9: CUTUP to A02,
  * RIVETS to A11; 10: a new bank, LO-BIT CLUB, whole; 11: four parts from the owner's sound sheets (CIRCUIT, TIDE,
- * SUSPEND, LANTERN), the rest of the bank blank (docs/bank-a.md) */
-#define FACTORY_REV 11
+ * SUSPEND, LANTERN), the rest of the bank blank (docs/bank-a.md); 12: the same four on format 17's bus (their reverbs,
+ * their sends and their delays' turned as the format turns an old pattern's) */
+#define FACTORY_REV 12
 static const char *const OLD_DEMO[FACTORY_REV][16] = {
     {"LATEX", "PVC", "SPU RM", "ELECTRO", "GLITCH", "CHROME", "ACID", "2STEP", "GROOVE", "HYPRPOP", "DUB", "CHIP",
      "HARDGRV", "IDM", "DUBSTEP", "INIT"},
@@ -661,6 +664,8 @@ static const char *const OLD_DEMO[FACTORY_REV][16] = {
      "RIBBON", "MOTEL", "FOUNDRY", "SPLICE"},
     {"LUMEN", "PULSAR", "LATTICE", "SPUDUB", "PROCESS", "SQUELCH", "GROWL", "BREAKS", "SPRITES", "OPLL", "JUKE", "CHIPJNG",
      "VIOLET", "DUSKLIT", "FLUTE", "EMBERS"},
+    {"CIRCUIT", "TIDE", "SUSPEND", "LANTERN", "INIT", "INIT", "INIT", "INIT", "INIT", "INIT", "INIT", "INIT", "INIT", "INIT",
+     "INIT", "INIT"},
 };
 
 static int name_is(const char *a, const char *b)
@@ -679,6 +684,9 @@ static const struct { uint8_t rev; uint16_t len[16]; uint32_t fnv[16]; } OLD_PAC
       0xc3f1ae57u, 0x68a1d2c2u, 0xe71862c7u, 0x3e87034cu, 0x37721b15u, 0x91e00738u, 0xb7030f9du, 0xbefb958fu}},
     {11, {1091, 935, 879, 911},
      {0x73cc380fu, 0x0f86d30bu, 0xd0488ca5u, 0x507c3f8cu, 0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u,
+      0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u}},
+    {12, {1091, 935, 879, 911},
+     {0xe75c4e7cu, 0x1c4929b7u, 0x75252c11u, 0xffc235abu, 0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u,
       0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u}},
 };
 
@@ -715,7 +723,7 @@ static void refresh_demos(m2k_img_t *im, int rev)
  * how many projects it holds; the settings; the working patterns; the projects; the sound library ('S', its count,
  * each slot). n and k as this build keeps them, or fewer (the browser writing a store for the FM-1): an open project
  * past k goes first, as the open one */
-static int store_pack_nk(int n, int k)
+static int store_ser(int n, int k)    /* (the images as they stand: the self-test puts an old store's bytes in them) */
 {
     uint8_t h[10] = {'M', '2', 'K', '2', 3, (uint8_t)cur_proj, (uint8_t)cur_pat, FACTORY_REV, (uint8_t)n, (uint8_t)k};
     if (cur_proj >= k) h[5] = 0;
@@ -724,7 +732,6 @@ static int store_pack_nk(int n, int k)
     st_bad = 0;
     st_put(h, 10);
     st_put(store_.set, S_COUNT);
-    if (!img_pack_work("WORK")) return 0;
     ser_img(&work_img, n);
     for (int i = 0; i < k; i++) ser_img(&proj[i == 0 && cur_proj >= k ? cur_proj : i < M2K_PROJECTS ? i : 0], n);
     uint8_t sh[2] = {'S', M2K_SOUNDS};
@@ -734,6 +741,12 @@ static int store_pack_nk(int n, int k)
     st_put(sh, 2);
     st_put(snd_cat, sizeof snd_cat);
     return st_bad ? 0 : (int)st_at;
+}
+
+static int store_pack_nk(int n, int k)
+{
+    if (!img_pack_work("WORK")) return 0;
+    return store_ser(n, k);
 }
 
 int m2k_store_pack(void) { return store_pack_nk(M2K_PATTERNS, M2K_PROJECTS); }

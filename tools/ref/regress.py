@@ -689,14 +689,19 @@ def cases():
     for v, T in ((8, 62.5), (16, 125), (32, 250), (48, 375), (64, 500), (96, 750), (127, 992.2)):
         add("delay_time", "chain_delay", f"d_tim_{v:03d}", "echo_ms", {"at": T}, 1.0)
     for v in (0, 16, 32, 48, 80, 96, 112, 127):
-        add("delay_send", "chain_delay", f"d_snd_{v:03d}", "echoes", {"at": [258]}, 0.5)
+        add("delay_send", "chain_delay", f"d_snd_{v:03d}", "echoes", {"at": [258]}, 0.5,
+            xfail="DSND straight in level since format 17 (the owner's, 2026-10-26: a third of the knob was near"
+                  " silent); the Monomachine's knob is the square, |d / 64|^2: an old pattern converts to it"
+            if 0 < v < 127 else None)
     for v in (56, 64):
         add("delay_fb", "chain_delay2", f"d2_fb_{v:03d}", "echoes", {"at": [132, 257]}, 0.5)
     add("delay_fb", "chain_delay2", "d2_fb_068", "echoes", {"at": [132, 257]}, 0.5)   # the "growth" was a control
                                                                                      # carried from the line before
     # (ping-pong's leak to the wrong side at -32 dB, a known gap, was its one-poles stalled off zero: gone with them)
     for s in (0, 32, 96, 127):
-        add("delay_pan", "chain_delay2", f"d2_pan_s{s:03d}_f048", "echoes", {"at": [258, 515]}, 1.0)
+        add("delay_pan", "chain_delay2", f"d2_pan_s{s:03d}_f048", "echoes", {"at": [258, 515]}, 1.0,
+            xfail="DSND straight in level since format 17: a send half way 6 dB louder than the Monomachine's square"
+            if s in (32, 96) else None)
     for n in ("d2_bas_032", "d2_bas_064", "d2_bas_096", "d2_wid_032", "d2_wid_064", "d2_wid_096", "d2_bw_032_032", "d2_default"):
         add("delay_filter", "chain_delay2", n, "echo_bands", {"at": 0.379, "hz": [125, 250, 500, 1000, 2000, 4000]}, 3.0,
             xfail="375 ms ping-pong runs past MONO2K's half line: the slowed clock darkens 2-4 kHz" if n == "d2_bas_096" else None)

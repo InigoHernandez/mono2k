@@ -1524,8 +1524,8 @@ static void track_block(int ti, int32_t *restrict L, int32_t *restrict R, int32_
     int32_t fold = P7(t, P_FOLD), xr = P7(t, P_XOR), xm = (xr * xr * 2) & 0x7FFF;
     int pan = P7(t, P_PAN);
     int32_t gl = T_PAN[pan], gr = T_PAN[127 - pan];
-    int32_t sd = P7(t, P_DSND) - 64, ds = sd * sd * 8;                      /* the send: (d / 64)^2, Q15 */
-    int32_t rs = T_VOL[P7(t, P_SPU)];
+    int32_t sd = P7(t, P_DSND) - 64, ds = (sd < 0 ? -sd : sd) * 512;        /* the send: |d| / 64, Q15 (format 17) */
+    int32_t rs = T_SEND[P7(t, P_SPU)];
     int mtype = PN(t, P_MODT, 3), mmix = P7(t, P_MODM) * 2, mdep = P7(t, P_MODD);
     uint32_t minc = T_MOD_INC[P7(t, P_MODR)];
     int32_t pk = 0;

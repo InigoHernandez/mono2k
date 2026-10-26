@@ -112,6 +112,7 @@ static struct {
     int16_t scope[256];                /* the master, every 8th sample */
     uint8_t scope_w;
     uint8_t glitch;                    /* 1 while the bus repeats */
+    uint8_t gmode;                     /* what it plays (the glitch's GM_ mode) */
     int32_t dly[M2K_TRACKS];           /* delay return level */
     uint8_t lfo_view;                  /* the track the screen shows: its LFOs are worked out though they move nothing */
 } mon;

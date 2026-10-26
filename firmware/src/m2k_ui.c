@@ -15,7 +15,8 @@ enum {
     K_ALGO, K_VOIC, K_WAVE, K_VOF1, K_VOF2, K_CONS, K_TRK, K_DEST, K_LWAV, K_LTRG, K_MULT, K_AMOD, K_ASPD, K_ARNG, K_GATE,
     K_BPM, K_SWNG, K_LEN, K_GLCH, K_GSIZ, K_FINE, K_TUN2, K_SCRN, K_PROJ, K_LOAD, K_MCH, K_SSEL, K_SLOAD, K_SSAVE, K_SCAT, K_WIPE, K_DEMO, K_SPD,
     K_FOCT, K_FWID, K_FATK, K_FDEC, K_EQHZ, K_DBHZ, K_SRR, K_PCH, K_WBNK, K_FR24, K_FR64, K_FRSQ, K_ONOFF, K_MSRC, K_MFRQ,
-    K_DWV4, K_DWV5, K_DRA, K_DRD, K_DOPN, K_DMUL, K_DNHZ, K_DCNT          /* the DRM- drums' */
+    K_DWV4, K_DWV5, K_DRA, K_DRD, K_DOPN, K_DMUL, K_DNHZ, K_DCNT,         /* the DRM- drums' */
+    K_DCAY, K_DAMP                                                        /* the reverb's */
 };
 typedef struct { const char *s4, *name; uint8_t kind; } pi_t;
 
@@ -41,8 +42,8 @@ static const pi_t PI_MOD[4] = {
 
 static const pi_t PI_GLOB[G_COUNT] = {
     {"BPM", "TEMPO", K_BPM}, {"SWNG", "SWING", K_SWNG}, {"LEN", "PATTERN LENGTH", K_LEN}, {"ACNT", "ACCENT", K_NUM},
-    {"TAPE", "TAPE WOW", K_NUM}, {"ADPC", "ADPCM CRUNCH", K_NUM}, {"GLCH", "GLITCH CHANCE", K_GLCH}, {"SIZE", "REPEAT SIZE", K_GSIZ},
-    {"DCAY", "REVERB DECAY", K_NUM}, {"DAMP", "REVERB DAMPING", K_NUM}, {"HISS", "HISS AND DUST", K_NUM}, {"DRIV", "BUS DRIVE", K_NUM},
+    {"TAPE", "TAPE WOW", K_NUM}, {"ADPC", "ADPCM CRUNCH", K_NUM}, {"GLCH", "GLITCH AMOUNT", K_GLCH}, {"SIZE", "REPEAT SIZE", K_GSIZ},
+    {"DCAY", "REVERB DECAY", K_DCAY}, {"DAMP", "REVERB DAMPING", K_DAMP}, {"HISS", "HISS AND DUST", K_NUM}, {"DRIV", "BUS DRIVE", K_NUM},
     {"SPD", "T1 SPEED", K_SPD}, {"SPD", "T2 SPEED", K_SPD}, {"SPD", "T3 SPEED", K_SPD}, {"SPD", "T4 SPEED", K_SPD},
     {"SPD", "T5 SPEED", K_SPD}, {"SPD", "T6 SPEED", K_SPD},
 };
@@ -378,12 +379,20 @@ static void fmt(const pi_t *pi, int t, int v, char *out, const char **unit)
     case K_BPM: s_int(out, 30 + v); *unit = "BPM"; break;
     case K_SWNG: s_int(out, 50 + (v * 25) / 127); *unit = "%"; break;
     case K_LEN: s_int(out, v); *unit = "STEPS"; break;
-    case K_GLCH: {                     /* a sixteenth's chance of a repeat, its law's: 0.3 % .. 50 % */
+    case K_GLCH: {                     /* a sixteenth's chance of a repeat, its law's: 0.4 % .. 50 % */
         int c10 = (int)((T_GLCH_P[v & 127] * 1000u + 32768u) >> 16);
         if (c10 < 100) s_dec1(out, c10); else s_int(out, (c10 + 5) / 10);
-        *unit = "%";
+        *unit = "% A STEP";
         break;
     }
+    case K_DCAY: {                     /* the reverb's RT60, its law's: 0.3 s .. 24 s */
+        uint32_t ms = T_RV_MS[v & 127];
+        if (!v) s_cpy(out, "OFF");
+        else if (ms < 1000) { s_int(out, (int)ms); *unit = "MS"; }
+        else { s_dec1(out, (int)((ms + 50) / 100)); *unit = "S"; }
+        break;
+    }
+    case K_DAMP: s_int(out, (int)((25600u + 128u + T_RV_DA[v & 127] / 2) / (256u + T_RV_DA[v & 127]))); *unit = "% TOP'S TIME"; break;
     case K_GSIZ: s_cpy(out, GSIZ_N[(v * 5) >> 7]); *unit = "NOTE"; break;
     case K_SCRN: s_cpy(out, c ? "DARK" : "LIGHT"); *unit = "DISPLAY"; break;
     case K_MCH: { char *e = s_cpy(out, "CH"); s_int(e, c + 1); *unit = "T1; T2 NEXT"; break; }
@@ -2605,15 +2614,26 @@ static void picture(void)
                 if (i) line(X + i - 1, prev, X + i, y, 1);
                 prev = y;
             }
-            if (mon.glitch) tag(X + 2, Y + 88, "REPEAT", 1);
-            else tag(X + 2, Y + 88, "REPEAT", 0);
-        } else if (ui.sub == 2) {      /* the room: squares out from the middle on each beat */
-            int ph = sq.playing ? (int)(sq.step & 3) : 0;
-            int n = 2 + p->glob[G_VERB] / 20;
-            for (int i = 0; i < n; i++) {
-                int r = 6 + ((i * 8 + ph * 2) % (n * 8));
-                frame(X + W / 2 - r, Y + 46 - r, 2 * r, 2 * r, 1);
+            static const char *const GM_N[8] = {"REPEAT", "REVERSE", "GATED", "OCTAVE UP", "OCTAVE DOWN", "ROLL", "SLOWING", "STOP"};
+            tag(X + 2, Y + 88, GM_N[mon.gmode & 7], mon.glitch);
+        } else if (ui.sub == 2) {      /* the decay: its level over time (0.1 .. 30 s on a log scale), 60 dB down the
+                                        * height; the bottom's solid, the top's dotted (DAMP's share of it) */
+            int v = p->glob[G_VERB], ty = Y + 82;
+            uint32_t t60 = T_RV_MS[v], th = (t60 * 256u) / (256u + T_RV_DA[p->glob[G_DAMP]]);
+            hline(X, ty, W, 1);
+            for (int s = 0; s < 3; s++) vline(X + s * 4037 * (W - 1) / 10000, ty, 3, 1);   /* 0.1, 1 and 10 s */
+            text(&F_S, X + 4037 * (W - 1) / 10000 - 2, ty + 5, "1 S", 1, 0);
+            text(&F_S, X + 8074 * (W - 1) / 10000 - 2, ty + 5, "10 S", 1, 0);
+            int lp = -1, hp = -1;
+            for (int i = 0; v && i < W; i++) {
+                /* the time at column i: 100 ms 2^(i / (W - 1) log2 300), in ms */
+                uint32_t e = (uint32_t)i * 2105u / (uint32_t)(W - 1), ms = (100u * T_EXP2F[e & 255]) >> (16 - (e >> 8));
+                int yl = (int)(ms * 72u / (t60 ? t60 : 1)), yh = (int)(ms * 72u / (th ? th : 1));
+                if (yl <= 72) { int y = Y + 8 + yl; if (lp >= 0) line(X + i - 1, lp, X + i, y, 1); else px(X + i, y, 1); lp = y; }
+                if (yh <= 72 && (i & 1)) { px(X + i, Y + 8 + yh, 1); hp = 1; }
             }
+            (void)hp;
+            if (!v) text_c(&F_S, X + W / 2, Y + 40, "OFF", 1, 0);
         } else if (ui.sub == 4) {      /* MIDI: the six tracks on their channels, the clock in and out, the beat */
             int ch = (store_.set[S_MCH] * 16) >> 7;
             for (int i = 0; i < M2K_TRACKS; i++) {
