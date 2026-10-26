@@ -176,7 +176,7 @@
       <tr><td>PLAY</td><td>Start, stop</td><td>A second: its card</td></tr>
       <tr><td>REC</td><td>Record (playing: live; stopped: step entry, then PLAY: Ready, the first note starts it)</td><td>FILL; with SEQ, clear the track (below)</td></tr>
       <tr><td>SAVE</td><td>Keep the pattern</td><td>Keep the project</td></tr>
-      <tr><td>OCT− OCT+</td><td>The octave; in GRID the page; a held step's ratchet. In a question, NO and YES</td><td>OCT− and a knob: that knob back to its default. A second alone: its card</td></tr>
+      <tr><td>OCT− OCT+</td><td>The track in view's octave; in GRID the page; a held step's ratchet. In a question, NO and YES</td><td>OCT− and a knob: that knob back to its INIT. A second alone: its card</td></tr>
     </tbody>
   </table>
   <h2>Hold GLO and press</h2>
@@ -339,7 +339,7 @@
   </ol>
   <h2>Put a knob back</h2>
   <ol class="steps">
-    <li>Hold OCT− and turn the knob: it goes back to its machine's default.</li>
+    <li>Hold OCT− and turn the knob: it goes back to its machine's INIT.</li>
     <li>In GRID with a step held, the same takes that knob's lock away from the step.</li>
   </ol>
   <h2>Play live with one hand</h2>
@@ -399,7 +399,7 @@
       <tr><td>PLAY</td><td></td><td>Starts and stops the sequencer.</td></tr>
       <tr><td>REC</td><td></td><td>A tap arms recording (live while playing, step entry while stopped). Held: FILL.</td></tr>
       <tr><td>SAVE</td><td></td><td>Keeps the pattern; held, the whole project.</td></tr>
-      <tr><td>OCT− OCT+</td><td></td><td>The keyboard's octave; in GRID, the page of steps. In a question, NO and YES.</td></tr>
+      <tr><td>OCT− OCT+</td><td></td><td>The keyboard's octave, the track in view's (each track keeps its own); in GRID, the page of steps. In a question, NO and YES.</td></tr>
     </tbody>
   </table>
   <h2>Knobs</h2>
@@ -464,7 +464,12 @@
   <h1>Tracks and machines</h1>
   <p class="sub">Six tracks, each one mono machine with its own sound, chain and steps.</p>
   <h2>Choosing a track and its machine</h2>
-  <p>SELECT picks the track; in GRID, the upper keys T1–T6 do. On EDIT, ALGORITHM changes the track's machine: its card comes up, and its eight knobs start from the machine's own settings while the rest of the track (the chain, the LFOs, the steps) stays as it was. The machines come in the Monomachine's order, its three FM+ machines together.</p>
+  <p>SELECT picks the track; in GRID, the upper keys T1–T6 do. On EDIT, ALGORITHM changes the track's machine and its card comes up. A track still at its machine's INIT takes the new machine's whole INIT; a sound you have shaped keeps its chain, its LFOs and its steps, and only the eight knobs start from the new machine's INIT.</p>
+  <p>The machines come in this order: the ten that play notes first (GND-SIN, SWAV-SAW, SWAV-PUL, SWAV-ENS, FM+STAT, FM+PAR, FM+DYN, VOX-6, DIGI-WAV, SID-6581), then the drums (DRM-KICK, DRM-SNAR, DRM-HATS, DRM-CYMB), GND-PERC and GND-NOIS, and the three FX last. One step back from GND-SIN is FX-RING.</p>
+  <h2>INIT: each machine's own sound</h2>
+  <p>Every machine starts as a sound for what it is for, not a bare oscillator: GND-SIN a round sine bass, SWAV-SAW a wide supersaw pad, SWAV-PUL a hollow reed lead, SWAV-ENS a minor-7 pad on one key, FM+STAT an e-piano, FM+PAR a gong-like bell, FM+DYN an FM bass, VOX-6 an "aah", DIGI-WAV a pluck that scans as it falls, SID-6581 a sync lead, DRM-KICK a kick, DRM-SNAR a snare, DRM-HATS a closed hat, DRM-CYMB a crash, GND-PERC a metal hit, GND-NOIS a wind you play, and the FX the track before made wide (FX-CHORUS), punched and held (FX-DYNAMIX) or turned to metal (FX-RING). Each is levelled to sit with the others. That INIT is what ALGORITHM gives a track at its INIT, what an INIT slot of the library, EDIT + SEQ and a held clear start a track with, and where OCT− and a knob take that knob back. A new pattern is INIT too: a sine bass, a kick, a snare, a hat, the FM keys and the ENS pad.</p>
+  <h2>Notes and octaves</h2>
+  <p>Each track plays at home. A machine chosen or INITed puts the track's new trigs, its pad and its keys on the note its INIT was made at: DRM-KICK at C2, GND-SIN, FM+DYN and the FX at C3, the rest at C4. A pattern opened puts each track on its root, the note its trigs sit on most, or its machine's home when it has none. The keyboard's octave is each track's own, set from its home note, which sits near the bottom of the keys (a C on their first C): a kick at C2 plays as a kick, not as a high zap. OCT− and OCT+ change the track in view's, and their lights show it.</p>
   <p>On every other page, ALGORITHM turns through the page's own pages instead of tapping its button: LFO 1A to 3B, FX's four, AMP's and FILT's two, GLO's TIME, GLITCH, VERB, SET and MIDI. It stops at the first and the last.</p>
   <h2>Level, pitch and mute</h2>
   <p>On HOME, KNOB 1 and 2 are the track's level and pitch. In GRID the MUTE key mutes the track in view; GLO held with one of the six lower keys mutes that track from anywhere.</p>
@@ -477,7 +482,7 @@
 <!-- ============================================================================================== machines -->
 <article id="machines" data-group="Machines">
   <h1>Machine reference</h1>
-  <p class="sub">Nineteen machines in eight families. Each has eight knobs, A–H, on its SYN page.</p>
+  <p class="sub">Nineteen machines in eight families, in ALGORITHM's order. Each has eight knobs, A–H, on its SYN page.</p>
   <div class="mlist" data-machines><p>Loading the machines from the firmware…</p></div>
 </article>
 
@@ -673,14 +678,14 @@
   <div class="figs">
     <figure class="fig"><canvas data-scr="25_syn_snd"></canvas><figcaption>SYN &gt; SND: the library's slots, each with its machine; SLOT picks one.</figcaption></figure>
   </div>
-  <p>128 sounds, S001 to S128, kept apart from the patterns: a sound saved there can go onto any track of any pattern. A sound is a track's machine and every setting (the machine's knobs, the amp, the filter, the FX, the LFOs) and a category: KICK, SNARE, HATS, PERC, BASS, LEAD, PAD or FX. The library starts with the demos' 24 sounds, each in the category its part gives it, then 104 INIT slots; it is saved with the rest.</p>
+  <p>128 sounds, S001 to S128, kept apart from the patterns: a sound saved there can go onto any track of any pattern. A sound is a track's machine and every setting (the machine's knobs, the amp, the filter, the FX, the LFOs), a category (KICK, SNARE, HATS, PERC, BASS, LEAD, PAD or FX) and the note it was made at: the track's root when it was saved, the note its trigs sit on most. Loaded, it is ready to sound as it did: the track's keys, pad and new trigs go to that note and its octave (a kick saved at C2 plays at C2). The library starts with the demos' 24 sounds, each in the category its part gives it and at the note it plays there, then 104 INIT slots; it is saved with the rest. (Sounds kept before their notes were: a kick at C2, a bass at C3, the rest at C4.)</p>
   <p>Press EDIT until the header says SND (the page after SYN, and after BANK on DIGI-WAV), or GLO + EDIT from anywhere.</p>
   <table>
     <thead><tr><th>Knob</th><th>Does</th></tr></thead>
     <tbody>
       <tr><td>SLOT</td><td>Picks a slot among those shown; the list shows its neighbours.</td></tr>
-      <tr><td>LOAD</td><td>Turned: the slot's sound onto the track in view. An INIT slot starts the track's machine afresh.</td></tr>
-      <tr><td>SAVE</td><td>Turned: the track's sound into the slot, named after the pattern and the track. Into an INIT slot at once; over a sound it asks first: OCT+ YES, OCT− NO.</td></tr>
+      <tr><td>LOAD</td><td>Turned: the slot's sound onto the track in view, its keys at the sound's note. An INIT slot starts the track's machine afresh, at its INIT.</td></tr>
+      <tr><td>SAVE</td><td>Turned: the track's sound into the slot, named after the pattern and the track, with the track's root. Into an INIT slot at once; over a sound it asks first: OCT+ YES, OCT− NO.</td></tr>
       <tr><td>CAT</td><td>Shows one category (and the INIT slots, to save into); ALL shows every slot. A sound saved while a category is shown takes it; under ALL, MONO2K guesses one from the machine and its notes.</td></tr>
     </tbody>
   </table>
@@ -765,6 +770,6 @@
 <script src="site.js?v=3"></script>
 <script src="panel.js?v=2"></script>
 <script src="changelog.js?v=27"></script>
-<script src="manual.js?v=28"></script>
+<script src="manual.js?v=29"></script>
 </body>
 </html>

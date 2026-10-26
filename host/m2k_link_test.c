@@ -153,14 +153,21 @@ static void check(int ok, const char *what)
     if (!ok) fails++;
 }
 
-static void mark(const char *pn, const char *sn)   /* a state to tell apart: pattern A01's name, sound slot 6's */
+/* a sound's note by its name, so each state's slot 6 has its own (the store's 'R'; m2k_host --web-store sets it so) */
+static uint8_t name_root(const char *s) { unsigned h = 0; while (*s) h = h * 31u + (uint8_t)*s++; return (uint8_t)(24 + h % 72); }
+
+static void mark(const char *pn, const char *sn)   /* a state to tell apart: pattern A01's name, sound slot 6's, its note */
 {
     memset(PAT(0)->name, 0, 8);
     memcpy(PAT(0)->name, pn, strlen(pn));
     memset(snd[5].name, 0, 8);
     memcpy(snd[5].name, sn, strlen(sn));
+    snd_root[5] = name_root(sn);
 }
-static int marked(const char *pn, const char *sn) { return !strcmp(PAT(0)->name, pn) && !strcmp(snd[5].name, sn); }
+static int marked(const char *pn, const char *sn)
+{
+    return !strcmp(PAT(0)->name, pn) && !strcmp(snd[5].name, sn) && snd_root[5] == name_root(sn);
+}
 static int stored(void) { uint32_t h[4]; return !st_read(BANK_AT, h, 16) && h[0] == STORE_MAGIC && store_load(); }
 
 /* the pattern cache (the FM-1 keeps two of its 64 patterns unpacked, the rest packed in the working image) */
@@ -531,7 +538,7 @@ int main(int argc, char **argv)
     check(stored() && marked("LINKB", "SNDB"), "(a second state saved)");
     flash_faults = 0;
     int st = write_store(a, na, crc32(a, na), ~0u);
-    check(st == LK_OK && marked("LINKA", "SNDA"), "a store written: the core reads it, the patterns and the sounds");
+    check(st == LK_OK && marked("LINKA", "SNDA"), "a store written: the core reads it, the patterns and the sounds (their notes too)");
     check(stored() && marked("LINKA", "SNDA"), "and it is the FM-1's store from then on");
     check(flash_faults == 0, "no byte programmed without its erase");
 

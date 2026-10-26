@@ -341,15 +341,16 @@ static int img_pack_all(m2k_img_t *dst, const char *name)
     return 1;
 }
 
-/* the sound library: 128 slots (S001..S128, M2K_SOUNDS in m2k.h), each a track's machine and its parameters and a
- * category, kept with the store. An empty slot (no name) is INIT: loading it starts the track's machine afresh. The
- * factory fills the first 96 from bank A's tracks (16 patterns, six each) and leaves the last 32 INIT */
+/* the sound library: 128 slots (S001..S128, M2K_SOUNDS in m2k.h), each a track's machine and its parameters, a
+ * category and the note it was made at, kept with the store. An empty slot (no name) is INIT: loading it starts the
+ * track's machine afresh. The factory fills the first 24 from bank A's demos (four, six tracks each), the rest INIT */
 typedef struct { char name[8]; uint8_t machine, kit[P_COUNT]; } m2k_sound_t;
 static m2k_sound_t snd[M2K_SOUNDS] POOL;
 enum { CAT_ALL, CAT_KICK, CAT_SNARE, CAT_HATS, CAT_PERC, CAT_BASS, CAT_LEAD, CAT_PAD, CAT_FX, CAT_COUNT };
 static const char *const CAT_N[CAT_COUNT] = {"ALL", "KICK", "SNARE", "HATS", "PERC", "BASS", "LEAD", "PAD", "FX"};
 static const char *const CAT_S[CAT_COUNT] = {"", "KCK", "SNR", "HAT", "PRC", "BAS", "LD", "PAD", "FX"};
 static uint8_t snd_cat[M2K_SOUNDS];                /* CAT_*; 0 none */
+static uint8_t snd_root[M2K_SOUNDS];               /* the note each was made at: loaded, its track's keys go there */
 
 /* a track's notes: the lowest and highest of its trigs (lo > hi with none) */
 static void track_notes(const m2k_pattern_t *p, int t, int *lo, int *hi)
@@ -357,6 +358,22 @@ static void track_notes(const m2k_pattern_t *p, int t, int *lo, int *hi)
     *lo = 127; *hi = 0;
     for (int s = 0; s < M2K_STEPS; s++)
         if (p->step[t][s].flags & ST_TRIG) { int n = p->step[t][s].note; *lo = n < *lo ? n : *lo; *hi = n > *hi ? n : *hi; }
+}
+
+/* a track's root: the note its trigs sit on most within the pattern's length (the lowest of equals), so a drum tuned
+ * to the key by its note keeps it and a line its home note; -1 without trigs */
+static int pat_root(const m2k_pattern_t *p, int t)
+{
+    uint8_t cnt[128];
+    m_set(cnt, 0, sizeof cnt);
+    int best = -1, len = CLAMP(p->glob[G_LEN], 1, 64);
+    for (int st = 0; st < len; st++) {
+        if (!(p->step[t][st].flags & ST_TRIG)) continue;
+        int n = p->step[t][st].note & 127;
+        if (cnt[n] < 255) cnt[n]++;
+        if (best < 0 || cnt[n] > cnt[best] || (cnt[n] == cnt[best] && n < best)) best = n;
+    }
+    return best;
 }
 
 /* a sound's category, guessed from its machine, its knobs and the notes it plays (lo > hi: none known), after bank A's
@@ -390,7 +407,8 @@ static void sound_name(char *o, const m2k_pattern_t *p, int t)   /* "MAMMO3": th
     o[i] = 0;
 }
 
-static void sound_save(int slot, const m2k_pattern_t *p, int t, int cat)    /* cat 0: guessed */
+/* a track's sound into a slot, made at note root (-1: its trigs' root, or its machine's home note without trigs) */
+static void sound_save(int slot, const m2k_pattern_t *p, int t, int cat, int root)    /* cat 0: guessed */
 {
     m2k_sound_t *d = &snd[slot % M2K_SOUNDS];
     m_set(d, 0, sizeof *d);
@@ -400,23 +418,30 @@ static void sound_save(int slot, const m2k_pattern_t *p, int t, int cat)    /* c
     int lo, hi;
     track_notes(p, t, &lo, &hi);
     snd_cat[slot % M2K_SOUNDS] = (uint8_t)(cat ? cat : sound_guess(d->machine, d->kit, lo, hi));
+    if (root < 0) root = pat_root(p, t);
+    snd_root[slot % M2K_SOUNDS] = (uint8_t)(root < 0 ? mach_home(d->machine) : root & 127);
 }
+
+/* a sound's note from a store before the notes were kept, by its category: a kick at C2, a bass at C3, the rest C4 */
+static int root_guess(int cat) { return cat == CAT_KICK ? 36 : cat == CAT_BASS ? 48 : 60; }
 
 #define FACTORY_DEMOS 4                          /* bank A's slots with a demo, A01-A04: factory() writes those alone */
 
-static void sounds_factory(void)              /* the demos' tracks, A01 T1 first; the rest empty (INIT) */
+static void sounds_factory(void)              /* the demos' tracks, at their roots, A01 T1 first; the rest INIT */
 {
     m_set(snd, 0, sizeof snd);
     m_set(snd_cat, 0, sizeof snd_cat);
+    m_set(snd_root, 0, sizeof snd_root);
     for (int i = 0; i < M2K_SOUNDS && i / M2K_TRACKS < (M2K_PATTERNS < FACTORY_DEMOS ? M2K_PATTERNS : FACTORY_DEMOS); i++)
-        sound_save(i, PAT(i / M2K_TRACKS), i % M2K_TRACKS, 0);
+        sound_save(i, PAT(i / M2K_TRACKS), i % M2K_TRACKS, 0, -1);
 }
 
+/* the blank pattern (INIT): six machines for six purposes, each its INIT sound (a bass, a kit, keys, a pad) */
 static void pattern_init_blank(m2k_pattern_t *p)
 {
     pat_init(p, "INIT");
-    static const uint8_t M[M2K_TRACKS] = {M_GSIN, M_GPRC, M_GPRC, M_SID, M_FMS, M_ENS};
-    for (int t = 0; t < M2K_TRACKS; t++) kit_default(p, t, M[t]);
+    static const uint8_t M[M2K_TRACKS] = {M_GSIN, M_DKIK, M_DSNR, M_DHAT, M_FMS, M_ENS};
+    for (int t = 0; t < M2K_TRACKS; t++) kit_init(p, t, M[t]);
     p->glob[G_TMPO] = 120 - 30;
     p->glob[G_VERB] = 40;
 }
@@ -479,6 +504,7 @@ static void project_load(int slot)
     cur_pat = 0;
     sq.queued = 0;
     work_reset_current();
+    keys_home();
 }
 
 /* the settings are the store's too: one turned is saved once it has stood a while (a knob turned is many detents) */
@@ -509,7 +535,7 @@ static void projects_factory(void)
 /* everything the instrument keeps, as one blob for the platform to save: the settings, the working patterns,
  * the four projects. "M2K2", version, open project; then images as (name, used, len[], data). */
 
-#define STORE_MAX (16 + S_COUNT + (M2K_PROJECTS + 1) * (12 + 2 * M2K_PATTERNS + IMG_DATA) + 4 + 81 * M2K_SOUNDS)
+#define STORE_MAX (16 + S_COUNT + (M2K_PROJECTS + 1) * (12 + 2 * M2K_PATTERNS + IMG_DATA) + 6 + 82 * M2K_SOUNDS)
 #ifndef M2K_FW
 static uint8_t store_buf[STORE_MAX] POOL;
 #endif
@@ -609,8 +635,8 @@ static int img_check(uint32_t len, int n, int kept)
     return 1;
 }
 
-/* the sound library after the images, whole when it is there: 'S', its count, the slots, then 'C', its count, the
- * categories (an older store has no 'C', or neither) */
+/* the sound library after the images, whole when it is there: 'S', its count, the slots; 'C', its count, the
+ * categories; 'R', its count, the notes they were made at (an older store ends before 'R', 'C' or all three) */
 static int snd_check(uint32_t len)
 {
     uint8_t sh[2];
@@ -618,7 +644,10 @@ static int snd_check(uint32_t len)
     if (!st_get(sh, 2, len) || sh[0] != 'S' || st_at + sh[1] * (uint32_t)sizeof(m2k_sound_t) > len) return 0;
     st_at += sh[1] * (uint32_t)sizeof(m2k_sound_t);
     if (st_at >= len) return 1;
-    return st_get(sh, 2, len) && sh[0] == 'C' && st_at + sh[1] <= len;
+    if (!st_get(sh, 2, len) || sh[0] != 'C' || st_at + sh[1] > len) return 0;
+    st_at += sh[1];
+    if (st_at >= len) return 1;
+    return st_get(sh, 2, len) && sh[0] == 'R' && st_at + sh[1] <= len;
 }
 
 #ifndef M2K_FW
@@ -713,8 +742,8 @@ static void refresh_demos(m2k_img_t *im, int rev)
 
 /* the store, version 3: "M2K2" 3, the open project and pattern, the factory's revision, how many patterns a project and
  * how many projects it holds; the settings; the working patterns; the projects; the sound library ('S', its count,
- * each slot). n and k as this build keeps them, or fewer (the browser writing a store for the FM-1): an open project
- * past k goes first, as the open one */
+ * each slot; 'C' and 'R' so for their categories and notes). n and k as this build keeps them, or fewer (the browser
+ * writing a store for the FM-1): an open project past k goes first, as the open one */
 static int store_pack_nk(int n, int k)
 {
     uint8_t h[10] = {'M', '2', 'K', '2', 3, (uint8_t)cur_proj, (uint8_t)cur_pat, FACTORY_REV, (uint8_t)n, (uint8_t)k};
@@ -733,6 +762,9 @@ static int store_pack_nk(int n, int k)
     sh[0] = 'C';                                        /* their categories */
     st_put(sh, 2);
     st_put(snd_cat, sizeof snd_cat);
+    sh[0] = 'R';                                        /* the notes they were made at */
+    st_put(sh, 2);
+    st_put(snd_root, sizeof snd_root);
     return st_bad ? 0 : (int)st_at;
 }
 
@@ -778,6 +810,7 @@ int m2k_store_unpack(int len)
     if (ver >= 3 && st_get(sh, 2, n) && sh[0] == 'S') {   /* the sound library: the slots this build keeps */
         m_set(snd, 0, sizeof snd);
         m_set(snd_cat, 0, sizeof snd_cat);
+        int nr = 0;                                     /* the notes read */
         for (int i = 0; i < sh[1]; i++) {
             m2k_sound_t tmp;
             if (!st_get(&tmp, sizeof tmp, n)) break;
@@ -787,10 +820,19 @@ int m2k_store_unpack(int len)
             if (snd[i].machine >= M_COUNT) snd[i].name[0] = 0;
             for (int k = 0; k < P_COUNT; k++) if (snd[i].kit[k] > 127) snd[i].kit[k] = 127;
         }
-        if (st_get(sh, 2, n) && sh[0] == 'C')           /* the categories (a store before them: guessed) */
+        if (st_get(sh, 2, n) && sh[0] == 'C') {         /* the categories (a store before them: guessed) */
             for (int i = 0; i < sh[1]; i++) { uint8_t c; if (!st_get(&c, 1, n)) break; if (i < M2K_SOUNDS) snd_cat[i] = c < CAT_COUNT ? c : 0; }
-        for (int i = 0; i < M2K_SOUNDS; i++)
+            if (st_get(sh, 2, n) && sh[0] == 'R')       /* their notes (a store before them: by category) */
+                for (int i = 0; i < sh[1]; i++) {
+                    uint8_t r;
+                    if (!st_get(&r, 1, n)) break;
+                    if (i < M2K_SOUNDS) { snd_root[i] = r & 127; nr = i + 1; }
+                }
+        }
+        for (int i = 0; i < M2K_SOUNDS; i++) {
             if (snd[i].name[0] && !snd_cat[i]) snd_cat[i] = (uint8_t)sound_guess(snd[i].machine, snd[i].kit, 127, 0);
+            if (i >= nr) snd_root[i] = (uint8_t)root_guess(snd_cat[i]);
+        }
     }
     /* today's demos, where the old ones still are (not with the cache: the factory would write into the working
      * image being read; the FM-1 takes new demos through the Patch Editor) */
@@ -806,6 +848,7 @@ int m2k_store_unpack(int len)
     cur_pat = o[6] < M2K_PATTERNS ? o[6] : 0;
     sq.queued = (uint8_t)cur_pat;
     work_reset_current();
+    keys_home();
     return 1;
 }
 
