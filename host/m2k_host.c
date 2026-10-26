@@ -1921,6 +1921,15 @@ static int selftest(void)
               "MIDI: the clock in, a step every sixth pulse, its tempo the sequencer's");
         m2k_midi(0xFC, 0, 0);
         CHECK(!sq.playing, "MIDI: stop from the clock in");
+        /* SYNC IN off: the transport still drives it, continue too (a DAW starting mid-song sends continue) */
+        m2k_setting(S_SYNI, 0);
+        m2k_midi(0xFB, 0, 0);
+        int cont_on = sq.playing;
+        m2k_midi(0xFC, 0, 0);
+        m2k_midi(0xFA, 0, 0);
+        int start_on = sq.playing;
+        m2k_midi(0xFC, 0, 0);
+        CHECK(cont_on && start_on && !sq.playing, "MIDI: SYNC IN off, start and continue play, stop stops");
         /* the channel: track 1 on channel 3, so 0x92 plays track 1 and 0x90 the track in view */
         m2k_setting(S_MCH, 2 * 8 + 4);
         ui.trk = 4; sq.ktrk = 4;

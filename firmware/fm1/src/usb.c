@@ -727,24 +727,55 @@ static void sysex_byte(uint8_t b)
     }
 }
 
+#ifndef FELUCCA_LOADER
+/* the clock and transport (F8 FA FB FC) into the MIDI ring, however a packet carries them (MONO2K; the
+ * update loader is built as Felucca's, untouched) */
+static void midi_in_rt(uint32_t b)
+{
+    if ((b == 0xF8u || b == 0xFAu || b == 0xFBu || b == 0xFCu) && mi_w - mi_r < MQ) {
+        midi_in_q[mi_w % MQ] = 0xFu | b << 8;
+        RING_PUBLISH();
+        mi_w++;
+    }
+}
+#endif
+
 /* one USB-MIDI event packet: SysEx bytes to sysex_byte, channel voice messages and the clock /
  * transport realtime ones to the MIDI ring; a malformed packet (status not matching its CIN, a data
- * byte with bit 7) is ignored (after Felucca 1.0) */
+ * byte with bit 7) is ignored (after Felucca 1.0). MONO2K: realtime is taken from a single-byte packet of
+ * either CIN (0xF as the spec has it, 0x5 as some hosts send it) and from inside SysEx packets, where MIDI
+ * lets it interleave (it was dropped: a sequencer's clock and start never arrived); the song position (F2,
+ * CIN 3) reaches the core, which sets where a continue starts */
 static void midi_in_event(uint32_t pkt)
 {
     uint32_t cin = pkt & 15u, st = (pkt >> 8) & 0xFFu;
+#ifdef FELUCCA_LOADER
     if (cin >= 4u && cin <= 7u) {                      /* SysEx */
         uint32_t k, nb = cin == 4u || cin == 7u ? 3u : cin == 6u ? 2u : 1u;
         for (k = 0; k < nb; k++)
             sysex_byte((uint8_t)(pkt >> (8u * (k + 1u))));
         return;
     }
+#else
+    if (cin >= 4u && cin <= 7u) {                      /* SysEx (CIN 5: also a lone realtime byte) */
+        uint32_t k, nb = cin == 4u || cin == 7u ? 3u : cin == 6u ? 2u : 1u;
+        for (k = 0; k < nb; k++) {
+            uint32_t b = (pkt >> (8u * (k + 1u))) & 0xFFu;
+            if (b >= 0xF8u)
+                midi_in_rt(b);                         /* realtime may occur anywhere in SysEx */
+            else
+                sysex_byte((uint8_t)b);
+        }
+        return;
+    }
+#endif
     if (st >= 0x80u && st < 0xF8u) {                   /* channel / system common also ends a SysEx */
         usb.sx_on = 0;
 #if FELUCCA_OTA
         sx_collect = 0;
 #endif
     }
+#ifdef FELUCCA_LOADER
     if (cin == 0xFu && (st == 0xF8u || st == 0xFAu || st == 0xFBu || st == 0xFCu)) {   /* clock, transport */
         if (mi_w - mi_r < MQ) {
             midi_in_q[mi_w % MQ] = 0xFu | st << 8;
@@ -753,6 +784,20 @@ static void midi_in_event(uint32_t pkt)
         }
         return;
     }
+#else
+    if (cin == 0xFu && st >= 0xF8u) {                  /* clock, transport */
+        midi_in_rt(st);
+        return;
+    }
+    if (cin == 3u && st == 0xF2u && !((pkt >> 16) & 0x80u) && !(pkt & 0x80000000u)) {   /* song position */
+        if (mi_w - mi_r < MQ) {
+            midi_in_q[mi_w % MQ] = pkt;
+            RING_PUBLISH();
+            mi_w++;
+        }
+        return;
+    }
+#endif
     if (cin >= 8u && cin <= 0xEu && (st >> 4) == cin && !((pkt >> 16) & 0x80u) &&
         (cin == 0xCu || cin == 0xDu || !(pkt & 0x80000000u))) {
         if (mi_w - mi_r < MQ) {

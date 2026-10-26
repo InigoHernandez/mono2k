@@ -630,8 +630,9 @@ void m2k_midi(int status, int d1, int d2)
     int ch = status & 15, cmd = status & 0xF0;
     int r = (ch - midi_ch() + 16) & 15, t = r < M2K_TRACKS ? r : sq.ktrk;
     if (status >= 0xF0) {
-        if (!set_on(S_SYNI)) {         /* no clock in: start and stop still drive the sequencer */
-            if (status == 0xFA) seq_play(1);
+        if (!set_on(S_SYNI)) {         /* no clock in: start, continue and stop still drive the sequencer (a DAW
+                                        * starting mid-song sends continue; without the clock it plays from its start) */
+            if (status == 0xFA || status == 0xFB) seq_play(1);
             else if (status == 0xFC) seq_play(0);
             return;
         }
