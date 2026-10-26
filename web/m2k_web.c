@@ -16,7 +16,7 @@ EXPORT void w_init(uint32_t seed) { m2k_init(seed); }
 EXPORT void w_key(int k, int d) { m2k_key(k, d); }
 EXPORT void w_button(int b, int d) { m2k_button(b, d); }
 EXPORT void w_encoder(int e, int d) { m2k_encoder(e, d); }
-EXPORT void w_midi(int s, int a, int b) { m2k_midi(s, a, b); }
+EXPORT void w_midi(int s, int a, int b) { m2k_midi(s, a, b); }   /* Web MIDI in: the FM-1's USB */
 EXPORT uint8_t *w_store_buf(void) { int m; return m2k_store_buf(&m); }
 EXPORT int w_store_max(void) { int m; m2k_store_buf(&m); return m; }
 EXPORT int w_store_pack(void) { return m2k_store_pack(); }
@@ -124,7 +124,7 @@ EXPORT const uint8_t *w_info(void)
     w_inf[16] = ui.nheld;
     for (int t = 0; t < M2K_TRACKS; t++) w_inf[17 + t] = pat[cur_pat].machine[t];
     w_inf[23] = (uint8_t)m2k_project_current();
-    w_inf[24] = store_.set[S_SYNI] >= 64;    /* GLO > MIDI */
+    w_inf[24] = (clk_from() & 1) != 0;       /* GLO > MIDI: the clock taken from USB, where the page's MIDI comes in */
     w_inf[25] = store_.set[S_SYNO] >= 64;
     w_inf[26] = store_.set[S_NOTO] >= 64;
     return w_inf;

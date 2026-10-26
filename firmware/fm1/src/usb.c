@@ -159,6 +159,10 @@ static volatile uint32_t so_w, so_r;
 #define MQ 256u                 /* a knob turned on a sequencer is a stream of CCs under its notes and clock: room for a slow loop */
 static uint32_t midi_in_q[MQ], midi_out_q[MQ];
 static volatile uint32_t mi_w, mi_r, mo_w, mo_r;
+#ifndef FELUCCA_LOADER
+#define MIDI_TRS 1u             /* the cable the TRS jack's messages carry in midi_in_q (midi_uart.c), USB's 0: MONO2K
+                                 * takes the clock and the notes from either or both (midi_get) */
+#endif
 static void midi_out_event(uint32_t pkt)            /* from the audio ISR */
 {
     if (usb.config && mo_w - mo_r < MQ) {
@@ -757,6 +761,7 @@ static void midi_in_event(uint32_t pkt)
         return;
     }
 #else
+    pkt &= ~0xF0u;                                     /* cable 0, whatever the host sent: the TRS jack's are MIDI_TRS */
     if (cin >= 4u && cin <= 7u) {                      /* SysEx (CIN 5: also a lone realtime byte) */
         uint32_t k, nb = cin == 4u || cin == 7u ? 3u : cin == 6u ? 2u : 1u;
         for (k = 0; k < nb; k++) {

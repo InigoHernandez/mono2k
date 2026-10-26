@@ -52,10 +52,20 @@ static struct {
     uint8_t gend[M2K_TRACKS];          /* a track's gate ended in this block (marked on its core) */
     mxq_t q[64];
     uint8_t qr, qw;
+    uint32_t in_at[2];                 /* the last message in from USB, from TRS (GLO > IN shows them), */
+    uint8_t in_seen;                   /* once one has come: bit 0 USB, bit 1 TRS */
 } mx;
 
 static inline int set_on(int i) { return store_.set[i] >= 64; }
 static inline int midi_ch(void) { return (store_.set[S_MCH] * 16) >> 7; }
+
+/* where the clock in and the notes are taken from: bit 0 USB, bit 1 TRS. SYIN's four (OFF USB TRS BOTH) are that mask;
+ * its knob writes them at 16 48 80 112 and they read with edges at 40 64 88, so the old switch's OFF (0, 32) stays
+ * OFF and its ON (96, 127) takes both. NOTE IN's (BOTH USB TRS OFF) read evenly, so an old store's 0 takes both */
+static inline int syin_choice(int v) { return v < 40 ? 0 : v < 64 ? 1 : v < 88 ? 2 : 3; }
+static inline int clk_from(void) { return syin_choice(store_.set[S_SYNI]); }
+static const uint8_t NTIN_FROM[4] = {3, 1, 2, 0};
+static inline int notes_from(void) { return NTIN_FROM[(store_.set[S_NTIN] * 4) >> 7]; }
 
 static void mx_out(int n, int a, int b, int c)
 {
@@ -635,17 +645,34 @@ static int mm_cc_param(int cc)
     return -1;
 }
 
-void m2k_midi(int status, int d1, int d2)
+/* GLO > IN's THRU: what the TRS jack brings, out over USB with the core's own messages, stamped alike (the FM-1 a MIDI
+ * interface too); its clock and transport not while SYNC OUT sends MONO2K's, which passes this one on when it follows
+ * it: one clock on the USB */
+static void midi_thru(int status, int d1, int d2)
 {
+    if (status >= 0xF8 && set_on(S_SYNO)) return;
+    int n = status >= 0xF8 ? 1 : (status & 0xE0) == 0xC0 ? 2 : 3;   /* realtime a byte, Cx Dx two, the rest three */
+    mx_out(n, status, n > 1 ? d1 : 0, n > 2 ? d2 : 0);
+}
+
+void m2k_midi_from(int src, int status, int d1, int d2)
+{
+    const int from = src == M2K_TRS ? 2 : 1;
+    mx.in_at[from >> 1] = mx.now;
+    mx.in_seen |= (uint8_t)from;
+    if (from == 2 && set_on(S_THRU)) midi_thru(status, d1, d2);
     int ch = status & 15, cmd = status & 0xF0;
     int r = (ch - midi_ch() + 16) & 15, t = r < M2K_TRACKS ? r : sq.ktrk;
     if (status >= 0xF0) {
-        if (!set_on(S_SYNI)) {         /* no clock in: start, continue and stop still drive the sequencer (a DAW
-                                        * starting mid-song sends continue; without the clock it plays from its start) */
+        if (!clk_from()) {             /* no clock in: start, continue and stop still drive the sequencer, from where
+                                        * the notes come (a DAW starting mid-song sends continue; without the clock it
+                                        * plays from its start) */
+            if (!(notes_from() & from)) return;
             if (status == 0xFA || status == 0xFB) seq_play(1);
             else if (status == 0xFC) seq_play(0);
             return;
         }
+        if (!(clk_from() & from)) return;    /* the clock and transport only from SYIN's: another's would fight it */
         if (status == 0xF8) clock_pulse();
         else if (status == 0xFA) clock_start(0);
         else if (status == 0xFB) clock_start(1);
@@ -660,6 +687,7 @@ void m2k_midi(int status, int d1, int d2)
         }
         return;
     }
+    if (!(notes_from() & from)) return;   /* notes, CCs and mutes only from NOTE IN's */
     if (cmd == 0xB0) {
         if (d1 == 3) {
             PAT(cur_pat)->mute = (uint8_t)((PAT(cur_pat)->mute & ~(1u << t)) | (d2 ? 1u << t : 0));
@@ -685,6 +713,8 @@ void m2k_midi(int status, int d1, int d2)
         if (trk[t].note == d1) voice_off(t);
     }
 }
+
+void m2k_midi(int status, int d1, int d2) { m2k_midi_from(M2K_USB, status, d1, d2); }
 
 /* ------------------------------------------------------------------------------------------ the factory */
 

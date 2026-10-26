@@ -14,6 +14,7 @@ enum {
     K_NUM, K_BI, K_TIME, K_HOLD, K_DECT, K_ATIM, K_AHLD, K_ADEC, K_AREL, K_MODT, K_MHZ, K_HZ, K_PAN, K_DTIM, K_BITS, K_SEMI, K_RATIO, K_SEMI24, K_INT25, K_SIDW, K_SIDM,
     K_ALGO, K_VOIC, K_WAVE, K_VOF1, K_VOF2, K_CONS, K_TRK, K_DEST, K_LWAV, K_LTRG, K_MULT, K_AMOD, K_ASPD, K_ARNG, K_GATE,
     K_BPM, K_SWNG, K_LEN, K_GLCH, K_GSIZ, K_FINE, K_TUN2, K_SCRN, K_PROJ, K_LOAD, K_MCH, K_SSEL, K_SLOAD, K_SSAVE, K_SCAT, K_WIPE, K_DEMO, K_SPD,
+    K_SYIN, K_NTIN, K_THRU,                                              /* GLO > MIDI's and IN's: where MIDI comes from */
     K_FOCT, K_FWID, K_FATK, K_FDEC, K_EQHZ, K_DBHZ, K_SRR, K_PCH, K_WBNK, K_FR24, K_FR64, K_FRSQ, K_ONOFF, K_MSRC, K_MFRQ,
     K_DWV4, K_DWV5, K_DRA, K_DRD, K_DOPN, K_DMUL, K_DNHZ, K_DCNT          /* the DRM- drums' */
 };
@@ -47,12 +48,12 @@ static const pi_t PI_GLOB[G_COUNT] = {
     {"SPD", "T5 SPEED", K_SPD}, {"SPD", "T6 SPEED", K_SPD},
 };
 
-static const pi_t PI_SET[13] = {
+static const pi_t PI_SET[15] = {
     {"SCRN", "SCREEN", K_SCRN},
     {"PROJ", "PROJECT", K_PROJ},
     {"LOAD", "LOAD PROJECT", K_LOAD},
     {"CHAN", "MIDI CHANNEL", K_MCH},   /* GLO > MIDI */
-    {"SYIN", "SYNC IN", K_ONOFF},
+    {"SYIN", "SYNC IN", K_SYIN},
     {"SYOU", "SYNC OUT", K_ONOFF},
     {"NOTE", "NOTES OUT", K_ONOFF},
     {"SLOT", "SOUND SLOT", K_SSEL},    /* SYN > SND: the sound library */
@@ -61,6 +62,8 @@ static const pi_t PI_SET[13] = {
     {"CAT", "CATEGORY", K_SCAT},
     {"WIPE", "EVERY PATTERN INIT", K_WIPE},   /* GLO > SET */
     {"DEMO", "BANK A'S DEMOS BACK", K_DEMO},
+    {"NOTE", "NOTES IN", K_NTIN},      /* GLO > IN */
+    {"THRU", "MIDI THRU", K_THRU},
 };
 
 typedef struct {
@@ -167,7 +170,8 @@ static const pi_t PI_NONE = {"-", "-", K_NUM};     /* a knob a page leaves free 
 static const pi_t *pinfo(int t, int id)
 {
     if (id == 0xFF) return &PI_NONE;
-    if (id >= 0xC0) { int s = id & 0x3F; return &PI_SET[s == 16 ? 1 : s == 17 ? 2 : s >= 18 && s <= 23 ? 7 + s - 18 : s >= S_MCH && s <= S_NOTO ? 3 + s - S_MCH : 0]; }
+    if (id >= 0xC0) { int s = id & 0x3F; return &PI_SET[s == 16 ? 1 : s == 17 ? 2 : s >= 18 && s <= 23 ? 7 + s - 18 : s >= S_MCH && s <= S_NOTO ? 3 + s - S_MCH
+                                            : s == S_NTIN ? 13 : s == S_THRU ? 14 : 0]; }
     if (id >= 0x80) return &PI_GLOB[id & 0x7F];
     if (id < 8) return &MI[PAT(cur_pat)->machine[t]].syn[id];
     if (id < P_LFO) return &PI_COMMON[id - 8];
@@ -181,7 +185,7 @@ static int kind_choices(int k);
 static int choice_of(int kind, int v)
 {
     int n = kind_choices(kind);
-    return kind == K_FR24 ? fr24(v) : n ? (v * n) >> 7 : 0;
+    return kind == K_FR24 ? fr24(v) : kind == K_SYIN ? syin_choice(v) : n ? (v * n) >> 7 : 0;
 }
 
 static int kind_choices(int k)
@@ -190,8 +194,8 @@ static int kind_choices(int k)
     case K_RATIO: case K_WAVE: return 32;
     case K_FR24: return 24;
     case K_SIDW: return 5;
-    case K_ONOFF: case K_MSRC: return 2;
-    case K_SIDM: case K_ALGO: case K_ASPD: case K_ARNG: return 4;
+    case K_ONOFF: case K_MSRC: case K_THRU: return 2;
+    case K_SIDM: case K_ALGO: case K_ASPD: case K_ARNG: case K_SYIN: case K_NTIN: return 4;
     case K_SCRN: return 2;
     case K_MCH: return 16;
     case K_SSEL: return M2K_SOUNDS;
@@ -388,6 +392,14 @@ static void fmt(const pi_t *pi, int t, int v, char *out, const char **unit)
     case K_GSIZ: s_cpy(out, GSIZ_N[(v * 5) >> 7]); *unit = "NOTE"; break;
     case K_SCRN: s_cpy(out, c ? "DARK" : "LIGHT"); *unit = "DISPLAY"; break;
     case K_MCH: { char *e = s_cpy(out, "CH"); s_int(e, c + 1); *unit = "T1; T2 NEXT"; break; }
+    case K_SYIN: case K_NTIN: {        /* (BOTH: "USB+TRS" is wider than a knob) */
+        static const char *const N[4] = {"OFF", "USB", "TRS", "BOTH"};
+        int m = pi->kind == K_SYIN ? c : NTIN_FROM[c];   /* each as its sources (m2k_seq.c) */
+        s_cpy(out, N[m]);
+        *unit = m == 3 ? "USB + TRS" : "";
+        break;
+    }
+    case K_THRU: s_cpy(out, c ? "ON" : "OFF"); *unit = "TRS TO USB"; break;
     case K_SSEL: { int i = snd_sel_get(); out[0] = 'S'; s_num3(out + 1, i + 1);
                    *unit = snd[i].name[0] ? snd[i].name : "INIT"; break; }
     case K_SLOAD: s_cpy(out, "TURN"); *unit = "TO LOAD"; break;
@@ -406,7 +418,7 @@ static void fmt(const pi_t *pi, int t, int v, char *out, const char **unit)
 /* -------------------------------------------------------------------------------------------- the pages */
 
 enum { PG_HOME, PG_SYN, PG_AMP, PG_FILT, PG_FX, PG_LFO, PG_ARP, PG_GLO, PG_COUNT };
-static const uint8_t NSUB[PG_COUNT] = {1, 3, 2, 2, 4, 6, 1, 5};   /* SYN: its two, then SND (BANK before it) */
+static const uint8_t NSUB[PG_COUNT] = {1, 3, 2, 2, 4, 6, 1, 6};   /* SYN: its two, then SND (BANK before it) */
 static int nsub(int page);                     /* SYN has a third page, the bank, where the machine plays waves */
 #define SETTING(i) (0xC0 | (i))
 #define GL(g) (0x80 | (g))
@@ -423,7 +435,8 @@ static int knob_param(int page, int sub, int k)
     case PG_FX: return sub < 3 ? P_EQF + sub * 4 + k : P_MODT + k;
     case PG_LFO: return P_LFO + (sub >> 1) * 8 + (sub & 1) * 4 + k;
     case PG_ARP: return P_AMOD + k;
-    case PG_GLO: return sub < 3 ? GL(sub * 4 + k) : sub == 4 ? SETTING(S_MCH + k)      /* PROJ and LOAD only with */
+    case PG_GLO: return sub == 5 ? (k == 0 ? SETTING(S_NTIN) : k == 1 ? SETTING(S_THRU) : NONE)   /* IN */
+                        : sub < 3 ? GL(sub * 4 + k) : sub == 4 ? SETTING(S_MCH + k)      /* PROJ and LOAD only with */
                         : k == 0 ? SETTING(S_SCREEN) : M2K_PROJECTS < 2 ? (k == 1 ? SETTING(22) : k == 2 ? SETTING(23) : NONE)
                         : k == 1 ? SETTING(16) : k == 2 ? SETTING(17) : k == 3 ? SETTING(22) : NONE;   /* projects to choose */
     default: return NONE;
@@ -436,7 +449,7 @@ static void page_label(int page, int sub, char *o)
     switch (page) {
     case PG_FX: s_cpy(o, sub == 0 ? "FX" : sub == 1 ? "DELAY" : sub == 2 ? "DSTR" : "MOD"); break;
     case PG_LFO: { char *e = s_cpy(o, "LFO"); e = s_int(e, (sub >> 1) + 1); s_cpy(e, (sub & 1) ? "B" : "A"); break; }
-    case PG_GLO: s_cpy(o, sub == 0 ? "TIME" : sub == 1 ? "GLITCH" : sub == 2 ? "VERB" : sub == 3 ? "SET" : "MIDI"); break;
+    case PG_GLO: s_cpy(o, sub == 0 ? "TIME" : sub == 1 ? "GLITCH" : sub == 2 ? "VERB" : sub == 3 ? "SET" : sub == 4 ? "MIDI" : "IN"); break;
     case PG_SYN: s_cpy(o, sub >= 2 && sub == nsub(PG_SYN) - 1 ? "SND" : sub == 2 ? "BANK" : "SYN"); break;
     default: s_cpy(o, N[page]); break;
     }
@@ -1863,7 +1876,7 @@ static void button_event(int b, int down)
     case B_ARP: go(PG_ARP); break;
 
     case B_PLAY:
-        if (!sq.playing && sq.rec && !ui.grid && !sq.ready && !set_on(S_SYNI)) {   /* Ready (Demake's): the first */
+        if (!sq.playing && sq.rec && !ui.grid && !sq.ready && !clk_from()) {   /* Ready (Demake's): the first */
             sq.ready = 1;                                                        /* note starts it, recorded */
             toast("READY", "THE FIRST NOTE STARTS IT");
         } else seq_play(!sq.playing);  /* (Ready: PLAY again starts it now) */
@@ -2676,7 +2689,7 @@ static void picture(void)
                 text_c(&F_S, x + w / 2, Y + 13, o, i != ui.trk, 0);
             }
             int beat = sq.playing && (sq.step & 3) == 1;
-            const int on_in = store_.set[S_SYNI] >= 64, on_out = store_.set[S_SYNO] >= 64;
+            const int on_in = clk_from() != 0, on_out = store_.set[S_SYNO] >= 64;
             tag(X + 2, Y + 34, "CLOCK IN", on_in);
             tag(X + 2, Y + 50, "CLOCK OUT", on_out);
             tag(X + 2, Y + 66, "NOTES OUT", store_.set[S_NOTO] >= 64);
@@ -2685,6 +2698,16 @@ static void picture(void)
             char o[12];
             s_int(o, (int)seq_bpm());
             text_c(&F_M, X + W / 2, Y + 84, o, 1, 0);
+        } else if (ui.sub == 5) {      /* IN: what each port feeds, its square lit while it brings something */
+            const int clk = clk_from(), nts = notes_from();
+            for (int s = 0; s < 2; s++) {
+                int x = X + 2 + s * (W / 2), b = 1 << s, w = text(&F_S, x + 3, Y + 12, s ? "TRS" : "USB", 1, 1);
+                if ((mx.in_seen & b) && mx.now - mx.in_at[s] < M2K_SR / 8u) rect(x + w + 6, Y + 14, 7, 7, 1);
+                else frame(x + w + 6, Y + 14, 7, 7, 1);
+                tag(x, Y + 32, "CLOCK", clk & b);
+                tag(x, Y + 52, "NOTES", nts & b);
+                if (s) tag(x, Y + 72, "THRU", set_on(S_THRU));
+            }
         } else {                       /* four beats */
             int beat = sq.playing ? (sq.step ? sq.step - 1 : 0) / 4 % 4 : -1, bw = (W - 8) / 4;
             for (int i = 0; i < 4; i++) {
@@ -2786,7 +2809,7 @@ static void knobs(void)
         int bx = x + 4, by = KNOB_Y + 35, bw = 52, bh = 3;
         int n = kind_choices(pi->kind);
         if (n && n <= 8) {
-            int c = (v * n) >> 7, sw = (bw - (n - 1) * 2) / n;
+            int c = choice_of(pi->kind, v), sw = (bw - (n - 1) * 2) / n;
             for (int i = 0; i < n; i++) {
                 if (i == c) rect(bx + i * (sw + 2), by, sw, bh, 1);
                 else hline(bx + i * (sw + 2), by + bh - 1, sw, 1);

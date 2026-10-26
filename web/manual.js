@@ -182,7 +182,7 @@
       ...[0, 1, 2, 3].map((sub) => [cstr(x, x.w_page_label(P.FX, sub)), "FX", P.FX, [sub]]),
       ...[0, 1, 2].map((l) => [`LFO ${l + 1}`, "LFO", P.LFO, [2 * l, 2 * l + 1]]),
       ["ARP", "ARP", P.ARP, [0]],
-      ...[0, 1, 2, 3].map((sub) => [cstr(x, x.w_page_label(P.GLO, sub)), "GLO", P.GLO, [sub]]),
+      ...Array.from({ length: x.w_subs(P.GLO) }, (_, sub) => [cstr(x, x.w_page_label(P.GLO, sub)), "GLO", P.GLO, [sub]]),   /* TIME .. MIDI, IN */
     ];
     const pages = $("[data-pages]");
     if (pages) pages.innerHTML = `<table><thead><tr><th>Page</th><th>Button</th><th>Knobs</th></tr></thead><tbody>${BLOCKS.map(([t, b, page, subs]) =>

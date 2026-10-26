@@ -141,7 +141,7 @@
     </tbody>
   </table>
   <h2>MIDI and saving</h2>
-  <p>A MIDI keyboard or controller plugged into the computer plays the emulator as it would the FM-1 (see <a href="#midi">MIDI</a>). Under the panel, the project's tools export a project as a <code>.m2kp</code> file and import one into any of the four project slots.</p>
+  <p>A MIDI keyboard or controller plugged into the computer plays the emulator as it would the FM-1 over USB (see <a href="#midi">MIDI</a>). Under the panel, the project's tools export a project as a <code>.m2kp</code> file and import one into any of the four project slots.</p>
 </article>
 
 <article id="commands" data-group="Getting started">
@@ -407,7 +407,7 @@
     <thead><tr><th>Knob</th><th>Turned</th><th>A step held in GRID</th></tr></thead>
     <tbody>
       <tr><td>SELECT</td><td>The track, 1–6.</td><td>The step's note.</td></tr>
-      <tr><td>ALGORITHM</td><td>On EDIT (SYN), the track's machine; on the other pages, their pages (LFO 1A to 3B, FX, GLO's TIME to MIDI).</td><td>Accent and slide.</td></tr>
+      <tr><td>ALGORITHM</td><td>On EDIT (SYN), the track's machine; on the other pages, their pages (LFO 1A to 3B, FX, GLO's TIME to IN).</td><td>Accent and slide.</td></tr>
       <tr><td>PRESETS</td><td>The pattern (queued to the end of the bar while playing).</td><td>The step's condition.</td></tr>
       <tr><td>KNOB 1–4</td><td>The four parameters on the page in view.</td><td>A lock on the step.</td></tr>
       <tr><td>MASTER</td><td>The volume.</td><td>The step's trig type.</td></tr>
@@ -470,7 +470,7 @@
   <p>Every machine starts as a sound for what it is for, not a bare oscillator: GND-SIN a round sine bass, SWAV-SAW a wide supersaw pad, SWAV-PUL a hollow reed lead, SWAV-ENS a minor-7 pad on one key, FM+STAT an e-piano, FM+PAR a gong-like bell, FM+DYN an FM bass, VOX-6 an "aah", DIGI-WAV a pluck that scans as it falls, SID-6581 a sync lead, DRM-KICK a kick, DRM-SNAR a snare, DRM-HATS a closed hat, DRM-CYMB a crash, GND-PERC a metal hit, GND-NOIS a wind you play, and the FX the track before made wide (FX-CHORUS), punched and held (FX-DYNAMIX) or turned to metal (FX-RING). Each is levelled to sit with the others. That INIT is what ALGORITHM gives a track at its INIT, what an INIT slot of the library, EDIT + SEQ and a held clear start a track with, and where OCT− and a knob take that knob back. A new pattern is INIT too: a sine bass, a kick, a snare, a hat, the FM keys and the ENS pad.</p>
   <h2>Notes and octaves</h2>
   <p>Each track plays at home. A machine chosen or INITed puts the track's new trigs, its pad and its keys on the note its INIT was made at: DRM-KICK at C2, GND-SIN, FM+DYN and the FX at C3, the rest at C4. A pattern opened puts each track on its root, the note its trigs sit on most, or its machine's home when it has none. The keyboard's octave is each track's own, set from its home note, which sits near the bottom of the keys (a C on their first C): a kick at C2 plays as a kick, not as a high zap. OCT− and OCT+ change the track in view's, and their lights show it.</p>
-  <p>On every other page, ALGORITHM turns through the page's own pages instead of tapping its button: LFO 1A to 3B, FX's four, AMP's and FILT's two, GLO's TIME, GLITCH, VERB, SET and MIDI. It stops at the first and the last.</p>
+  <p>On every other page, ALGORITHM turns through the page's own pages instead of tapping its button: LFO 1A to 3B, FX's four, AMP's and FILT's two, GLO's TIME, GLITCH, VERB, SET, MIDI and IN. It stops at the first and the last.</p>
   <h2>Level, pitch and mute</h2>
   <p>On HOME, KNOB 1 and 2 are the track's level and pitch. In GRID the MUTE key mutes the track in view; GLO held with one of the six lower keys mutes that track from anywhere.</p>
   <h2>FX machines</h2>
@@ -734,8 +734,14 @@
   </table>
   <p>These are the Monomachine's numbers, so a controller set up for one plays the other. MONO2K's own parameters (the destroy effects, MOD, the arpeggiator, pitch) have no controller: set them on the panel or in the <a href="editor.html">Patch Editor</a>.</p>
   <h2>Clock and sync</h2>
-  <p>GLO &gt; MIDI. <b>SYIN</b> (sync in) follows a MIDI clock: its tempo, start, continue, stop and the song position. <b>SYOU</b> (sync out) sends MONO2K's clock, 24 pulses a beat, with start and stop. <b>NOTE</b> (notes out) sends each track's trigs on its channel. With SYIN off, start and continue still play and stop still stops, at MONO2K's own tempo.</p>
-  <p>The clock comes in over USB, from a computer, phone or iPad, or on the TRS jack from any MIDI device. The FM-1's USB port is a device, like a keyboard's, and its TRS jack is an input only, so two FM-1s cabled to each other don't hear each other. Put a host between them: a computer or an iPad with a DAW or a MIDI router, or a USB MIDI host box. The one that leads must send a clock: MONO2K does (SYOU on); set the other to follow its USB clock.</p>
+  <p>GLO &gt; MIDI. <b>SYIN</b> (sync in) follows a MIDI clock: its tempo, start, continue, stop and the song position, from the input you pick: OFF, USB, TRS or BOTH; the other input's clock and transport are ignored. <b>SYOU</b> (sync out) sends MONO2K's clock, 24 pulses a beat, with start and stop; following a clock, it passes that one on. <b>NOTE</b> (notes out) sends each track's trigs on its channel. With SYIN off, start and continue still play and stop still stops, at MONO2K's own tempo, from where the notes come (NOTE on GLO &gt; IN).</p>
+  <p>The clock comes in over USB, from a computer, phone or iPad, or on the TRS jack from any MIDI device. The FM-1's USB port is a device, like a keyboard's, and its TRS jack is an input only, so two FM-1s cabled to each other don't hear each other. Put a host between them: a computer or an iPad with a DAW or a MIDI router, or a USB MIDI host box. The one that leads must send a clock: MONO2K does (SYOU on); set the other's SYIN to USB.</p>
+  <h2>USB and TRS</h2>
+  <p>GLO &gt; IN keeps the FM-1's two inputs apart. <b>NOTE</b> (notes in) picks where notes, controllers and mutes are taken from: BOTH, USB, TRS or OFF. <b>THRU</b> sends what comes in on the TRS jack out over USB as it came (notes, controllers, programs, the clock, start, stop and the song position), so the FM-1 is also a MIDI interface for the device on its jack; what comes in over USB never goes back. With SYOU on, the jack's clock, start and stop are not passed (MONO2K sends its own, or passes on the one it follows), so the computer hears one clock.</p>
+  <p>A DAW over USB and a keyboard on the jack, for instance: SYIN USB follows the DAW, NOTE TRS plays MONO2K from the keyboard alone, THRU on records the keyboard in the DAW too. On the page each input's square lights as MIDI comes in, and what it feeds is filled. In the emulator, the computer's MIDI comes in as USB.</p>
+  <div class="figs">
+    <figure class="fig"><canvas data-scr="32_glo_in"></canvas><figcaption>GLO, IN: USB feeds the clock and the notes, the TRS jack the notes and the thru; its square lit as a pulse comes in, not followed.</figcaption></figure>
+  </div>
 </article>
 
 <!-- ============================================================================================= reference -->
@@ -769,7 +775,7 @@
 </footer>
 <script src="site.js?v=3"></script>
 <script src="panel.js?v=2"></script>
-<script src="changelog.js?v=28"></script>
-<script src="manual.js?v=30"></script>
+<script src="changelog.js?v=29"></script>
+<script src="manual.js?v=31"></script>
 </body>
 </html>

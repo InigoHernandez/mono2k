@@ -37,7 +37,9 @@ the sizes: the image within the app slot (581 KB), `.data + .bss` within 96 KiB,
   pass while the audio renders (a whole screen is 77 ms of SPI at 12 MHz).
 - The panel: the platform's buttons, encoders and 27 keys mapped onto the core's (`m2k.h`); the LEDs on from a
   quarter of the core's brightness (the FM-1's are on or off). MASTER is the platform's output level.
-- MIDI in: USB-MIDI and the TRS jack, into `m2k_midi`.
+- MIDI in: USB-MIDI and the TRS jack, into `m2k_midi_from`: one ring, the jack's messages on cable 1 (`MIDI_TRS`,
+  usb.c; USB's forced to cable 0), so GLO > MIDI's SYIN and GLO > IN's NOTE take each from either or both, and THRU
+  sends the jack's out over USB.
 - The store: a stream (`m2k_fw_store_put` / `_get`) into the last 128 KiB of the data area, `0xC0000`..`0xE0000`,
   a 4 KiB sector at a time, its header (magic, length, CRC-32) last, so a save cut short reads as none. SAVE marks it;
   it is written when the sequencer stands (a sector's erase stops the sound ~50 ms). That region is part of the

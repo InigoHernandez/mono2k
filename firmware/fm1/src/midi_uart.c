@@ -3,7 +3,7 @@
 /* MIDI IN on the TRS jack: PH8 -> input channel 1 -> UART1 RX, 31250 baud,
  * RX DMA into a 2048-byte ring, polled from the TIMER5 ISR (no UART IRQ).
  * Channel messages go directly into midi_in_q next to USB-MIDI packets
- * (cable 0, CIN = status >> 4). */
+ * (cable MIDI_TRS, so MONO2K tells them from USB's; CIN = status >> 4). */
 #pragma once
 #include <stdint.h>
 #include "fm1_uart.h"
@@ -31,7 +31,7 @@ static void um_byte(uint32_t b)
     if (b >= 0xF8u) {
         if (b == 0xF8u || b == 0xFAu || b == 0xFBu || b == 0xFCu) {
             if (mi_w - mi_r < MQ) {
-                midi_in_q[mi_w % MQ] = 0xFu | b << 8;
+                midi_in_q[mi_w % MQ] = MIDI_TRS << 4 | 0xFu | b << 8;
                 RING_PUBLISH();
                 mi_w++;
                 um.msgs++;
@@ -58,7 +58,7 @@ static void um_byte(uint32_t b)
     }
     {
         uint32_t d1 = um.need == 2u ? um.d0 : b, d2 = um.need == 2u ? b : 0u;
-        uint32_t pkt = (um.st >> 4) | (uint32_t)um.st << 8 | d1 << 16 | d2 << 24;
+        uint32_t pkt = MIDI_TRS << 4 | (um.st >> 4) | (uint32_t)um.st << 8 | d1 << 16 | d2 << 24;
         um.got = 0;
         if (um.st == 0xF2u)
             um.st = 0;                             /* (system common has no running status) */

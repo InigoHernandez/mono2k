@@ -432,8 +432,9 @@
   const send = (m) => { if (node) node.port.postMessage(m); };
 
   // ---------------------------------------------------------------------------------------------------- MIDI
-  /* Web MIDI: a device in (notes, controls, the clock and transport, into the core as the FM-1's USB and TRS take
-   * them) and one out (what the core sends: GLO > MIDI's clock and notes), stamped ahead by the sound's latency */
+  /* Web MIDI: a device in (notes, controls, the clock and transport, into the core as the FM-1's USB takes them: GLO >
+   * MIDI's SYIN and IN's NOTE pick USB or TRS there) and one out (what the core sends: GLO > MIDI's clock and notes),
+   * stamped ahead by the sound's latency */
   const S_SYNI = 2, S_SYNO = 3, S_NOTO = 4, MIDI_KEY = "mono2k.midi";
   let midiAcc = null, midiIn = null, midiOut = null;
   const midiPrefs = () => { try { return JSON.parse(localStorage.getItem(MIDI_KEY) || "{}"); } catch (e) { return {}; } };
