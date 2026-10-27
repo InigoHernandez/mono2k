@@ -799,6 +799,10 @@ def bayer(n):
     return r
 B = bayer(8)
 out.append("static const uint8_t T_BAYER[8][8] = {%s};\n" % ", ".join("{" + ", ".join(map(str, row)) + "}" for row in B))
+# a level's (0..64) eight rows of the Bayer matrix as screen bytes, MSB first: set where T_BAYER[y][x] < level, so
+# the splash lights its fills and dissolves a byte at a time (a level's rows together: a fill walks down them)
+BM = [[sum(0x80 >> x for x in range(8) if B[y][x] < l) for y in range(8)] for l in range(65)]
+out.append("static const uint8_t T_BMASK[65][8] = {%s};\n" % ", ".join("{" + ", ".join(map(str, row)) + "}" for row in BM))
 
 os.makedirs(os.path.dirname(OUT), exist_ok=True)
 with open(OUT, "w") as f:

@@ -46,6 +46,7 @@ window.M2K_SCREENS = (() => {
     play(script, seed) {
       const x = this.x;
       x.w_init(seed || 4242);
+      if (x.w_skip_splash) x.w_skip_splash();     /* the power-on splash is the emulator's, not a scripted screen's */
       x.w_setting(0, pageDark() ? 0 : 127);
       this.now = 1; this.acc = 0;
       x.w_frame(1);

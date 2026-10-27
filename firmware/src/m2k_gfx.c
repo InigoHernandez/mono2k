@@ -54,22 +54,55 @@ static inline int px_get(const uint8_t *buf, int x, int y)
 static void clip(int x, int y, int w, int h) { clip_x0 = (int16_t)x; clip_y0 = (int16_t)y; clip_x1 = (int16_t)(x + w); clip_y1 = (int16_t)(y + h); }
 static void noclip(void) { clip(0, 0, M2K_W, M2K_H); }
 
-/* the text audit (a host build, M2K_TEXT_AUDIT): every text's ink as drawn, so a test can find two that touch or one
- * cut by the screen's edge. A fill of paper (a window, a toast's line) or a broad one of ink hides what it covers */
+/* the text audit (a host build, M2K_TEXT_AUDIT): every text's ink as drawn, so a test can find two that touch, one cut
+ * by the screen's edge or a clip, one past its cell or its window, one on a rule. A fill of paper (a window, a toast's
+ * line) or a broad one of ink hides the texts and the rules it covers. Without the audit the cells and rules are drawn
+ * and nothing is kept */
 #ifdef M2K_TEXT_AUDIT
 typedef struct { int16_t x0, y0, x1, y1; uint8_t cut; char s[14]; } ta_t;
 static ta_t ta[512];
 static int ta_n;
-static struct { int16_t x0, y0, x1, y1; } ta_win[16];   /* the windows (paper fills) drawn so far this frame */
-static int ta_nwin;
+/* the boxes a text must keep to, the last drawn on top: a window (a paper fill: a text begun in it ends 2 px inside its
+ * frame) or a cell (a knob's, the stage's two columns, the header's and the footer's slots: a text whose ink begins
+ * anywhere in the cell's box lies wholly in its content, 3 px clear of the rules) */
+typedef struct { int16_t x0, y0, x1, y1, cx0, cy0, cx1, cy1; uint8_t win; } ta_box_t;
+static ta_box_t ta_box[32];
+static int ta_nbox;
+/* the rules (the bands' and the cells'): no text's ink within 2 px of one */
+typedef struct { int16_t x0, y0, x1, y1; } ta_rule_t;
+static ta_rule_t ta_rule[48];
+static int ta_nrule;
+static void ta_rule_add(int x0, int y0, int x1, int y1)
+{
+    if (ta_nrule < 48 && x0 <= x1 && y0 <= y1) ta_rule[ta_nrule++] = (ta_rule_t){(int16_t)x0, (int16_t)y0, (int16_t)x1, (int16_t)y1};
+}
 static void ta_cover(int x, int y, int w, int h)
 {
-    if (ta_nwin < 16 && w * h >= 2000) { ta_win[ta_nwin].x0 = (int16_t)x; ta_win[ta_nwin].y0 = (int16_t)y; ta_win[ta_nwin].x1 = (int16_t)(x + w - 1); ta_win[ta_nwin].y1 = (int16_t)(y + h - 1); ta_nwin++; }
+    if (ta_nbox < 32 && w * h >= 2000)
+        ta_box[ta_nbox++] = (ta_box_t){(int16_t)x, (int16_t)y, (int16_t)(x + w - 1), (int16_t)(y + h - 1), 0, 0, 0, 0, 1};
     int j = 0;
     for (int i = 0; i < ta_n; i++)
         if (!(ta[i].x0 < x + w && x <= ta[i].x1 && ta[i].y0 < y + h && y <= ta[i].y1)) ta[j++] = ta[i];
     ta_n = j;
+    /* a rule under the fill is hidden there: what is left of it each side stays */
+    for (int i = ta_nrule - 1; i >= 0; i--) {
+        ta_rule_t r = ta_rule[i];
+        if (!(r.x0 < x + w && x <= r.x1 && r.y0 < y + h && y <= r.y1)) continue;
+        ta_rule[i] = ta_rule[--ta_nrule];
+        if (r.y0 == r.y1) { ta_rule_add(r.x0, r.y0, x - 1, r.y1); ta_rule_add(x + w, r.y0, r.x1, r.y1); }
+        else { ta_rule_add(r.x0, r.y0, r.x1, y - 1); ta_rule_add(r.x0, y + h, r.x1, r.y1); }
+    }
 }
+/* a cell: its box [x0, x1) x [y0, y1), its content [cx0, cx1) x [cy0, cy1) */
+static void cell(int x0, int y0, int x1, int y1, int cx0, int cy0, int cx1, int cy1)
+{
+    if (ta_nbox < 32)
+        ta_box[ta_nbox++] = (ta_box_t){(int16_t)x0, (int16_t)y0, (int16_t)(x1 - 1), (int16_t)(y1 - 1), (int16_t)cx0, (int16_t)cy0,
+                                       (int16_t)(cx1 - 1), (int16_t)(cy1 - 1), 0};
+}
+#define CELL(x0, y0, x1, y1, cx0, cy0, cx1, cy1) cell(x0, y0, x1, y1, cx0, cy0, cx1, cy1)
+#else
+#define CELL(x0, y0, x1, y1, cx0, cy0, cx1, cy1) ((void)0)
 #endif
 
 static void cls(void)
@@ -77,7 +110,8 @@ static void cls(void)
     m_set(fb, 0, sizeof fb);
 #ifdef M2K_TEXT_AUDIT
     ta_n = 0;
-    ta_nwin = 0;
+    ta_nbox = 0;
+    ta_nrule = 0;
 #endif
 }
 
@@ -86,8 +120,11 @@ static void cls(void)
 static void rect(int x, int y, int w, int h, int c)
 {
 #ifdef M2K_TEXT_AUDIT
-    if (c == 0 || (c == 1 && w * h >= 600)) ta_cover(x, y, w, h);
-    if (c == 1 && w * h >= 600 && ta_nwin) ta_nwin--;   /* (an ink fill is no window) */
+    if (c == 0 || (c == 1 && w * h >= 600)) {
+        int nb = ta_nbox;
+        ta_cover(x, y, w, h);
+        if (c == 1) ta_nbox = nb;                     /* (an ink fill is no window) */
+    }
 #endif
     int x0 = x > clip_x0 ? x : clip_x0, x1 = x + w < clip_x1 ? x + w : clip_x1;
     int y0 = y > clip_y0 ? y : clip_y0, y1 = y + h < clip_y1 ? y + h : clip_y1;
@@ -145,6 +182,48 @@ static void frame(int x, int y, int w, int h, int c)
 {
     hline(x, y, w, c); hline(x, y + h - 1, w, c);
     vline(x, y + 1, h - 2, c); vline(x + w - 1, y + 1, h - 2, c);
+}
+
+/* dots on the screen's checker ((x + y) even), so every dotted line, outline and rule meets the others in step */
+static void dots_h(int x, int y, int w) { for (int i = x + ((x + y) & 1); i < x + w; i += 2) px(i, y, 1); }
+static void dots_v(int x, int y, int h) { for (int j = y + ((x + y) & 1); j < y + h; j += 2) px(x, j, 1); }
+static void dots_frame(int x, int y, int w, int h)
+{
+    dots_h(x, y, w); dots_h(x, y + h - 1, w);
+    dots_v(x, y + 1, h - 2); dots_v(x + w - 1, y + 1, h - 2);
+}
+
+/* the rules: a band's solid across the screen, a cell's dotted. The audit keeps them: no text's ink within 2 px */
+static void rule_h(int x, int y, int w, int dotted)
+{
+    if (dotted) dots_h(x, y, w); else hline(x, y, w, 1);
+#ifdef M2K_TEXT_AUDIT
+    ta_rule_add(x, y, x + w - 1, y);
+#endif
+}
+static void rule_v(int x, int y, int h, int dotted)
+{
+    if (dotted) dots_v(x, y, h); else vline(x, y, h, 1);
+#ifdef M2K_TEXT_AUDIT
+    ta_rule_add(x, y, x, y + h - 1);
+#endif
+}
+
+/* a window over the stage: paper, a 1 px frame, a 2 px shadow down and right */
+static void win(int x, int y, int w, int h)
+{
+    rect(x, y, w, h, 0);
+    frame(x, y, w, h, 1);
+    rect(x + w, y + 2, 2, h, 1);
+    rect(x + 2, y + h, w, 2, 1);
+}
+
+/* a picture's handle: 5 x 5 framed on paper, or 7 x 7 solid while its knob turns */
+static void handle(int x, int y, int hot)
+{
+    if (hot) { rect(x - 3, y - 3, 7, 7, 1); return; }
+    rect(x - 2, y - 2, 5, 5, 0);
+    frame(x - 2, y - 2, 5, 5, 1);
 }
 
 static void line(int x0, int y0, int x1, int y1, int c)

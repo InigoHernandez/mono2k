@@ -418,17 +418,17 @@
   </table>
   <h2>The screen</h2>
   <div class="figs">
-    <figure class="fig big"><canvas data-scr="01_home_stopped"></canvas><figcaption>HOME: the knobs along the top, the six tracks' steps on the stage, the four bars under them, the pattern and the tempo in the footer.</figcaption></figure>
+    <figure class="fig big"><canvas data-scr="01_home_stopped"></canvas><figcaption>HOME: pattern and tempo on top, the knobs, six tracks' steps, the bars, the breadcrumb.</figcaption></figure>
   </div>
-  <p>The screen keeps one grid on every page, five bands, each on its own rule:</p>
+  <p>One grid on every page: five bands, four knob cells, the stage split into value and picture. No text crosses a rule.</p>
   <table>
     <thead><tr><th>Band</th><th>Shows</th></tr></thead>
     <tbody>
-      <tr><td>Header</td><td>The page (its pages as squares), the track and its machine; GRID, PADS, FILL, recording and the transport on the right.</td></tr>
-      <tr><td>Knobs</td><td>KNOB 1–4, in a row as they sit on the panel: each its name, its value and a level under it (a bar; segments for a few choices; nothing for an action such as LOAD). The one being turned has its name inverted; a locked value is inverted.</td></tr>
-      <tr><td>Stage</td><td>Left, what you touch: a value in big type, the machine's card, a held step, or the page's name at rest. Right, the page's picture: the envelope, the filter's response, the echoes, the sound library. On HOME the six tracks' steps take it all.</td></tr>
-      <tr><td>Steps</td><td>The track's 16 steps of the page in view, in four beats.</td></tr>
-      <tr><td>Footer</td><td>The pattern's four bars (the one in view solid, those past its end dotted, the playing one marked), the pattern and its name, the tempo.</td></tr>
+      <tr><td>Header</td><td>Pattern and name; GRID, PADS, READY, FILL; tempo, REC, transport.</td></tr>
+      <tr><td>Knobs</td><td>A cell per knob: name, value, level. Turned: name inverted. Locked: value inverted.</td></tr>
+      <tr><td>Stage</td><td>Left: the value in big type, the machine's card or a held step. Right: the page's picture, live.</td></tr>
+      <tr><td>Steps</td><td>The track's 16 steps, a beat under each knob.</td></tr>
+      <tr><td>Footer</td><td>The four bars; track ▸ machine ▸ page; the page count, 2/4.</td></tr>
     </tbody>
   </table>
   <p>The screen can be light or dark: GLO &gt; SET, SCRN.</p>
@@ -443,6 +443,10 @@
     </tbody>
   </table>
   <p>A message takes the header for a moment, inverted; a longer one takes the line under it too.</p>
+  <div class="figs">
+    <figure class="fig"><canvas data-scr="00_boot"></canvas><figcaption>The splash: the wave bank as a waterfall.</figcaption></figure>
+  </div>
+  <p>Power on: two seconds of MONO2K in dithered 3D. Any key, button or knob skips it.</p>
 </article>
 
 <article id="pages" data-group="The instrument">
@@ -454,7 +458,7 @@
     <figure class="fig"><canvas data-scr="10_filt"></canvas><figcaption>FILT: the high-pass and low-pass as a band.</figcaption></figure>
     <figure class="fig"><canvas data-scr="12_fx_delay"></canvas><figcaption>FX, DELAY: its echoes as they fall.</figcaption></figure>
     <figure class="fig"><canvas data-scr="13_fx_destroy"></canvas><figcaption>FX, DSTR: bits, wavefold, XOR and the reverb's send.</figcaption></figure>
-    <figure class="fig"><canvas data-scr="14_lfo"></canvas><figcaption>LFO 1: where it goes, its wave, how it trigs; its cycle and depth.</figcaption></figure>
+    <figure class="fig"><canvas data-scr="14_lfo"></canvas><figcaption>LFO: all three stacked, live.</figcaption></figure>
     <figure class="fig"><canvas data-scr="20_arp"></canvas><figcaption>ARP: mode, speed, range and gate.</figcaption></figure>
     <figure class="fig"><canvas data-scr="15_glo_time"></canvas><figcaption>GLO, TIME: tempo, swing, length, accent.</figcaption></figure>
   </div>
@@ -635,11 +639,11 @@
   <p>EQF and EQG are one band of EQ; SRR reduces the sample rate; the delay (DTIM, DSND, DFB, DBAS, DWID) is the track's own, in 8-bit mu-law. DSTR: BITS crushes, FOLD folds the wave over itself, XOR mangles the samples, VERB sends the track to the bus's reverb. Both sends, DSND and VERB, are straight in level: half way is 6 dB under the most, so a little is already heard. MOD is a chorus, a flanger or a phaser across the stereo.</p>
   <h2>LFOs</h2>
   <div class="figs">
-    <figure class="fig"><canvas data-scr="14b_lfo_cycle"></canvas><figcaption>LFO 1B: SPD as the time a cycle takes, a bar; DPTH against full.</figcaption></figure>
+    <figure class="fig"><canvas data-scr="14b_lfo_cycle"></canvas><figcaption>LFO 1B: SPD as a cycle's time; DPTH against full.</figcaption></figure>
   </div>
   <p>Three per track, two pages each: TRCK and DEST say which track and parameter it moves (any track's), WAVE its shape, TRIG what a trig does to it (FREE runs on, TRIG starts it over, HOLD samples it until the next trig, ONE runs one cycle, HALF half a cycle), MULT and SPD its rate in time with the tempo, PHAS where it starts, DPTH how far, either way.</p>
   <p>SPD shows the time one cycle takes, in bars and notes at any tempo, slow at the bottom and fast at the top: 0 stands still, 1 is 30 bars, 12 is 16 bars, 60 a bar, 84 a quarter note and 120 a 1/32 note. Every twelve steps it doubles; seven steps slower than a note is that note dotted, seven faster its triplet. MULT multiplies it (x1 to x128), and past a 1/64 note it shows hertz at the pattern's tempo. The LFOs run on MONO2K's own clock, 1.5 % slower than the bars they are named after, as they always have: a FREE LFO drifts slowly against the pattern, and TRIG starts it with each note.</p>
-  <p>DPTH is squared around its middle, so the first steps away from 64 are fine (66 swings an eighth of a step, 72 two steps, 80 eight) and the ends sweep the whole range; the screen shows it as a share of full, and the LFO's picture draws its wave as deep as it goes. Whatever an LFO moves glides between the knob's steps, with no zipper. A little DPTH on PTCH is a vibrato (66 is about 12 cents).</p>
+  <p>DPTH is squared around its middle, so the first steps away from 64 are fine (66 swings an eighth of a step, 72 two steps, 80 eight) and the ends sweep the whole range; the screen shows it as a share of full. The picture stacks all three LFOs: destination, rate, wave, a live cursor; the one you edit drawn heavy. Whatever an LFO moves glides between the knob's steps, with no zipper. A little DPTH on PTCH is a vibrato (66 is about 12 cents).</p>
   <h2>Arpeggiator</h2>
   <p>On ARP: MODE (OFF, UP, DOWN, U/D, RND, ORDR, the order you played them), SPD (1/32 to 1/4), RNG (one to four octaves) and GATE. Hold keys and it plays them in turn.</p>
 </article>
@@ -693,7 +697,7 @@
     <figure class="fig"><canvas data-scr="25_syn_snd"></canvas><figcaption>SYN &gt; SND: the library's slots, each with its machine; SLOT picks one.</figcaption></figure>
   </div>
   <p>128 sounds, S001 to S128, kept apart from the patterns: a sound saved there can go onto any track of any pattern. A sound is a track's machine and every setting (the machine's knobs, the amp, the filter, the FX, the LFOs), a category (KICK, SNARE, HATS, PERC, BASS, LEAD, PAD or FX) and the note it was made at: the track's root when it was saved, the note its trigs sit on most. Loaded, it is ready to sound as it did: the track's keys, pad and new trigs go to that note and its octave (a kick saved at C2 plays at C2). The library starts with the demos' 24 sounds, each in the category its part gives it and at the note it plays there, then 104 INIT slots; it is saved with the rest. (Sounds kept before their notes were: a kick at C2, a bass at C3, the rest at C4.)</p>
-  <p>Press EDIT until the header says SND (the page after SYN, and after BANK on DIGI-WAV), or GLO + EDIT from anywhere.</p>
+  <p>Press EDIT until the footer says SND (the page after SYN, and after BANK on DIGI-WAV), or GLO + EDIT from anywhere.</p>
   <table>
     <thead><tr><th>Knob</th><th>Does</th></tr></thead>
     <tbody>
@@ -790,6 +794,6 @@
 <script src="site.js?v=3"></script>
 <script src="panel.js?v=2"></script>
 <script src="changelog.js?v=31"></script>
-<script src="manual.js?v=33"></script>
+<script src="manual.js?v=34"></script>
 </body>
 </html>

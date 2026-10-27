@@ -44,6 +44,7 @@
   function prepare(sub) {
     const x = core;
     x.w_init(7919);
+    if (x.w_skip_splash) x.w_skip_splash();        /* (the splash would take the presses below) */
     x.w_setting(0, S.pageDark() ? 0 : 127);
     x.w_frame(1); x.w_frame(2100);
     t = x.w_audition(m);

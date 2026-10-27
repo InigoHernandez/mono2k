@@ -13,6 +13,7 @@ EXPORT void w_render(int n) { m2k_render(w_buf, n); }
 EXPORT const uint8_t *w_frame(uint32_t ms) { return m2k_frame(ms); }
 EXPORT const uint8_t *w_leds(void) { return m2k_leds(); }
 EXPORT void w_init(uint32_t seed) { m2k_init(seed); }
+EXPORT void w_skip_splash(void) { ui.splash_end = 0; ui.splashed = 1; }   /* a core the page scripts: no splash, no wipe */
 EXPORT void w_key(int k, int d) { m2k_key(k, d); }
 EXPORT void w_button(int b, int d) { m2k_button(b, d); }
 EXPORT void w_encoder(int e, int d) { m2k_encoder(e, d); }
