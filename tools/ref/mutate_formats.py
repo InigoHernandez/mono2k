@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
-# Mutation tests of the pattern format's conversions (fm_v9, sid_v10, gsin_v11, hold_v12, vox_v13): each mutant is one small change to a conversion;
+# Mutation tests of the pattern format's conversions (fm_v9, sid_v10, gsin_v11, hold_v12, vox_v13, fx_v16): each mutant is one small change to a conversion;
 # the self-test must fail on every one. A survivor is a conversion the self-test does not hold.
 #   .venv/bin/python tools/ref/mutate_formats.py [TREE]     (default: this checkout; it restores each file it touches)
 import subprocess, sys, os
@@ -78,6 +78,19 @@ M = [
  ("VOX other locks kept", F, "            else l->trk = 0xFF;\n        }\n    }\n    for (int t = 0; t < M2K_TRACKS; t++)\n        for (int l = 0; l < 3; l++) {\n            uint8_t *b = &p->kit[t][P_LFO + 8 * l];\n            int to = ens_target(b[L_TRCK]), dest = b[L_DEST] - 1;\n            if (p->machine[to] != M_VOX", "            else (void)0;\n        }\n    }\n    for (int t = 0; t < M2K_TRACKS; t++)\n        for (int l = 0; l < 3; l++) {\n            uint8_t *b = &p->kit[t][P_LFO + 8 * l];\n            int to = ens_target(b[L_TRCK]), dest = b[L_DEST] - 1;\n            if (p->machine[to] != M_VOX"),
  ("VOX LFOs not followed", F, "            b[L_DEST] = (uint8_t)(dest == P_SYN ? P_SYN + 1 : dest == P_SYN + 4 ? P_SYN + 3 + 1 : 0);", "            (void)b;"),
  ("VOX bank A not converted at build", H, "    for (int i = 0; i < 16; i++) vox_v13(PAT(i));", "    (void)0;"),
+ ("BUS17 not converted", P, "    if (ver < 17) fx_v16(p);", "    if (ver < 1) fx_v16(p);"),
+ ("BUS17 converted on a version-17 pattern", P, "    if (ver < 17) fx_v16(p);", "    if (ver < 18) fx_v16(p);"),
+ ("BUS17 VERB send kept squared", F, "    int n = v ? (v * v * gain + 127 * 128) / (127 * 256) : 0;", "    int n = v ? (v * gain + 128) / 256 : 0;"),
+ ("BUS17 a send on turned off", F, "    return (uint8_t)(v && n < 1 ? 1 : n > 127 ? 127 : n);", "    return (uint8_t)(n > 127 ? 127 : n);"),
+ ("BUS17 DSND kept squared", F, "    int d = v - 64, a = d < 0 ? -d : d, n = (a * a + 32) / 64;", "    int d = v - 64, a = d < 0 ? -d : d, n = a;"),
+ ("BUS17 DSND's side lost", F, "    return (uint8_t)(d < 0 ? 64 - n : 64 + n);", "    return (uint8_t)(64 + n);"),
+ ("BUS17 VERB locks left", F, "        if (l->param == P_SPU) l->val = spu_v16(l->val & 127, gain);", "        (void)0;"),
+ ("BUS17 DSND locks left", F, "        if (l->param == P_DSND) l->val = dsnd_v16(l->val & 127);", "        (void)0;"),
+ ("BUS17 GLCH left", F, "    g[G_GLCH] = T_V17_GLCH[g[G_GLCH] & 127];", "    (void)0;"),
+ ("BUS17 the reverb's level not made up", F, "    int32_t gain = ov ? (lv + 2048) >> 12 : 256;", "    int32_t gain = 256;"),
+ ("BUS17 the grid not read between", F, "    *f = ((v - axis[i]) * 256) / (axis[i + 1] - axis[i]);", "    *f = 0;"),
+ ("BUS17 a reverb off turned on", F, "    g[G_VERB] = (uint8_t)(ov ? CLAMP((dc + 32768) >> 16, 1, 127) : 0);", "    g[G_VERB] = (uint8_t)CLAMP((dc + 32768) >> 16, 1, 127);"),
+ ("BUS17 DAMP left", F, "    g[G_DAMP] = (uint8_t)CLAMP((dm + 32768) >> 16, 0, 127);", "    (void)dm;"),
 ]
 def run():
     r = subprocess.run("cc -O2 -w -Ifirmware/src -Ifirmware/gen -o build/host/m2k_mut host/m2k_host.c -lm && build/host/m2k_mut --selftest",

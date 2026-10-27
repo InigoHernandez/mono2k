@@ -1,8 +1,9 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /* MONO2K's effects. Each track has its own delay, as on the Monomachine (time in 1/64 notes, feedback, and a
  * base / width band in the loop); here it runs at half rate in 8-bit mu-law, which is the memory budget and the
- * colour. The bus is the lofi part: an SPU-flavoured reverb at 22 kHz, a beat-repeat glitch, tape wow and flutter,
- * a 4-bit ADPCM crunch, hiss and crackle, and a drive into the soft clip. */
+ * colour. The bus is the lofi part: a reverb at 22 kHz (a feedback delay network, 0.3 to 24 s), a glitch that grows
+ * from rare quiet repeats to wild, tape wow and flutter, a 4-bit ADPCM crunch, hiss and crackle, and a drive into the
+ * soft clip; and PERFORM's effects over them while FX is held. */
 
 static uint8_t mulaw_enc(int32_t x)
 {
@@ -241,11 +242,12 @@ enum { GM_RPT, GM_REV, GM_GATE, GM_OCTU, GM_OCTD, GM_ROLL, GM_TSTOP, GM_STOP };
 #define G_HELD 0x7FFFFFFFu
 #define G_UNITY (1u << 24)
 
-/* PERFORM (FX held): a black key's effect while it is held. Repeats of the last 1/4 .. 1/32 note, the last beat
- * reversed, a tape stop, a gated stutter (1/32 hits of the last sixteenth): each locked to the sequencer's grid (the
- * slice the one that ended on its last beat, eighth or sixteenth, played from where that puts it now, so the repeats
- * fall on the beat however late the key); the crush, the wow and the drive at their most, each gliding in and out,
- * the drive's level held to the dry's; a kill (the bus silent). Let go, each fades out (the stop spins back up first) */
+/* PERFORM (FX held): a black key's effect while it is held. Repeats of 1/4 .. 1/32 note, the last beat reversed, a
+ * tape stop, a gated stutter (1/32 hits of the last sixteenth): each locked to the sequencer's grid (a repeat's slice
+ * the one that began on the last beat, eighth or sixteenth, its first time round the sound coming in; the reverse the
+ * beat that ended there), played from where that puts it now, so the repeats fall on the beat however late the key;
+ * the crush, the wow and the drive at their most, each gliding in and out, the drive's level held to the dry's; a
+ * kill (the bus silent). Let go, each fades out (the stop spins back up first) */
 enum { PF_R4, PF_R8, PF_R16, PF_R32, PF_REV, PF_STOP, PF_STUT, PF_CRSH, PF_WOW, PF_DRIV, PF_KILL, PF_COUNT };
 static struct { uint8_t on[PF_COUNT]; int32_t kill; } perf = {{0}, 32767};
 
@@ -364,8 +366,12 @@ static void gl_tick(void)
     } else {
         int rev = mode == GM_REV;
         uint32_t k = rev ? bus.g_start + len - 1 - p : bus.g_start + p, k1 = rev ? k - 1 : k + 1;
-        l = gl_buf[k & M][0] + (((gl_buf[k1 & M][0] - gl_buf[k & M][0]) * fr) >> 12);
-        r = gl_buf[k & M][1] + (((gl_buf[k1 & M][1] - gl_buf[k & M][1]) * fr) >> 12);
+        l = gl_buf[k & M][0];
+        r = gl_buf[k & M][1];
+        if (fr) {                                         /* (only off pitch: a repeat reads whole samples) */
+            l += ((gl_buf[k1 & M][0] - l) * fr) >> 12;
+            r += ((gl_buf[k1 & M][1] - r) * fr) >> 12;
+        }
         uint32_t xf = len >> 2 < GL_XF ? len >> 2 : GL_XF;
         if (p + xf >= len) {                              /* the seam: into what leads to the slice's start */
             uint32_t j = rev ? bus.g_start + 2 * len - 1 - p : bus.g_start + p - len;
@@ -627,10 +633,11 @@ static void bus_block(int32_t *L, int32_t *R, const int32_t *rsend, int16_t *out
     }
     int32_t ad_mix = bus.ad_mixq >> 8, ad_div = T_ADPC_DIV[adpc], ad_run = ad_mix || bus.ad_warm;
     /* the drive: its control's; DRIVE glides up and down over 20 ms, its output held to the level the control's would
-     * give: while it glides, by the gain's own ratio (a small sound's level, a loud one's a little under), then by the
-     * two outputs measured (one-poles on both, ~23 ms), rising to it; never louder, never at full scale */
+     * give: while it rises, by the gain's own ratio (a small sound's level, a loud one's a little under), then by the
+     * two outputs measured (one-poles on both, ~23 ms), rising to it, and so back down; never louder, never at full
+     * scale */
     int32_t drv0 = T_DRIV[g[G_DRIV]], drv_t = perf.on[PF_DRIV] ? T_DRIV[127] : drv0;
-    if (!bus.dv) bus.dv = drv0;
+    if (!bus.dv) bus.dv = drv0, bus.dv_g = 32767;          /* (from init: the control's, nothing held) */
     { int32_t d = drv_t - bus.dv; bus.dv += d > 24 ? 24 : d < -24 ? -24 : d; }
     int32_t drv = bus.dv, pdrv = drv != drv0 || bus.dv_g < 32767;
     if (!pdrv) bus.dv_e0 = bus.dv_e1 = 0;                 /* (both from 0: their ratio right from the start) */
@@ -746,7 +753,7 @@ static void bus_block(int32_t *L, int32_t *R, const int32_t *rsend, int16_t *out
         if (drv != drv0) {                                /* (at least the small signal's: drv0 / drv) */
             uint32_t w = bus.dv_e1 > 0 ? isqrt32(((uint32_t)bus.dv_e0 << 9) / ((uint32_t)bus.dv_e1 >> 11 | 1u)) << 5 : 32767;
             int32_t lo = (drv0 << 15) / drv;
-            want = drv != drv_t ? lo : CLAMP((int32_t)w, lo, 31743);
+            want = drv < drv_t ? lo : CLAMP((int32_t)w, lo, 31743);   /* (rising, at the gain's ratio) */
         }
         if (want < bus.dv_g) bus.dv_g = want;             /* down at once, up gently */
         else bus.dv_g += (want - bus.dv_g) >> 4;

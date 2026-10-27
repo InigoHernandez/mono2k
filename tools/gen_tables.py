@@ -554,10 +554,11 @@ out.append(arr("T_V9_ADPC", "uint8_t", [o if o <= 64 else 64 if o < 86 else 96 i
 
 # The reverb (pattern format 17): a feedback delay network at 22 kHz (m2k_fx.c). DCAY its decay, an RT60 of 0.3 s at 1
 # to 24 s at 127, a ratio a step. The room grows with it (its lines x0.3 at 0.3 s, whole from 3.3 s: a short room is a
-# small one, dense), and so does its lines' swing (a long tail's modes smeared, 0.25 to 3 samples); its level as the
-# time's fourth root (a long tail fuller, not as much louder as its energy would be). DAMP how much sooner the top
-# dies: the RT60 at the top 1 (0) down to 1/30 (127) of the bottom's (the lines' one-poles),
-# and the input's top from 14 kHz down to 2 kHz with it. Per line attenuation in log2 units a sample, Q24
+# small one, dense), and so does its swing (two lines turned into each other by an angle swaying 0.01 to 0.15 rad: a
+# long tail's modes smeared); its level as the time's fourth root (a long tail fuller, not as much louder as its
+# energy would be; the level set against the old reverb's at the same RT60), the lines' input kept under their
+# build-up. DAMP how much sooner the top dies: the RT60 at the top 1 (0) down to 1/30 (127) of the bottom's (the lines'
+# one-poles), and the input's top from 14 kHz down to 5 kHz with it. Per line attenuation in log2 units a sample, Q24
 RV_FS = SR / 2
 def rv_t60(v):
     return 0.3 * 80 ** ((v - 1) / 126.0)

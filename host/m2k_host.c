@@ -3838,29 +3838,29 @@ static int selftest(void)
     }
     {
         /* format 17: an old pattern's bus turns on load. The sends straight: VERB 64 to 32 (the reverb off: no level made
-         * up), DSND 80 to 68, a lock of 48 to 60, 0 and 127 as they were, a send of 1 still on; GLCH by its table. At a
-         * node of the reverb's grid (old DCAY 64 DAMP 64) the node's pair, each send with its level; between four nodes
-         * (old 72 72) half of each; today's loads as it is */
+         * up), a lock of it too, DSND 80 to 68, a lock of 48 to 60, 0 and 127 as they were, a send of 1 still on; GLCH by
+         * its table. At a node of the reverb's grid (old DCAY 127 DAMP 0: +3 dB) the node's pair, each send with its
+         * level; between four nodes (old 72 72) half of each; today's loads as it is */
         static m2k_pattern_t w, w2;
         static uint8_t wb[BLOB_MAX], wb2[BLOB_MAX];
         m_set(&w, 0, sizeof w);
         pat_init(&w, "OLD17");
         w.glob[G_VERB] = 0; w.glob[G_DAMP] = 50; w.glob[G_GLCH] = 30;
         w.kit[0][P_SPU] = 64; w.kit[1][P_DSND] = 80; w.kit[2][P_DSND] = 0; w.kit[3][P_DSND] = 127; w.kit[4][P_SPU] = 1;
-        lk(&w, 0, 4, P_SPU, 127);
+        lk(&w, 0, 4, P_SPU, 64);
         lk(&w, 1, 4, P_DSND, 48);
         int wn = pat_pack_v(&w, wb, 15), ok = pat_unpack(&w2, wb, wn), lks = 0;
         for (int i = 0; i < M2K_LOCKS; i++) {
-            if (w2.lock[i].trk == 0 && w2.lock[i].param == P_SPU) lks += w2.lock[i].val == 127;
+            if (w2.lock[i].trk == 0 && w2.lock[i].param == P_SPU) lks += w2.lock[i].val == 32;
             if (w2.lock[i].trk == 1 && w2.lock[i].param == P_DSND) lks += w2.lock[i].val == 60;
         }
         ok = ok && w2.glob[G_VERB] == 0 && w2.kit[0][P_SPU] == 32 && w2.kit[1][P_DSND] == 68 && w2.kit[2][P_DSND] == 0 &&
              w2.kit[3][P_DSND] == 126 && w2.kit[4][P_SPU] == 1 && w2.glob[G_GLCH] == T_V17_GLCH[30] && lks == 2;
-        CHECK(ok, "format: version 15 -> 17, the sends straight (VERB 64 -> 32, DSND 80 -> 68, a lock 48 -> 60), GLCH by its table");
-        w.glob[G_VERB] = 64; w.glob[G_DAMP] = 64;
+        CHECK(ok, "format: version 15 -> 17, the sends straight (VERB 64 -> 32, its lock too, DSND 80 -> 68, a lock 48 -> 60), GLCH by its table");
+        w.glob[G_VERB] = 127; w.glob[G_DAMP] = 0;
         wn = pat_pack_v(&w, wb, 16);
-        ok = pat_unpack(&w2, wb, wn) && w2.glob[G_VERB] == T_V17_RV[40][0] && w2.glob[G_DAMP] == T_V17_RV[40][1] &&
-             w2.kit[0][P_SPU] == spu_v16(64, T_V17_RVL[40]);
+        ok = pat_unpack(&w2, wb, wn) && w2.glob[G_VERB] == T_V17_RV[72][0] && w2.glob[G_DAMP] == T_V17_RV[72][1] &&
+             w2.kit[0][P_SPU] == spu_v16(64, T_V17_RVL[72]) && w2.kit[0][P_SPU] != 32;
         w.glob[G_VERB] = 72; w.glob[G_DAMP] = 72;
         wn = pat_pack_v(&w, wb, 16);
         int dc = (T_V17_RV[40][0] + T_V17_RV[41][0] + T_V17_RV[49][0] + T_V17_RV[50][0] + 2) / 4;
