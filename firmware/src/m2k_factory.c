@@ -222,6 +222,13 @@ static uint8_t dsnd_v16(int v)
     return (uint8_t)(d < 0 ? 64 - n : 64 + n);
 }
 
+/* a sound of the library saved before format 17: its sends on the straight laws (no reverb of its own to make up) */
+static void fx_kit_v16(uint8_t *k)
+{
+    k[P_SPU] = spu_v16(k[P_SPU] & 127, 256);
+    k[P_DSND] = dsnd_v16(k[P_DSND] & 127);
+}
+
 /* where an old value sits on one of the grid's axes: its cell, and how far into it (Q8) */
 static int grid_at(const uint8_t *axis, int v, int *f)
 {
@@ -431,6 +438,83 @@ static void vox_v13(m2k_pattern_t *p)
         }
 }
 
+/* format 16: the amp and the LFOs on the owner's laws (gen_tables.py). ATK DEC REL to the value that sounds nearest
+ * (T_AMP15: DEC and REL by their time to -60 dB, ATK by its rise's loudness), an LFO's SPD to the nearest rate (T_SPD15)
+ * and its DPTH, now squared about 64, to the same swing (T_DPTH15); in the kit and in the locks. An LFO on a DEC or a
+ * REL swings over the new law's steps: its depth the one that lands where the old swing did (feel_lfo) */
+static int amp_row(int prm) { return prm == P_ATK ? 0 : prm == P_DEC ? 1 : prm == P_REL ? 2 : -1; }
+
+static uint8_t feel_val(int prm, int v)
+{
+    v &= 127;
+    if (amp_row(prm) >= 0) return T_AMP15[amp_row(prm)][v];
+    if (prm >= P_LFO && prm < P_LFO + 24 && (prm - P_LFO) % 8 == L_SPD) return T_SPD15[v];
+    if (prm >= P_LFO && prm < P_LFO + 24 && (prm - P_LFO) % 8 == L_DPTH) return T_DPTH15[v];
+    return (uint8_t)v;
+}
+
+/* an old depth d on a DEC or REL (row 1, 2) whose old value is c: the new depth whose swing, at 17 points across it,
+ * lands nearest (in the new law's Q8 steps) to where the old one's (whole steps, as the old engine read them) sound */
+static uint8_t feel_lfo(int row, int c, int d)
+{
+    int best = 64;
+    int32_t be = -1, cn = T_AMP15[row][c & 127] * 256;
+    for (int n = 0; n < 128; n++) {
+        int32_t e = 0;
+        for (int32_t v = -32767; v <= 32767; v += 4095) {   /* (the shape by the depth: 2^15 by 2^14 at most) */
+            int32_t po = CLAMP((c & 127) * 256 + ((v * ((d & 127) - 64)) >> 6), 0, 127 * 256) >> 8;
+            int32_t x = T_AMP15[row][po] * 256 - CLAMP(cn + ((v * T_LDPTH[n]) >> 14), 0, 127 * 256);
+            e += x < 0 ? -x : x;
+        }
+        if (be < 0 || e < be) { be = e; best = n; }
+    }
+    return (uint8_t)best;
+}
+
+/* a kit's LFO page value (DPTH or SPD) at index prm, the LFO aiming at kit tk's parameter dest (tk the old one) */
+static uint8_t feel_lfo_val(int prm, int v, int dest, const uint8_t *tk)
+{
+    int row = amp_row(dest);
+    if ((prm - P_LFO) % 8 == L_DPTH && row > 0) return feel_lfo(row, tk[dest], v);
+    return feel_val(prm, v);
+}
+
+static void feel_v15(m2k_pattern_t *p)
+{
+    static uint8_t old[M2K_TRACKS][P_COUNT];        /* the kits before: an LFO's depth reads its target's old value */
+    m_cpy(old, p->kit, sizeof old);
+    for (int t = 0; t < M2K_TRACKS; t++) {
+        for (int prm = P_ATK; prm <= P_REL; prm++) p->kit[t][prm] = feel_val(prm, old[t][prm]);
+        for (int l = 0; l < 3; l++) {
+            const uint8_t *b = &old[t][P_LFO + 8 * l];
+            p->kit[t][P_LFO + 8 * l + L_SPD] = T_SPD15[b[L_SPD] & 127];
+            p->kit[t][P_LFO + 8 * l + L_DPTH] = feel_lfo_val(P_LFO + 8 * l + L_DPTH, b[L_DPTH], b[L_DEST] - 1,
+                                                             old[ens_target(b[L_TRCK])]);
+        }
+    }
+    for (int i = 0; i < M2K_LOCKS; i++) {
+        m2k_lock_t *l = &p->lock[i];
+        if (l->trk >= M2K_TRACKS) continue;
+        if (l->param >= P_LFO && l->param < P_LFO + 24) {
+            const uint8_t *b = &old[l->trk][P_LFO + (l->param - P_LFO) / 8 * 8];
+            l->val = feel_lfo_val(l->param, l->val, b[L_DEST] - 1, old[ens_target(b[L_TRCK])]);
+        } else l->val = feel_val(l->param, l->val);
+    }
+}
+
+/* a sound of the library saved before format 16: its kit on the same laws (its LFOs aiming at its own values) */
+static void feel_kit_v15(uint8_t *k)
+{
+    uint8_t o[P_COUNT];
+    m_cpy(o, k, P_COUNT);
+    for (int prm = P_ATK; prm <= P_REL; prm++) k[prm] = feel_val(prm, o[prm]);
+    for (int l = 0; l < 3; l++) {
+        uint8_t *b = &k[P_LFO + 8 * l];
+        b[L_SPD] = T_SPD15[b[L_SPD] & 127];
+        b[L_DPTH] = feel_lfo_val(P_LFO + 8 * l + L_DPTH, b[L_DPTH], b[L_DEST] - 1, o);
+    }
+}
+
 /* format 13: HOLD in beats, as the Monomachine's (v / 32 of a beat, measured at 60, 120 and 240 BPM), no longer 14.6 ms
  * a step: the kit's and its locks' HOLD to the step nearest the time they held, at the pattern's tempo (INF stays) */
 static uint8_t hold_to(int v, int bpm) { return v >= 127 ? 127 : (uint8_t)CLAMP((v * bpm * 146 + 9375) / 18750, 0, 126); }
@@ -545,15 +629,7 @@ static void trim(m2k_pattern_t *p, int lev)
 /* the modulation effect: 0 chorus, 1 flanger, 2 phaser; rate (0.1..10 Hz), depth, mix */
 #define MOD(p, t, type, rate, dpth, mix) SET(p, t, P_MODT, enc(type, 3), P_MODR, rate, P_MODD, dpth, P_MODM, mix)
 
-/* the machines' A..H, by name */
-#define SA (P_SYN + 0)
-#define SB (P_SYN + 1)
-#define SC (P_SYN + 2)
-#define SD (P_SYN + 3)
-#define SE (P_SYN + 4)
-#define SF (P_SYN + 5)
-#define SG (P_SYN + 6)
-#define SH (P_SYN + 7)
+/* (the machines' A..H by name, SA..SH, and the LFOs' pages, L1..L3: m2k_seq.c, with the machines' inits) */
 /* choices */
 #define WAVE(i) ((uint8_t)((i) * 127 / 31))   /* DIGI-WAV: 5 BELL 6 GLAS 7 PLST 8 LTEX 19 MTL1 20 MTL2 25 BITS 26 8BIT 30 CRSH */
 #define GSIZE(i) enc(i, 5)             /* 1/64 1/32 1/16 1/8 1/4 */
@@ -635,16 +711,10 @@ static void locks(m2k_pattern_t *p, const uint8_t *v, int n)
 {
     for (int i = 0; i + 3 < n; i += 4) lk(p, v[i], v[i + 1], v[i + 2], v[i + 3]);
 }
-#define L1 (P_LFO)                     /* the three LFOs' pages */
-#define L2 (P_LFO + 8)
-#define L3 (P_LFO + 16)
 
 /* bank A: four parts (docs/bank-a.md, written to docs/composing.md): every sound picked by the owner from the sound
  * sheets (tools/sheet/), each 4-bar pattern a 16-bar form (what enters after the first pass, what alternates, what comes
- * on the third and fourth, LFOs over 16 bars), at the bank's loudness. The rest of the bank blank. Their reverbs and
- * sends are on format 17's: each part's old DCAY and DAMP (62 81, 96 68, 96 68, 26 56) the new pair measured nearest
- * at those very values (tools/conv17.py's points), its sends the old levels with what that pair makes up (-0.6, +0.5,
- * +0.5, -1.4 dB), the delay's on the straight law */
+ * on the third and fourth, LFOs over 16 bars), at the bank's loudness. The rest of the bank blank */
 static void factory(void)
 {
     m2k_pattern_t *p;
@@ -660,7 +730,7 @@ static void factory(void)
         P_BASE, 22, P_WDTH, 115, P_HPQ, 51, P_LPQ, 63, P_FATK, 55, P_FDEC, 74, P_BOF, 33, P_WOF, 56, P_EQF, 93,
         P_EQG, 41, P_LEVL, 72, P_GATE, 15, P_MODT, 106, P_MODR, 113, P_MODD, 96);
     SET(p, 1, SA, 16, SB, 0, SC, 0, SD, 100, SE, 80, P_DEC, 28, P_REL, 14, P_BASE, 8, P_WDTH, 52, P_HPQ, 18, P_LPQ, 9,
-        P_FATK, 23, P_FDEC, 28, P_EQF, 72, P_EQG, 53, P_SPU, 4, P_LEVL, 127, P_GATE, 23, L1 + L_DEST, 34,
+        P_FATK, 23, P_FDEC, 28, P_EQF, 72, P_EQG, 53, P_SPU, 24, P_LEVL, 127, P_GATE, 23, L1 + L_DEST, 34,
         L1 + L_WAVE, 45, L1 + L_TRIG, 12, L1 + L_MULT, 72, L1 + L_SPD, 64, L1 + L_DPTH, 40, P_MODT, 21, P_MODR, 65,
         P_MODD, 41);
     SET(p, 2, SA, 119, SB, 70, SC, 10, SD, 84, SE, 100, SF, 117, SG, 12, P_HOLD, 7, P_DEC, 53, P_REL, 13, P_VOL, 100,
@@ -673,13 +743,13 @@ static void factory(void)
         P_WOF, 51, P_EQF, 26, P_LEVL, 127, P_GATE, 24, L3 + L_DEST, 18, L3 + L_WAVE, 9, L3 + L_TRIG, 12,
         L3 + L_MULT, 8, L3 + L_SPD, 4, L3 + L_DPTH, 86, P_MODT, 64, P_MODR, 8, P_MODD, 58, P_MODM, 69);
     SET(p, 5, SA, 98, SB, 63, SC, 105, SD, 8, SE, 109, SF, 19, SG, 55, P_HOLD, 7, P_DEC, 65, P_REL, 75, P_DIST, 66,
-        P_BASE, 9, P_WDTH, 54, P_HPQ, 7, P_LPQ, 49, P_FATK, 10, P_FDEC, 54, P_WOF, 66, P_DTIM, 48, P_DSND, 73,
-        P_DFB, 43, P_DWID, 92, P_SPU, 4, P_LEVL, 87, P_GATE, 30, L3 + L_DEST, 6, L3 + L_WAVE, 9, L3 + L_TRIG, 12,
+        P_BASE, 9, P_WDTH, 54, P_HPQ, 7, P_LPQ, 49, P_FATK, 10, P_FDEC, 54, P_WOF, 66, P_DTIM, 48, P_DSND, 88,
+        P_DFB, 43, P_DWID, 92, P_SPU, 22, P_LEVL, 87, P_GATE, 30, L3 + L_DEST, 6, L3 + L_WAVE, 9, L3 + L_TRIG, 12,
         L3 + L_MULT, 8, L3 + L_SPD, 8, L3 + L_DPTH, 78);
     p->glob[G_SWNG] = 10;
     p->glob[G_TAPE] = 79;
-    p->glob[G_VERB] = 33;
-    p->glob[G_DAMP] = 112;
+    p->glob[G_VERB] = 62;
+    p->glob[G_DAMP] = 81;
     p->glob[G_HISS] = 10;
     static const uint8_t A01_TRIGS[] = {   /* track, step, note, flags, condition, retrigs */
         0,0,33,1,0,0, 0,7,33,1,0,0, 0,10,33,1,0,0, 0,16,33,1,0,0, 0,23,33,1,0,0, 0,26,33,1,0,0, 0,32,33,1,0,0,
@@ -715,7 +785,7 @@ static void factory(void)
      * answering, ending two ways; the hats on the third and fourth passes */
     p = part(1, "TIDE", 122, MACHINES(M_ENS, M_DKIK, M_DSNR, M_FMD, M_FMS, M_DHAT));
     SET(p, 0, SD, 82, SE, 56, SF, 44, SG, 71, P_ATK, 37, P_HOLD, 127, P_DEC, 127, P_REL, 114, P_BASE, 10, P_WDTH, 46,
-        P_LPQ, 51, P_FATK, 18, P_FDEC, 95, P_WOF, 80, P_SPU, 22, P_LEVL, 112, P_GATE, 127, L1 + L_DEST, 18,
+        P_LPQ, 51, P_FATK, 18, P_FDEC, 95, P_WOF, 80, P_SPU, 52, P_LEVL, 112, P_GATE, 127, L1 + L_DEST, 18,
         L1 + L_WAVE, 27, L1 + L_TRIG, 12, L1 + L_MULT, 24, L1 + L_SPD, 16, L1 + L_DPTH, 52, L3 + L_DEST, 18,
         L3 + L_WAVE, 9, L3 + L_TRIG, 12, L3 + L_MULT, 8, L3 + L_SPD, 4, L3 + L_DPTH, 84, P_MODT, 21, P_MODR, 18,
         P_MODD, 83, P_MODM, 58);
@@ -723,22 +793,22 @@ static void factory(void)
         P_BASE, 22, P_WDTH, 115, P_HPQ, 51, P_LPQ, 63, P_FATK, 55, P_FDEC, 74, P_BOF, 33, P_WOF, 56, P_EQF, 93,
         P_EQG, 41, P_LEVL, 61, P_GATE, 15, P_MODT, 106, P_MODR, 113, P_MODD, 96);
     SET(p, 2, SA, 16, SB, 0, SC, 0, SD, 100, SE, 80, P_DEC, 28, P_REL, 14, P_BASE, 8, P_WDTH, 52, P_HPQ, 18, P_LPQ, 9,
-        P_FATK, 23, P_FDEC, 28, P_EQF, 72, P_EQG, 53, P_SPU, 5, P_LEVL, 115, P_GATE, 23, L1 + L_DEST, 34,
+        P_FATK, 23, P_FDEC, 28, P_EQF, 72, P_EQG, 53, P_SPU, 24, P_LEVL, 115, P_GATE, 23, L1 + L_DEST, 34,
         L1 + L_WAVE, 45, L1 + L_TRIG, 12, L1 + L_MULT, 72, L1 + L_SPD, 64, L1 + L_DPTH, 40, P_MODT, 21, P_MODR, 65,
         P_MODD, 41);
     SET(p, 3, SA, 96, SC, 112, SD, 28, SE, 64, SF, 59, SG, 111, P_HOLD, 8, P_DEC, 109, P_REL, 75, P_VOL, 112,
         P_BASE, 4, P_WDTH, 46, P_LPQ, 20, P_FATK, 51, P_FDEC, 117, P_BOF, 35, P_WOF, 18, P_EQF, 125, P_EQG, 51,
         P_LEVL, 127, P_GATE, 37, P_MODT, 21, P_MODR, 48, P_MODD, 47);
     SET(p, 4, SA, 98, SB, 63, SC, 105, SD, 8, SE, 109, SF, 19, SG, 55, P_HOLD, 7, P_DEC, 65, P_REL, 75, P_DIST, 66,
-        P_BASE, 9, P_WDTH, 54, P_HPQ, 7, P_LPQ, 49, P_FATK, 10, P_FDEC, 54, P_WOF, 66, P_DTIM, 48, P_DSND, 73,
-        P_DFB, 43, P_DWID, 92, P_SPU, 4, P_LEVL, 85, P_GATE, 30);
+        P_BASE, 9, P_WDTH, 54, P_HPQ, 7, P_LPQ, 49, P_FATK, 10, P_FDEC, 54, P_WOF, 66, P_DTIM, 48, P_DSND, 88,
+        P_DFB, 43, P_DWID, 92, P_SPU, 22, P_LEVL, 85, P_GATE, 30);
     SET(p, 5, SA, 119, SB, 70, SC, 10, SD, 84, SE, 100, SF, 117, SG, 12, P_HOLD, 7, P_DEC, 53, P_REL, 13, P_VOL, 76,
         P_PAN, 90, P_BASE, 50, P_WDTH, 40, P_HPQ, 23, P_FATK, 21, P_FDEC, 20, P_BOF, 71, P_WOF, 60, P_EQF, 45,
         P_EQG, 71, P_DFB, 49, P_DWID, 45, P_LEVL, 127, P_GATE, 25, L1 + L_DEST, 11, L1 + L_WAVE, 9, L1 + L_TRIG, 12,
         L1 + L_MULT, 56, L1 + L_DPTH, 28, P_MODT, 106, P_MODR, 32, P_MODD, 126);
     p->glob[G_SWNG] = 20;
-    p->glob[G_VERB] = 61;
-    p->glob[G_DAMP] = 127;
+    p->glob[G_VERB] = 96;
+    p->glob[G_DAMP] = 68;
     p->glob[G_HISS] = 10;
     static const uint8_t A02_TRIGS[] = {   /* track, step, note, flags, condition, retrigs */
         0,0,64,1,0,0, 0,8,64,1,0,0, 0,16,64,1,0,0, 0,24,64,1,0,0, 0,32,61,1,0,0, 0,40,61,1,0,0, 0,48,61,1,0,0,
@@ -771,7 +841,7 @@ static void factory(void)
      * pass; the cymbal on the second and fourth */
     p = part(2, "SUSPEND", 110, MACHINES(M_ENS, M_DKIK, M_GSIN, M_GSIN, M_FMS, M_DCYM));
     SET(p, 0, SD, 82, SE, 56, SF, 44, SG, 71, P_ATK, 20, P_HOLD, 127, P_DEC, 127, P_REL, 114, P_BASE, 10, P_WDTH, 42,
-        P_LPQ, 51, P_FATK, 18, P_FDEC, 95, P_WOF, 80, P_SPU, 22, P_LEVL, 110, P_GATE, 127, L1 + L_DEST, 18,
+        P_LPQ, 51, P_FATK, 18, P_FDEC, 95, P_WOF, 80, P_SPU, 52, P_LEVL, 110, P_GATE, 127, L1 + L_DEST, 18,
         L1 + L_WAVE, 27, L1 + L_TRIG, 12, L1 + L_MULT, 24, L1 + L_SPD, 16, L1 + L_DPTH, 52, L3 + L_DEST, 18,
         L3 + L_WAVE, 9, L3 + L_TRIG, 12, L3 + L_MULT, 8, L3 + L_SPD, 4, L3 + L_DPTH, 82, P_MODT, 21, P_MODR, 18,
         P_MODD, 83, P_MODM, 58);
@@ -783,15 +853,15 @@ static void factory(void)
         P_FOLD, 34, P_XOR, 8, P_LEVL, 104, P_GATE, 23, P_MODT, 106, P_MODR, 36, P_MODD, 74, P_MODM, 46);
     SET(p, 3, P_ATK, 10, P_HOLD, 127, P_DEC, 127, P_REL, 70, P_LEVL, 77, P_GATE, 127);
     SET(p, 4, SA, 82, SB, 62, SC, 74, SD, 6, SF, 22, SG, 49, P_DEC, 57, P_REL, 78, P_DIST, 86, P_BASE, 1, P_WDTH, 59,
-        P_HPQ, 10, P_LPQ, 54, P_FATK, 19, P_FDEC, 90, P_DTIM, 32, P_DSND, 72, P_DFB, 33, P_DWID, 65, P_SPU, 33,
+        P_HPQ, 10, P_LPQ, 54, P_FATK, 19, P_FDEC, 90, P_DTIM, 32, P_DSND, 87, P_DFB, 33, P_DWID, 65, P_SPU, 63,
         P_LEVL, 90, P_GATE, 12, L1 + L_DEST, 7, L1 + L_WAVE, 9, L1 + L_TRIG, 12, L1 + L_MULT, 8, L1 + L_DPTH, 38,
         P_MODT, 21, P_MODR, 24, P_MODD, 90, P_MODM, 86);
     SET(p, 5, SA, 73, SB, 124, SC, 51, SD, 104, SE, 65, SF, 6, SG, 58, SH, 9, P_HOLD, 8, P_DEC, 81, P_REL, 69,
         P_PAN, 86, P_BASE, 77, P_WDTH, 78, P_HPQ, 55, P_LPQ, 73, P_FATK, 19, P_FDEC, 9, P_BOF, 44, P_WOF, 88,
-        P_EQF, 113, P_EQG, 85, P_FOLD, 30, P_SPU, 13, P_LEVL, 51, P_GATE, 36);
+        P_EQF, 113, P_EQG, 85, P_FOLD, 30, P_SPU, 40, P_LEVL, 51, P_GATE, 36);
     p->glob[G_SWNG] = 20;
-    p->glob[G_VERB] = 61;
-    p->glob[G_DAMP] = 127;
+    p->glob[G_VERB] = 96;
+    p->glob[G_DAMP] = 68;
     p->glob[G_HISS] = 10;
     static const uint8_t A03_TRIGS[] = {   /* track, step, note, flags, condition, retrigs */
         0,0,57,1,6,0, 0,1,57,1,7,0, 0,16,58,1,6,0, 0,17,58,1,7,0, 0,32,62,1,6,0, 0,33,57,1,7,0, 0,48,62,1,6,0,
@@ -832,16 +902,16 @@ static void factory(void)
         P_FOLD, 34, P_XOR, 8, P_LEVL, 117, P_GATE, 23, P_MODT, 106, P_MODR, 36, P_MODD, 74, P_MODM, 46);
     SET(p, 3, P_ATK, 10, P_HOLD, 127, P_DEC, 127, P_REL, 60, P_LEVL, 70, P_GATE, 100);
     SET(p, 4, SA, 82, SB, 62, SC, 74, SD, 6, SF, 22, SG, 49, P_DEC, 57, P_REL, 78, P_DIST, 86, P_BASE, 1, P_WDTH, 59,
-        P_HPQ, 10, P_LPQ, 54, P_FATK, 19, P_FDEC, 90, P_DTIM, 32, P_DSND, 72, P_DFB, 33, P_DWID, 65, P_SPU, 27,
+        P_HPQ, 10, P_LPQ, 54, P_FATK, 19, P_FDEC, 90, P_DTIM, 32, P_DSND, 87, P_DFB, 33, P_DWID, 65, P_SPU, 63,
         P_LEVL, 98, P_GATE, 12, L1 + L_DEST, 7, L1 + L_WAVE, 9, L1 + L_TRIG, 12, L1 + L_MULT, 8, L1 + L_DPTH, 38,
         P_MODT, 21, P_MODR, 24, P_MODD, 90, P_MODM, 86);
     SET(p, 5, SA, 73, SB, 124, SC, 51, SD, 104, SE, 65, SF, 6, SG, 58, SH, 9, P_HOLD, 8, P_DEC, 81, P_REL, 69,
         P_PAN, 86, P_BASE, 77, P_WDTH, 78, P_HPQ, 55, P_LPQ, 73, P_FATK, 19, P_FDEC, 9, P_BOF, 44, P_WOF, 88,
-        P_EQF, 113, P_EQG, 85, P_FOLD, 30, P_SPU, 11, P_LEVL, 56, P_GATE, 36);
+        P_EQF, 113, P_EQG, 85, P_FOLD, 30, P_SPU, 40, P_LEVL, 56, P_GATE, 36);
     p->glob[G_SWNG] = 30;
     p->glob[G_ADPC] = 7;
-    p->glob[G_VERB] = 25;
-    p->glob[G_DAMP] = 88;
+    p->glob[G_VERB] = 26;
+    p->glob[G_DAMP] = 56;
     p->glob[G_HISS] = 10;
     static const uint8_t A04_TRIGS[] = {   /* track, step, note, flags, condition, retrigs */
         0,0,61,1,0,0, 0,6,61,1,0,0, 0,16,60,1,0,0, 0,22,60,1,0,0, 0,32,62,1,0,0, 0,38,62,1,0,0, 0,48,62,1,0,0,
@@ -867,4 +937,9 @@ static void factory(void)
     };
     locks(p, A04_LOCKS, sizeof A04_LOCKS);
     /* (A05-A16 have none: blank at the factory, the player's after; DEMO brings these four back alone) */
+    /* the four as the owner approved them, written on format 15's amp and LFO laws: onto 16's, once */
+    for (int i = 0; i < 4; i++) feel_v15(PAT(i));
+    /* and on format 16's bus: onto 17's, once (their reverbs to the pair measured nearest, their sends at the level
+     * that keeps them as loud) */
+    for (int i = 0; i < 4; i++) fx_v16(PAT(i));
 }

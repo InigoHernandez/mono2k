@@ -55,7 +55,7 @@ cc -O2 -Wall -Wno-unused-function -Ifirmware/src -Ifirmware/gen -o build/host/m2
 | Factory | project DEMO, bank A: four parts, CIRCUIT, TIDE, SUSPEND and LANTERN (`docs/bank-a.md`: how they were made, key and idea of each), every sound picked by the owner from sound sheets; A05–A16 and banks B–D blank. A store saved with earlier demos takes the new ones where the old still stand |
 | Sequencer | 6 × 64 steps, note / accent / slide, parameter locks, the Monomachine's trig types (each step trigs the amp, the filter's envelope and the LFOs independently: step + VOL, ALL ... NONE, a trigless lock), trig conditions (chance, A:B, 1ST, PRE, FILL), ratchets, swing, live recording and step entry (REC while stopped), pages held to set the length, patterns queued at the bar |
 | Bus | a feedback-delay-network reverb at 22 kHz (RT60 0.3–24 s, DAMP the top's decay 1/1–1/30), a glitch whose one knob grows from rare quiet ghosts to wild (repeats, reverse, gates, octaves, rolls, slowing; every change crossfaded), tape wow and flutter, 4-bit ADPCM crunch, hiss and dust, drive; each control on a law measured over its whole range |
-| MIDI | tracks 1–6 on six channels from GLO > MIDI's CHAN (1–6 at first), the others play the track in view: notes and the Monomachine's CC map (SYN 48–55, AMP 56–63, FILT 72–79, FX 80–87, LFO 1/2/3 on 88/104/112, level 7, mute 3). SYNC IN follows a MIDI clock (its tempo, a step every sixth pulse, the swing kept; start, continue, stop), SYNC OUT sends one (24 a beat, start, stop), NOTES OUT each track's trigs on its channel. The emulator picks a MIDI device in and one out |
+| MIDI | tracks 1–6 on six channels from GLO > MIDI's CHAN (1–6 at first), the others play the track in view: notes and the Monomachine's CC map (SYN 48–55, AMP 56–63, FILT 72–79, FX 80–87, LFO 1/2/3 on 88/104/112, level 7, mute 3). SYNC IN follows a MIDI clock (its tempo, a step every sixth pulse, the swing kept; start, continue, stop) from USB, the TRS jack or both, SYNC OUT sends one (24 a beat, start, stop), NOTES OUT each track's trigs on its channel. GLO > IN: where notes and CCs come from (both, USB, TRS, none), and a thru of the jack's MIDI out over USB. The emulator picks a MIDI device in (as USB) and one out |
 | Screen | 240 × 240 at 1 bit (a 7.2 KB framebuffer): Orbitron in solid ink (one size for every big value), Model:Cycles-style machine cards, machine marks as one family of isotypes on a 12-unit grid, each moving in its own way in time with the pattern, dissolves, glitches, live envelopes, filters, LFOs and scopes; light or dark (GLO > SET > SCRN; on the web it follows the page's theme) |
 
 ## Where things are
@@ -105,7 +105,12 @@ Done so far, all measured on OS 1.32B:
 - **The amp envelope.** The attack rises in a straight line in 0.90 ms × e^(0.0814·v), decay and release fall 20 dB
   in 8.3 ms × e^(0.0665·v), the hold lasts v / 32 of a beat at the tempo (32 is a beat, 8 a sixteenth: measured at 60,
   120 and 240 BPM within 0.3 %, `tools/ref/chain_hold46`, group `hold`; it was a fixed 14.6 ms a step until format 13,
-  fit at one tempo); a key let go ends the hold and the decay. MONO2K follows within a few percent from 0 to 127.
+  fit at one tempo); a key let go ends the hold and the decay. MONO2K followed within a few percent from 0 to 127 until
+  pattern format 16, when the owner chose laws of MONO2K's own for ATK, DEC and REL (gen_tables.py): the knob spent
+  where the times are useful (ATK 0.4 s at 64, 10 s at 127; DEC and REL 0.8 s at 64, 20 s at 127), the attack the
+  square of its time, the time shown the one heard (ATK to full, DEC and REL to -60 dB). Older patterns convert to the
+  value that sounds nearest; the kick cases measured against the Monomachine's DEC are XFAIL for it (group `kick`).
+  The LFOs too: SPD a cycle in 2^((84 − SPD) / 12) beats, DPTH squared about 64.
 - **SWAV-SAW** on SWAVE-SAW's page: the unison pairs' detune and levels, the square and sine subs, within 0.2 c and
   0.5 dB (`tools/ref/swave_saw*.spec`).
 - **SWAV-ENS** on SWAVE-ENS's page (`tools/ref/chain_ens15..20.spec`, `ensacc`): PCH2–4 off its interval table (−12
@@ -310,7 +315,7 @@ went from full-level replacements (16 dB under the mix even at 1) to a law in ra
 and the modes (44 dB under at 1). PERFORM's repeats lock to the grid, every effect crossfades in and out, DRIVE holds
 its level. Old patterns convert by measurement (`tools/conv17.py`: the reverb to the pair nearest by its octaves'
 RT60s and each send by the level that keeps it as loud; GLCH by its glitch's energy and events; the sends' squares to
-straight levels); bank A was rewritten so (its reverb's return within 2 dB, its octaves within 3 dB at 250 Hz and
+straight levels); bank A is turned so at build (its reverb's return within 2 dB of the approved, its octaves within 3 dB at 250 Hz and
 1 kHz). The delay's send leaves the Monomachine's square there (regress.py's delay_send: XFAIL).
 
 DIGI-WAV plays either bank, set on SYN's third page (BANK: M2K, MONO2K's 32 waves across WAVE's range as before; M64,

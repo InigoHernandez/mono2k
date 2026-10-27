@@ -125,7 +125,7 @@ host/m2k_host.c    tests, renders, screenshots, the text audit
 void m2k_init(uint32_t seed);
 void m2k_render(int16_t *lr, int frames);        /* interleaved stereo, a multiple of 16 */
 void m2k_key(int k, int down);  void m2k_button(int b, int down);  void m2k_encoder(int e, int delta);
-void m2k_midi(int status, int d1, int d2);
+void m2k_midi(int status, int d1, int d2);      /* as from USB; m2k_midi_from(src, ...) names USB or TRS */
 const uint8_t *m2k_frame(uint32_t ms);           /* 240 x 240, 1 bit, MSB first, 1 = ink */
 const uint8_t *m2k_leds(void);                   /* 27 keys then 14 buttons, 0..255 */
 /* store: m2k_store_buf / _pack / _unpack / _pack_as; projects; MIDI out with a sample stamp */
@@ -200,7 +200,9 @@ package shows the real load on the FM-1's screen.
   the bar's end, "jump now", fill held, fill on the next loop.
 - Live recording (to the nearest step), step entry (stopped: keys write, EDIT a rest, PRESETS the cursor).
 - MIDI clock in and out, notes out a channel per track, the Monomachine's CC map. `m2k_midi_out(msg, played)` hands
-  out what is due once the sound has reached sample `played`, so timing matches what you hear.
+  out what is due once the sound has reached sample `played`, so timing matches what you hear. USB and the TRS jack
+  kept apart (the platform marks the jack's as cable 1): the clock from SYNC IN's (OFF USB TRS BOTH), notes and CCs
+  from NOTE IN's, and a thru of the jack's out over USB.
 
 ---
 

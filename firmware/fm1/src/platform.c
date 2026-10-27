@@ -7,7 +7,7 @@
  *   boot + boot guard   a firmware that crashes at boot falls back to the USB rescue, then to the ROM
  *   USB rescue          OCT- held at power-on: no audio, only the updater (the web installer still works)
  *   updater             the M-UPGRADE SysEx path: the web installer / the hub can always reach the FM-1
- *   USB-MIDI            in and out (midi_get, midi_send); TRS MIDI in lands in the same queue
+ *   USB-MIDI            in and out (midi_get, midi_send); TRS MIDI in lands in the same queue, as its own cable
  *   second core         audio_worker_submit / audio_worker_join: a render job on CPU1 (DINGHY_DUAL_CORE)
  *   USB audio           the output as a class-compliant 16-bit stereo input, 44.1 or 48 kHz
  *   keys, knobs, LEDs   fm1_in.notes / buttons, fm1_input_edges, fm1_enc_take, fm1_led_key (hal/fm1_input.h)
@@ -249,14 +249,16 @@ static int bank_save(const void *p, uint32_t n)   /* erases the sector: ~50 ms w
     return fl_write(BANK_AT, p, n);
 }
 
-/* ---- MIDI over USB: 4-byte USB-MIDI packets, cable 0 */
-static int midi_get(uint8_t *st, uint8_t *d1, uint8_t *d2)   /* 1: a message (status, data 1, data 2) */
+/* ---- MIDI over USB: 4-byte USB-MIDI packets, cable 0; the TRS jack's in the same queue as cable MIDI_TRS (MONO2K) */
+static int midi_get(uint8_t *src, uint8_t *st, uint8_t *d1, uint8_t *d2)   /* 1: a message (where from: 0 USB,
+                                                                              MIDI_TRS the jack; status, data 1, 2) */
 {
     uint32_t pk;
     if (mi_r == mi_w)
         return 0;
     pk = midi_in_q[mi_r % MQ];
     mi_r++;
+    *src = (uint8_t)(pk >> 4 & 15u);
     *st = (uint8_t)(pk >> 8);
     *d1 = (uint8_t)(pk >> 16);
     *d2 = (uint8_t)(pk >> 24);
@@ -265,7 +267,8 @@ static int midi_get(uint8_t *st, uint8_t *d1, uint8_t *d2)   /* 1: a message (st
 static uint32_t midi_in_drops(void) { return um.drops; }     /* TRS bytes lost (the ring) + messages lost (the queue), by midi_uart.c */
 static void midi_send(uint32_t st, uint32_t d1, uint32_t d2)   /* from the main loop only */
 {
-    midi_out_event((st >> 4) | st << 8 | (d1 & 0x7Fu) << 16 | (d2 & 0x7Fu) << 24);
+    uint32_t cin = st == 0xF2u ? 3u : st >> 4;   /* the song position a three-byte system common (MONO2K: the thru's) */
+    midi_out_event(cin | st << 8 | (d1 & 0x7Fu) << 16 | (d2 & 0x7Fu) << 24);
 }
 
 /* ---- the timer: 10 kHz key scan, milliseconds, USB at 2 kHz. It outranks the audio ISR; nested in a

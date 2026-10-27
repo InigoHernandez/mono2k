@@ -354,7 +354,7 @@
   const status = (s) => console.info("MONO2K:", s);   /* the page keeps no status line: messages go to the console */
 
   async function boot() {
-    const r = await fetch("m2k.wasm?v=83");
+    const r = await fetch("m2k.wasm?v=84");
     wasmBytes = await r.arrayBuffer();
     pre = new WebAssembly.Instance(new WebAssembly.Module(wasmBytes), {}).exports;
     if (pre._initialize) pre._initialize();
@@ -432,8 +432,9 @@
   const send = (m) => { if (node) node.port.postMessage(m); };
 
   // ---------------------------------------------------------------------------------------------------- MIDI
-  /* Web MIDI: a device in (notes, controls, the clock and transport, into the core as the FM-1's USB and TRS take
-   * them) and one out (what the core sends: GLO > MIDI's clock and notes), stamped ahead by the sound's latency */
+  /* Web MIDI: a device in (notes, controls, the clock and transport, into the core as the FM-1's USB takes them: GLO >
+   * MIDI's SYIN and IN's NOTE pick USB or TRS there) and one out (what the core sends: GLO > MIDI's clock and notes),
+   * stamped ahead by the sound's latency */
   const S_SYNI = 2, S_SYNO = 3, S_NOTO = 4, MIDI_KEY = "mono2k.midi";
   let midiAcc = null, midiIn = null, midiOut = null;
   const midiPrefs = () => { try { return JSON.parse(localStorage.getItem(MIDI_KEY) || "{}"); } catch (e) { return {}; } };
@@ -495,7 +496,7 @@
   }
 
   // ---------------------------------------------------------------------------------------------- readouts
-  let machineNames = [];
+  let machineNames = [], machineOrder = [];      /* names by number; the numbers in ALGORITHM's order */
   let startPattern = -1, patNames = [], projNames = [], curPat = 0, queuedPat = 0, playingNow = 0, curProj = 0;
   const label = (n) => "ABCD"[n >> 4] + String((n & 15) + 1).padStart(2, "0");
   /* the patterns: the web shows bank A, the demos; the other banks are the FM-1's. While playing, a click queues
@@ -630,14 +631,15 @@
   // ---------------------------------------------------------------------------------------- machine sheet
   function machines() {
     const x = pre, n = x.w_machines(), grid = $("mgrid");
-    machineNames = [];
+    machineNames = Array.from({ length: n }, (_, m) => cstr(x, x.w_mi(m, 0)));   /* by number, as patterns keep them */
+    machineOrder = Array.from({ length: n }, (_, k) => (x.w_morder ? x.w_morder(k) : k));   /* (an older m2k.wasm: by number) */
     grid.innerHTML = "";
-    for (let m = 0; m < n; m++) {
-      const name = cstr(x, x.w_mi(m, 0)), style = cstr(x, x.w_mi(m, 2)), cls = cstr(x, x.w_mi(m, 3));
-      machineNames.push(name);
+    for (let k = 0; k < n; k++) {                    /* the cards in ALGORITHM's order */
+      const m = machineOrder[k];
+      const name = machineNames[m], style = cstr(x, x.w_mi(m, 2)), cls = cstr(x, x.w_mi(m, 3));
       const card = document.createElement("article");
       card.className = "mcard";
-      card.style.setProperty("--i", String(m % 3 + (m / 3 | 0)));   /* dealt out in diagonals when scrolled to */
+      card.style.setProperty("--i", String(k % 3 + (k / 3 | 0)));   /* dealt out in diagonals when scrolled to */
       const st = ["PUNCH", "METAL", "PLASTIC"].map((s, i) => {          /* five segments, as the screen's card */
         const v = x.w_stat(m, i);
         return `<span class="stat"><b>${s}</b><i>${Array.from({ length: 5 }, (_, k) => `<u class="${k < v ? "on" : ""}"></u>`).join("")}</i></span>`;
@@ -690,7 +692,7 @@
     ];
     const li = (r) => `<li><b>${r.s4}</b>${r.name}</li>`;
     grid.innerHTML = blocks.map(([t, page, subs]) => page === P.SYN
-      ? `<section class="pblk"><h5>${t}<select id="psyn" aria-label="Machine">${machineNames.map((n, m) => `<option value="${m}">${n}</option>`).join("")}</select></h5><ol id="psynl">${knobs(page, subs, 0).map(li).join("")}</ol></section>`
+      ? `<section class="pblk"><h5>${t}<select id="psyn" aria-label="Machine">${machineOrder.map((m) => `<option value="${m}">${machineNames[m]}</option>`).join("")}</select></h5><ol id="psynl">${knobs(page, subs, 0).map(li).join("")}</ol></section>`
       : `<section class="pblk"><h5>${t}</h5><ol>${knobs(page, subs, 0).map(li).join("")}</ol></section>`).join("");
     $("psyn").addEventListener("change", (e) => { $("psynl").innerHTML = knobs(P.SYN, [0, 1], +e.target.value).map(li).join(""); });
     const codes = new Set(blocks.flatMap(([, page, subs]) => knobs(page, subs, 0).map((r) => r.code)));

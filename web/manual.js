@@ -138,15 +138,17 @@
   };
   const cstr = (x, p) => { const m = new Uint8Array(x.memory.buffer); let s = ""; while (m[p]) s += String.fromCharCode(m[p++]); return s; };
   async function firmware() {
-    const r = await fetch("m2k.wasm?v=83");
+    const r = await fetch("m2k.wasm?v=84");
     const x = new WebAssembly.Instance(new WebAssembly.Module(await r.arrayBuffer()), {}).exports;
     if (x._initialize) x._initialize();
     x.w_init(2000);
-    /* the machines: their marks drawn as the emulator's cards draw them */
+    /* the machines, in ALGORITHM's order (an older m2k.wasm without w_morder: by number): their marks drawn as the
+     * emulator's cards draw them */
     const ml = $("[data-machines]");
     if (ml) {
       ml.innerHTML = "";
-      for (let m = 0; m < x.w_machines(); m++) {
+      for (let i = 0; i < x.w_machines(); i++) {
+        const m = x.w_morder ? x.w_morder(i) : i;
         const name = cstr(x, x.w_mi(m, 0)), style = cstr(x, x.w_mi(m, 2)), cls = cstr(x, x.w_mi(m, 3));
         const knobs = Array.from({ length: 8 }, (_, i) => {
           const s4 = cstr(x, x.w_syn(m, i, 0)), ln = cstr(x, x.w_syn(m, i, 1));
@@ -180,7 +182,7 @@
       ...[0, 1, 2, 3].map((sub) => [cstr(x, x.w_page_label(P.FX, sub)), "FX", P.FX, [sub]]),
       ...[0, 1, 2].map((l) => [`LFO ${l + 1}`, "LFO", P.LFO, [2 * l, 2 * l + 1]]),
       ["ARP", "ARP", P.ARP, [0]],
-      ...[0, 1, 2, 3].map((sub) => [cstr(x, x.w_page_label(P.GLO, sub)), "GLO", P.GLO, [sub]]),
+      ...Array.from({ length: x.w_subs(P.GLO) }, (_, sub) => [cstr(x, x.w_page_label(P.GLO, sub)), "GLO", P.GLO, [sub]]),   /* TIME .. MIDI, IN */
     ];
     const pages = $("[data-pages]");
     if (pages) pages.innerHTML = `<table><thead><tr><th>Page</th><th>Button</th><th>Knobs</th></tr></thead><tbody>${BLOCKS.map(([t, b, page, subs]) =>

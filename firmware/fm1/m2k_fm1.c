@@ -70,9 +70,9 @@ static uint32_t job_ticks;                      /* the second core's time on job
 static void par_end(void) { audio_worker_join(); job_ticks += audio_worker.last_job_ticks; }
 #endif
 
-/* ---- MIDI out (GLO > MIDI's clock and notes): each message once the interrupt has taken the sound it belongs to
- * (the ring runs ahead of the speaker; sent at render time it would run 17 ms ahead of the sound). USB only: the
- * FM-1's TRS jack is an input */
+/* ---- MIDI out (GLO > MIDI's clock and notes, IN's thru): each message once the interrupt has taken the sound it
+ * belongs to (the ring runs ahead of the speaker; sent at render time it would run 17 ms ahead of the sound). USB only:
+ * the FM-1's TRS jack is an input */
 static void midi_drain(void)
 {
     uint8_t m[3];
@@ -99,8 +99,8 @@ static void take_panel(void)
         int32_t d = fm1_enc_take(i);
         if (d) m2k_encoder(ENC_OF[i], d);
     }
-    uint8_t st, d1, d2;
-    while (midi_get(&st, &d1, &d2)) m2k_midi(st, d1, d2);
+    uint8_t src, st, d1, d2;
+    while (midi_get(&src, &st, &d1, &d2)) m2k_midi_from(src == MIDI_TRS ? M2K_TRS : M2K_USB, st, d1, d2);
 }
 
 /* ---- a test build's meter (M2K_FM1_DIAG): over the top 16 lines, in red, shares of real time in %: CPU the first

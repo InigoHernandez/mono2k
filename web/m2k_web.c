@@ -16,7 +16,7 @@ EXPORT void w_init(uint32_t seed) { m2k_init(seed); }
 EXPORT void w_key(int k, int d) { m2k_key(k, d); }
 EXPORT void w_button(int b, int d) { m2k_button(b, d); }
 EXPORT void w_encoder(int e, int d) { m2k_encoder(e, d); }
-EXPORT void w_midi(int s, int a, int b) { m2k_midi(s, a, b); }
+EXPORT void w_midi(int s, int a, int b) { m2k_midi(s, a, b); }   /* Web MIDI in: the FM-1's USB */
 EXPORT uint8_t *w_store_buf(void) { int m; return m2k_store_buf(&m); }
 EXPORT int w_store_max(void) { int m; m2k_store_buf(&m); return m; }
 EXPORT int w_store_pack(void) { return m2k_store_pack(); }
@@ -72,9 +72,7 @@ EXPORT void w_set_machine(int t, int m)
 {
     t %= M2K_TRACKS;
     if (m < 0 || m >= M_COUNT) return;
-    pat[cur_pat].machine[t] = (uint8_t)m;
-    m_cpy(pat[cur_pat].kit[t], MACH_DEF[m], 8);
-    m_cpy(trk[t].eff, pat[cur_pat].kit[t], 8);
+    machine_to(t, m);                                    /* as ALGORITHM: an INIT sound takes m's whole INIT */
     dirty = 1;
 }
 /* in the page's own copy of the core: the machines the edited pattern has, so the labels and the formats follow them */
@@ -121,12 +119,12 @@ EXPORT const uint8_t *w_info(void)
     w_inf[11] = (uint8_t)seq_len();
     w_inf[12] = sq.queued;
     w_inf[13] = pat[cur_pat].mute;
-    w_inf[14] = (uint8_t)ui.oct;
+    w_inf[14] = (uint8_t)ui.oct[ui.trk];     /* the track in view's keyboard octave */
     w_inf[15] = master_vol;
     w_inf[16] = ui.nheld;
     for (int t = 0; t < M2K_TRACKS; t++) w_inf[17 + t] = pat[cur_pat].machine[t];
     w_inf[23] = (uint8_t)m2k_project_current();
-    w_inf[24] = store_.set[S_SYNI] >= 64;    /* GLO > MIDI */
+    w_inf[24] = (clk_from() & 1) != 0;       /* GLO > MIDI: the clock taken from USB, where the page's MIDI comes in */
     w_inf[25] = store_.set[S_SYNO] >= 64;
     w_inf[26] = store_.set[S_NOTO] >= 64;
     return w_inf;
@@ -136,6 +134,7 @@ EXPORT const uint8_t *w_info(void)
 EXPORT const uint8_t *w_mark(int m) { return MARK_BITS[m % ICON_COUNT]; }
 EXPORT const uint8_t *w_icon(int m, int f) { return ICON_BITS[m % ICON_COUNT][f % ICON_FRAMES]; }
 EXPORT int w_machines(void) { return M_COUNT; }
+EXPORT int w_morder(int i) { return M_ORDER[(unsigned)i % M_COUNT]; }   /* the machine at place i, as ALGORITHM steps */
 EXPORT const char *w_mi(int m, int field)
 {
     const mi_t *mi = &MI[m % M_COUNT];

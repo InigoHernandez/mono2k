@@ -14,9 +14,11 @@ enum {
     K_NUM, K_BI, K_TIME, K_HOLD, K_DECT, K_ATIM, K_AHLD, K_ADEC, K_AREL, K_MODT, K_MHZ, K_HZ, K_PAN, K_DTIM, K_BITS, K_SEMI, K_RATIO, K_SEMI24, K_INT25, K_SIDW, K_SIDM,
     K_ALGO, K_VOIC, K_WAVE, K_VOF1, K_VOF2, K_CONS, K_TRK, K_DEST, K_LWAV, K_LTRG, K_MULT, K_AMOD, K_ASPD, K_ARNG, K_GATE,
     K_BPM, K_SWNG, K_LEN, K_GLCH, K_GSIZ, K_FINE, K_TUN2, K_SCRN, K_PROJ, K_LOAD, K_MCH, K_SSEL, K_SLOAD, K_SSAVE, K_SCAT, K_WIPE, K_DEMO, K_SPD,
+    K_SYIN, K_NTIN, K_THRU,                                              /* GLO > MIDI's and IN's: where MIDI comes from */
     K_FOCT, K_FWID, K_FATK, K_FDEC, K_EQHZ, K_DBHZ, K_SRR, K_PCH, K_WBNK, K_FR24, K_FR64, K_FRSQ, K_ONOFF, K_MSRC, K_MFRQ,
     K_DWV4, K_DWV5, K_DRA, K_DRD, K_DOPN, K_DMUL, K_DNHZ, K_DCNT,         /* the DRM- drums' */
-    K_DCAY, K_DAMP                                                        /* the reverb's */
+    K_LSPD, K_LDPT,                                                        /* the LFOs' speed and depth */
+    K_DCAY, K_DAMP                                                         /* the reverb's */
 };
 typedef struct { const char *s4, *name; uint8_t kind; } pi_t;
 
@@ -31,10 +33,11 @@ static const pi_t PI_COMMON[P_LFO - 8] = {
     {"PTCH", "TRACK PITCH", K_SEMI}, {"LEVL", "TRACK LEVEL", K_NUM}, {"MODE", "ARP MODE", K_AMOD}, {"SPD", "ARP SPEED", K_ASPD},
     {"RNG", "ARP RANGE", K_ARNG}, {"GATE", "GATE LENGTH", K_GATE},
 };
-static const pi_t PI_LFO[8] = {
-    {"TRCK", "LFO TRACK", K_TRK}, {"DEST", "LFO DESTINATION", K_DEST}, {"WAVE", "LFO WAVE", K_LWAV}, {"TRIG", "LFO TRIG MODE", K_LTRG},
-    {"MULT", "LFO MULTIPLIER", K_MULT}, {"SPD", "LFO SPEED", K_NUM}, {"PHAS", "START PHASE", K_NUM}, {"DPTH", "LFO DEPTH", K_BI},
-};
+/* each LFO's own (its speed is shown with its MULT: which LFO, from where in here) */
+#define PI_LFO1 \
+    {"TRCK", "LFO TRACK", K_TRK}, {"DEST", "LFO DESTINATION", K_DEST}, {"WAVE", "LFO WAVE", K_LWAV}, {"TRIG", "LFO TRIG MODE", K_LTRG}, \
+    {"MULT", "LFO MULTIPLIER", K_MULT}, {"SPD", "LFO CYCLE", K_LSPD}, {"PHAS", "START PHASE", K_NUM}, {"DPTH", "LFO DEPTH", K_LDPT}
+static const pi_t PI_LFO[24] = {PI_LFO1, PI_LFO1, PI_LFO1};
 static const pi_t PI_WBNK = {"BANK", "WAVE BANK", K_WBNK};
 static const pi_t PI_MOD[4] = {
     {"TYPE", "MOD TYPE", K_MODT}, {"RATE", "MOD RATE", K_MHZ}, {"DPTH", "MOD DEPTH", K_NUM}, {"MIX", "MOD MIX", K_NUM},
@@ -48,12 +51,12 @@ static const pi_t PI_GLOB[G_COUNT] = {
     {"SPD", "T5 SPEED", K_SPD}, {"SPD", "T6 SPEED", K_SPD},
 };
 
-static const pi_t PI_SET[13] = {
+static const pi_t PI_SET[15] = {
     {"SCRN", "SCREEN", K_SCRN},
     {"PROJ", "PROJECT", K_PROJ},
     {"LOAD", "LOAD PROJECT", K_LOAD},
     {"CHAN", "MIDI CHANNEL", K_MCH},   /* GLO > MIDI */
-    {"SYIN", "SYNC IN", K_ONOFF},
+    {"SYIN", "SYNC IN", K_SYIN},
     {"SYOU", "SYNC OUT", K_ONOFF},
     {"NOTE", "NOTES OUT", K_ONOFF},
     {"SLOT", "SOUND SLOT", K_SSEL},    /* SYN > SND: the sound library */
@@ -62,6 +65,8 @@ static const pi_t PI_SET[13] = {
     {"CAT", "CATEGORY", K_SCAT},
     {"WIPE", "EVERY PATTERN INIT", K_WIPE},   /* GLO > SET */
     {"DEMO", "BANK A'S DEMOS BACK", K_DEMO},
+    {"NOTE", "NOTES IN", K_NTIN},      /* GLO > IN */
+    {"THRU", "MIDI THRU", K_THRU},
 };
 
 typedef struct {
@@ -70,9 +75,10 @@ typedef struct {
     pi_t syn[8];
 } mi_t;
 
-/* the machines as the selector steps through them: the Monomachine's order (its FM+ STAT, PAR, DYN together) */
-static const uint8_t M_ORDER[M_COUNT] = {M_GSIN, M_GNOI, M_GPRC, M_DKIK, M_DSNR, M_DHAT, M_DCYM, M_SID, M_FMS, M_FMP, M_FMD, M_SAW,
-                                          M_PUL, M_ENS, M_WAV, M_VOX, M_FXC, M_FXD, M_FXR};
+/* the machines as the selector steps through them (patterns keep their numbers): the ten tonal ones first, the sine
+ * and the SWAV and FM+ families together, then the drums in a kit's order, the noises, the FX (silent alone) */
+static const uint8_t M_ORDER[M_COUNT] = {M_GSIN, M_SAW, M_PUL, M_ENS, M_FMS, M_FMP, M_FMD, M_VOX, M_WAV, M_SID,
+                                          M_DKIK, M_DSNR, M_DHAT, M_DCYM, M_GPRC, M_GNOI, M_FXC, M_FXD, M_FXR};
 static int m_place(int m) { for (int i = 0; i < M_COUNT; i++) if (M_ORDER[i] == m) return i; return 0; }
 
 static const mi_t MI[M_COUNT] = {
@@ -106,7 +112,7 @@ static const mi_t MI[M_COUNT] = {
     {"FM+PAR", "FM+", "TRIPLE", "SYNTH", {4, 5, 3},
      {{"1FRQ", "RATIO 1", K_FR24}, {"1ENV", "DEPTH / DECAY 1", K_BI}, {"2FRQ", "RATIO 2", K_FR24}, {"2ENV", "DEPTH / DECAY 2", K_BI},
       {"3FRQ", "RATIO 3", K_FR24}, {"3ENV", "DEPTH / DECAY 3", K_BI}, {"TONE", "TONE", K_NUM}, {"TUNE", "TUNE", K_TUN2}}},
-    {"SWAV-PUL", "SWAV", "PULSE", "SYNTH", {3, 1, 4},
+    {"SWAV-PUL", "SWV", "PULSE", "SYNTH", {3, 1, 4},
      {{"UNIL", "UNISON LEVEL", K_NUM}, {"UNIW", "UNISON WIDTH", K_NUM}, {"SUB1", "SINE SUB -1", K_NUM}, {"SUB2", "SINE SUB -2", K_NUM},
       {"PW", "PULSE WIDTH", K_NUM}, {"PWAD", "PW SWEEP", K_NUM}, {"PWRS", "SWEEP RESET", K_ONOFF}, {"TUNE", "TUNE", K_TUN2}}},
     {"FX-CHORS", "FX", "CHORUS", "FX", {1, 2, 3},
@@ -167,13 +173,14 @@ static const pi_t PI_NONE = {"-", "-", K_NUM};     /* a knob a page leaves free 
 static const pi_t *pinfo(int t, int id)
 {
     if (id == 0xFF) return &PI_NONE;
-    if (id >= 0xC0) { int s = id & 0x3F; return &PI_SET[s == 16 ? 1 : s == 17 ? 2 : s >= 18 && s <= 23 ? 7 + s - 18 : s >= S_MCH && s <= S_NOTO ? 3 + s - S_MCH : 0]; }
+    if (id >= 0xC0) { int s = id & 0x3F; return &PI_SET[s == 16 ? 1 : s == 17 ? 2 : s >= 18 && s <= 23 ? 7 + s - 18 : s >= S_MCH && s <= S_NOTO ? 3 + s - S_MCH
+                                            : s == S_NTIN ? 13 : s == S_THRU ? 14 : 0]; }
     if (id >= 0x80) return &PI_GLOB[id & 0x7F];
     if (id < 8) return &MI[PAT(cur_pat)->machine[t]].syn[id];
     if (id < P_LFO) return &PI_COMMON[id - 8];
     if (id == P_WBNK) return &PI_WBNK;
     if (id >= P_MODT) return &PI_MOD[(id - P_MODT) & 3];
-    return &PI_LFO[(id - P_LFO) & 7];
+    return &PI_LFO[(id - P_LFO) % 24];
 }
 
 static int kind_choices(int k);
@@ -181,7 +188,7 @@ static int kind_choices(int k);
 static int choice_of(int kind, int v)
 {
     int n = kind_choices(kind);
-    return kind == K_FR24 ? fr24(v) : n ? (v * n) >> 7 : 0;
+    return kind == K_FR24 ? fr24(v) : kind == K_SYIN ? syin_choice(v) : n ? (v * n) >> 7 : 0;
 }
 
 static int kind_choices(int k)
@@ -190,8 +197,8 @@ static int kind_choices(int k)
     case K_RATIO: case K_WAVE: return 32;
     case K_FR24: return 24;
     case K_SIDW: return 5;
-    case K_ONOFF: case K_MSRC: return 2;
-    case K_SIDM: case K_ALGO: case K_ASPD: case K_ARNG: return 4;
+    case K_ONOFF: case K_MSRC: case K_THRU: return 2;
+    case K_SIDM: case K_ALGO: case K_ASPD: case K_ARNG: case K_SYIN: case K_NTIN: return 4;
     case K_SCRN: return 2;
     case K_MCH: return 16;
     case K_SSEL: return M2K_SOUNDS;
@@ -275,6 +282,40 @@ static int filt_q3(int t, int32_t steps_q8)
     return CLAMP((pos * 1087 >> 10) - 132, 0, 1016);
 }
 
+/* an LFO's cycle at SPD v and MULT 2^mu (format 16: 2^((84 - v) / 12 - mu) beats of the LFOs' clock, whatever the
+ * tempo), as a player counts it: bars, a note (dotted, a triplet) where it is one (the clock's: 1.45 % long), else
+ * beats; hertz past a 1/64 note (or past the LFO's fastest, lfo_inc's) */
+static void s_lfo_cycle(char *out, const char **unit, int v, int mu)
+{
+    *unit = "";
+    if (!v) { s_cpy(out, "STOP"); *unit = "STILL"; return; }
+    uint32_t inc = lfo_inc(v * 256, mu, seq_bpm() * 10);
+    int n = 84 - v, r = ((n % 12) + 12) % 12, k = (n - r) / 12 - mu;     /* 2^k beats, times 2^(r / 12) */
+    if (inc >= LFO_MAX || k < -4 || (k == -4 && r)) {
+        int h10 = (int)mulu_hi(inc, 27563, 32);                              /* inc x 44100 / 16 / 2^32, in 0.1 Hz */
+        if (h10 < 1000) s_dec1(out, h10); else s_int(out, (h10 + 5) / 10);
+        *unit = "HZ";
+        return;
+    }
+    if (k >= 2 && (r == 0 || r == 7)) {                                      /* a bar or more: 1, 1.5, 2, 3, 4 .. 32 */
+        int b2 = (r ? 3 : 2) << (k - 2);                                     /* half bars */
+        if (b2 & 1) s_dec1(out, b2 * 5); else s_int(out, b2 / 2);
+        *unit = b2 == 2 ? "BAR" : "BARS";
+        return;
+    }
+    if (k < 2 && (r == 0 || r == 7 || (r == 5 && k <= 0))) {                 /* a note: 1/2 .. 1/64, dotted, triplets */
+        char *e = s_cpy(out, "1/");
+        e = s_int(e, r == 5 ? 2 << -k : k >= 0 ? 4 >> k : 4 << -k);
+        if (r) s_cpy(e, r == 7 ? "." : "T");
+        *unit = r == 7 ? "NOTE DOTTED" : r == 5 ? "NOTE TRIPLET" : "NOTE";
+        return;
+    }
+    uint32_t c = T_LCYC[v] >> mu;                                            /* 1/1000 beat */
+    if (c >= 4000) { s_dec1(out, (int)(c / 400)); *unit = "BARS"; }
+    else if (c >= 1000) { s_dec1(out, (int)(c / 100)); *unit = "BEATS"; }
+    else { char *e = s_cpy(out, "0."); e[0] = (char)('0' + c / 100); e[1] = (char)('0' + c / 10 % 10); e[2] = 0; *unit = "BEAT"; }
+}
+
 /* the value as the screen shows it, and its unit */
 static void s_num3(char *o, int v) { o[0] = (char)('0' + v / 100); o[1] = (char)('0' + v / 10 % 10); o[2] = (char)('0' + v % 10); o[3] = 0; }
 static int snd_sel_get(void);                        /* SYN > SND's slot (the screen's state, below) */
@@ -311,6 +352,19 @@ static void fmt(const pi_t *pi, int t, int v, char *out, const char **unit)
         break;
     }
     case K_DWV4: case K_DWV5: s_cpy(out, DWAV_N[c]); break;
+    case K_LSPD: {                                  /* with its own LFO's MULT */
+        int l = (int)(pi - PI_LFO) >> 3;
+        s_lfo_cycle(out, unit, v, choice_of(K_MULT, PAT(cur_pat)->kit[t][P_LFO + 8 * l + L_MULT]));
+        break;
+    }
+    case K_LDPT: {                                  /* its swing against full (format 16: squared about 64) */
+        int d = T_LDPTH[v & 127], p10 = d < 0 ? -((-d * 1000 + 8192) >> 14) : (d * 1000 + 8064) / 16128;
+        if (!p10) s_cpy(out, "0");
+        else if (p10 > -100 && p10 < 100) s_sdec1(out, p10);
+        else { char *e = s_cpy(out, p10 < 0 ? "-" : "+"); s_int(e, (p10 < 0 ? -p10 : p10) / 10); }
+        *unit = "%";
+        break;
+    }
     case K_DMUL: s_dec1(out, (256 + T_DRM_PAMT[v]) * 10 / 256); *unit = "X PITCH"; break;   /* at the start: 1 + A */
     case K_DNHZ: s_hz(out, unit, (22050 * (v | 1)) / 127); break;
     case K_DCNT: if (!c) s_cpy(out, "OFF"); else { s_int(out, c); *unit = "HITS"; } break;
@@ -402,6 +456,14 @@ static void fmt(const pi_t *pi, int t, int v, char *out, const char **unit)
     case K_GSIZ: s_cpy(out, GSIZ_N[(v * 5) >> 7]); *unit = "NOTE"; break;
     case K_SCRN: s_cpy(out, c ? "DARK" : "LIGHT"); *unit = "DISPLAY"; break;
     case K_MCH: { char *e = s_cpy(out, "CH"); s_int(e, c + 1); *unit = "T1; T2 NEXT"; break; }
+    case K_SYIN: case K_NTIN: {        /* (BOTH: "USB+TRS" is wider than a knob) */
+        static const char *const N[4] = {"OFF", "USB", "TRS", "BOTH"};
+        int m = pi->kind == K_SYIN ? c : NTIN_FROM[c];   /* each as its sources (m2k_seq.c) */
+        s_cpy(out, N[m]);
+        *unit = m == 3 ? "USB + TRS" : "";
+        break;
+    }
+    case K_THRU: s_cpy(out, c ? "ON" : "OFF"); *unit = "TRS TO USB"; break;
     case K_SSEL: { int i = snd_sel_get(); out[0] = 'S'; s_num3(out + 1, i + 1);
                    *unit = snd[i].name[0] ? snd[i].name : "INIT"; break; }
     case K_SLOAD: s_cpy(out, "TURN"); *unit = "TO LOAD"; break;
@@ -420,7 +482,7 @@ static void fmt(const pi_t *pi, int t, int v, char *out, const char **unit)
 /* -------------------------------------------------------------------------------------------- the pages */
 
 enum { PG_HOME, PG_SYN, PG_AMP, PG_FILT, PG_FX, PG_LFO, PG_ARP, PG_GLO, PG_COUNT };
-static const uint8_t NSUB[PG_COUNT] = {1, 3, 2, 2, 4, 6, 1, 5};   /* SYN: its two, then SND (BANK before it) */
+static const uint8_t NSUB[PG_COUNT] = {1, 3, 2, 2, 4, 6, 1, 6};   /* SYN: its two, then SND (BANK before it) */
 static int nsub(int page);                     /* SYN has a third page, the bank, where the machine plays waves */
 #define SETTING(i) (0xC0 | (i))
 #define GL(g) (0x80 | (g))
@@ -437,7 +499,8 @@ static int knob_param(int page, int sub, int k)
     case PG_FX: return sub < 3 ? P_EQF + sub * 4 + k : P_MODT + k;
     case PG_LFO: return P_LFO + (sub >> 1) * 8 + (sub & 1) * 4 + k;
     case PG_ARP: return P_AMOD + k;
-    case PG_GLO: return sub < 3 ? GL(sub * 4 + k) : sub == 4 ? SETTING(S_MCH + k)      /* PROJ and LOAD only with */
+    case PG_GLO: return sub == 5 ? (k == 0 ? SETTING(S_NTIN) : k == 1 ? SETTING(S_THRU) : NONE)   /* IN */
+                        : sub < 3 ? GL(sub * 4 + k) : sub == 4 ? SETTING(S_MCH + k)      /* PROJ and LOAD only with */
                         : k == 0 ? SETTING(S_SCREEN) : M2K_PROJECTS < 2 ? (k == 1 ? SETTING(22) : k == 2 ? SETTING(23) : NONE)
                         : k == 1 ? SETTING(16) : k == 2 ? SETTING(17) : k == 3 ? SETTING(22) : NONE;   /* projects to choose */
     default: return NONE;
@@ -450,7 +513,7 @@ static void page_label(int page, int sub, char *o)
     switch (page) {
     case PG_FX: s_cpy(o, sub == 0 ? "FX" : sub == 1 ? "DELAY" : sub == 2 ? "DSTR" : "MOD"); break;
     case PG_LFO: { char *e = s_cpy(o, "LFO"); e = s_int(e, (sub >> 1) + 1); s_cpy(e, (sub & 1) ? "B" : "A"); break; }
-    case PG_GLO: s_cpy(o, sub == 0 ? "TIME" : sub == 1 ? "GLITCH" : sub == 2 ? "VERB" : sub == 3 ? "SET" : "MIDI"); break;
+    case PG_GLO: s_cpy(o, sub == 0 ? "TIME" : sub == 1 ? "GLITCH" : sub == 2 ? "VERB" : sub == 3 ? "SET" : sub == 4 ? "MIDI" : "IN"); break;
     case PG_SYN: s_cpy(o, sub >= 2 && sub == nsub(PG_SYN) - 1 ? "SND" : sub == 2 ? "BANK" : "SYN"); break;
     default: s_cpy(o, N[page]); break;
     }
@@ -461,7 +524,7 @@ static void page_label(int page, int sub, char *o)
 static struct {
     uint32_t now, boot_t0;
     uint8_t page, sub, trk, grid, spage, follow;
-    int8_t oct;
+    int8_t oct[M2K_TRACKS];            /* each track's keyboard octave, from its home (OCT-/+: the track in view's) */
     uint8_t note[M2K_TRACKS];          /* the last note played on each track: new trigs take it */
     /* steps held in GRID */
     uint8_t held[8], nheld, held_added[8], held_edit;
@@ -528,6 +591,29 @@ static struct {
 
 static void ui_forget(void);
 
+/* a track at home on note n: its new trigs take n, its keys the octave whose lowest F is 1 to 12 semitones under n (a
+ * C on their first C), so a kick at C2 plays as a kick from the keys and a bass as a bass */
+static void track_home(int t, int n)
+{
+    ui.note[t] = (uint8_t)n;
+    ui.oct[t] = (int8_t)CLAMP((n + 66) / 12 - 10, -3, 3);      /* floor((n - 54) / 12), n from 0 */
+}
+
+/* every track of the open pattern at home: on its root (its trigs'), or its machine's home note without trigs (a
+ * pattern opened, a project or a store loaded, the boot) */
+static void keys_home(void)
+{
+    const m2k_pattern_t *p = PAT(cur_pat);
+    for (int t = 0; t < M2K_TRACKS; t++) {
+        int r = pat_root(p, t);
+        track_home(t, r >= 0 ? r : mach_home(p->machine[t]));
+    }
+}
+
+/* a track's root, the note PADS plays it at and the library keeps a sound made at (pat_root); a track without trigs
+ * plays the note new trigs take */
+static int track_root(const m2k_pattern_t *p, int t) { int r = pat_root(p, t); return r < 0 ? ui.note[t] : r; }
+
 static void ui_init(void)
 {
     m_set(&ui, 0, sizeof ui);
@@ -537,8 +623,7 @@ static void ui_init(void)
         ui.kw[k] = (int8_t)(black ? -1 : w++);
         ui.kb[k] = (int8_t)(black ? b++ : -1);
     }
-    for (int t = 0; t < M2K_TRACKS; t++) ui.note[t] = 60;
-    ui.note[0] = 36;
+    keys_home();
     ui.follow = 1;
     ui.page = PG_HOME;
     ui.icon_spd = 6 << 8;
@@ -635,13 +720,15 @@ static void sound_load(m2k_pattern_t *p)
 {
     m2k_sound_t *sd = &snd[ui.snd_sel];
     char o[16] = {'T', (char)('1' + ui.trk), ' ', 0};
-    if (sd->name[0]) {
+    if (sd->name[0]) {                           /* its keys and new trigs on the note it was made at */
         p->machine[ui.trk] = sd->machine;
         m_cpy(p->kit[ui.trk], sd->kit, P_COUNT);
+        track_home(ui.trk, snd_root[ui.snd_sel]);
         s_cpy(o + 3, sd->name);
         toast("SOUND LOADED", o);
     } else {                                     /* INIT: the track's machine as it starts */
-        kit_default(p, ui.trk, p->machine[ui.trk]);
+        kit_init(p, ui.trk, p->machine[ui.trk]);
+        track_home(ui.trk, mach_home(p->machine[ui.trk]));
         s_cpy(o + 3, MI[p->machine[ui.trk]].name);
         toast("SOUND INIT", o);
     }
@@ -737,7 +824,7 @@ static void edit(int k, int d)
         } else {
             undo_mark(N_PAT, 21);
             if (code >= 0x80) { pat_init(&pat_tmp, "X"); q->glob[code & 0x7F] = pat_tmp.glob[code & 0x7F]; }
-            else { kit_default(&pat_tmp, ui.trk, q->machine[ui.trk]); q->kit[ui.trk][code] = pat_tmp.kit[ui.trk][code]; trk[ui.trk].eff[code] = q->kit[ui.trk][code]; }
+            else { kit_init(&pat_tmp, ui.trk, q->machine[ui.trk]); q->kit[ui.trk][code] = pat_tmp.kit[ui.trk][code]; trk[ui.trk].eff[code] = q->kit[ui.trk][code]; }
             toast(pi0->s4, "BACK TO ITS START");
         }
         ui.focus = (uint8_t)k; ui.focus_t = ui.now | 1u;
@@ -794,7 +881,7 @@ static void edit(int k, int d)
         } else {
             char o[16] = {'S', 0};
             s_num3(o + 1, ui.snd_sel + 1);
-            sound_save(ui.snd_sel, p, ui.trk, ui.snd_cat);
+            sound_save(ui.snd_sel, p, ui.trk, ui.snd_cat, track_root(p, ui.trk));
             o[4] = ' ';
             s_cpy(o + 5, CAT_N[snd_cat[ui.snd_sel]]);
             toast("SOUND SAVED", o);
@@ -825,33 +912,38 @@ static void edit(int k, int d)
     ui.focus_t = ui.now | 1u;
 }
 
-static void set_machine(int m)
+static int kit_same(const uint8_t *a, const uint8_t *b)
+{
+    for (int k = 0; k < P_COUNT; k++) if (a[k] != b[k]) return 0;
+    return 1;
+}
+
+/* machine m on track t (ALGORITHM on EDIT, the Patch Editor's): a sound still its machine's INIT (or the INIT before
+ * these, kit_default's) takes m's whole INIT; one the player shaped takes m's page alone, its chain kept. Its new trigs
+ * and keys go to m's home note */
+static void machine_to(int t, int m)
 {
     m2k_pattern_t *p = PAT(cur_pat);
-    p->machine[ui.trk] = (uint8_t)m;
-    m_cpy(p->kit[ui.trk], MACH_DEF[m], 8);
-    m_cpy(trk[ui.trk].eff, p->kit[ui.trk], 8);
+    kit_init(&pat_tmp, t, p->machine[t]);
+    int fresh = kit_same(p->kit[t], pat_tmp.kit[t]);
+    kit_default(&pat_tmp, t, p->machine[t]);
+    feel_kit_v15(pat_tmp.kit[t]);                  /* (an old pattern's, its amp and LFOs since turned to format 16) */
+    fresh |= kit_same(p->kit[t], pat_tmp.kit[t]);
+    kit_init(&pat_tmp, t, m);
+    int n = fresh ? P_COUNT : 8;
+    m_cpy(p->kit[t], pat_tmp.kit[t], (uint32_t)n);
+    p->machine[t] = (uint8_t)m;
+    m_cpy(trk[t].eff, p->kit[t], (uint32_t)n);
+    track_home(t, mach_home(m));
+}
+
+static void set_machine(int m)
+{
+    machine_to(ui.trk, m);
     start_glitch(4);
     ui.card_t = ui.now | 1u;
     ui.focus_t = 0;
     syn_sub_check();
-}
-
-/* a track's root, the note PADS plays it at: the one its trigs sit on most within the pattern's length (the lowest
- * of equals), so a drum tuned to the key by its note keeps it and a line plays its home note; a track without trigs
- * plays the note new trigs take */
-static int track_root(const m2k_pattern_t *p, int t)
-{
-    uint8_t cnt[128];
-    m_set(cnt, 0, sizeof cnt);
-    int best = -1, len = seq_len();
-    for (int st = 0; st < len; st++) {
-        if (!(p->step[t][st].flags & ST_TRIG)) continue;
-        int n = p->step[t][st].note & 127;
-        if (cnt[n] < 255) cnt[n]++;
-        if (best < 0 || cnt[n] > cnt[best] || (cnt[n] == cnt[best] && n < best)) best = n;
-    }
-    return best < 0 ? ui.note[t] : best;
 }
 
 /* the keys let go of every note they hold: the keys' track changes, or the keys become steps or pads (a note left
@@ -920,6 +1012,16 @@ static int page_length(int pg)
 }
 
 /* step entry: REC armed while stopped, the keys playing: each note is the next step */
+/* a trig taken away: its condition (chance, A:B...), ratchet and locks go with it, so a trig put there later
+ * starts plain (the owner: "when I removed the note or trigger, the probability should be removed too") */
+static void step_remove(int t, int s)
+{
+    m2k_step_t *st = &PAT(cur_pat)->step[t][s];
+    st->flags = 0;
+    st->cond = 0;
+    st->rtrg = 0;
+    lock_clear_step(t, s);
+}
 static int step_entry(void) { return sq.rec && !sq.playing && !ui.grid && !sq.ready; }
 
 static void entry_show(const char *what)
@@ -1030,10 +1132,7 @@ static void key_release(int k)
         int added = 1, was = 0;
         for (int i = 0; i < ui.nheld; i++) if (ui.held[i] == arg) { added = ui.held_added[i]; was = 1; }
         held_remove(arg);
-        if (was && !added && !ui.held_edit && ui.now - ui.kt0[k] < 300) {
-            PAT(cur_pat)->step[ui.trk][arg].flags = 0;
-            lock_clear_step(ui.trk, arg);
-        }
+        if (was && !added && !ui.held_edit && ui.now - ui.kt0[k] < 300) step_remove(ui.trk, arg);
         break;
     }
     default: break;
@@ -1132,7 +1231,7 @@ static void key_event(int k, int down)
         return;
     }
     if (!ui.grid) {
-        int note = 53 + k + 12 * ui.oct;   /* (its release lets go of this note, whatever the octave is by then) */
+        int note = 53 + k + 12 * ui.oct[ui.trk];   /* (its release lets go of this note, whatever the octave is by then) */
         sq.ktrk = ui.trk;
         live_on(note, 100);
         ui.kact[k] = KA_NOTE; ui.karg[k] = (uint8_t)note;
@@ -1402,7 +1501,10 @@ static void verb(int noun, int v)
         if (v == V_PASTE && clipb.kind != 2) { toast("NOTHING", "EDIT + REC COPIES ONE"); break; }
         undo_mark(noun, v);
         if (v == V_PASTE) { p->machine[ui.trk] = clipb.machine; m_cpy(p->kit[ui.trk], clipb.kit, P_COUNT); }
-        else kit_default(p, ui.trk, p->machine[ui.trk]);   /* a sound cleared is INIT: its machine as it starts */
+        else {                                         /* a sound cleared is INIT: its machine as it starts, at home */
+            kit_init(p, ui.trk, p->machine[ui.trk]);
+            track_home(ui.trk, mach_home(p->machine[ui.trk]));
+        }
         m_cpy(trk[ui.trk].eff, p->kit[ui.trk], P_COUNT);
         s_cpy(s_cpy(o, t2), v == V_PASTE ? " SOUND PASTED" : " SOUND INIT");
         toast(o, undo_line);
@@ -1466,22 +1568,27 @@ static void ring_tick(void)
     ring.done = 1;
     m2k_pattern_t *p = PAT(cur_pat);
     char o[28];
+    int home = 1;                                      /* the open pattern INIT: its tracks' keys at their homes */
     if (ring.noun == N_PAT) {
         pattern_init_blank(p);
         s_cpy(s_pat(o, cur_pat), " INIT");
         toast(o, "BLANK. GLO+OCT- UNDO");
     } else if (ring.noun == N_TRK) {
-        kit_default(p, ui.trk, p->machine[ui.trk]);
+        kit_init(p, ui.trk, p->machine[ui.trk]);
+        track_home(ui.trk, mach_home(p->machine[ui.trk]));
+        home = 0;
         char t2[24] = {'T', (char)('1' + ui.trk), 0};
         s_cpy(t2 + 2, " STEPS AND SOUND INIT");
         toast(t2, "GLO+OCT- UNDO");
     } else {
         int n = 0;
+        home = pick_target(cur_pat);
         for (int i = 0; i < M2K_PATTERNS; i++) if (pick_target(i)) { pattern_init_blank(PAT(i)); n++; }
         s_cpy(s_int(o, n), n == 1 ? " PATTERN INIT" : " PATTERNS INIT");
         toast(o, "BLANK, AS INIT BANKS");
     }
     work_reset_current();
+    if (home) keys_home();
     start_glitch(4);
 }
 
@@ -1494,7 +1601,7 @@ static void ask_answer(int yes)
     char o[24];
     switch (k) {
     case ASK_SND_OVER:                                 /* what was asked: that slot, that track's sound */
-        sound_save(ask.slot, PAT(ask.pn), ask.trk, ask.cat);
+        sound_save(ask.slot, PAT(ask.pn), ask.trk, ask.cat, track_root(PAT(ask.pn), ask.trk));
         o[0] = 'S'; s_num3(o + 1, ask.slot + 1); o[4] = ' '; s_cpy(o + 5, CAT_N[snd_cat[ask.slot]]);
         toast("SOUND SAVED", o);
         dirty = 1;
@@ -1502,6 +1609,7 @@ static void ask_answer(int yes)
     case ASK_WIPE:
         for (int i = 0; i < M2K_PATTERNS; i++) pattern_init_blank(PAT(i));
         work_reset_current();
+        keys_home();
         toast("ALL PATTERNS INIT", "THE SOUND LIBRARY KEPT");
         start_glitch(5);
         dirty = 1;
@@ -1510,6 +1618,7 @@ static void ask_answer(int yes)
     case ASK_DEMO:
         factory();                                /* A01-A04, the slots with a demo (FACTORY_DEMOS) */
         work_reset_current();
+        if (cur_pat < FACTORY_DEMOS) keys_home();
         toast("DEMOS BACK", "A01-A04, THE REST KEPT");
         start_glitch(5);
         dirty = 1;
@@ -1545,7 +1654,7 @@ static void sound_keep(void)
     int slot = -1;
     for (int i = 0; i < M2K_SOUNDS && slot < 0; i++) if (!snd[i].name[0]) slot = i;
     if (slot < 0) { toast("LIBRARY FULL", "SYN > SND: REPLACE ONE"); return; }
-    sound_save(slot, p, ui.trk, 0);
+    sound_save(slot, p, ui.trk, 0, track_root(p, ui.trk));
     o[0] = 'S'; s_num3(o + 1, slot + 1); o[4] = ' '; s_cpy(o + 5, CAT_N[snd_cat[slot]]);
     toast("SOUND SAVED", o);
     ui.snd_sel = (uint8_t)slot;
@@ -1814,8 +1923,7 @@ static void button_event(int b, int down)
     case B_ENV: go(PG_AMP); break;
     case B_EDIT:
         if (step_entry()) {                            /* step entry: a rest, and on */
-            PAT(cur_pat)->step[ui.trk][ui.cursor].flags = 0;
-            lock_clear_step(ui.trk, ui.cursor);
+            step_remove(ui.trk, ui.cursor);
             ui.cursor = (uint8_t)((ui.cursor + 1) % seq_len());
             entry_show("REST");
             ui.edit_t0 = 0;
@@ -1833,7 +1941,7 @@ static void button_event(int b, int down)
     case B_ARP: go(PG_ARP); break;
 
     case B_PLAY:
-        if (!sq.playing && sq.rec && !ui.grid && !sq.ready && !set_on(S_SYNI)) {   /* Ready (Demake's): the first */
+        if (!sq.playing && sq.rec && !ui.grid && !sq.ready && !clk_from()) {   /* Ready (Demake's): the first */
             sq.ready = 1;                                                        /* note starts it, recorded */
             toast("READY", "THE FIRST NOTE STARTS IT");
         } else seq_play(!sq.playing);  /* (Ready: PLAY again starts it now) */
@@ -1842,7 +1950,11 @@ static void button_event(int b, int down)
         int d = b == B_OCTU ? 1 : -1;
         if (ui.grid && ui.nheld) held_step_edit(0, d);
         else if (ui.grid) { ui.spage = (uint8_t)CLAMP(ui.spage + d, 0, (seq_len() - 1) / 16); ui.follow = 0; }   /* (the pattern's pages) */
-        else { ui.oct = (int8_t)CLAMP(ui.oct + d, -3, 3); char o[8]; char *e = s_cpy(o, "OCT "); if (ui.oct > 0) *e++ = '+'; s_int(e, ui.oct); toast(o, 0); }
+        else {                                       /* the track in view's octave (each track keeps its own) */
+            int8_t *oc = &ui.oct[ui.trk];
+            *oc = (int8_t)CLAMP(*oc + d, -3, 3);
+            char o[8]; char *e = s_cpy(o, "OCT "); if (*oc > 0) *e++ = '+'; s_int(e, *oc); toast(o, 0);
+        }
         break;
     }
     default: break;
@@ -1870,12 +1982,14 @@ static void select_pattern(int n)
         toast(a, n == cur_pat ? "" : "QUEUED");
         return;
     }
+    int other = n != cur_pat;
     cur_pat = n;
     sq.queued = (uint8_t)n;
     if (ui.spage * 16 >= seq_len()) ui.spage = 0;     /* a page this pattern does not reach shows nothing: its first */
     ui.follow = 1;
     lockmap_build();
     for (int t = 0; t < M2K_TRACKS; t++) m_cpy(trk[t].eff, PAT(n)->kit[t], P_COUNT);
+    if (other) keys_home();
     toast(a, PAT(n)->name);
     start_glitch(4);
 }
@@ -2272,15 +2386,16 @@ static void filt_curve(int X, int W, int top, int yb, int hp, int lp, int hq, in
     *yl = filt_row(filt_db(lp, hp, lp, hq, lq), top, yb);
 }
 
-/* the amp's level at a point of its picture: Q8, 0..256. A straight attack, the hold, the decay falling 48 dB over its
- * segment (straight in dB, as T_ADEC_COEF falls), to the release from where the key is let go (a quarter: -12 dB) */
-static int env_level(int seg, int q, int dec_inf)
+/* the amp's level at a point of its picture (q 0..256 along its segment): Q8, 0..256, on the sound's own curves
+ * (env_block): the attack the square of its time (ATK 0 straight), the hold, the decay straight in dB to where the key
+ * is let go (a quarter: -12 dB), the release on down 48 dB (-60 under full) */
+static int env_level(int seg, int q, int dec_inf, int atk0)
 {
-    if (seg == 0) return q;
+    if (seg == 0) return atk0 ? q : (q * q) >> 8;
     if (seg == 1) return 256;
-    if (seg == 2) return dec_inf ? 256 : 64 + (int)((192u * (iexp2_q16(-(q * 6)) >> 8)) >> 8);   /* to a quarter */
+    if (seg == 2) return dec_inf ? 256 : (int)(iexp2_q16(-(q * 2)) >> 8);                      /* two halvings */
     int from = dec_inf ? 256 : 64;
-    return (int)(((uint32_t)from * (iexp2_q16(-(q * 8)) >> 8)) >> 8);                          /* 48 dB down */
+    return (int)(((uint32_t)from * (iexp2_q16(-(q * 8)) >> 8)) >> 8);                          /* eight */
 }
 
 /* the right column: what the page is about, live */
@@ -2376,9 +2491,9 @@ static void picture(void)
             break;
         }
         /* attack, hold, decay, release as lengths on a log scale (a long decay does not crowd the attack out), the level
-         * as the voice runs it (env_level): the segment being turned fills solid and draws heavy, the others hatched;
-         * dotted lines and handles where each ends, the 50 % level dotted, the letters under their segments, and the
-         * live voice runs on it */
+         * on the voice's own curves (env_level): the segment being turned fills solid and draws heavy, the others
+         * hatched; dotted lines and handles where each ends, the 50 % level dotted, the letters under their segments,
+         * and the live voice runs on it, where its level is on the curve */
         int dec_inf = k[P_DEC] == 127;
         int wa = 6 + k[P_ATK] * 24 / 127, wh = k[P_HOLD] == 127 ? 18 : 2 + k[P_HOLD] * 18 / 127;
         int wd = dec_inf ? 18 : 12 + k[P_DEC] * 30 / 127, wr = 8 + k[P_REL] * 24 / 127;
@@ -2392,7 +2507,7 @@ static void picture(void)
             int seg = x < xs[1] ? 0 : x < xs[2] ? 1 : x < xs[3] ? 2 : 3;
             int len = xs[seg + 1] - xs[seg];
             int q = (x - xs[seg]) * 256 / (len ? len : 1);
-            int y = yb - hgt * env_level(seg, q, dec_inf) / 256;
+            int y = yb - hgt * env_level(seg, q, dec_inf, !k[P_ATK]) / 256;
             int tone = seg == fk ? PT_SOLID : fk < 0 ? PT_VLINES : PT_HATCH;
             for (int j = y + 1; j <= yb; j++) if (pat_ink(tone, x, j)) px(x, j, 1);
             line(x - 1, py, x, y, 1);
@@ -2421,7 +2536,13 @@ static void picture(void)
         int st = mon.astage[ui.trk], lv = mon.aenv[ui.trk];
         if (st) {
             int y = yb - (hgt * lv >> 15);
-            int x = st == 1 ? xs[0] + wa * lv / 32768 : st == 2 ? xs[1] + wh / 2 : st == 3 ? xs[2] + wd - wd * lv / 32768 : xs[3] + 2;
+            /* along its segment as its level says: the attack's square root (ATK 0: straight), the decay's and the
+             * release's halvings (two to a quarter, eight on) */
+            int dn = lv ? (ilog2_q8(32768) - ilog2_q8((uint32_t)lv)) : 8 * 256;          /* halvings under full, Q8 */
+            int ra = !k[P_ATK] ? lv : (int)(atk_from((uint32_t)lv << 15) >> 15);
+            int x = st == 1 ? xs[0] + wa * ra / 32768 : st == 2 ? xs[1] + wh / 2
+                  : st == 3 ? xs[2] + wd * CLAMP(dn, 0, 512) / 512
+                  : xs[3] + wr * CLAMP(dn - (dec_inf ? 0 : 512), 0, 2048) / 2048;
             vline(x, top - 4, yb - top + 4, 2);
             disc(x, y, 3, 1);
         }
@@ -2571,14 +2692,25 @@ static void picture(void)
         const uint8_t *b = &k[P_LFO + 8 * l];
         int wave = (b[L_WAVE] * 7) >> 7, prev = 0;
         int32_t r = 0;
-        for (int i = 0; i < W; i++) {           /* the shape, dotted */
+        for (int i = 0; i < W; i++) {           /* the shape, dotted: a cycle */
             int32_t v = lfo_shape(wave, (uint32_t)i * (0xFFFFFFFFu / W), &r);
             if (wave == 6) v = ((i / 11) * 7919 % 64 - 32) * 1000;
-            int y = Y0 + 32 - (v * 28 >> 15);
+            int y = Y0 + 26 - (v * 22 >> 15);
             if ((i & 1) == 0) px(X + i, y, 1);
         }
-        for (int i = 0; i < W; i++) {           /* the live value, scrolling */
-            int v = ui.lfo_hist[(ui.lfo_w + i) % W];
+        /* under it the time the cycle takes (as SPD shows it) and how deep it goes, against full */
+        char o[24], dp[12];
+        const char *u;
+        s_lfo_cycle(o, &u, b[L_SPD], choice_of(K_MULT, b[L_MULT]));
+        if (*u) { char *e = o; while (*e) e++; *e++ = ' '; s_cpyn(e, u, (int)(o + sizeof o - e)); }
+        fmt(&PI_LFO[8 * l + L_DPTH], ui.trk, b[L_DPTH], dp, &u);
+        { char *e = dp; while (*e) e++; s_cpy(e, u); }
+        int dw = text_w(&F_S, dp, 0);
+        text_fit(X, Y0 + 52, o, 0, W - dw - 6, 1);
+        text(&F_S, X + W - dw, Y0 + 52, dp, 1, 0);
+        int32_t ad = T_LDPTH[b[L_DPTH]] < 0 ? -T_LDPTH[b[L_DPTH]] : T_LDPTH[b[L_DPTH]];
+        for (int i = 0; i < W; i++) {           /* the live value, scrolling, as deep as DPTH swings it */
+            int v = (int)((ui.lfo_hist[(ui.lfo_w + i) % W] * ad) >> 14);
             int y = Y0 + H - 34 - (v * 26 >> 15);
             if (i) line(X + i - 1, prev, X + i, y, 1);
             prev = y;
@@ -2651,7 +2783,7 @@ static void picture(void)
                 text_c(&F_S, x + w / 2, Y + 13, o, i != ui.trk, 0);
             }
             int beat = sq.playing && (sq.step & 3) == 1;
-            const int on_in = store_.set[S_SYNI] >= 64, on_out = store_.set[S_SYNO] >= 64;
+            const int on_in = clk_from() != 0, on_out = store_.set[S_SYNO] >= 64;
             tag(X + 2, Y + 34, "CLOCK IN", on_in);
             tag(X + 2, Y + 50, "CLOCK OUT", on_out);
             tag(X + 2, Y + 66, "NOTES OUT", store_.set[S_NOTO] >= 64);
@@ -2660,6 +2792,16 @@ static void picture(void)
             char o[12];
             s_int(o, (int)seq_bpm());
             text_c(&F_M, X + W / 2, Y + 84, o, 1, 0);
+        } else if (ui.sub == 5) {      /* IN: what each port feeds, its square lit while it brings something */
+            const int clk = clk_from(), nts = notes_from();
+            for (int s = 0; s < 2; s++) {
+                int x = X + 2 + s * (W / 2), b = 1 << s, w = text(&F_S, x + 3, Y + 12, s ? "TRS" : "USB", 1, 1);
+                if ((mx.in_seen & b) && mx.now - mx.in_at[s] < M2K_SR / 8u) rect(x + w + 6, Y + 14, 7, 7, 1);
+                else frame(x + w + 6, Y + 14, 7, 7, 1);
+                tag(x, Y + 32, "CLOCK", clk & b);
+                tag(x, Y + 52, "NOTES", nts & b);
+                if (s) tag(x, Y + 72, "THRU", set_on(S_THRU));
+            }
         } else {                       /* four beats */
             int beat = sq.playing ? (sq.step ? sq.step - 1 : 0) / 4 % 4 : -1, bw = (W - 8) / 4;
             for (int i = 0; i < 4; i++) {
@@ -2761,7 +2903,7 @@ static void knobs(void)
         int bx = x + 4, by = KNOB_Y + 35, bw = 52, bh = 3;
         int n = kind_choices(pi->kind);
         if (n && n <= 8) {
-            int c = (v * n) >> 7, sw = (bw - (n - 1) * 2) / n;
+            int c = choice_of(pi->kind, v), sw = (bw - (n - 1) * 2) / n;
             for (int i = 0; i < n; i++) {
                 if (i == c) rect(bx + i * (sw + 2), by, sw, bh, 1);
                 else hline(bx + i * (sw + 2), by + bh - 1, sw, 1);
@@ -3350,7 +3492,7 @@ const uint8_t *m2k_leds(void)
             else if (w == 14) v = p->mute || sq.solo ? 90 : 16;
         } else if (lay == 2) {
             if (b >= 0 && b < PF_COUNT) v = perf.on[b] ? 255 : 24;
-            else if (w >= 0) { int note = 53 + k + 12 * ui.oct; v = ui.keys[k] ? 255 : trk[ui.trk].sounding && trk[ui.trk].note == note ? 120 : 0; }
+            else if (w >= 0) { int note = 53 + k + 12 * ui.oct[ui.trk]; v = ui.keys[k] ? 255 : trk[ui.trk].sounding && trk[ui.trk].note == note ? 120 : 0; }
         } else if (lay == 3) {
             if (w >= 0 && w < 8) v = 200;
         } else if (lay == 4) {
@@ -3383,7 +3525,7 @@ const uint8_t *m2k_leds(void)
                 v = (p->mute >> ui.trk) & 1 ? 255 : 16;
             }
         } else {
-            int note = 53 + k + 12 * ui.oct;
+            int note = 53 + k + 12 * ui.oct[ui.trk];
             if (ui.keys[k]) v = 255;
             else if (trk[ui.trk].sounding && trk[ui.trk].note == note) v = 120;
         }
@@ -3402,8 +3544,8 @@ const uint8_t *m2k_leds(void)
     B[B_SEQ] = ui.grid ? 255 : 0;
     B[B_PLAY] = sq.playing ? ((play_step() & 3) == 0 ? 255 : 70) : sq.ready && blink ? 255 : 0;   /* Ready: blinks */
     B[B_REC] = sq.rec ? 255 : 0;
-    B[B_OCTD] = ui.oct < 0 ? 200 : 0;
-    B[B_OCTU] = ui.oct > 0 ? 200 : 0;
+    B[B_OCTD] = ui.oct[ui.trk] < 0 ? 200 : 0;
+    B[B_OCTU] = ui.oct[ui.trk] > 0 ? 200 : 0;
     if (ui.latch) B[ui.latch - 1] = blink ? 255 : 0;   /* a latched layer's button blinks */
     return L;
 }

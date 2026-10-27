@@ -38,7 +38,8 @@ static void pbm_write(const char *path, const uint8_t *fbuf)
 
 typedef struct { int ms; char kind; int a, b; const char *shot; } ev_t;
 
-/* the tour: kind b button (a, b = down), e encoder (a, delta), k key (a, down), s screenshot */
+/* the tour: kind b button (a, b = down), e encoder (a, delta), k key (a, down), m MIDI in (a from, b status), s
+ * screenshot */
 static const ev_t TOUR[] = {
     {900, 's', 0, 0, "00_boot"},
     {2400, 's', 0, 0, "01_home_stopped"},
@@ -75,7 +76,7 @@ static const ev_t TOUR[] = {
 };
 
 /* the manual's scenes: B01's T1 with a trig of each of the eight types on every other step, in GRID (30); step 5's
- * FILTER trig held (31); the sound library, SYN > SND (25) */
+ * FILTER trig held (31); the sound library, SYN > SND (25); GLO > IN (32); and on, T1's AMP and LFO pages (09b, 14b) */
 static const ev_t MANUAL[] = {
     {2600, 'b', B_SEQ, 1, 0}, {2620, 'b', B_SEQ, 0, 0},
     {3400, 's', 0, 0, "30_grid_trig_types"},
@@ -106,10 +107,27 @@ static const ev_t MANUAL[] = {
     {22600, 's', 0, 0, "29i_seq_latched"}, {22700, 'b', B_SEQ, 1, 0}, {22720, 'b', B_SEQ, 0, 0},
     {23000, 'b', B_PLAY, 1, 0}, {24200, 's', 0, 0, "29j_play_card"}, {24300, 'b', B_PLAY, 0, 0},
     {24400, 'b', B_PLAY, 1, 0}, {24420, 'b', B_PLAY, 0, 0},
-    /* GLO tapped to its VERB page: the reverb's decay drawn (16b) */
-    {24600, 'b', B_GLO, 1, 0}, {24620, 'b', B_GLO, 0, 0}, {24900, 'b', B_GLO, 1, 0}, {24920, 'b', B_GLO, 0, 0},
-    {25200, 'b', B_GLO, 1, 0}, {25220, 'b', B_GLO, 0, 0}, {25500, 'e', E_ALGO, 1, 0}, {26200, 's', 0, 0, "16b_glo_verb"},
-    {26300, 'x', 0, 0, 0},
+    /* GLO > MIDI: SYIN to USB; GLO > IN: THRU on, a pulse in on the TRS jack (its square lit, not followed) (32) */
+    {24600, 'b', B_GLO, 1, 0}, {24620, 'b', B_GLO, 0, 0}, {24800, 'e', E_K2, 1, 0},
+    {25000, 'b', B_GLO, 1, 0}, {25020, 'b', B_GLO, 0, 0}, {25200, 'e', E_K2, 1, 0},
+    {25750, 'm', M2K_TRS, 0xF8, 0}, {25800, 's', 0, 0, "32_glo_in"},
+    /* T1's AMP on a swell (ATK 48, 0.17 s, its square rising; HOLD a half beat, DEC 1.4 s, REL 1.8 s: from GND-SIN's
+     * INIT, HOLD 24 DEC 113 REL 37), ATK in focus (09b); its LFO 1 on BASE, a sine, SPD 60 (a bar, from 48) and DPTH 90
+     * (+17 %), SPD in focus (14b) */
+    {26000, 'b', B_ENV, 1, 0}, {26020, 'b', B_ENV, 0, 0},
+    {26200, 'e', E_K2, -8, 0}, {26250, 'e', E_K3, -37, 0}, {26300, 'e', E_K4, 43, 0}, {26350, 'e', E_K1, 48, 0},
+    {27100, 's', 0, 0, "09b_amp_swell"},
+    {27200, 'b', B_LFO, 1, 0}, {27220, 'b', B_LFO, 0, 0},
+    {27300, 'e', E_K2, 17, 0}, {27350, 'e', E_K3, 19, 0},
+    {27500, 'b', B_LFO, 1, 0}, {27520, 'b', B_LFO, 0, 0},
+    {27700, 'e', E_K4, 26, 0}, {27750, 'e', E_K2, 12, 0},
+    {28500, 's', 0, 0, "14b_lfo_cycle"},
+    /* GLO tapped, then ALGORITHM back to its first page and on to VERB: the reverb's decay drawn (16b) */
+    {28700, 'b', B_GLO, 1, 0}, {28720, 'b', B_GLO, 0, 0}, {29000, 'e', E_ALGO, -1, 0}, {29050, 'e', E_ALGO, -1, 0}, {29100, 'e', E_ALGO, -1, 0},
+    {29150, 'e', E_ALGO, -1, 0}, {29200, 'e', E_ALGO, -1, 0}, {29250, 'e', E_ALGO, -1, 0}, {29300, 'e', E_ALGO, -1, 0},
+    {29400, 'e', E_ALGO, 1, 0}, {29450, 'e', E_ALGO, 1, 0},
+    {30000, 's', 0, 0, "16b_glo_verb"},
+    {30100, 'x', 0, 0, 0},
 };
 
 static void manual_scene(void)
@@ -185,13 +203,17 @@ static int text_sweep(void)
                     int code = knob_param(pg, sub, k);
                     if (code == NONE) continue;
                     static const int V[3] = {0, 64, 127};
+                    const int set = code >= 0xC0 && (code & 0x3F) < S_COUNT ? code & 0x3F : -1;   /* (not PROJ, SLOT ...) */
+                    const uint8_t kept = set >= 0 ? store_.set[set] : 0;
                     for (int vi = 0; vi < 3; vi++) {
                         if (code < 0x80) PAT(cur_pat)->kit[0][code] = (uint8_t)V[vi];
                         else if (code < 0xC0) PAT(cur_pat)->glob[code & 0x7F] = (uint8_t)V[vi];
+                        else if (set >= 0) store_.set[set] = (uint8_t)V[vi];
                         ui.focus = (uint8_t)k; ui.focus_t = now; ui.roll_t = now - 2000;
                         now += 40; ui.trans_t = 0; ui.toast_t = 0;
                         m2k_frame(now); ta_check((int)now);
                     }
+                    if (set >= 0) store_.set[set] = kept;
                 }
             }
     }
@@ -240,6 +262,7 @@ static void run_events(const ev_t *E, const char *out)
             if (e->kind == 'b') m2k_button(e->a, e->b);
             if (e->kind == 'e') m2k_encoder(e->a, e->b);
             if (e->kind == 'k') m2k_key(e->a, e->b);
+            if (e->kind == 'm') m2k_midi_from(e->a, e->b, 0, 0);
             if (e->kind == 's') {
                 snprintf(path, sizeof path, "%s/%s.pbm", out, e->shot);
                 pbm_write(path, m2k_frame((uint32_t)now));
@@ -466,7 +489,7 @@ static void tape_pitch_at(int tape, double *wow_c, double *flut_c)
 {
     m2k_init(7);
     open_b01();
-    pat[16].machine[0] = M_GSIN;
+    kit_default(&pat[16], 0, M_GSIN);              /* the plain sine the references were measured on */
     pat[16].kit[0][P_SYN + 3] = 0;                 /* no pitch envelope */
     pat[16].kit[0][P_SYN + 5] = 30;                /* the click the bus's references were measured with (GND-SIN's init before 12) */
     pat[16].kit[0][P_HOLD] = 127;
@@ -524,6 +547,7 @@ static void bus_ref(int tracks, int ctl, int v, int gsiz)
         p->kit[1][P_SYN] = 112; p->kit[1][P_DEC] = 12; p->kit[1][P_BASE] = 40;
         p->kit[2][P_DEC] = 44; p->kit[2][P_WDTH] = 40;
         p->kit[3][P_HOLD] = 127; p->kit[3][P_DEC] = 127; p->kit[3][P_GATE] = 127; p->kit[3][P_WDTH] = 40;
+        for (int t = 0; t < 4; t++) feel_kit_v15(p->kit[t]);   /* (written on format 15's amp: the mix as recorded) */
         static const uint8_t BASS[16] = {36, 0, 0, 36, 0, 0, 43, 0, 0, 0, 46, 0, 0, 0, 0, 0};
         for (int s = 0; s < 16; s++) {
             if (s % 4 == 0) p->step[0][s] = (m2k_step_t){.note = 36, .flags = ST_TRIG};
@@ -787,7 +811,7 @@ static int bus_measure(const char *dir)
             tape_pitch_at(v, &w, &fl);
             m2k_init(7);
             open_b01();
-            pat[16].machine[0] = M_GSIN;
+            kit_default(&pat[16], 0, M_GSIN);
             pat[16].kit[0][P_SYN + 3] = 0;
             pat[16].kit[0][P_SYN + 5] = 30;
             pat[16].kit[0][P_HOLD] = 127;
@@ -964,29 +988,29 @@ static const char LATTICE_R10[] =
     "001a0100001b0500001a0100001a01000026010000320100003201000030030000300300003001040030030000300300003001040000"
     "00";
 
-/* revision 11's A01 CIRCUIT (f1f2708) as its stores keep it, packed (version 15): format 17 turns its reverb and sends */
+/* revision 11's A01 CIRCUIT (cfdd1da) as its stores keep it, packed in format 15: its amp and LFOs on the laws before
+ * 16 */
 static const char CIRCUIT_R11[] =
-    "500f43495243554954000f1011000603600a403c4f0000003e510a58525252525252000216080c221b484c00284e0840404000167333"
-    "3f374a21385d2900404020007f0000000040480040000f0a000000002000400a000000002000400a000000002000406a716000001000"
-    "00645040000600001c0e4040400008341209171c4040483500404020007f00000018407f0040001720222d0c48400028200000000020"
-    "00402000000000200040154129000077460a5464750c000007350d40645a00322817001514473c2d4700404031002d00000000407f00"
-    "400019350b090c3820001c350000000020004035000000002000406a207e0000120000002800324000185a1e40404000007f00000020"
-    "4040404000404020007f0000000040520040007f4a000000002000404a000000002000404a0000000020004000284000002d712c7f18"
-    "56084000063e01455e3a000c32140c292b2e331a4000404020007f00000000407f004000186000000000200040600000000020004060"
-    "12090c0804005640083a4500623f69086d1337400007414b42404000093607310a36404240400030582b005c0000001640570040001e"
-    "750000000020004075000000002000407506090c0808004e0028400000810481048104812410101010101010d0444444644444444504"
-    "49044904490459400000a040000022a924a924a924a92421010000210100002101000021010000210100002101000021010000210100"
-    "002101000021010000210100002101000021010e002f0110002f0110002f0110002f0110002f0110002f0110002f0110002f0110002f"
-    "010e002f0107003901100039011000390110003901100039011000390110003901100039010200390110003901100039011000390110"
-    "00390110003901100039011000390102003901100039010e002101000021010000280100002b0100002101000021010000240100001f"
-    "0100001d0100001d01000024010000210100001f0100001f010000260100002b010e00230100003c0100003c0106003c010700400100"
-    "003e0110003e0100003c0107004701070047010d0043010700450107003c010d003c0107004701070047010d0043010700450107003c"
-    "010d00400107004801070048010d00410107004501070040010d003e0107004701070047010d0040010700430107003e010d00390001"
-    "3f0d24013e0d2c021d0d2202380d22023e071e0302092803020a5a0308090503080a2c030b0905030b0a2c030e0905030e0a2c031209"
-    "2803120a5a0318090503180a2c031b0905031b0a2c031e090c031e0a2c0322092803220a5a0328090503280a2c032b0905032b0a2c03"
-    "2e090c032e0a2c0332092803320a5a0338090503380a2c033b0905033b0a2c033e090c033e0a2c033c0905033c0a2c04060032040601"
-    "6404060278041d0032041d0164041d0278041f0032041f0164041f027804260017042601410426026c04390017043901450439027004"
-    "3d0017043d0145043d0270";
+    "500f43495243554954000f1011000603600a403c4f0000003e510a58525252525252000216080c221b484c00284e08404040001673333f"
+    "374a21385d2900404020007f0000000040480040000f0a000000002000400a000000002000400a000000002000406a7160000010000064"
+    "5040000600001c0e4040400008341209171c4040483500404020007f00000018407f0040001720222d0c48400028200000000020004020"
+    "00000000200040154129000077460a5464750c000007350d40645a00322817001514473c2d4700404031002d00000000407f0040001935"
+    "0b090c3820001c350000000020004035000000002000406a207e0000120000002800324000185a1e40404000007f000000204040404000"
+    "404020007f0000000040520040007f4a000000002000404a000000002000404a0000000020004000284000002d712c7f1856084000063e"
+    "01455e3a000c32140c292b2e331a4000404020007f00000000407f00400018600000000020004060000000002000406012090c08040056"
+    "40083a4500623f69086d1337400007414b42404000093607310a36404240400030582b005c0000001640570040001e7500000000200040"
+    "75000000002000407506090c0808004e0028400000810481048104812410101010101010d0444444644444444504490449044904594000"
+    "00a040000022a924a924a924a9242101000021010000210100002101000021010000210100002101000021010000210100002101000021"
+    "0100002101000021010e002f0110002f0110002f0110002f0110002f0110002f0110002f0110002f0110002f010e002f01070039011000"
+    "39011000390110003901100039011000390110003901100039010200390110003901100039011000390110003901100039011000390110"
+    "00390102003901100039010e002101000021010000280100002b0100002101000021010000240100001f0100001d0100001d0100002401"
+    "0000210100001f0100001f010000260100002b010e00230100003c0100003c0106003c010700400100003e0110003e0100003c01070047"
+    "01070047010d0043010700450107003c010d003c0107004701070047010d0043010700450107003c010d00400107004801070048010d00"
+    "410107004501070040010d003e0107004701070047010d0040010700430107003e010d003900013f0d24013e0d2c021d0d2202380d2202"
+    "3e071e0302092803020a5a0308090503080a2c030b0905030b0a2c030e0905030e0a2c0312092803120a5a0318090503180a2c031b0905"
+    "031b0a2c031e090c031e0a2c0322092803220a5a0328090503280a2c032b0905032b0a2c032e090c032e0a2c0332092803320a5a033809"
+    "0503380a2c033b0905033b0a2c033e090c033e0a2c033c0905033c0a2c040600320406016404060278041d0032041d0164041d0278041f"
+    "0032041f0164041f027804260017042601410426026c043900170439014504390270043d0017043d0145043d0270";
 
 /* the sound engine's tests: pattern 40 bare (bare()), the drive off; eng_go takes its kits up and plays it, eng_run
  * renders (the last block's output in eng_out) */
@@ -1005,7 +1029,34 @@ static void eng_go(m2k_pattern_t *q)
     seq_play(1);
 }
 static void eng_run(double sec) { for (int i = 0; i < (int)(sec * M2K_SR) / M2K_SUB; i++) m2k_render(eng_out, M2K_SUB); }
-
+/* the amp heard: T1's clean sine (GND-SIN at C7, the filter open, alone) played with this ATK HOLD DEC REL, let go
+ * after gate blocks (never: -1), and if retrig a second note on it there; each 16-sample block's level (the most of it
+ * and the two before: two cycles and more) into lv, n blocks */
+static void amp_probe(int atk, int hold, int dec, int rel, int gate, int retrig, int32_t *lv, int n)
+{
+    m2k_pattern_t *q = eng_pat(41);
+    uint8_t *k = q->kit[0];
+    k[P_ATK] = (uint8_t)atk; k[P_HOLD] = (uint8_t)hold; k[P_DEC] = (uint8_t)dec; k[P_REL] = (uint8_t)rel;
+    k[P_VOL] = 100; k[P_LEVL] = 127;
+    m_cpy(trk[0].eff, k, P_COUNT);
+    voice_on(0, 96, 100, 0);
+    int32_t a = 0, b = 0;
+    for (int i = 0; i < n; i++) {
+        if (i == gate) voice_off(0);
+        if (i == retrig) voice_on(0, 96, 100, 0);
+        m2k_render(eng_out, M2K_SUB);
+        int32_t c = 0;
+        for (int j = 0; j < M2K_SUB; j++) c = abs(eng_out[2 * j]) > c ? abs(eng_out[2 * j]) : c;
+        lv[i] = c > a ? (c > b ? c : b) : a > b ? a : b;
+        b = a; a = c;
+    }
+}
+/* the first block at or past i0 where lv is at least (up 1) or under (up 0) the fraction f of ref: -1 if none */
+static int amp_when(const int32_t *lv, int n, int i0, int up, double f, int32_t ref)
+{
+    for (int i = i0; i < n; i++) if (up ? lv[i] >= f * ref : lv[i] < f * ref) return i;
+    return -1;
+}
 /* a held 440 Hz sine on T1 (GND-SIN, HOLD and DEC at INF, its note held from the keys: sine_on after eng_go) */
 static void sine_track(m2k_pattern_t *q)
 {
@@ -1046,6 +1097,34 @@ static int32_t eng_phaser(uint32_t *mph, int32_t *map, int32_t *mfb, int32_t x, 
     }
     *mfb = (int32_t)(v < -65536 ? -65536 : v > 65536 ? 65536 : v);
     return (int32_t)(x + (((v - x) * mix) >> 8));
+}
+
+/* today's store (m2k_store_pack, n bytes) with pattern slot s of its first two images, the work and P1, the bytes b:
+ * what a store saved by an older build holds, its demos packed as that build packed them. Its new length */
+static int store_splice(int n, int s, const uint8_t *b, int bn)
+{
+    static uint8_t o[STORE_MAX];
+    int np = store_buf[8], at = 10 + S_COUNT, w = at;
+    memcpy(o, store_buf, (size_t)at);
+    for (int im = 0; im < 2; im++) {
+        const uint8_t *h = store_buf + at, *ln = h + 12, *d = ln + 2 * np;
+        uint32_t used = h[8] | h[9] << 8 | h[10] << 16 | (uint32_t)h[11] << 24, off = 0, old = ln[2 * s] | ln[2 * s + 1] << 8;
+        for (int i = 0; i < s; i++) off += ln[2 * i] | ln[2 * i + 1] << 8;
+        uint32_t nu = used - old + (uint32_t)bn;
+        memcpy(o + w, h, 8);
+        for (int k = 0; k < 4; k++) o[w + 8 + k] = (uint8_t)(nu >> (8 * k));
+        memcpy(o + w + 12, ln, (size_t)(2 * np));
+        o[w + 12 + 2 * s] = (uint8_t)bn; o[w + 13 + 2 * s] = (uint8_t)(bn >> 8);
+        w += 12 + 2 * np;
+        memcpy(o + w, d, off); w += (int)off;
+        memcpy(o + w, b, (size_t)bn); w += bn;
+        memcpy(o + w, d + off + old, used - off - old); w += (int)(used - off - old);
+        at += 12 + 2 * np + (int)used;
+    }
+    memcpy(o + w, store_buf + at, (size_t)(n - at));
+    w += n - at;
+    memcpy(store_buf, o, (size_t)w);
+    return w;
 }
 
 static int selftest(void)
@@ -1098,7 +1177,7 @@ static int selftest(void)
               "format: version 4 -> 5 converts the chain (DIST, DTIM, DSND, DFB, VOL)");
         CHECK(b.kit[0][P_BASE] == v5_base(T_V5_FPOS[40], 36), "format: the filter is placed against the track's note");
         /* (GND-SIN's page since version 12: TUNE on H, its other knobs one earlier, values as they were) */
-        CHECK(b.kit[0][P_SYN + 1] == 77 && b.kit[0][P_LFO + L_SPD] == 21 && b.kit[0][P_BITS] == 9 &&
+        CHECK(b.kit[0][P_SYN + 1] == 77 && b.kit[0][P_LFO + L_SPD] == T_SPD15[21] && b.kit[0][P_BITS] == 9 &&   /* (SPD's rate: 16) */
               !memcmp(b.kit[1], a.kit[1], 8) && b.step[0][4].note == 36 && b.step[0][4].flags == ST_TRIG,
               "format: machine, LFO and MONO2K's own settings, trigs untouched");
         int lock_ok = 0;
@@ -1165,7 +1244,10 @@ static int selftest(void)
             for (int t = 0; t < M2K_TRACKS; t++) { w.kit[t][P_SPU] = 0; w.kit[t][P_DSND] = 64; }   /* (17 turns sends) */
             int wn = pat_pack_v(&w, wb, 7);
             int same = pat_unpack(&w2, wb, wn);
-            for (int t = 0; t < M2K_TRACKS; t++) same = same && !memcmp(w2.kit[t], w.kit[t], P_WBNK) && w2.kit[t][P_WBNK] == 0;
+            static m2k_pattern_t we;                                     /* (16 turns the amp's and the LFOs' alone) */
+            m_cpy(&we, &w, sizeof we);
+            feel_v15(&we);
+            for (int t = 0; t < M2K_TRACKS; t++) same = same && !memcmp(w2.kit[t], we.kit[t], P_WBNK) && w2.kit[t][P_WBNK] == 0;
             CHECK(same, "format: version 7 -> 8 keeps every kit value, the bank MONO2K's 32");
             w.kit[3][P_WBNK] = 127;
             wn = pat_pack(&w, wb);
@@ -1245,9 +1327,9 @@ static int selftest(void)
             for (int t = 0; t < M2K_TRACKS; t++)             /* (a version-10 SID, GND-SIN or VOX-6 page is the old one: none) */
                 if (w2.machine[t] == M_GSIN || w2.machine[t] == M_SID || w2.machine[t] == M_VOX) w2.machine[t] = M_GPRC;
             wn = pat_pack_v(&w2, wb, 10);                   /* and a version-10 pattern: its FM pages already the new ones */
-            int ok10 = pat_unpack(&w, wb, wn);
-            m_cpy(w.glob, w2.glob, G_COUNT);                /* (its reverb's pair turns at 17) */
-            wn2 = ok10 ? pat_pack(&w, wb2) : 0;
+            wn2 = pat_unpack(&w, wb, wn) ? pat_pack(&w, wb2) : 0;
+            feel_v15(&w2);                                  /* (its amp and LFOs: 16's; its bus: 17's) */
+            fx_v16(&w2);
             int wn3 = pat_pack(&w2, wb);
             CHECK(wn2 == wn3 && !memcmp(wb, wb2, (size_t)wn3), "format: version 10's FM pages load unconverted");
         }
@@ -1299,6 +1381,8 @@ static int selftest(void)
                     ok = ok && (v == 23 || v == 31 || v == 18 || v == 38 || v == 26 || v == 33);
                 }
             CHECK(ok && nl > 0, "factory, the bank before: its HOLDs in beats at each part's tempo (A01's T4: 263 ms, 23 steps at 164)");
+            CHECK(pat[0].kit[3][P_DEC] == 61, "factory, the bank before: its amp on format 16's laws (A01's T4 DEC 50, 0.69 s"
+                                              " to -60 dB, 61)");
         }
         /* VOX-6 onto VO-6's page (14): the old vowel to the nearest VOC1 VOC2 (an E, 400 and 2100 Hz, lands within 8 %
          * of both), BRTH to VOIC; a VOWL lock to VOC1's, a BRTH lock to VOIC's, the rest gone; an LFO on BRTH moves to
@@ -1341,6 +1425,39 @@ static int selftest(void)
             ok = ok && pat[1].machine[3] == M_VOX && pat[1].kit[3][P_SYN + 0] == T_VOX14[0][0] && pat[1].kit[3][P_SYN + 5] == 64;
             CHECK(ok, "format: version 13 -> 14, VOX-6 onto VO-6's page (the vowel to its F1 F2, BRTH to VOIC, their locks and"
                       " LFOs with them, the rest gone; its HOLD not turned again); version 14 as it is; CUTUP's voice turned at build");
+        }
+        /* the amp's and the LFOs' laws (16), each old value to the new one that sounds nearest: ATK 80 (0.61 s, straight)
+         * to 66 (0.44 s, squared: the same loudness against time), DEC 64 (1.75 s to -60 dB) to 79 (1.74 s), REL 100
+         * (19.1 s) to 126 (19.0 s), DEC's INF and ATK 0 as they were, a DEC lock 30 (0.18 s) to 37; an LFO's SPD to its
+         * rate (64 at x16, 4.06 / 16 beats, to 60, a sixteenth; a lock 16 to 36), its DPTH 72 (+-16 steps) to 86 (the same
+         * swing); an LFO on a DEC (64 -36: +-72 old steps, 25 ms to INF) to the swing that lands there on the new law's
+         * steps (11: +-88), not the plain 16; version 16 as it is */
+        {
+            static m2k_pattern_t w, w2;
+            static uint8_t wb[BLOB_MAX], wb2[BLOB_MAX];
+            pat_init(&w, "FEEL");
+            w.kit[0][P_ATK] = 80; w.kit[0][P_DEC] = 64; w.kit[0][P_REL] = 100; w.kit[2][P_DEC] = 127; w.kit[2][P_ATK] = 0;
+            w.kit[1][P_DEC] = 100;                                       /* (T2's own: its LFO reads T1's) */
+            uint8_t *b1 = &w.kit[0][P_LFO], *b2 = &w.kit[1][P_LFO + 8];
+            b1[L_DEST] = P_PAN + 1; b1[L_MULT] = enc(4, 8); b1[L_SPD] = 64; b1[L_DPTH] = 72;
+            b2[L_TRCK] = enc(0, M2K_TRACKS); b2[L_DEST] = P_DEC + 1; b2[L_DPTH] = 28;
+            lk(&w, 0, 4, P_DEC, 30);
+            lk(&w, 0, 8, P_LFO + L_SPD, 16);
+            int wn = pat_pack_v(&w, wb, 15);
+            int ok = pat_unpack(&w2, wb, wn), ld = 0, ls = 0;
+            const uint8_t *k = w2.kit[0];
+            for (int i = 0; i < M2K_LOCKS; i++) {
+                if (w2.lock[i].trk == 0 && w2.lock[i].step == 4) ld = w2.lock[i].param == P_DEC && w2.lock[i].val == 37;
+                if (w2.lock[i].trk == 0 && w2.lock[i].step == 8) ls = w2.lock[i].param == P_LFO + L_SPD && w2.lock[i].val == 36;
+            }
+            ok = ok && k[P_ATK] == 66 && k[P_DEC] == 79 && k[P_REL] == 126 && w2.kit[2][P_DEC] == 127 && w2.kit[2][P_ATK] == 0 &&
+                 ld && ls && k[P_LFO + L_SPD] == 60 && k[P_LFO + L_DPTH] == 86 && w2.kit[1][P_LFO + 8 + L_DPTH] == 11 &&
+                 fabs(T_ADEC_MS10[79] / 17495.0 - 1) < 0.03 && fabs(T_ADEC_MS10[126] / 191424.0 - 1) < 0.03 &&
+                 abs(T_LDPTH[86] - 8 * 256) < 128;
+            int wn2 = pat_unpack(&w, wb, pat_pack(&w2, wb)) ? pat_pack(&w, wb2) : 0;
+            ok = ok && wn2 > 0 && !memcmp(w.kit, w2.kit, sizeof w.kit);
+            CHECK(ok, "format: version 15 -> 16, ATK DEC REL (their locks too) to the value that sounds nearest, an LFO's SPD"
+                      " to its rate and DPTH to its swing (one on a DEC to the new law's steps); version 16 as it is");
         }
         /* HOLD in beats (13): a version-12 HOLD (14.6 ms a step) to the step nearest the time it held at the pattern's
          * tempo, its locks with it, INF kept; a version-13 pattern as it is */
@@ -1474,9 +1591,11 @@ static int selftest(void)
                 pat[fp].kit[1][P_SYN + 4] = (uint8_t)(c ? 127 : 0);      /* RAT */
                 pat[fp].kit[1][P_SYN + 2] = 40;                          /* THRS */
                 pat[fp].kit[1][P_SYN + 5] = (uint8_t)(c ? 90 : 0);       /* GAIN */
-                pat[fp].kit[0][P_DEC] = 30;
-                lk(&pat[fp], 0, 4, P_DIST, 46);                          /* the second and fourth hits lower at the source */
-                lk(&pat[fp], 0, 12, P_DIST, 46);
+                pat[fp].kit[0][P_DEC] = 37;                              /* 0.18 s (format 15's 30) */
+                /* the second and fourth hits 8 dB lower going in (INP 40 of 100): a DIST under 64 at the source lowered
+                 * them by 3 to 15 dB, as the sine's phase at the hit fell */
+                lk(&pat[fp], 1, 4, P_SYN + 7, 40);
+                lk(&pat[fp], 1, 12, P_SYN + 7, 40);
                 fx_measure(fp, 0x3F, 2.0, kb, &pk, &rm);
                 int a0 = 0, a1 = 0;
                 int step = M2K_SR / 8;                                   /* a sixteenth at the blank's 120 bpm, in frames */
@@ -1485,6 +1604,27 @@ static int selftest(void)
             }
             printf("     FX-DYNAMIX: loud against soft %.1f dB at RAT 0, %.1f dB at RAT 127\n", spread[0], spread[1]);
             CHECK(spread[1] < spread[0] - 6, "FX-DYNAMIX: brings a soft hit up to a loud one");
+            /* its quick attack (MACH_DEF's ATK) holds a note's first peak as it holds the next: one note from silence on
+             * a plain SWAV-SAW (its high-pass leaves a spike at each of the saw's resets), the peak at its first reset
+             * against its second. A block's gain ramped from the block before passed the first ~6-10 dB over */
+            static const uint8_t DN[6] = {33, 40, 45, 48, 52, 57};
+            double first = -99;
+            for (int c = 0; c < 6; c++) {
+                FXPAT(M_FXD, M_SAW, 0);
+                for (int s_ = 4; s_ < 16; s_ += 4) pat[fp].step[0][s_].flags = pat[fp].step[1][s_].flags = 0;
+                pat[fp].step[0][0].note = pat[fp].step[1][0].note = DN[c];
+                fx_measure(fp, 0x3F, 0.25, kb, &pk, &rm);
+                double per = M2K_SR / (440.0 * pow(2, (DN[c] - 69) / 12.0));
+                int rs[2] = {0, 0};
+                for (int k = 0; k < 2; k++) {                           /* the reset's peak, within half a ms */
+                    int at = (int)((k + 1) * per);
+                    for (int i = at - 22; i < at + 22; i++) if (abs(kb[2 * i]) > rs[k]) rs[k] = abs(kb[2 * i]);
+                }
+                double d = 20 * log10((rs[0] + 1.0) / (rs[1] + 1.0));
+                if (d > first) first = d;
+            }
+            printf("     FX-DYNAMIX: a note's first peak over its second, at most %+.1f dB (A1 to A3)\n", first);
+            CHECK(first < 5, "FX-DYNAMIX: a note's first peak held as the next (its gain falls within the block, no ramp from the last)");
             /* the MOD effect's chorus across the stereo (MONO2K's own): a saw through it wide, a low sine through it still
              * in the middle (the side high-passed), the phaser and MIX 0 mono */
             double mc[4];
@@ -1705,7 +1845,7 @@ static int selftest(void)
         char buf[64];
         const char *u;
         const pi_t *sets[] = {PI_COMMON, PI_LFO, PI_MOD, PI_GLOB, PI_SET};
-        const int counts[] = {P_LFO - 8, 8, 4, G_COUNT, 3};
+        const int counts[] = {P_LFO - 8, 24, 4, G_COUNT, 3};
         for (int m = 0; m < M_COUNT + 5; m++) {
             const pi_t *tab = m < M_COUNT ? MI[m].syn : sets[m - M_COUNT];
             int cnt = m < M_COUNT ? 8 : counts[m - M_COUNT];
@@ -1754,8 +1894,9 @@ static int selftest(void)
         m2k_button(B_EDIT, 1); m2k_button(B_EDIT, 0);
         m2k_key(kw1, 1); m2k_key(kw1, 0);
         m2k_step_t *sp = pat[16].step[ui.trk];
-        CHECK(sp[c0].note == 53 + kw0 && sp[c0 + 1].note == 53 + kw2 && !(sp[c0 + 2].flags & ST_TRIG) &&
-              sp[c0 + 3].note == 53 + kw1 && (sp[c0 + 3].flags & ST_TRIG), "keys: step entry writes notes, EDIT a rest");
+        int lo = 53 + 12 * ui.oct[ui.trk];                       /* (the track's keys at its home's octave) */
+        CHECK(sp[c0].note == lo + kw0 && sp[c0 + 1].note == lo + kw2 && !(sp[c0 + 2].flags & ST_TRIG) &&
+              sp[c0 + 3].note == lo + kw1 && (sp[c0 + 3].flags & ST_TRIG), "keys: step entry writes notes, EDIT a rest");
         TAP_B(B_REC);
         pat[16] = keep;
         m2k_pattern(0);
@@ -1928,15 +2069,13 @@ static int selftest(void)
             m2k_init(15);
             m2k_pattern_t today = pat[2];
             for (int i = 0; i < 16; i++) { memset(pat[i].name, 0, 8); s_cpy(pat[i].name, OLD_DEMO[10][i]); }
-            int same = pat_unpack(&pat[2], lb, ln) && fnv(lb, (uint32_t)ln) == OLD_PACKED[0].fnv[2];   /* (as shipped) */
+            int same = pat_unpack(&pat[2], lb, ln) && pat_pack(&pat[2], rb) == ln;   /* (format 16's layout: as long) */
             if (k) pat[2].kit[3][P_VOL] ^= 1;         /* a knob turned a detent, the name kept */
             int vol = pat[2].kit[3][P_VOL], mine = 0;
             for (int s = 0; s < 64; s++) { pat[4].step[0][s].flags = ST_TRIG; pat[4].step[0][s].note = (uint8_t)(36 + s % 12); }
             project_save(0);
-            int n = 0, len;
-            if (!k && img_pack_work("WORK") && img_put(&work_img, 2, lb, ln) && img_put(&proj[0], 2, lb, ln))
-                n = store_ser(M2K_PATTERNS, M2K_PROJECTS);   /* the store as revision 10 wrote it: its bytes */
-            if (k) n = m2k_store_pack();
+            int n = m2k_store_pack(), len;
+            if (!k) n = store_splice(n, 2, lb, ln);     /* untouched: its bytes as that build packed them */
             store_buf[7] = 10;
             m2k_init(16);
             int ok = m2k_store_unpack(n) == 1;
@@ -1952,6 +2091,53 @@ static int selftest(void)
                       "store: revision 10's LATTICE with a knob turned under its name is the owner's: kept");
             CHECK(ok && rest, "store: revision 10's A05 PROCESS with the owner's work and A06-A16 stay, none blanked");
         }
+    }
+    /* revision 11 (12: format 16's amp and LFO laws): A01 CIRCUIT as it shipped, packed in format 15, loads as today's
+     * (its conversion on load the one bank A takes at build) and, untouched in a revision-11 store, becomes today's in
+     * the work and in P1; a version-3 store's sounds take format 16's laws, a version-4 store's load as they are */
+    {
+        static uint8_t cb[BLOB_MAX], rb[BLOB_MAX];
+        static m2k_pattern_t q;
+        int cn = 0, len;
+        for (const char *h = CIRCUIT_R11; h[0] && h[1]; h += 2) { unsigned v; sscanf(h, "%2x", &v); cb[cn++] = (uint8_t)v; }
+        m2k_init(18);
+        m2k_pattern_t today = pat[0];
+        CHECK(today.kit[0][P_DEC] == 97 && today.kit[2][P_LFO + L_DPTH] == 11 && today.kit[1][P_LFO + L_SPD] == 60,
+              "factory: bank A turned at build onto format 16's laws (A01's kick DEC 78, 4.4 s, as 97; its hats' LFO on DEC)");
+        CHECK(cb[1] == 15 && fnv(cb, (uint32_t)cn) == 0x73cc380fu && pat_unpack(&q, cb, cn) && !memcmp(&q, &today, sizeof q),
+              "format: version 15 -> 16, A01 CIRCUIT as revision 11 shipped it loads as today's (the amp's and LFOs' laws)");
+        project_save(0);
+        int n = store_splice(m2k_store_pack(), 0, cb, cn);
+        store_buf[7] = 11;
+        m2k_init(19);
+        int ok = m2k_store_unpack(n) == 1;
+        const uint8_t *b = img_get(&proj[0], 0, &len);
+        CHECK(ok && !memcmp(&pat[0], &today, sizeof today) && len == pat_pack(&today, rb) && !memcmp(b, rb, (size_t)len),
+              "store: revision 11's A01 CIRCUIT as it shipped becomes today's, in the work and in P1");
+        m2k_init(20);
+        static uint8_t k0[M2K_SOUNDS][P_COUNT];
+        for (int i = 0; i < M2K_SOUNDS; i++) m_cpy(k0[i], snd[i].kit, P_COUNT);
+        n = m2k_store_pack();
+        int v5 = store_buf[4] == 5;
+        m2k_init(21);
+        ok = m2k_store_unpack(n) == 1;
+        for (int i = 0; i < M2K_SOUNDS; i++) ok &= !memcmp(k0[i], snd[i].kit, P_COUNT);
+        int conv = 1, moved = 0;
+        for (int sv = 3; sv <= 4; sv++) {
+            store_buf[4] = (uint8_t)sv;
+            m2k_init(22);
+            conv &= m2k_store_unpack(n) == 1;
+            for (int i = 0; i < M2K_SOUNDS; i++) {
+                uint8_t e[P_COUNT];
+                m_cpy(e, k0[i], P_COUNT);
+                if (sv < 4) feel_kit_v15(e);
+                fx_kit_v16(e);
+                conv &= !memcmp(e, snd[i].kit, P_COUNT);
+                moved += memcmp(e, k0[i], P_COUNT) != 0;
+            }
+        }
+        CHECK(v5 && ok && conv && moved > 0,
+              "store: version 5; a version-4 store's sounds take format 17's sends, a version-3's 16's amp and LFO laws too");
     }
     {   /* OLD_PACKED's row for this revision is today's bank A packed: a bank changed is a new revision */
         int row = -1, same = 1;
@@ -2149,13 +2335,186 @@ static int selftest(void)
         CHECK(t0, "MIDI: CHAN puts track 1 on its channel");
         m2k_setting(S_MCH, 0); m2k_setting(S_SYNI, 0);
     }
+    /* MIDI in by where it comes from (the FM-1's USB or TRS jack): the clock and transport only from SYNC IN's; with
+     * SYNC IN off the transport from NOTE IN's; notes, CCs and mutes only from NOTE IN's; THRU passes the jack's on over
+     * USB (its clock not while SYNC OUT sends MONO2K's), never USB's */
+    {
+        static int16_t mb[2 * 128];
+        static const uint8_t OLDV[4] = {0, 32, 96, 127}, OLDC[4] = {0, 0, 3, 3}, NTC[4] = {3, 1, 2, 0};
+        static const char *const SRC_N[4] = {"OFF", "USB", "TRS", "BOTH"};
+        const int U = M2K_USB, T = M2K_TRS;
+        uint8_t m[3];
+        char o[16];
+        const char *u;
+        m2k_init(15);
+        open_b01();
+        /* an old store: SYNC IN's switch OFF (0 at first, 32 turned) or ON (96, the page's 127); NOTE IN and THRU 0 */
+        int old = notes_from() == 3 && !set_on(S_THRU);
+        for (int i = 0; i < 4; i++) { store_.set[S_SYNI] = OLDV[i]; old &= clk_from() == OLDC[i]; }
+        /* SYIN turned on the panel from an old OFF: USB, TRS, BOTH, and no further; from an old ON down: TRS */
+        ui.page = PG_GLO; ui.sub = 4;
+        store_.set[S_SYNI] = 32;
+        int turn = knob_param(PG_GLO, 4, 1) == SETTING(S_SYNI);
+        for (int i = 1; i <= 4; i++) {
+            edit(1, 1);
+            fmt(pinfo(0, SETTING(S_SYNI)), 0, store_.set[S_SYNI], o, &u);
+            turn &= clk_from() == (i < 3 ? i : 3) && !strcmp(o, SRC_N[i < 3 ? i : 3]);
+        }
+        store_.set[S_SYNI] = 96;
+        edit(1, -1);
+        turn &= clk_from() == 2;
+        /* GLO > IN: NOTE IN (BOTH USB TRS OFF) and THRU */
+        int page = knob_param(PG_GLO, 5, 0) == SETTING(S_NTIN) && knob_param(PG_GLO, 5, 1) == SETTING(S_THRU) &&
+                   knob_param(PG_GLO, 5, 2) == NONE && knob_param(PG_GLO, 5, 3) == NONE;
+        for (int i = 0; i < 4; i++) {
+            store_.set[S_NTIN] = enc(i, 4);
+            fmt(pinfo(0, SETTING(S_NTIN)), 0, store_.set[S_NTIN], o, &u);
+            page &= notes_from() == NTC[i] && !strcmp(o, SRC_N[NTC[i]]);
+        }
+        CHECK(old && turn && page, "MIDI in: an old store's SYNC IN off stays OFF, on takes USB and TRS (BOTH), NOTE IN "
+                                   "BOTH, THRU off; SYIN turns OFF USB TRS BOTH; GLO > IN's NOTE IN and THRU");
+        /* SYNC IN USB: the jack's song position, start, pulses and stop pass it by; TRS: the other way; BOTH: either */
+        m2k_setting(S_NTIN, enc(0, 4));
+        m2k_setting(S_SYNI, enc(1, 4));
+        m2k_midi_from(T, 0xF2, 5, 0);
+        m2k_midi_from(T, 0xFA, 0, 0);
+        int usb = !sq.playing && sq.step == 0;
+        m2k_midi_from(U, 0xF2, 5, 0);
+        usb &= sq.step == 5;
+        m2k_midi_from(U, 0xFA, 0, 0);
+        usb &= sq.playing && mx.ext;
+        m2k_midi_from(T, 0xF8, 0, 0);
+        usb &= mx.pulses == 0;
+        m2k_midi_from(U, 0xF8, 0, 0);
+        usb &= mx.pulses == 1;
+        m2k_midi_from(T, 0xFC, 0, 0);
+        usb &= sq.playing;
+        m2k_midi_from(U, 0xFC, 0, 0);
+        usb &= !sq.playing;
+        m2k_setting(S_SYNI, enc(2, 4));
+        m2k_midi_from(U, 0xFA, 0, 0);
+        int trs = !sq.playing;
+        m2k_midi_from(T, 0xFA, 0, 0);
+        trs &= sq.playing && mx.ext;
+        m2k_midi_from(U, 0xF8, 0, 0);
+        trs &= mx.pulses == 0;
+        m2k_midi_from(T, 0xF8, 0, 0);
+        trs &= mx.pulses == 1;
+        m2k_midi_from(U, 0xFC, 0, 0);
+        trs &= sq.playing;
+        m2k_midi_from(T, 0xFC, 0, 0);
+        trs &= !sq.playing;
+        m2k_setting(S_SYNI, enc(3, 4));
+        m2k_midi_from(T, 0xFA, 0, 0);
+        int both = sq.playing && mx.ext;
+        m2k_midi_from(U, 0xFC, 0, 0);
+        both &= !sq.playing;
+        m2k_midi_from(U, 0xFB, 0, 0);
+        both &= sq.playing && mx.ext;
+        m2k_midi_from(T, 0xFC, 0, 0);
+        both &= !sq.playing;
+        CHECK(usb && trs && both, "MIDI in: the clock, start, continue, stop and song position only from SYNC IN's (USB, TRS, both)");
+        /* SYNC IN off: start, continue and stop from NOTE IN's, at MONO2K's tempo */
+        m2k_setting(S_SYNI, enc(0, 4));
+        m2k_setting(S_NTIN, enc(1, 4));
+        m2k_midi_from(T, 0xFA, 0, 0);
+        int off = !sq.playing;
+        m2k_midi_from(U, 0xFA, 0, 0);
+        off &= sq.playing && !mx.ext;
+        m2k_midi_from(T, 0xFC, 0, 0);
+        off &= sq.playing;
+        m2k_midi_from(U, 0xFC, 0, 0);
+        off &= !sq.playing;
+        m2k_setting(S_NTIN, enc(2, 4));
+        m2k_midi_from(U, 0xFB, 0, 0);
+        off &= !sq.playing;
+        m2k_midi_from(T, 0xFB, 0, 0);
+        off &= sq.playing;
+        m2k_midi_from(T, 0xFC, 0, 0);
+        off &= !sq.playing;
+        m2k_setting(S_NTIN, enc(3, 4));
+        m2k_midi_from(U, 0xFA, 0, 0);
+        m2k_midi_from(T, 0xFA, 0, 0);
+        off &= !sq.playing;
+        CHECK(off, "MIDI in: SYNC IN off, start, continue and stop only from NOTE IN's");
+        /* notes, CCs (SYN A on 48) and mutes (3) only from NOTE IN's: both, USB, TRS, none */
+        m2k_setting(S_MCH, 0);
+        ui.trk = 4; sq.ktrk = 4;
+        int notes = 1;
+        for (int c = 0; c < 4; c++) {
+            m2k_setting(S_NTIN, enc(c, 4));
+            for (int s = 0; s < 2; s++) {
+                int src = s ? T : U, want = NTC[c] >> s & 1;
+                m2k_midi_from(src, 0x90, 64, 100);
+                int on = trk[0].note == 64 && trk[0].gate;
+                voice_off(0);
+                PAT(cur_pat)->kit[0][P_SYN] = 0;
+                m2k_midi_from(src, 0xB0, 48, 99);
+                int cc = PAT(cur_pat)->kit[0][P_SYN] == 99;
+                PAT(cur_pat)->mute = 0;
+                m2k_midi_from(src, 0xB0, 3, 127);
+                int mute = PAT(cur_pat)->mute & 1;
+                notes &= on == want && cc == want && mute == want;
+            }
+        }
+        PAT(cur_pat)->mute = 0;
+        CHECK(notes, "MIDI in: notes, CCs and mutes only from NOTE IN's (both, USB, TRS, none)");
+        /* THRU: the jack's out over USB as they came, stamped with the sample they came in at, as the core's own are;
+         * USB's never back; with SYNC OUT on, one clock: following the jack, MONO2K passes its start, pulses and stop
+         * on once; following USB, the jack's are not passed */
+        m2k_setting(S_NTIN, enc(0, 4));
+        m2k_setting(S_SYNI, enc(0, 4));
+        m2k_setting(S_SYNO, 0);
+        while (m2k_midi_out(m, m2k_samples()) > 0) {}
+        m2k_midi_from(T, 0x93, 60, 100);
+        int thru = m2k_midi_out(m, m2k_samples()) == 0;
+        m2k_midi_from(T, 0x83, 60, 0);
+        m2k_setting(S_THRU, 127);
+        m2k_render(mb, 128);
+        m2k_midi_from(T, 0x93, 60, 100);
+        thru &= m2k_midi_out(m, m2k_samples() - 1) == 0;
+        thru &= m2k_midi_out(m, m2k_samples()) == 3 && m[0] == 0x93 && m[1] == 60 && m[2] == 100;
+        m2k_midi_from(T, 0x83, 60, 0);
+        thru &= m2k_midi_out(m, m2k_samples()) == 3 && m[0] == 0x83 && m[1] == 60 && m[2] == 0;
+        m2k_midi_from(T, 0xC5, 7, 0);
+        thru &= m2k_midi_out(m, m2k_samples()) == 2 && m[0] == 0xC5 && m[1] == 7;
+        m2k_midi_from(T, 0xF2, 3, 1);
+        thru &= m2k_midi_out(m, m2k_samples()) == 3 && m[0] == 0xF2 && m[1] == 3 && m[2] == 1;
+        m2k_midi_from(T, 0xF8, 0, 0);
+        thru &= m2k_midi_out(m, m2k_samples()) == 1 && m[0] == 0xF8;
+        m2k_midi_from(U, 0x93, 62, 100);
+        m2k_midi_from(U, 0x83, 62, 0);
+        m2k_midi_from(U, 0xF8, 0, 0);
+        thru &= m2k_midi_out(m, m2k_samples()) == 0;
+        m2k_setting(S_SYNO, 127);
+        m2k_setting(S_SYNI, enc(2, 4));
+        m2k_midi_from(T, 0xFA, 0, 0);
+        for (int i = 0; i < 3; i++) m2k_midi_from(T, 0xF8, 0, 0);
+        m2k_midi_from(T, 0xFC, 0, 0);
+        int fa = 0, f8 = 0, fc = 0, k;
+        while ((k = m2k_midi_out(m, m2k_samples())) > 0) { fa += m[0] == 0xFA; f8 += m[0] == 0xF8; fc += m[0] == 0xFC; }
+        int one = fa == 1 && f8 == 3 && fc == 1;
+        m2k_setting(S_SYNI, enc(1, 4));
+        m2k_midi_from(T, 0xFA, 0, 0);
+        m2k_midi_from(T, 0xF8, 0, 0);
+        one &= !sq.playing && m2k_midi_out(m, m2k_samples()) == 0;
+        CHECK(thru && one, "MIDI in: THRU passes the TRS jack's notes, programs, position and clock on over USB as they "
+                           "came, stamped as the core's own, never USB's; with SYNC OUT on, one clock");
+        CHECK(mx.in_seen == 3 && mx.in_at[1] == m2k_samples(), "MIDI in: each port's last message kept, for GLO > IN");
+        /* NOTE IN and THRU kept with the store */
+        m2k_setting(S_NTIN, enc(2, 4));
+        int n = m2k_store_pack();
+        m2k_init(16);
+        CHECK(m2k_store_unpack(n) == 1 && notes_from() == 2 && set_on(S_THRU) && clk_from() == 1,
+              "MIDI in: SYNC IN's source, NOTE IN and THRU come back with the store");
+    }
     /* the store, version 3: the sound library with it; a store for the FM-1 (16 patterns, one project) read here (64,
      * four): bank A as it was, the rest blank, the sounds kept; a project file of version 1 still imported */
     {
         m2k_init(31);
         CHECK(snd[0].name[0] && snd[0].machine == pat[0].machine[0] && !memcmp(snd[0].kit, pat[0].kit[0], P_COUNT),
               "sounds: the factory's library holds bank A's tracks, A01 T1 first");
-        sound_save(63, &pat[2], 4, 0);
+        sound_save(63, &pat[2], 4, 0, -1);
         s_cpy(snd[63].name, "MINE");
         int n = m2k_store_pack();
         m2k_init(32);
@@ -2214,10 +2573,10 @@ static int selftest(void)
         edit(1, 1);                                               /* an INIT slot: the machine afresh */
         m2k_pattern_t fresh;
         pat_init(&fresh, "X");
-        kit_default(&fresh, 4, mach);
+        kit_init(&fresh, 4, mach);
         int init = pat[16].machine[4] == mach && !memcmp(pat[16].kit[4], fresh.kit[4], P_COUNT);
         CHECK(saved && kept && replaced && loaded && init,
-              "sounds: SAVE into INIT at once, over a sound when OCT+ says YES, LOAD once, INIT afresh");
+              "sounds: SAVE into INIT at once, over a sound when OCT+ says YES, LOAD once, INIT afresh (its machine's INIT)");
         ui.snd_sel = 0;
         int c0 = snd_cat[0];
         edit(3, 1);                                               /* CAT: KICK */
@@ -2227,6 +2586,170 @@ static int selftest(void)
         for (int k = 0; k < 40; k++) edit(0, 1);                  /* SLOT through them */
         CHECK(ui.snd_cat == CAT_KICK && shown_ok && n >= 32 && snd_shown(ui.snd_sel) && (c0 || 1),
               "sounds: CAT shows one category and the INIT slots; SLOT steps through those alone");
+    }
+    /* the machines' INITs (MACH_INIT): each its own sound on its own chain, kit_default's left as it was; their home
+     * notes; rendered at those, no two alike (GND-PERC's INIT and GND-NOIS's were one white noise) */
+    {
+        m2k_pattern_t a, b;
+        pat_init(&a, "X"); pat_init(&b, "X");
+        int own = 1, apart = 1;
+        for (int m = 0; m < M_COUNT; m++) {
+            kit_init(&a, 0, m); kit_default(&b, 0, m);
+            if (a.machine[0] != m || !memcmp(&a.kit[0][P_ATK], &b.kit[0][P_ATK], P_COUNT - P_ATK)) own = 0;
+            for (int n = m + 1; n < M_COUNT; n++) {
+                kit_init(&b, 0, n);
+                if (!memcmp(&a.kit[0][P_ATK], &b.kit[0][P_ATK], P_COUNT - P_ATK)) apart = 0;
+            }
+        }
+        int homes = mach_home(M_DKIK) == 36 && mach_home(M_GSIN) == 48 && mach_home(M_FMD) == 48 && mach_home(M_SAW) == 60 &&
+                    mach_home(M_DSNR) == 60;
+        for (int m = 0; m < M_COUNT; m++) homes &= mach_home(m) >= 36 && mach_home(m) <= 60;
+        CHECK(own && apart && homes, "INIT: every machine's on its own chain (none kit_default's, no two alike); the kick's home C2, the basses' C3");
+        /* a sound's shape, its level aside: its zero crossings and its slope's (pitch or noise, brightness), and its
+         * first 100 ms against the rest (dB: a hit or a held note); 20 ln of a ratio, so 5 % a unit */
+        static int16_t ib[2 * M2K_SR + 512];
+        double fz[M_COUNT], fs[M_COUNT], fd[M_COUNT];
+        int alike = 0, ca = -1, cb = -1;
+        double close = 1e9;
+        for (int m = 0; m < M_COUNT; m++) {
+            if (m == M_FXC || m == M_FXR || m == M_FXD) continue;   /* (silent without a track before them) */
+            m2k_init(2000);
+            pat_init(&pat[47], "INI");
+            kit_init(&pat[47], 0, m);
+            pat[47].glob[G_DRIV] = 0;
+            pat[47].step[0][0] = (m2k_step_t){.note = (uint8_t)mach_home(m), .flags = ST_TRIG};
+            double pk, rm;
+            fx_measure(47, 1, 1.0, ib, &pk, &rm);
+            double e0 = 0, e1 = 0;
+            int zc = 0, zs = 0;
+            for (int i = 2; i < M2K_SR; i++) {
+                double v = ib[2 * i];
+                if (i < M2K_SR / 10) e0 += v * v; else e1 += v * v;
+                zc += (ib[2 * i] < 0) != (ib[2 * i - 2] < 0);
+                zs += (ib[2 * i] < ib[2 * i - 2]) != (ib[2 * i - 2] < ib[2 * i - 4]);
+            }
+            fz[m] = zc + 1; fs[m] = zs + 1; fd[m] = 10 * log10((e0 + 1) / (e1 + 1));
+            for (int n = 0; n < m; n++) {
+                if (n == M_FXC || n == M_FXR || n == M_FXD) continue;
+                double d = 20 * fabs(log(fz[m] / fz[n])) + 20 * fabs(log(fs[m] / fs[n])) + fabs(fd[m] - fd[n]);
+                if (d < close) { close = d; ca = n; cb = m; }
+                alike += d < 1.0;
+            }
+        }
+        printf("     INITs at their homes: the closest two %s and %s, %.1f apart (crossings, the slope's, decay)\n", MI[ca].name, MI[cb].name, close);
+        CHECK(!alike, "INIT: the sixteen machines with a sound of their own sound apart at their home notes");
+    }
+    /* ALGORITHM on EDIT: a sound still its machine's INIT (or kit_default's, the INIT before) takes the next machine's
+     * whole INIT, an FX its amp (HOLD 127) with it; a sound shaped keeps its chain and takes the page alone. The
+     * selector's order: the ten tonal machines first, then the drums, the noises, the FX */
+    {
+        static const uint8_t ORD[M_COUNT] = {M_GSIN, M_SAW, M_PUL, M_ENS, M_FMS, M_FMP, M_FMD, M_VOX, M_WAV, M_SID,
+                                             M_DKIK, M_DSNR, M_DHAT, M_DCYM, M_GPRC, M_GNOI, M_FXC, M_FXD, M_FXR};
+        int order = !memcmp(M_ORDER, ORD, M_COUNT), once = 1;
+        for (int m = 0; m < M_COUNT; m++) once &= M_ORDER[m_place(m)] == m;
+        CHECK(order && once, "ALGORITHM's order: tonal first (GND-SIN, the SWAV and FM+ families, VOX-6, DIGI-WAV, SID), drums, noises, FX");
+        CHECK(!strcmp(MI[M_SAW].badge, "SWV") && !strcmp(MI[M_PUL].badge, "SWV") && !strcmp(MI[M_ENS].badge, "SWV"),
+              "the SWAV family's badge: SWV, SWAV-PUL's too");
+        m2k_init(50);
+        m2k_pattern(16);                                          /* B01, the INIT pattern: T1 GND-SIN at its INIT */
+        ui.trk = 0; ui.page = PG_SYN; ui.sub = 0;
+        m2k_pattern_t w;
+        pat_init(&w, "X");
+        m2k_encoder(E_ALGO, 1);                                   /* -> SWAV-SAW */
+        kit_init(&w, 0, M_SAW);
+        int whole = pat[16].machine[0] == M_SAW && !memcmp(pat[16].kit[0], w.kit[0], P_COUNT) && !memcmp(trk[0].eff, w.kit[0], P_COUNT);
+        pat[16].kit[0][P_DEC] = 33; pat[16].kit[0][P_WDTH] = 77; pat[16].kit[0][P_SYN + 1] = 5;   /* shaped */
+        uint8_t shaped[P_COUNT];
+        m_cpy(shaped, pat[16].kit[0], P_COUNT);
+        m2k_encoder(E_ALGO, 1);                                   /* -> SWAV-PUL: its page, the chain kept */
+        kit_init(&w, 0, M_PUL);
+        int page = pat[16].machine[0] == M_PUL && !memcmp(pat[16].kit[0], w.kit[0], 8) && !memcmp(pat[16].kit[0] + 8, shaped + 8, P_COUNT - 8);
+        kit_default(&pat[16], 0, M_PUL);                          /* the INIT before these, as an old pattern */
+        feel_kit_v15(pat[16].kit[0]);                             /* loads it: on format 16's laws */
+        m2k_encoder(E_ALGO, 1);                                   /* -> SWAV-ENS, whole */
+        kit_init(&w, 0, M_ENS);
+        int old = pat[16].machine[0] == M_ENS && !memcmp(pat[16].kit[0], w.kit[0], P_COUNT);
+        kit_init(&pat[16], 0, M_GSIN);
+        m2k_encoder(E_ALGO, -1);                                  /* GND-SIN back to the end: FX-RING, whole */
+        kit_init(&w, 0, M_FXR);
+        int fx = pat[16].machine[0] == M_FXR && !memcmp(pat[16].kit[0], w.kit[0], P_COUNT) && pat[16].kit[0][P_HOLD] == 127 &&
+                 pat[16].kit[0][P_DEC] == 127;
+        CHECK(whole && page && old && fx, "ALGORITHM: an INIT sound takes the next machine's whole INIT (an FX its amp); a shaped one its page, the chain kept");
+    }
+    /* the notes that fit the sound: a machine picked or INITed puts its track's new trigs, pads and keys on its home
+     * note, each track's keyboard octave its own (OCT- / OCT+ the track in view's); an INIT pattern opened, every
+     * track at home: DRM-KICK at C2 from the keys' first C, not the zap of C4 */
+    {
+        m2k_init(51);
+        m2k_pattern(16);                                          /* B01 INIT: GND-SIN DRM-KICK DRM-SNAR DRM-HATS FM+STAT SWAV-ENS */
+        int blank = ui.note[0] == 48 && ui.oct[0] == -1 && ui.note[1] == 36 && ui.oct[1] == -2 && ui.note[2] == 60 &&
+                    ui.oct[2] == 0 && ui.note[4] == 60 && ui.oct[4] == 0;
+        m2k_track(1);
+        m2k_key(7, 1);                                            /* the keys' first C */
+        int kick = trk[1].note == 36;
+        m2k_key(7, 0);
+        ui.grid = 1;
+        m2k_key(ux_white(0), 1); m2k_key(ux_white(0), 0);         /* a trig on step 1 */
+        int trig = (pat[16].step[1][0].flags & ST_TRIG) && pat[16].step[1][0].note == 36;
+        ui.grid = 0;
+        m2k_track(0);
+        m2k_button(B_OCTU, 1); m2k_button(B_OCTU, 0);             /* T1's octave up, T2's kept */
+        const uint8_t *L = m2k_leds();                            /* OCT- lit for an octave down: the track in view's */
+        int own = ui.oct[0] == 0 && ui.oct[1] == -2 && !L[M2K_KEYS + B_OCTD] && !L[M2K_KEYS + B_OCTU];
+        m2k_track(1);
+        L = m2k_leds();
+        own &= L[M2K_KEYS + B_OCTD] && !L[M2K_KEYS + B_OCTU];
+        m2k_key(7, 1);
+        own &= trk[1].note == 36;
+        m2k_key(7, 0);
+        m2k_track(4);
+        ui.page = PG_SYN; ui.sub = 0;
+        set_machine(M_DKIK);                                      /* FM+STAT's track a kick: at C2 */
+        int picked = ui.note[4] == 36 && ui.oct[4] == -2;
+        set_machine(M_GSIN);                                      /* and on to a sine: at C3 */
+        int bass = ui.note[4] == 48 && ui.oct[4] == -1;
+        m2k_button(B_GLO, 1); m2k_button(B_ARP, 1); m2k_button(B_ARP, 0); m2k_button(B_GLO, 0);   /* PADS */
+        m2k_key(ux_white(1), 1); m2k_key(ux_white(1), 0);         /* T2's pad: its trig's note */
+        m2k_key(ux_white(4), 1); m2k_key(ux_white(4), 0);         /* T5's: no trigs, its home */
+        int pads = trk[1].note == 36 && trk[4].note == 48;
+        CHECK(blank && kick && trig && own && picked && bass && pads,
+              "notes: an INIT pattern's tracks at home (the kick's keys C2, a trig there); octaves per track; a machine picked, its home");
+    }
+    /* the library's notes: each sound kept with the note it was made at (the demos' roots; SAVE the track's root) and
+     * loaded there, its track's keys and new trigs with it (a kick saved at C2 plays at C2); kept in the store's 'R';
+     * a store before 'R' guesses by category (a kick at C2, a bass at C3, the rest C4); one cut inside it is refused */
+    {
+        m2k_init(52);
+        int fac = 1;
+        for (int i = 0; i < 6 * FACTORY_DEMOS; i++) fac &= snd_root[i] == pat_root(&pat[i / 6], i % 6);
+        fac &= pat[0].machine[0] == M_DKIK && snd_root[0] == 33;  /* A01's kick on A1 */
+        m2k_pattern(16);
+        for (int s = 0; s < 16; s += 4) pat[16].step[1][s] = (m2k_step_t){.note = 36, .flags = ST_TRIG};
+        m2k_track(1);
+        ui.page = PG_SYN; ui.sub = (uint8_t)(nsub(PG_SYN) - 1); ui.snd_cat = 0; ui.snd_sel = 100; ui.now = 5000;
+        edit(2, 1);                                               /* SAVE: the kick at C2 */
+        int saved = snd[100].machine == M_DKIK && snd_root[100] == 36 && snd_cat[100] == CAT_KICK;
+        m2k_track(4);
+        ui.now = 9000;
+        edit(1, 1);                                               /* LOAD onto T5 */
+        int loaded = pat[16].machine[4] == M_DKIK && ui.note[4] == 36 && ui.oct[4] == -2;
+        m2k_key(7, 1);
+        loaded &= trk[4].note == 36;
+        m2k_key(7, 0);
+        snd_root[101] = 77; s_cpy(snd[101].name, "HIGH"); snd[101].machine = M_SAW; snd_cat[101] = CAT_LEAD;
+        int n = m2k_store_pack();
+        m2k_init(53);
+        int kept = m2k_store_unpack(n) == 1 && snd_root[100] == 36 && snd_root[101] == 77;
+        int tag = n > 130 && store_buf[n - 130] == 'R' && store_buf[n - 129] == M2K_SOUNDS;
+        m2k_init(54);
+        int old = tag && m2k_store_unpack(n - 130) == 1 && snd_root[100] == 36 && snd_root[101] == 60 && !strcmp(snd[101].name, "HIGH");
+        for (int i = 0; i < M2K_SOUNDS; i++) if (snd[i].name[0]) old &= snd_root[i] == root_guess(snd_cat[i]);
+        old &= snd_root[3] == 48 && snd_cat[3] == CAT_BASS;       /* A01's sine bass */
+        m2k_init(55);
+        s_cpy(pat[0].name, "MINE");
+        int cut = !m2k_store_unpack(n - 10) && !strcmp(pat[0].name, "MINE");
+        CHECK(fac && saved && loaded && kept && old && cut,
+              "sounds: each kept with its note (the demos' roots, SAVE's), loaded there (a kick at C2); 'R' in the store, older ones guessed");
     }
     /* the verbs: GLO + SEQ clears the pattern's steps (the sounds stay), again within 3 s undoes it, held a second
      * makes it INIT; GLO + OCT- / OCT+ undo and redo; in GRID they act on the track; GLO + EDIT opens the library */
@@ -2333,9 +2856,9 @@ static int selftest(void)
             int waits = sq.ready && !sq.playing;
             for (int i = 0; i < 20; i++) m2k_render(rb, 128);                         /* nothing moves while it waits */
             int still = !sq.playing && !(pat[16].step[0][0].flags & ST_TRIG);
-            m2k_key(4, 1);                                                             /* A3: the first note */
+            m2k_key(4, 1);                                                             /* A: the first note */
             int started = sq.playing && !sq.ready;
-            int rec0 = (pat[16].step[0][0].flags & ST_TRIG) && pat[16].step[0][0].note == 57;
+            int rec0 = (pat[16].step[0][0].flags & ST_TRIG) && pat[16].step[0][0].note == 57 + 12 * ui.oct[0];
             m2k_key(4, 0);
             seq_play(0);
             ui.now += 200;
@@ -2379,6 +2902,33 @@ static int selftest(void)
             m2k_encoder(E_ALGO, 1);
             int syn = PAT(cur_pat)->machine[ui.trk] != m0;
             CHECK(lfo_end && lfo_back && home && syn, "ALGORITHM: the page's pages (LFO 1A..3B, to its ends), nothing on HOME, the machine on EDIT");
+        }
+        /* SWAV-PUL's PW sweep (PWAD) bounces between 4 % and 96 %: no dropout through the silent ends every cycle
+         * (the owner's "clip every few seconds, like looping": its level fell to a tenth); PWAD 0 as it was */
+        {
+            static int16_t pb[2 * 44100 * 8];
+            m2k_init(42);
+            m2k_pattern(16);
+            m2k_pattern_t *q = PAT(cur_pat);
+            for (int t = 0; t < M2K_TRACKS; t++) for (int st = 0; st < M2K_STEPS; st++) q->step[t][st].flags = 0;
+            kit_default(q, 0, M_PUL);
+            q->kit[0][P_HOLD] = 127; q->kit[0][P_DEC] = 127; q->kit[0][P_SYN + 5] = 8;
+            q->mute = 0x3E;
+            for (int t = 0; t < M2K_TRACKS; t++) m_cpy(trk[t].eff, q->kit[t], P_COUNT);
+            ui.trk = 0; sq.ktrk = 0;
+            live_on(57, 100);
+            int n = (44100 * 8) & ~127;
+            for (int f = 0; f < n; f += 128) m2k_render(pb + 2 * f, 128);
+            live_off(57);
+            double lo = 1e9, sum = 0; int nw = 0;
+            for (int w = 10; w < n / 882; w++) {
+                double m = 0, a = 0;
+                for (int i = 0; i < 882; i++) m += pb[2 * (w * 882 + i)];
+                m /= 882;
+                for (int i = 0; i < 882; i++) { double x = pb[2 * (w * 882 + i)] - m; a += x * x; }
+                a = sqrt(a / 882); sum += a; nw++; if (a < lo) lo = a;
+            }
+            CHECK(lo > 0.25 * sum / nw, "SWAV-PUL: PWAD's sweep bounces between 4 % and 96 %, no dropout every cycle");
         }
         /* GLO > SET: WIPE asks, OCT+ makes every pattern INIT (the sounds kept), OCT- or any other button keeps them;
          * DEMO asks, OCT+ brings bank A's back */
@@ -2463,9 +3013,9 @@ static int selftest(void)
         m2k_button(B_EDIT, 0);
         m2k_pattern_t fr;
         pat_init(&fr, "X");
-        kit_default(&fr, 2, pat[0].machine[2]);
-        CHECK(kept_snd && pat[0].kit[2][P_DEC] == fr.kit[2][P_DEC] && !ui.grid,
-              "EDIT held: SAVE keeps the sound in the first INIT slot, SEQ INITs it (no GRID)");
+        kit_init(&fr, 2, pat[0].machine[2]);
+        CHECK(kept_snd && !memcmp(pat[0].kit[2], fr.kit[2], P_COUNT) && !ui.grid,
+              "EDIT held: SAVE keeps the sound in the first INIT slot, SEQ INITs it (its machine's INIT; no GRID)");
         }
         /* SEQ: a tap is GRID; held, the white keys are tools on the track's steps (their locks with them), the knobs
          * LEN SWING ACCENT TEMPO, and letting go is not a tap */
@@ -2664,13 +3214,14 @@ static int selftest(void)
         /* a help card: OCT- held a second alone shows it and its release does nothing; held shorter, the octave; a key
          * meanwhile, no card */
         m2k_init(48);
+        int o0 = ui.oct[ui.trk];                      /* (T1, A01's kick: at home two octaves down) */
         ui.now = 1000; m2k_button(B_OCTD, 1); ui.now = 2100;
         int card = card_up();
         m2k_frame(ui.now);
         m2k_button(B_OCTD, 0);
-        int quiet = ui.oct == 0 && !ui.octd;
+        int quiet = ui.oct[ui.trk] == o0 && !ui.octd;
         ui.now = 3000; m2k_button(B_OCTD, 1); ui.now = 3300; m2k_button(B_OCTD, 0);
-        int oct = ui.oct == -1;
+        int oct = o0 == -2 && ui.oct[ui.trk] == o0 - 1;
         ui.now = 4000; m2k_button(B_PLAY, 1); m2k_key(wk[0], 1); ui.now = 5200;
         int nocard = !card_up();
         m2k_key(wk[0], 0); m2k_button(B_PLAY, 0);
@@ -2834,16 +3385,19 @@ static int selftest(void)
         int unlocked = lock_find(0, 0, P_DEC) < 0 && q->step[0][0].rtrg <= 1;
         m2k_key(0, 0);
         ui.grid = 0;
-        m2k_pattern_t fr;
+        m2k_pattern_t fr, fd;
         pat_init(&fr, "X");
-        kit_default(&fr, 0, q->machine[0]);
+        pat_init(&fd, "X");
+        kit_init(&fr, 0, q->machine[0]);              /* home: the machine's INIT (A01's kick: DEC 42), not kit_default's */
+        kit_default(&fd, 0, q->machine[0]);
         q->kit[0][P_DEC] = (uint8_t)(fr.kit[0][P_DEC] ^ 40);
+        int o0 = ui.oct[ui.trk];
         m2k_button(B_OCTD, 1); edit(2, 1); m2k_button(B_OCTD, 0);
-        int home = q->kit[0][P_DEC] == fr.kit[0][P_DEC] && ui.oct == 0;
+        int home = q->kit[0][P_DEC] == fr.kit[0][P_DEC] && fr.kit[0][P_DEC] != fd.kit[0][P_DEC] && ui.oct[ui.trk] == o0;
         m2k_button(B_OCTD, 1); m2k_button(B_OCTD, 0);
-        int oct = ui.oct == -1;
+        int oct = ui.oct[ui.trk] == o0 - 1;
         CHECK(tt && cd && locked && unlocked && home && oct,
-              "a held step: black 1-5 its trig type, 6-11 its condition; OCT- + knob: the lock away, else the value home; OCT- alone the octave");
+              "a held step: black 1-5 its trig type, 6-11 its condition; OCT- + knob: the lock away, else the INIT's value; OCT- alone the octave");
     }
     /* a key's release lets go of the note its press started, whatever is held by then (OCT+ tapped meanwhile, SEQ or
      * GLO held), and the keys let go of their notes when they become steps (SEQ tapped) or pads (GLO + ARP), or their
@@ -2925,6 +3479,30 @@ static int selftest(void)
         m2k_key(ux_white(s), 1); ux_ms(100); m2k_key(ux_white(s), 0);
         int tapped = !(q->step[t][s].flags & ST_TRIG) && lock_find(t, s, P_DEC) < 0;
         CHECK(s >= 0 && kept && tapped, "GRID: a trig held 2 s and let go keeps itself and its locks; a quick tap removes it");
+    }
+    /* a trig taken away takes its condition and ratchet with it: tapped again, the new trig is plain (100 %, no
+     * ratchet); step entry's rest the same (the owner: "the probability should be removed too") */
+    {
+        ux_init(7);
+        ux_tap(B_SEQ);
+        m2k_pattern_t *q = PAT(cur_pat);
+        int t = ui.trk, s = -1;
+        for (int i = 0; i < 16 && s < 0; i++) if (q->step[t][i].flags & ST_TRIG) s = i;
+        q->step[t][s].cond = C_P50; q->step[t][s].rtrg = 2;
+        m2k_key(ux_white(s), 1); ux_ms(100); m2k_key(ux_white(s), 0);       /* a quick tap: removed */
+        int gone = !(q->step[t][s].flags & ST_TRIG) && q->step[t][s].cond == 0 && q->step[t][s].rtrg == 0;
+        ux_ms(400);
+        m2k_key(ux_white(s), 1); ux_ms(100); m2k_key(ux_white(s), 0);       /* again: a plain trig */
+        int plain = (q->step[t][s].flags & ST_TRIG) && q->step[t][s].cond == 0 && q->step[t][s].rtrg == 0;
+        ux_tap(B_SEQ);                                                        /* KEYS; step entry and its rest */
+        ux_ms(400);
+        q->step[t][0].flags = ST_TRIG; q->step[t][0].cond = C_1_2; q->step[t][0].rtrg = 3;
+        ux_tap(B_REC);
+        ui.cursor = 0;
+        ux_tap(B_EDIT);
+        int rest = !(q->step[t][0].flags & ST_TRIG) && q->step[t][0].cond == 0 && q->step[t][0].rtrg == 0;
+        ux_tap(B_REC);
+        CHECK(s >= 0 && gone && plain && rest, "a trig taken away (GRID's tap, step entry's rest) takes its condition and ratchet with it");
     }
     /* a question does what it asked: REPLACE S001 answered YES after SLOT moved on saves the track's sound into S001,
      * S002 untouched; LOAD P2 answered YES after PROJ moved on loads P2 */
@@ -3057,9 +3635,9 @@ static int selftest(void)
     /* GLO + OCT- (undo), GLO let go first: OCT-'s own release does nothing (it turned the octave) */
     {
         ux_init(7);
-        int o0 = ui.oct;
+        int o0 = ui.oct[ui.trk];
         m2k_button(B_GLO, 1); m2k_button(B_OCTD, 1); m2k_button(B_GLO, 0); m2k_button(B_OCTD, 0);
-        CHECK(ui.oct == o0, "GLO + OCT-, GLO let go first: the octave stays");
+        CHECK(ui.oct[ui.trk] == o0, "GLO + OCT-, GLO let go first: the octave stays");
     }
     /* the drawing's byte-wise fills and type (rect, frame, a glyph a byte at a time) as a pixel at a time draws them:
      * random boxes and texts, in ink, paper and inverted, in each size, cut by random clips and the screen's edges */
@@ -3617,6 +4195,131 @@ static int selftest(void)
         CHECK(n2 == 4 && abs((int)t2[1] - (int)(8 * 5512.5)) <= 2 * M2K_SUB && abs((int)t2[2] - (int)(16 * 5512.5)) <= 2 * M2K_SUB && with == 2,
               "speeds: a track's speed turned while playing goes on from where the pattern is");
     }
+    /* the amp (format 16, the owner's laws): the time shown is the time heard on the output, ATK to full and DEC and
+     * REL to -60 dB (within two blocks and 3 %); the attack swells, half its level only after 0.62 of its time (a
+     * square of the time: 0.71; a straight rise is there at 0.5); the knob spent where the times are: ATK about 20 ms at
+     * 16, 67 ms at 32, 0.4 s at 64, 2.1 s at 96, 10 s at 127; DEC and REL 0.8 s at 64, 19 s at 126, REL 20 s at 127 */
+    {
+        static int32_t lv[M2K_SR * 12 / M2K_SUB];
+        const double blk = 1000.0 * M2K_SUB / M2K_SR;           /* ms */
+        int ok = 1;
+        static const int AV[5] = {16, 32, 64, 96, 127};
+        static const double AT[5] = {21, 67, 400, 2080, 10000};
+        for (int i = 0; i < 5; i++) {
+            int a = AV[i], n = (int)(T_AATK_MS10[a] / 10.0 / blk) + 400;
+            double shown = T_AATK_MS10[a] / 10.0;
+            amp_probe(a, 127, 127, 0, -1, -1, lv, n);
+            int32_t full = lv[n - 1];
+            double t_full = amp_when(lv, n, 0, 1, 0.99, full) * blk, t_half = amp_when(lv, n, 0, 1, 0.5, full) * blk;
+            int good = fabs(t_full - shown) <= 2 * blk + 0.03 * shown && t_half >= 0.62 * shown && fabs(shown / AT[i] - 1) < 0.1;
+            if (!good) printf("     ATK %d: shown %.1f ms, full at %.1f, half at %.1f\n", a, shown, t_full, t_half);
+            ok &= good;
+        }
+        static const int DV[3] = {32, 64, 96};
+        for (int i = 0; i < 3; i++) {
+            int d = DV[i], n = (int)(T_ADEC_MS10[d] / 10.0 / blk * 1.2) + 50;
+            double shown = T_ADEC_MS10[d] / 10.0;
+            amp_probe(0, 0, d, 0, -1, -1, lv, n);
+            int pk = 0;
+            for (int j = 0; j < 20; j++) if (lv[j] > lv[pk]) pk = j;
+            double t60 = (amp_when(lv, n, pk, 0, 1e-3, lv[pk]) - pk) * blk;
+            amp_probe(0, 127, 127, d, 20, -1, lv, n + 20);
+            double r60 = (amp_when(lv, n + 20, 20, 0, 1e-3, lv[19]) - 20) * blk;
+            int good = fabs(t60 - shown) <= 2 * blk + 0.03 * shown && fabs(r60 - shown) <= 2 * blk + 0.03 * shown;
+            if (!good) printf("     DEC / REL %d: shown %.1f ms, heard %.1f / %.1f\n", d, shown, t60, r60);
+            ok &= good;
+        }
+        ok &= fabs(T_ADEC_MS10[64] / 8020.0 - 1) < 0.05 && fabs(T_ADEC_MS10[126] / 190000.0 - 1) < 0.05 &&
+              fabs(T_ADEC_MS10[127] / 200000.0 - 1) < 0.05;
+        CHECK(ok, "AMP: the time shown is the time heard (ATK to full, DEC and REL to -60 dB), the attack swelling, on the "
+                  "owner's laws (ATK 0.4 s at 64, 10 s at 127; DEC and REL 0.8 s at 64, 20 s at 127)");
+        /* a trig over a sounding note: an attack goes on from where the note is (no step down); ATK 0 starts from
+         * zero, the percussive edge, as before */
+        int n = 260, cont = 1;
+        amp_probe(12, 127, 127, 30, 60, 160, lv, n);                    /* ATK 14 ms, REL 0.12 s: -18 dB at the trig */
+        for (int j = 160; j < n - 1; j++) cont &= lv[j + 1] >= lv[j] * 99 / 100;
+        CHECK(cont && lv[159] < lv[59] / 2 && lv[n - 1] > lv[59] * 98 / 100,
+              "AMP: a trig on a releasing note rises from where it is to full, no step down (ATK 12)");
+    }
+    /* the LFOs (format 16): DPTH squared about 64, fine near the middle (72 swings a quarter octave of BASE, two steps:
+     * format 15's 72 swung sixteen), full at the ends; the modulation glides between steps on what reads whole steps
+     * (VOL PAN LPQ HPQ DEC: a half step lands between); SPD a cycle in 2^((84 - SPD) / 12) beats at x1, as shown */
+    {
+        int32_t sw[3];
+        static const int DP[3] = {72, 0, 127};
+        for (int i = 0; i < 3; i++) {
+            m2k_init(42);
+            trk_t *t = &trk[0];
+            m_set(t->eff, 0, P_COUNT);
+            t->eff[P_LFO + L_DEST] = P_PAN + 1;
+            t->eff[P_LFO + L_WAVE] = enc(2, 7);                        /* a square: its whole swing at once */
+            t->eff[P_LFO + L_DPTH] = (uint8_t)DP[i];
+            modn = 0;
+            lfo_block(0);
+            sw[i] = modq[0].v < 0 ? -modq[0].v : modq[0].v;
+            modn = 0;
+        }
+        CHECK(abs(sw[0] - 512) < 16 && abs(sw[1] - 128 * 256) < 64 && abs(sw[2] - 126 * 256) < 64,
+              "LFO: DPTH 72 swings two steps (format 15's: sixteen), 0 and 127 the whole range");
+        /* a half step of modulation: VOL's gain, PAN's, LPQ's and HPQ's filters, DEC's fall between their whole steps */
+        int32_t vq[3], pq[3], lq[3], hq[3];
+        uint32_t dq[3];
+        for (int i = 0; i < 3; i++) {
+            m2k_pattern_t *q = eng_pat(43);
+            uint8_t *k = q->kit[0];
+            k[P_HOLD] = 127; k[P_DEC] = 127; k[P_VOL] = 60; k[P_PAN] = 40; k[P_LPQ] = 40; k[P_HPQ] = 40;
+            k[P_BASE] = 20; k[P_WDTH] = 40;
+            m_cpy(trk[0].eff, k, P_COUNT);
+            static const int P[4] = {P_VOL, P_PAN, P_LPQ, P_HPQ};
+            for (int j = 0; j < 4; j++) trk[0].mod[P[j]] = i * 128;   /* (no LFO: it stays) */
+            voice_on(0, 60, 100, 0);
+            m2k_render(eng_out, M2K_SUB);
+            m2k_render(eng_out, M2K_SUB);
+            int32_t l = 0, r = 0;
+            for (int j = 0; j < M2K_SUB; j++) { l += abs(eng_out[2 * j]); r += abs(eng_out[2 * j + 1]); }
+            vq[i] = l + r; pq[i] = (int32_t)((int64_t)l * 4096 / (r + 1));
+            lq[i] = trk[0].lp1.k; hq[i] = trk[0].hp2.k;
+            trk[0].mod[P_DEC] = i * 128;
+            trk[0].eff[P_DEC] = 60; trk[0].astage = 3; trk[0].aenv = 1u << 30;
+            env_block(&trk[0]);
+            dq[i] = trk[0].aenv;
+        }
+        #define BETWEEN(a) (((a)[1] > (a)[0] && (a)[1] < (a)[2]) || ((a)[1] < (a)[0] && (a)[1] > (a)[2]))
+        CHECK(BETWEEN(vq) && BETWEEN(pq) && BETWEEN(lq) && BETWEEN(hq) && BETWEEN(dq),
+              "LFO: half a step of modulation lands between the steps (VOL, PAN, LPQ, HPQ, DEC): it glides, no zipper");
+        #undef BETWEEN
+        /* SPD: 12 at x1 a cycle in 16 bars (32 s at 120 BPM), 60 a bar, 60 at x16 a sixteenth, 0 still; the screen says so
+         * (the LFOs' clock 1.45 % slow, as format 15's: its 32, 16 at x1 a bar and 64 at x16 converted exactly) */
+        int good = 1;
+        static const int SV[4] = {12, 60, 60, 0}, MU[4] = {0, 0, 4, 0};
+        static const double BEATS[4] = {64, 4, 0.25, 0};
+        static const char *const SHOWN[4] = {"16 BARS", "1 BAR", "1/16 NOTE", "STOP STILL"};
+        for (int i = 0; i < 4; i++) {
+            m2k_init(44);
+            trk_t *t = &trk[0];
+            m_set(t->eff, 0, P_COUNT);
+            t->eff[P_LFO + L_DEST] = P_PAN + 1;
+            t->eff[P_LFO + L_SPD] = (uint8_t)SV[i];
+            t->eff[P_LFO + L_MULT] = enc(MU[i], 8);
+            t->eff[P_LFO + L_DPTH] = 72;
+            bpm10 = 1200;
+            uint32_t ph0 = t->lph[0];
+            int nb = 0;
+            uint64_t moved = 0;
+            while (nb < 2000000 && moved < 4294967296ull) { uint32_t a = t->lph[0]; lfo_block(0); modn = 0; moved += (uint32_t)(t->lph[0] - a); nb++; }
+            double beats = nb * (double)M2K_SUB / M2K_SR * 2.0;
+            char o[24], w[40];
+            const char *u;
+            s_lfo_cycle(o, &u, SV[i], MU[i]);
+            snprintf(w, sizeof w, "%s %s", o, u);
+            int g = !strcmp(w, SHOWN[i]) && (SV[i] ? fabs(beats / (BEATS[i] * 1.01449) - 1) < 0.002 : t->lph[0] == ph0);
+            if (!g) printf("     SPD %d x%d: %.3f beats a cycle, shown %s\n", SV[i], 1 << MU[i], beats, w);
+            good &= g;
+        }
+        good &= T_SPD15[32] == 48 && T_SPD15[16] == 36 && T_SPD15[64] == 60 && T_LCYC[48] == 8116;   /* 8.116 beats: format 15's 32 */
+        CHECK(good, "LFO: SPD 12 cycles in 16 bars at x1, 60 in a bar, 60 at x16 in a sixteenth, 0 stands, as the screen says;"
+                    " format 15's speeds kept (32 as 48, 64 as 60)");
+    }
     /* LFO ONE and HALF: a whole cycle and half of one from the trig's phase (PHAS), whatever it is */
     {
         int ok = 1;
@@ -3631,7 +4334,7 @@ static int selftest(void)
                 t->eff[P_LFO + L_PHAS] = (uint8_t)ph;
                 t->eff[P_LFO + L_DPTH] = 127;
                 lfo_trig(t);
-                double inc = 64.0 * bpm10 * 10 / 4294967296.0, want = mode == 3 ? 1.0 : 0.5;
+                double inc = lfo_inc(64 * 256, 0, bpm10) / 4294967296.0, want = mode == 3 ? 1.0 : 0.5;
                 int n = 0;
                 while (!t->ldone[0] && n < 100000) { lfo_block(0); modn = 0; n++; }
                 ok &= n * inc >= want && n * inc < want + inc * 1.01;
@@ -3769,7 +4472,7 @@ static int selftest(void)
         int ph_same = 1;
         for (int i = 0; i < M2K_SR; i++) {
             int32_t x = ((i & 1) ? 90000 : -90000) * (((i / 3) & 1) ? -1 : 1);      /* near Nyquist, a driven track's 2.7 x full */
-            int32_t y = mod_tick(t, line, x, 2, T_MOD_INC[64], 127, 254, &side);
+            int32_t y = mod_tick(t, line, x, 2, T_MOD_INC[64], 127 * 206, 254, &side);   /* (MODD 127, the phaser's scale) */
             ph_same &= y == eng_phaser(&mph, map, &mfb, x, T_MOD_INC[64], 127, 254);
         }
         CHECK(gp <= 32401 && !flips && ph_same, "64-bit products: GND-PERC's METAL, DRM-SNAR's gain, the phaser's allpasses, on loud signals");
@@ -3870,38 +4573,6 @@ static int selftest(void)
         int wn2 = pat_unpack(&w, wb, wn) ? pat_pack(&w, wb2) : 0;
         CHECK(ok && wn2 == wn && !memcmp(wb, wb2, (size_t)wn),
               "format: 17's reverb pair at a node of its grid and between four, each send by its level; today's loads as it is");
-    }
-    {
-        /* bank A on format 17: revision 11's A01 CIRCUIT as it shipped (version 15) loads as today's but for the reverb's
-         * pair (the grid's, read between, against the pair measured at its very values) and its sends' rounding; a store
-         * of revision 11 holding it as shipped takes today's */
-        static uint8_t cb[BLOB_MAX];
-        static m2k_pattern_t c;
-        int cn = 0;
-        for (const char *h = CIRCUIT_R11; h[0] && h[1]; h += 2) { unsigned v; sscanf(h, "%2x", &v); cb[cn++] = (uint8_t)v; }
-        m2k_init(18);
-        int ok = cn > 0 && fnv(cb, (uint32_t)cn) == OLD_PACKED[1].fnv[0] && pat_unpack(&c, cb, cn);
-        int near = abs(c.glob[G_VERB] - pat[0].glob[G_VERB]) <= 4 && abs(c.glob[G_DAMP] - pat[0].glob[G_DAMP]) <= 8, rest = 1;
-        for (int g = 0; g < G_COUNT; g++) if (g != G_VERB && g != G_DAMP) rest &= c.glob[g] == pat[0].glob[g];
-        for (int t = 0; t < M2K_TRACKS; t++) {
-            near &= abs(c.kit[t][P_SPU] - pat[0].kit[t][P_SPU]) <= 2;
-            for (int k = 0; k < P_COUNT; k++) if (k != P_SPU) rest &= c.kit[t][k] == pat[0].kit[t][k];
-        }
-        rest &= !memcmp(c.step, pat[0].step, sizeof c.step) && !memcmp(c.lock, pat[0].lock, sizeof c.lock);
-        printf("     A01 from revision 11: DCAY %d DAMP %d (today's %d %d), sends %d %d (%d %d)\n", c.glob[G_VERB], c.glob[G_DAMP],
-               pat[0].glob[G_VERB], pat[0].glob[G_DAMP], c.kit[1][P_SPU], c.kit[5][P_SPU], pat[0].kit[1][P_SPU], pat[0].kit[5][P_SPU]);
-        CHECK(ok && near && rest, "format: revision 11's A01 CIRCUIT turns to today's but for the reverb's pair and its sends' rounding");
-        m2k_pattern_t today = pat[0];
-        project_save(0);
-        int n = 0, len;
-        if (img_pack_work("WORK") && img_put(&work_img, 0, cb, cn) && img_put(&proj[0], 0, cb, cn)) n = store_ser(M2K_PATTERNS, M2K_PROJECTS);
-        store_buf[7] = 11;
-        m2k_init(19);
-        static uint8_t rb[BLOB_MAX];
-        ok = n && m2k_store_unpack(n) == 1;
-        const uint8_t *b = img_get(&proj[0], 0, &len);
-        CHECK(ok && !memcmp(&pat[0], &today, sizeof today) && len == pat_pack(&today, rb) && !memcmp(b, rb, (size_t)len),
-              "store: revision 11's A01 CIRCUIT as it shipped becomes today's, in the work and in P1");
     }
     {
         /* the reverb's length and colour (m2k_host --bus's measure): 0.3 s at DCAY 1, past 18 s at 127, 2 .. 3.3 s at
@@ -4185,7 +4856,10 @@ static int selftest(void)
 
 /* the browser and the FM-1's stores, through the Patch Editor's link (host/m2k_link_test.c): --web-store PATH writes
  * a store as the browser sends it to the FM-1 (64 patterns, one project; A01 named WEB16, sound 6 WEBSND);
- * --fm1-store PATH reads one the FM-1 sent (the link test's: A01 LINKA, sound 6 SNDA) as the browser does */
+ * --fm1-store PATH reads one the FM-1 sent (the link test's: A01 LINKA, sound 6 SNDA) as the browser does. Sound 6's
+ * note goes with it, by its name (the link test's name_root) */
+static uint8_t name_root(const char *s) { unsigned h = 0; while (*s) h = h * 31u + (uint8_t)*s++; return (uint8_t)(24 + h % 72); }
+
 static int link_store(const char *mode, const char *path)
 {
     int max;
@@ -4194,6 +4868,7 @@ static int link_store(const char *mode, const char *path)
     if (!strcmp(mode, "--web-store")) {
         memset(pat[0].name, 0, 8); memcpy(pat[0].name, "WEB16", 5);
         memset(snd[5].name, 0, 8); memcpy(snd[5].name, "WEBSND", 6);
+        snd_root[5] = name_root("WEBSND");
         int n = m2k_store_pack_as(64, 1);
         FILE *f = fopen(path, "wb");
         if (!f || n <= 0 || b[8] != 64 || b[9] != 1) { printf("FAIL a store for the FM-1\n"); if (f) fclose(f); return 1; }
@@ -4207,8 +4882,8 @@ static int link_store(const char *mode, const char *path)
     int n = (int)fread(b, 1, (size_t)max, f);
     fclose(f);
     int ok = b[8] == 64 && b[9] == 1 && m2k_store_unpack(n) && !strcmp(pat[0].name, "LINKA") && !strcmp(snd[5].name, "SNDA") &&
-             !strcmp(pat[16].name, "INIT");
-    printf("%s the FM-1's store read in the browser: its 64 patterns, its sounds\n", ok ? "ok  " : "FAIL");
+             snd_root[5] == name_root("SNDA") && !strcmp(pat[16].name, "INIT");
+    printf("%s the FM-1's store read in the browser: its 64 patterns, its sounds and their notes\n", ok ? "ok  " : "FAIL");
     return !ok;
 }
 
