@@ -46,6 +46,12 @@
     r.setProperty("--g-down", make(8, 64, (x, y) => BAYER[y & 7][x & 7] < 64 - y));
     r.setProperty("--g-down-inv", make(8, 64, (x, y) => BAYER[y & 7][x & 7] < 64 - y, paper()));   /* for a block in the other theme */
     r.setProperty("--g-up", make(8, 64, (x, y) => BAYER[y & 7][x & 7] < y));
+    r.setProperty("--d-check-p", make(2, 2, (x, y) => (x + y) % 2 === 0, paper()));   /* the checker in paper, on ink */
+    /* the page's one motion: masks that are solid, then the screen's dither falling away, then nothing. Slid across a
+     * block (wipe) or down a screen (scan), stepped, they bring it in as the FM-1's transitions do (style.css) */
+    const ramp = (i, b) => i < 32 || (i < 64 && b < (64 - i) * 2);
+    r.setProperty("--m-wipe", make(96, 8, (x, y) => ramp(x, BAYER[y & 7][x & 7])));
+    r.setProperty("--m-scan", make(8, 96, (x, y) => ramp(y, BAYER[y & 7][x & 7])));
   }
 
   // --------------------------------------------------------------------------- the wordmark: the logotype, dithered
@@ -419,7 +425,7 @@
         } else if (m.t === "ready") {
           displayMode();
           status(ctx.sampleRate === 44100 ? "Running at 44.1 kHz, as on the FM-1." : `Running at ${ctx.sampleRate} Hz, resampled from 44.1 kHz.`);
-          say(ctx.sampleRate === 44100 ? "Sound on, at 44.1 kHz as on the FM-1. Point at a control: this line says what it does." : `Sound on, resampled from 44.1 kHz to ${ctx.sampleRate} Hz. Point at a control: this line says what it does.`);
+          say(ctx.sampleRate === 44100 ? "Sound on, at 44.1 kHz as on the FM-1." : `Sound on, resampled to ${ctx.sampleRate} Hz.`);
         }
       };
       node.port.postMessage({ t: "wasm", bytes: wasmBytes, seed: (Math.random() * 4294967295) >>> 0, store: loadStore() });
@@ -475,9 +481,9 @@
     send({ t: "set", i, v: on ? 127 : 0 });
   }
   $("midi-on").addEventListener("click", async () => {
-    if (!navigator.requestMIDIAccess) { $("midi-note").textContent = "This browser has no Web MIDI: Chrome, Edge or Firefox."; return; }
+    if (!navigator.requestMIDIAccess) { $("midi-note").textContent = "No Web MIDI here: try Chrome, Edge or Firefox."; return; }
     try { midiAcc = await navigator.requestMIDIAccess({ sysex: false }); }
-    catch (e) { $("midi-note").textContent = "MIDI was not allowed: allow it in the site's settings and press Connect again."; return; }
+    catch (e) { $("midi-note").textContent = "MIDI not allowed: allow it, then Connect again."; return; }
     midiAcc.onstatechange = midiFill;
     midiFill();
     $("midi-on").textContent = "On";
@@ -513,7 +519,12 @@
    * core's state: the page and its knobs, the keys' mode, the track, the transport (help.js has the words) */
   const statusEl = $("status");
   let statusOn = "", statusText = "", I0 = null;
-  const say = (s) => { if (s !== statusText) { statusText = s; statusEl.textContent = s; } };
+  const say = (s) => {                             /* each new line scans in (style.css: .status.flip) */
+    if (s === statusText) return;
+    statusText = s;
+    statusEl.textContent = s;
+    statusEl.classList.remove("flip"); void statusEl.offsetWidth; statusEl.classList.add("flip");
+  };
   function ctxOf(I) {
     const c = { page: 0, sub: 0, trk: 0, mach: "", grid: 0, pads: 0, rec: 0, playing: 0, ready: 0, spage: 0, oct: 0, pat: "A01", label: "HOME", knobs: [] };
     if (!I) return c;
@@ -526,10 +537,9 @@
     return c;
   }
   function statusShow() {
-    if (statusOn === "panel") { say("The panel has the computer's keys: Z to O and S to 9 play, Space PLAY, Enter REC, A GRID, 5 SYN, Tab and the arrows the knobs; Esc gives them back. Keys lists them all."); return; }
+    if (statusOn === "panel") { say("The panel has the keys: Z… play, Space PLAY; Esc lets go."); return; }
     if (!statusOn) {
-      say(running ? "Point at a knob, a button, a key or the screen: this line says what it does. Click the panel to play it from the computer's keys."
-        : "Press Start for the sound, then point at any knob, button or key: this line says what it does.");
+      say(running ? "Point at a control: this line says what it does." : "Press Start, then point at a control: this line says what it does.");
       return;
     }
     say(window.M2K_HELP.line(statusOn, ctxOf(I0)));
@@ -581,7 +591,7 @@
     if (pre) { pre.w_init(2000); pre.w_setting(0, isDark() ? 0 : 127); namesFrom(pre); }
     displayMode();
     drawer("");
-    say("The factory's demos are back: A01 CIRCUIT, A02 TIDE, A03 SUSPEND, A04 LANTERN; this browser's saves are gone.");
+    say("The factory's demos are back; this browser's saves are gone.");
     $("reset").focus();
   });
   document.addEventListener("keydown", (ev) => {           /* Esc closes an open drawer (when the panel has no keys) */
@@ -630,6 +640,8 @@
   function press(c, d) {
     if (!running) return;
     const kind = c[0], i = +c.slice(1);
+    const g = svg.querySelector(`[data-c="${c}"]`);   /* the key or button goes down, as on the FM-1 (style.css) */
+    if (g) g.classList.toggle("down", !!d);
     if (kind === "k") send({ t: "key", k: i, d });
     else if (kind === "b") send({ t: "btn", b: i, d });
   }
@@ -759,7 +771,12 @@
     if (!("IntersectionObserver" in window) || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     document.documentElement.classList.add("reveal");
     const io = new IntersectionObserver((es) => {
-      for (const e of es) if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); }
+      for (const e of es) if (e.isIntersecting) {
+        const t = e.target;
+        t.classList.add("in");
+        io.unobserve(t);
+        if (t.matches(".wipe, .scan")) setTimeout(() => t.classList.add("done"), 1600);   /* its mask off once it has arrived */
+      }
     }, { rootMargin: "0px 0px -10% 0px", threshold: 0 });
     const watch = (sel, cls) => document.querySelectorAll(sel).forEach((el) => {
       if (cls) el.classList.add(cls);
@@ -768,9 +785,30 @@
       io.observe(el);
     });
     watch(".sec");
-    watch(".sec__n, .hero__sub > *, .sec__body .lede, .cols2 > p, .todo__list > li, .made__steps > li, .made__facts > li", "rv-up");   /* not the foot: at the page's end it never scrolls far enough in */
-    watch(".sec__body .display", "rv-wipe");
+    watch(".sec__n, .hero__sub > *, .sec__body .lede, .pts > li, .todo__list > li, .made__steps > li, .made__facts > li, .gaps dt", "rv-up");   /* not the foot: at the page's end it never scrolls far enough in */
+    watch(".sec__body .display", "wipe");
+    watch(".wipe, .scan");                       /* blocks wipe in through the dither, screens scan in */
   }
+
+  /* the FM-1 lands as it is scrolled to: tilted back on the page's plane, it rights itself by the time it is in full
+   * view (a transform only; nothing for those who ask for less motion) */
+  const landEl = $("land");
+  if (landEl && motion) {
+    let pend = false;
+    const land = () => {
+      pend = false;
+      const r = landEl.getBoundingClientRect(), vh = window.innerHeight || 800;
+      const p = Math.min(1, Math.max(0, (vh - r.top) / (vh * 0.75)));
+      const t = 1 - p * p * (3 - 2 * p);           /* smooth, flat at both ends */
+      landEl.style.setProperty("--tilt", t < 0.002 ? "0" : t.toFixed(3));
+      landEl.classList.toggle("flat", t < 0.002);
+    };
+    window.addEventListener("scroll", () => { if (!pend) { pend = true; requestAnimationFrame(land); } }, { passive: true });
+    window.addEventListener("resize", land);
+    land();
+  }
+  /* the wordmark answers the pointer: passing over it crushes its dither a little, as a hit of the music does */
+  wm.addEventListener("pointermove", () => { if (motion && performance.now() - kickT > 180) { kickT = performance.now(); kickAmp = 0.45; } });
   /* an accordion a person opens deals its contents in (style.css, gl-deal); one opened by the page does not */
   document.addEventListener("click", (e) => { const s = e.target.closest && e.target.closest("details > summary"); if (s) s.parentElement.classList.add("gl-dealt"); });
 })();

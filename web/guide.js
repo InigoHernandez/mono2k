@@ -47,6 +47,32 @@
       el("line", { x1: cx, y1: cy - 10, x2: cx, y2: cy - 19, stroke: "currentColor", "stroke-width": 3 }, eg);
       T(cx, cy - 30, P.ENC[i], 7.5, svg, { "font-weight": 800 });
     }
+    /* the frame that glides from what was lit to what is (light) */
+    mark = el("rect", { class: "gmark", rx: 8, fill: "none", stroke: "currentColor", "stroke-width": 2, "stroke-dasharray": "3 3", opacity: 0 });
+    box0 = null;
+  }
+  let mark = null, box0 = null, tw = 0;
+  function glide(ids) {
+    let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+    for (const id of ids) {
+      const e = ctl[id];
+      if (!e) continue;
+      const b = e.getBBox();
+      x0 = Math.min(x0, b.x); y0 = Math.min(y0, b.y); x1 = Math.max(x1, b.x + b.width); y1 = Math.max(y1, b.y + b.height);
+    }
+    if (x0 > x1 || !mark) return;
+    const to = [x0 - 6, y0 - 6, x1 - x0 + 12, y1 - y0 + 12], from = box0 || to, t0 = performance.now();
+    box0 = to;
+    const set = (b) => { mark.setAttribute("x", b[0]); mark.setAttribute("y", b[1]); mark.setAttribute("width", b[2]); mark.setAttribute("height", b[3]); };
+    mark.setAttribute("opacity", 1);
+    cancelAnimationFrame(tw);
+    if (!S.motion()) { set(to); return; }
+    const step = (t) => {                          /* eased, over a quarter of a second */
+      const p = Math.min(1, (t - t0) / 240), e = 1 - Math.pow(1 - p, 3);
+      set(from.map((v, i) => v + (to[i] - v) * e));
+      if (p < 1) tw = requestAnimationFrame(step);
+    };
+    tw = requestAnimationFrame(step);
   }
 
   // --------------------------------------------------------------------------------------------- the list
@@ -73,6 +99,7 @@
   let cur = "", curScreen = null, player = null, want = null;
   function light(ids) {
     for (const id in ctl) ctl[id].classList.toggle("on", ids.includes(id));
+    glide(ids);
   }
   function select(id, from) {
     const key = from && from[0] === "k" ? from : "";
