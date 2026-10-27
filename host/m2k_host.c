@@ -42,8 +42,8 @@ typedef struct { int ms; char kind; int a, b; const char *shot; } ev_t;
  * screenshot */
 static const ev_t TOUR[] = {
     {900, 's', 0, 0, "00_boot"},
-    {2400, 's', 0, 0, "01_home_stopped"},
-    {2500, 'b', B_PLAY, 1, 0}, {2520, 'b', B_PLAY, 0, 0},
+    {2520, 's', 0, 0, "01_home_stopped"},     /* (the splash 2.1 s, its wipe into HOME 0.4 s) */
+    {2560, 'b', B_PLAY, 1, 0}, {2580, 'b', B_PLAY, 0, 0},
     {3400, 's', 0, 0, "02_home_playing"},
     {3500, 'e', E_K3, 4, 0}, {3560, 's', 0, 0, "03_home_tempo_roll"}, {3900, 's', 0, 0, "04_home_tempo"},
     {5600, 'e', E_SELECT, 1, 0},
@@ -140,9 +140,11 @@ static void manual_scene(void)
     for (int i = 0; i < 8; i++) pat[16].step[0][2 * i].flags = (uint8_t)(ST_TRIG | TTYPE[i]);
 }
 
-/* the text audit: in a frame just drawn, two texts whose ink touches (or is a dot apart) or a text cut short by the
- * screen or a clip. Each found once, with when; the count is what the tour returns */
-static int ta_found;
+/* the text audit: in a frame just drawn, two texts whose ink touches (or is a dot apart), a text cut short by the
+ * screen or a clip, one that leaves its window or its cell (a knob's, the stage's columns, the header's and the
+ * footer's: begun anywhere in the cell, it lies in its content), one whose ink comes within 2 px of a rule (the bands'
+ * and the cells'). Each found once, with when; the count is what the tour returns */
+static int ta_found, ta_quiet;               /* (quiet: the self-test's own cases of the audit) */
 static uint32_t ta_seen[256];
 static int ta_nseen;
 static void ta_report(const char *kind, const ta_t *a, const ta_t *b, int ms)
@@ -155,6 +157,7 @@ static void ta_report(const char *kind, const ta_t *a, const ta_t *b, int ms)
     for (int i = 0; i < ta_nseen; i++) if (ta_seen[i] == h) return;
     if (ta_nseen < 256) ta_seen[ta_nseen++] = h;
     ta_found++;
+    if (ta_quiet) return;
     if (b) printf("TEXT %s at %d ms: \"%s\" (%d,%d..%d,%d) and \"%s\" (%d,%d..%d,%d) [page %d.%d]\n", kind, ms, a->s, a->x0, a->y0,
                   a->x1, a->y1, b->s, b->x0, b->y0, b->x1, b->y1, ui.page, ui.sub);
     else printf("TEXT %s at %d ms: \"%s\" (%d,%d..%d,%d) [page %d.%d]\n", kind, ms, a->s, a->x0, a->y0, a->x1, a->y1, ui.page, ui.sub);
@@ -162,17 +165,36 @@ static void ta_report(const char *kind, const ta_t *a, const ta_t *b, int ms)
 
 static void ta_check(int ms)
 {
-    if (ui.boot_t0 == 0xFFFFFFFFu || (uint32_t)ms - ui.boot_t0 < 2600u) return;      /* the boot splash is art */
-    if (ui.trans_t && (uint32_t)ms - ui.trans_t < 400u) return;                       /* a glitch between pages */
+    if (ui.boot_t0 == 0xFFFFFFFFu || (uint32_t)ms - ui.boot_t0 < ui.splash_end) return;   /* the splash is art */
+    if (ui.trans_t && (uint32_t)ms - ui.trans_t < 400u) return;                       /* a glitch between pages, the wipe */
     if (ui.toast_t && (uint32_t)ms - ui.toast_t < 130u) return;                       /* a message sweeping in */
     for (int i = 0; i < ta_n; i++) {
         const ta_t *a = &ta[i];
         if (a->cut) ta_report("cut", a, 0, ms);
-        for (int k = ta_nwin - 1; k >= 0; k--)           /* begun in a window: it must end inside its frame */
-            if (a->x0 > ta_win[k].x0 && a->y0 > ta_win[k].y0 && a->x0 < ta_win[k].x1 && a->y0 < ta_win[k].y1) {
-                if (a->x1 > ta_win[k].x1 - 2 || a->y1 > ta_win[k].y1 - 2) ta_report("past its window", a, 0, ms);
+        if (a->x1 < 0) continue;
+        for (int k = ta_nbox - 1; k >= 0; k--) {         /* begun in a box, the last drawn on top */
+            const ta_box_t *w = &ta_box[k];
+            if (w->win) {                                 /* a window: it must end inside its frame */
+                if (a->x0 > w->x0 && a->y0 > w->y0 && a->x0 < w->x1 && a->y0 < w->y1) {
+                    if (a->x1 > w->x1 - 2 || a->y1 > w->y1 - 2) ta_report("past its window", a, 0, ms);
+                    break;
+                }
+            } else if (a->x0 >= w->x0 && a->y0 >= w->y0 && a->x0 <= w->x1 && a->y0 <= w->y1) {   /* a cell: in its content */
+                if (a->x0 < w->cx0 || a->y0 < w->cy0 || a->x1 > w->cx1 || a->y1 > w->cy1) {
+                    ta_t c = {w->cx0, w->cy0, w->cx1, w->cy1, 0, "(its cell)"};
+                    ta_report("past its cell", a, &c, ms);
+                }
                 break;
             }
+        }
+        for (int k = 0; k < ta_nrule; k++) {             /* no ink within 2 px of a rule */
+            const ta_rule_t *r = &ta_rule[k];
+            if (a->x0 <= r->x1 + 2 && r->x0 <= a->x1 + 2 && a->y0 <= r->y1 + 2 && r->y0 <= a->y1 + 2) {
+                ta_t c = {r->x0, r->y0, r->x1, r->y1, 0, "(a rule)"};
+                ta_report("on a rule", a, &c, ms);
+                break;
+            }
+        }
         for (int j = i + 1; j < ta_n; j++) {
             const ta_t *b = &ta[j];
             if (a->x1 < 0 || b->x1 < 0) continue;
@@ -941,7 +963,7 @@ static int mo_hung(void)
 static uint32_t ux_now;
 static void ux_ms(int ms) { for (int i = 0; i < ms; i += 20) m2k_frame(ux_now += 20); }
 static void ux_tap(int b) { m2k_button(b, 1); ux_ms(40); m2k_button(b, 0); ux_ms(40); }
-static void ux_init(uint32_t seed) { m2k_init(seed); ux_now = 100000; m2k_frame(ux_now); ux_ms(2000); }
+static void ux_init(uint32_t seed) { m2k_init(seed); ux_now = 100000; m2k_frame(ux_now); ux_ms(SPLASH_MS + WIPE_MS + 100); }   /* (past the splash) */
 static int ux_white(int w) { for (int k = 0; k < M2K_KEYS; k++) if (ui.kw[k] == w) return k; return -1; }
 static int ux_black(int b) { for (int k = 0; k < M2K_KEYS; k++) if (ui.kb[k] == b) return k; return -1; }
 static void ux_audio(int n) { static int16_t b[2 * 1024]; for (n &= ~15; n > 0; n -= 1024) m2k_render(b, n < 1024 ? n : 1024); }
@@ -1127,6 +1149,9 @@ static int store_splice(int n, int s, const uint8_t *b, int bn)
     return w;
 }
 
+/* the self-test's instrument starts past its splash (a press at once is a press); the splash's own case below calls
+ * the real one, (m2k_init)(seed) */
+#define m2k_init(s) (m2k_init(s), ui.splash_end = 0, ui.splashed = 1)
 static int selftest(void)
 {
     int fails = 0;
@@ -4871,9 +4896,70 @@ static int selftest(void)
         }
         CHECK(ok && !memcmp(o[0], o[1], sizeof o[0]), "unsigned past 2^23: the EXP LFO, the delay's, SWAV-ENS's and the tape's positions");
     }
+    /* the splash: 2.1 s from the first frame, then the wipe into HOME; a key, a button or a knob ends it at once and
+     * is the splash's alone (its release too): no note, no page, the sequencer untouched; after it a press is a press */
+    {
+        int kw = 0;
+        for (int k = 0; k < M2K_KEYS; k++) if (ui.kw[k] == 2) kw = k;
+        (m2k_init)(60);
+        int run = 1;
+        for (uint32_t ms = 0; ms < SPLASH_MS; ms += 40) { m2k_frame(ms); run &= splash_on(); }
+        m2k_frame(SPLASH_MS + 20);
+        int wiped = !splash_on() && ui.in_trans && ui.trans_wipe;
+        m2k_frame(SPLASH_MS + WIPE_MS + 40);
+        int home = !ui.in_trans && ui.page == PG_HOME;
+        (m2k_init)(61);
+        m2k_frame(500);
+        int page = ui.page;
+        m2k_key(kw, 1);
+        int skip = !splash_on() && sq.nheld == 0;
+        m2k_frame(520);
+        m2k_key(kw, 0);
+        m2k_button(B_PLAY, 1); m2k_button(B_PLAY, 0);                  /* (in the wipe: a press is a press) */
+        int plays = sq.playing;
+        seq_play(0);
+        (m2k_init)(62);
+        m2k_frame(500);
+        m2k_button(B_ENV, 1); m2k_frame(540); m2k_button(B_ENV, 0);       /* the page's button: skipped, not the page */
+        m2k_frame(580);
+        int envp = ui.page == PG_HOME && !splash_on();
+        (m2k_init)(62);
+        m2k_frame(500);
+        int lv = PAT(cur_pat)->kit[ui.trk][P_LEVL];
+        m2k_encoder(E_K1, 3);                                            /* a knob: skipped, the level kept */
+        int still = ui.page == page && !sq.playing && PAT(cur_pat)->kit[ui.trk][P_LEVL] == lv && !splash_on();
+        for (uint32_t ms = 560; ms < 1400; ms += 40) m2k_frame(ms);
+        m2k_key(kw, 1);
+        int note = sq.nheld == 1;
+        m2k_key(kw, 0);
+        CHECK(run && wiped && home && skip && plays && envp && still && note,
+              "splash: 2.1 s at power-on, then the wipe into HOME; a key, a button, a knob skips it, swallowed with its release");
+    }
+    /* the text audit: a text across a rule and past its cell is found, one inside its cell clear of the rules is not */
+    {
+        ux_init(63);
+        int before = ta_found;
+        ta_quiet = 1;
+        cls();
+        rule_v(GX, STAGE_Y + 2, STAGE_H - 4, 1);
+        CELL(0, STAGE_Y, GX, STRIP_Y - 1, VX, STAGE_Y + 2, VX + VW, STRIP_Y - 2);
+        text(&F_M, VX, 100, "SWAV-SAW", 1, 0);                      /* (109 px from 4: over the rule at 104) */
+        ta_check((int)ux_now);
+        int found = ta_found - before;
+        cls();
+        rule_v(GX, STAGE_Y + 2, STAGE_H - 4, 1);
+        CELL(0, STAGE_Y, GX, STRIP_Y - 1, VX, STAGE_Y + 2, VX + VW, STRIP_Y - 2);
+        text(&F_M, VX, 100, "SWAV-", 1, 0);
+        ta_check((int)ux_now);
+        int clear = ta_found - before == found;
+        ta_quiet = 0;
+        ta_found = before;
+        CHECK(found == 2 && clear, "text audit: a text over a rule and past its cell found, one inside and clear not");
+    }
     printf("%s (%d failed)\n", fails ? "SELFTEST FAILED" : "selftest passed", fails);
     return fails != 0;
 }
+#undef m2k_init
 
 /* the browser and the FM-1's stores, through the Patch Editor's link (host/m2k_link_test.c): --web-store PATH writes
  * a store as the browser sends it to the FM-1 (64 patterns, one project; A01 named WEB16, sound 6 WEBSND);
@@ -4937,6 +5023,16 @@ int main(int argc, char **argv)
         return pitch_dump(out);
     }
     if (argc > 2 && !strcmp(argv[2], "--export-bank")) return bank_export(out);
+    if (argc > 2 && !strcmp(argv[2], "--splash")) {          /* every splash frame, 25 a second, then HOME: tools/splash.py */
+        m2k_init(2000);
+        int n = 0;
+        for (uint32_t ms = 0; ms <= SPLASH_MS + WIPE_MS + 120; ms += 40, n++) {
+            snprintf(path, sizeof path, "%s/splash_%03d.pbm", out, n);
+            pbm_write(path, m2k_frame(ms));
+        }
+        printf("%d splash frames in %s (40 ms apart): .venv/bin/python tools/splash.py %s\n", n, out, out);
+        return 0;
+    }
     if (argc > 2 && !strcmp(argv[2], "--bus")) return bus_measure(out);
     if (argc > 2 && !strcmp(argv[2], "--demo")) return demo_render(out, argc, argv);     /* [SECONDS] [SLOT ...] */
     if (argc > 2 && !strcmp(argv[2], "--demo-dry")) { demo_dry = 1; return demo_render(out, argc, argv); }
