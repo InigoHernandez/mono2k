@@ -7,6 +7,30 @@ window.M2K_KINDS = {
 };
 window.M2K_CHANGES = [
   {
+    date: "2026-10-27", title: "MONO2K 1.1: the envelope and the LFOs by ear, the glitch, the reverb and PERFORM reworked, MIDI in by source",
+    items: [
+      ["sound", "The amp envelope on new laws: ATCK, DEC and REL spend their knobs where the times are (ATCK 20 ms at 16, 67 ms at 32, 0.4 s at 64, 2 s at 96, 10 s at 127; DEC and REL 0.8 s at 64, 4 s at 96, 20 s at 127) and show the time you hear: ATCK to full, DEC and REL to -60 dB."],
+      ["sound", "The attack swells as the square of its time, even to the ear, instead of sounding instant up to the middle of the knob; ATCK 0 stays the percussive 1 ms; a note played over a sounding one rises from where it is."],
+      ["sound", "LFO speed, slow first: 0 stands still, 12 is sixteen bars, 60 a bar, 84 a beat, 120 a 1/32; MULT multiplies it. Before, most of the knob was fast."],
+      ["sound", "LFO depth squared around 64: fine near the middle (72 swings two steps, it swung sixteen), the whole range at the ends."],
+      ["sound", "Whatever an LFO moves glides between its steps (VOL, PAN, the resonances, the decays, the machines' knobs): no zipper."],
+      ["screen", "SPD shows the time a cycle takes (16 BARS, 1 BAR, 1/4, 1/8., 1/16T, Hz past a 1/64 note); DPTH shows its swing as a share of full; the LFO picture shows its cycle and draws the wave as deep as it goes."],
+      ["screen", "The AMP picture draws the sound's own curves: the attack's swell, the decays falling in dB."],
+      ["patterns", "Saved patterns and sounds load with ATCK, DEC, REL, SPD and DPTH moved to the values that sound as they did; bank A and every machine's INIT sound too (untouched saved demos update)."],
+      ["sound", "GLCH starts subtle: low values give a rare, quiet, short slice under the dry sound, growing to wild at the top (reverse, gate, octaves, rolls, tape stops), and every glitch fades in and out without a click."],
+      ["sound", "The reverb's DCAY runs from 0.3 s to over 20 s, and DAMP shapes the tail from bright to dark (the top's time 1/1 to 1/30 of the bottom's) without killing it. Before, every DCAY sounded much alike and a high DAMP left only a rumble."],
+      ["sound", "The VERB send and DSND are audible early: VERB 32 is 12 dB under 127 (it was 24), and DSND 80 gives a clear echo (before, a hat's echo at 70 was 42 dB down, unheard)."],
+      ["sound", "PERFORM locks to the beat: repeats start on the grid and keep the attack, R4 is a whole quarter, REVERSE plays the beat just gone, STOP slows over a beat and spins back up, STUTTER gates 1/32 repeats."],
+      ["fixes", "PERFORM's CRUSH, WOW and DRIVE come in and go out without clicks, and DRIVE holds its level instead of jumping 9 dB."],
+      ["screen", "The VERB page draws the tail's decay at the bottom and the top; DCAY shows its time, DAMP the top's share, and the GLITCH page names the glitch playing."],
+      ["patterns", "Older patterns' reverb, sends and GLCH load converted so they sound as before; bank A sounds as approved."],
+      ["workflow", "MIDI in over USB and on the TRS jack kept apart: GLO > MIDI's SYIN picks where the clock comes from, OFF, USB, TRS or BOTH (a SYIN that was on is BOTH)."],
+      ["workflow", "GLO > IN, a new page: NOTE picks where notes, CCs and mutes come from (BOTH, USB, TRS, OFF); THRU sends the TRS jack's MIDI out over USB, so the FM-1 is a MIDI interface too (nothing from USB goes back, and with SYNC OUT on the computer hears one clock)."],
+      ["screen", "GLO > IN lights each input as MIDI comes in and shows what it feeds."],
+      ["web", "The installer offers MONO2K 1.1: all of the above, and on the FM-1 the changes of the 26th that were in the emulator only (every machine's INIT sound, ALGORITHM's order and pages, Ready, notes that fit the sound, SWAV-PUL's sweep, the trig's removal). It reaches The Firmware Hub with its GitHub release."],
+    ],
+  },
+  {
     date: "2026-10-26", title: "MONO2K 1.0.3: the MIDI clock in, a fix for the FM-1's chip, GLO + HOME for the keys; Ready",
     items: [
       ["machines", "Every machine starts as a sound for its job: GND-SIN a round sine bass, SWAV-SAW a wide supersaw pad, SWAV-PUL a reed lead, SWAV-ENS a minor-7 pad, FM+STAT an e-piano, FM+PAR a gong bell, FM+DYN an FM bass, VOX-6 an \"aah\", DIGI-WAV a scanning pluck, SID-6581 a sync lead, the DRM- drums a kick, a snare, a closed hat and a crash, GND-PERC a metal hit, GND-NOIS a wind you play, and the FX a wide chorus, a punchy compressor and a ring. Each is levelled to sit with the others; before, most started as the same plain tone or the same white noise."],
@@ -16,9 +40,6 @@ window.M2K_CHANGES = [
       ["sound", "Library sounds load ready to play as they were made: each keeps the note it was made at, and loading one puts the track's keys and new trigs there (sounds saved before: a kick at C2, a bass at C3, the rest at C4)."],
       ["patterns", "A new pattern (INIT) has six machines for six jobs, each at its INIT: a sine bass, a kick, a snare, a hat, FM keys and the ENS pad (it had two white-noise tracks)."],
       ["fixes", "FX-DYNAMIX no longer lets a note's first peak through about 10 dB over the rest. SWAV-PUL's badge reads SWV, as its siblings'."],
-      ["workflow", "MIDI in over USB and on the TRS jack kept apart: GLO > MIDI's SYIN picks where the clock comes from, OFF, USB, TRS or BOTH (a SYIN that was on is BOTH)."],
-      ["workflow", "GLO > IN, a new page: NOTE picks where notes, CCs and mutes come from (BOTH, USB, TRS, OFF); THRU sends the TRS jack's MIDI out over USB, so the FM-1 is a MIDI interface too (nothing from USB goes back, and with SYNC OUT on the computer hears one clock)."],
-      ["screen", "GLO > IN lights each input as MIDI comes in and shows what it feeds."],
       ["fixes", "A trig taken away (a quick tap in GRID, or a rest in step entry) now takes its probability or condition and its ratchet with it: a trig put there later starts plain."],
       ["fixes", "SWAV-PUL: with the pulse-width sweep on (PWAD), the width wrapped round through its silent ends, a dropout every few seconds that sounded like a loop. It now bounces between 4 % and 96 %. PWAD at 0 is as it was."],
       ["workflow", "ALGORITHM changes the track's machine only on EDIT now. On every other page it turns through the page's own pages, instead of tapping its button again and again: LFO 1A to 3B, FX's four, AMP's and FILT's two, GLO's five."],
