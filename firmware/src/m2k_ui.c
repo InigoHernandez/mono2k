@@ -3308,7 +3308,7 @@ static void slab(int t, int fade)
     sp.b = (uint8_t)k;
     sp.front = (124 << 8) - (248 << 8) / 256 * ease8(t, t0, t1);
     sp.breath = 72 + (sinp((uint32_t)t * 2900000u) >> 11);
-    sp.fph = (uint32_t)(-(int32_t)t * 7000000);
+    sp.fph = 0u - (uint32_t)t * 7000000u;                               /* (unsigned: the phase wraps) */
     sp.wrow = t << 2;                                                    /* (16 waves a second) */
     /* the rows, front first: fewer as the slab narrows into the logotype's band (a pixel apart at the end) */
     const int NR = 24 + 14 * (PQ - (18 << 8)) / (98 << 8), T = 12 * ce >> 14, yc = 128 - 8 * fold / 256;
