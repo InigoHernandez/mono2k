@@ -588,6 +588,8 @@ static struct {
     uint32_t splash_end, skip_keys;
     uint16_t skip_btns;
     uint8_t splashed, trans_wipe;      /* the wipe into HOME begun; a transition that is the wipe */
+    uint32_t pop_t;                    /* a step toggled (its box pops a moment): when, which */
+    uint8_t pop_s, pop_trk;
     uint8_t leds[M2K_KEYS + B_COUNT];
     int8_t kw[M2K_KEYS], kb[M2K_KEYS];
 } ui;
@@ -915,6 +917,7 @@ static void edit(int k, int d)
     if (nv != v) {
         if (ui.focus != k || ui.now - ui.roll_t > 90) s_cpy(ui.roll_old, old);
         ui.roll_t = ui.now;
+        if (ui.page == PG_SYN && code < 8 && (!ui.icon_hit || ui.now - ui.icon_hit > 120)) { ui.icon_hit = ui.now | 1u; ui.icon_amp = 8; }   /* the mark answers */
     }
     ui.focus = (uint8_t)k;
     ui.focus_t = ui.now | 1u;
@@ -1022,8 +1025,10 @@ static int page_length(int pg)
 /* step entry: REC armed while stopped, the keys playing: each note is the next step */
 /* a trig taken away: its condition (chance, A:B...), ratchet and locks go with it, so a trig put there later
  * starts plain (the owner: "when I removed the note or trigger, the probability should be removed too") */
+static void step_pop(int t, int s) { ui.pop_t = ui.now | 1u; ui.pop_s = (uint8_t)s; ui.pop_trk = (uint8_t)t; }
 static void step_remove(int t, int s)
 {
+    step_pop(t, s);
     m2k_step_t *st = &PAT(cur_pat)->step[t][s];
     st->flags = 0;
     st->cond = 0;
@@ -1044,6 +1049,7 @@ static void entry_show(const char *what)
 static void entry_write(int note)
 {
     m2k_step_t *st = &PAT(cur_pat)->step[ui.trk][ui.cursor];
+    step_pop(ui.trk, ui.cursor);
     st->flags = ST_TRIG;
     st->note = (uint8_t)note;
     st->cond = C_ALWAYS;
@@ -1283,6 +1289,7 @@ static void key_event(int k, int down)
         st->flags = ST_TRIG;
         st->note = ui.note[ui.trk];
         added = 1;
+        step_pop(ui.trk, s);
     }
     if (!ui.nheld) ui.held_edit = 0;
     ui.held[ui.nheld] = (uint8_t)s;
@@ -2239,7 +2246,7 @@ static void header(void)
 }
 
 /* ---- the knobs, along the top as on the panel: each cell its label, its value (the label inverted while turned, the
- * value while locked) and a level under it: a bar (from the middle for a two-sided value), a row of segments for a few
+ * value while locked) and a level under it, easing to the value, a needle on its end while it turns: a bar (from the middle for a two-sided value), a row of segments for a few
  * choices, nothing for an action */
 static int bipolar(int kind) { return kind == K_BI || kind == K_PAN || kind == K_SEMI || kind == K_FINE || kind == K_TUN2 || kind == K_SEMI24; }
 static int action(int kind) { return kind == K_LOAD || kind == K_SLOAD || kind == K_SSAVE || kind == K_WIPE || kind == K_DEMO; }
@@ -2294,6 +2301,10 @@ static void knobs(void)
         int target = ((v - mn) * 256 * CW) / (mx - mn ? mx - mn : 1);
         ui.ease[k] += (target - ui.ease[k]) / 3;
         level(cx, KNOB_Y + 33, CW, n && n <= 8 ? n : 0, choice_of(pi->kind, v), ui.ease[k], bipolar(pi->kind));
+        if (focus && ui.now - ui.focus_t < 200) {               /* turning: a needle on its end, the chosen segment up */
+            if (n && n <= 8) { int sw = (CW - (n - 1) * 2) / n; rect(cx + choice_of(pi->kind, v) * (sw + 2), KNOB_Y + 30, sw, 3, 1); }
+            else rect(cx + CLAMP(ui.ease[k] >> 8, 1, CW) - 1, KNOB_Y + 30, 2, 6, 1);
+        }
     }
     rule_h(0, STAGE_Y - 1, 240, 0);
 }
@@ -2301,7 +2312,7 @@ static void knobs(void)
 /* ---- the steps */
 static int play_step(void) { int s = (int)sq.step - 1; return s < 0 ? seq_len() - 1 : s; }
 
-/* a step's box: a trig solid, as on the Monomachine's grid; on a condition (a chance, A:B, PRE, FILL ...) framed, its
+/* a step's box (a ring pops round it as it is toggled): a trig solid, as on the Monomachine's grid; on a condition (a chance, A:B, PRE, FILL ...) framed, its
  * block inset; on some of its trig tracks a third filled for each (AMP, FILTER, LFO, left to right), NONE a dot; with
  * locks its top corner cut; accent a notch, slide a dotted edge, ratchets dots along the foot. Empty: its outline in
  * dots on the screen's checker (the lanes read as a grid); past the pattern's end a dot at its centre */
@@ -2332,6 +2343,7 @@ static void step_cell(int x, int y, int w, int h, int t, int s)
     } else dots_frame(x, y, w, h);
     if (playing) frame(x - 1, y - 1, w + 2, h + 2, 2);
     if (step_entry() && t == ui.trk && s == ui.cursor && ((ui.now >> 8) & 1)) frame(x - 1, y - 1, w + 2, h + 2, 1);
+    if (ui.pop_t && t == ui.pop_trk && s == ui.pop_s && ui.now - ui.pop_t < 160) frame(x - 2, y - 2, w + 4, h + 4, 1);   /* toggled */
     if (held && ((ui.now >> 7) & 1)) rect(x, y, w, h, 2);
 }
 
@@ -3197,8 +3209,9 @@ static void param_page(void)
 }
 
 /* ---- the splash (2.1 s, then the wipe into HOME, 0.4 s; a key, a button or a knob skips to the wipe). A slab of
- * MONO2K's own waves in dithered 3D on ink, lit from the upper left, turning and morphing: GND-SIN's dome, the
- * wavefolds (DSTR's sine, folded more the further it lies), the wave bank as a waterfall (a wave a row, rolling in);
+ * MONO2K's own shapes in dithered 3D on ink, lit from the left, turning and morphing: the wordmark's letters extruded
+ * over it, GND-SIN's dome, the wavefolds (DSTR's, folded more to the right), the wave bank as a waterfall (a wave a
+ * row, rolling in);
  * then it folds into the wordmark: the waves die into the letters' relief as the camera rises over it, the slab
  * narrows to the logotype's band and the turn comes to rest; the relief resolves into the wordmark, and the type comes
  * in. Drawn front to back with a floating horizon (each pixel once), each strip lit by its slope, the light through the
@@ -3213,7 +3226,8 @@ static int ease8(int t, int t0, int t1)
 }
 
 /* the slab's shapes at (u, q) (Q8 px about its middle, q away from the viewer), Q8 px: 0 GND-SIN's dome (breathing),
- * 1 the wavefolds, 2 the wave bank, 3 the wordmark's relief. What the frame fixes (the breath, the travel) is in sp,
+ * 1 the wavefolds, 2 the wave bank, 3 the wordmark's relief, 4 the wordmark stretched three times over the slab's depth
+ * (the opening). What the frame fixes (the breath, the travel) is in sp,
  * with the shape going (a), the one coming (b) and where their front is: the new one rolls in from the back */
 typedef struct { uint8_t a, b; int32_t front, breath; uint32_t fph; int32_t wrow; } slab_t;
 
@@ -3240,8 +3254,8 @@ static inline __attribute__((always_inline)) int32_t slab_shape(int k, int32_t u
         return (a + (((b - a) * f) >> 8)) * 16 >> 7;
     }
     default: {
-        int lx = (u >> 8) + LOGO_W / 2, ly = LOGO_H / 2 - 1 - (q >> 8);
-        return lx >= 0 && lx < LOGO_W && ly >= 0 && ly < LOGO_H && logo_bit(LOGO_BITS, lx, ly) ? 14 * 256 : 0;
+        int lx = (u >> 8) + LOGO_W / 2, ly = LOGO_H / 2 - 1 - (k == 4 ? (q >> 8) / 3 : q >> 8);
+        return lx >= 0 && lx < LOGO_W && ly >= 0 && ly < LOGO_H && logo_bit(LOGO_BITS, lx, ly) ? (k == 4 ? 18 : 14) * 256 : 0;
     }
     }
 }
@@ -3301,12 +3315,16 @@ static void slab(int t, int fade)
     int32_t sy = sinp(ay) >> 1, cy = sinp(ay + 0x40000000u) >> 1, se = sinp(ae) >> 1, ce = sinp(ae + 0x40000000u) >> 1;
     const int32_t PU = 116 << 8, PQ = (116 << 8) - (98 << 8) * fold / 256;
     slab_t sp;
-    static const int16_t TT[4] = {340, 840, 1250, 3000};               /* each shape's turn ends: 220 ms, 350 to the logo */
-    int k = t < TT[0] ? 0 : t < TT[1] ? 1 : t < TT[2] ? 2 : 3;
-    int t0 = k ? TT[k - 1] : 0, t1 = k == 3 ? 1600 : t0 + 220;
-    sp.a = (uint8_t)(k && t < t1 ? k - 1 : k);
-    sp.b = (uint8_t)k;
-    sp.front = (124 << 8) - (248 << 8) / 256 * ease8(t, t0, t1);
+    /* the turns: the wordmark, the dome, the folds, the waves, the wordmark again; each rolls in over 180 ms (350 the
+     * last, as the slab folds) */
+    static const int16_t TS[5] = {0, 300, 620, 920, 1250};
+    static const uint8_t SHAPE[5] = {4, 0, 1, 2, 3};
+    int k = 0;
+    while (k < 4 && t >= TS[k + 1]) k++;
+    int t0 = TS[k], t1 = t0 + (k == 4 ? 350 : 180);
+    sp.a = k && t < t1 ? SHAPE[k - 1] : SHAPE[k];
+    sp.b = SHAPE[k];
+    sp.front = (124 << 8) - 248 * ease8(t, t0, t1);
     sp.breath = 72 + (sinp((uint32_t)t * 2900000u) >> 11);
     sp.fph = 0u - (uint32_t)t * 7000000u;                               /* (unsigned: the phase wraps) */
     sp.wrow = t << 2;                                                    /* (16 waves a second) */

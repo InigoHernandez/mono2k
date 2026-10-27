@@ -93,11 +93,21 @@ Never for a bar, a meter, a tag, a rule or text.
 2.1 s at power on (`SPLASH_MS`), then a dithered wipe into HOME (`WIPE_MS`, 0.4 s); any key, button or knob (not
 MASTER) skips it, and that press and its release are the splash's alone (`skip_keys`, `skip_btns`). On ink: a slab
 of MONO2K's waves drawn front to back with a floating horizon (each pixel once), 2 px columns, each strip lit by its
-slope through a tanh knee (`T_SAT`), the light through `T_BMASK` a byte at a time: GND-SIN's dome, the wavefolds,
-the wave bank as a waterfall (its strips dark under lit lines), each rolling in from the back over the last; then
-the camera rises, the turn stops, the slab narrows to the logotype's band and the letters rise out of the waves;
-the relief resolves into the wordmark (white on ink, its fill dithered), the type comes in, a glitch once. See
+slope through a tanh knee (`T_SAT`), the light through `T_BMASK` a byte at a time. Its shapes are MONO2K's own, each
+rolling in from the back over the last: the wordmark's letters extruded over the slab, GND-SIN's dome, the
+wavefolds, the wave bank as a waterfall (its strips dark under lit lines); then the camera rises, the turn stops,
+the slab narrows to the logotype's band and the letters rise out of the waves again; the relief resolves into the
+wordmark (white on ink, its fill dithered), the type comes in, a glitch once. See
 every frame: `build/host/m2k_host DIR --splash && .venv/bin/python tools/splash.py DIR` (a GIF and a montage).
+
+## Motion
+
+Small, crisp, on the grid, never in the way of input:
+
+- a knob's level eases to its value; while it turns, a needle on the bar's end (the chosen segment taller), 0.2 s;
+- a step box pops as it is toggled (a ring 2 px out, 160 ms);
+- a big value's two bands slip as it changes; the SYN mark jumps on the track's hits and as its knobs turn;
+- a page change and a machine change: the glitch dissolve (`cyber`); a message sweeps in over the header.
 
 ## What the audit enforces
 
