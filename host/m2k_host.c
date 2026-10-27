@@ -549,6 +549,7 @@ static void bus_ref(int tracks, int ctl, int v, int gsiz)
             if (BASS[s]) p->step[2][s] = (m2k_step_t){.note = BASS[s], .flags = ST_TRIG};
         }
         p->step[3][0] = (m2k_step_t){.note = 60, .flags = ST_TRIG};
+        for (int t = 0; t < 4; t++) feel_kit_v15(p->kit[t]);   /* written on format 15's amp: the same mix since */
     }
     p->glob[ctl] = (uint8_t)v;
     cur_pat = 16;
