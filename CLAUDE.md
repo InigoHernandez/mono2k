@@ -43,7 +43,12 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   scenes, `m2k_host DIR`, each PBM saved as a 1-bit PNG of the same name), the installer
   (`installer.html`: installs `web/firmware/mono2k.fwsc`, or a `.fwsc` from a file) and the patch editor (`editor.html`, `editor.js`: the same worklet and
   saves; the FM-1 link's client, the FM-1's patterns a session of their own under `mono2k.fm1.v1`, `.m2ks` store files).
-  `panel.js` is the FM-1's layout, `site.js` the subpages' theme and textures. Every push adds what it changes for a
+  `panel.js` is the FM-1's layout, `site.js` the subpages' theme and textures. On the emulator page `help.js` says what
+  every control, page and layer does (the status line under the panel, the guide's list: from the manual and m2k_ui.c),
+  `screens.js` runs copies of the core apart from the one that plays (from `app.js`'s compiled module; a script of
+  panel actions each), `guide.js` is How to play, `engines.js` the machines' Hit (`w_audition`, `w_hit` in `m2k_web.c`:
+  a machine's INIT at its home note, an FX machine after a plain SWAV-SAW) and `made.js` How it was made's charts (the
+  suite's numbers a snapshot of a `regress.py check` run: update them with it). Every push adds what it changes for a
   player to `web/changelog.js` (the manual's Change log: an entry per day of updates, newest first, a kind on every
   line: machines sound sequencer workflow patterns screen web fixes), and bumps `changelog.js?v=` in `manual.html`. Every
   update also adds what it taught to `../FM1-FIRMWARE-HANDBOOK.md` (outside the repo: the owner's handbook of MONO2K's

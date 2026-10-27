@@ -1,9 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // MONO2K's emulator page: the dithered wordmark, the FM-1 panel in one bit, the screen, the controls (mouse, touch,
-// computer keys, MIDI), the live readout, the machine sheet and the saves. The firmware itself runs in worklet.js.
+// computer keys, MIDI), the status line under the panel (what the control under the pointer does, help.js), the bar's
+// tools and the saves. The firmware itself runs in worklet.js; the page's other copies of it (the guide, the machines)
+// in screens.js, guide.js and engines.js, from the module compiled here.
 (() => {
   "use strict";
   const $ = (id) => document.getElementById(id);
+  /* the firmware, fetched and compiled once for every copy the page runs */
+  const wasmP = fetch("m2k.wasm?v=86").then((r) => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); });
+  window.M2K_CORE = { bytes: wasmP, module: wasmP.then((b) => WebAssembly.compile(b)) };
   const NS = "http://www.w3.org/2000/svg";
   const css = () => getComputedStyle(document.documentElement);
   const ink = () => css().getPropertyValue("--ink").trim() || "#0b0b0b";
@@ -351,12 +356,11 @@
       status("Saved in this browser.");
     } catch (e) { status("Could not save here (private window?)."); }
   };
-  const status = (s) => console.info("MONO2K:", s);   /* the page keeps no status line: messages go to the console */
+  const status = (s) => console.info("MONO2K:", s);   /* the saves' messages, to the console (the status line is say()) */
 
   async function boot() {
-    const r = await fetch("m2k.wasm?v=85");
-    wasmBytes = await r.arrayBuffer();
-    pre = new WebAssembly.Instance(new WebAssembly.Module(wasmBytes), {}).exports;
+    wasmBytes = await wasmP;
+    pre = (await WebAssembly.instantiate(await window.M2K_CORE.module, {})).exports;
     if (pre._initialize) pre._initialize();
     pre.w_init(2000);
     pre.w_setting(0, isDark() ? 0 : 127);
@@ -364,7 +368,6 @@
     machines();
     params();
     namesFrom(pre);
-    patterns();
     requestAnimationFrame(preTick);
   }
   function preTick(t) {
@@ -382,6 +385,7 @@
     try {
       try { ctx = new AudioContext({ sampleRate: 44100, latencyHint: "interactive" }); }
       catch (e) { ctx = new AudioContext({ latencyHint: "interactive" }); }
+      ctx.onstatechange = () => sndShow();
       await ctx.audioWorklet.addModule("worklet.js?v=35");
       node = new AudioWorkletNode(ctx, "mono2k", { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2] });
       node.connect(ctx.destination);
@@ -398,7 +402,6 @@
           if (m.names) send({ t: "names" });
         } else if (m.t === "names") {
           patNames = m.pats; projNames = m.projs;
-          patterns();
         } else if (m.t === "store") {
           saveStore(m.bytes);
         } else if (m.t === "export") {
@@ -415,17 +418,19 @@
           midiSend(m.list);
         } else if (m.t === "ready") {
           displayMode();
-          if (startPattern >= 0) { send({ t: "pattern", n: startPattern }); startPattern = -1; }
           status(ctx.sampleRate === 44100 ? "Running at 44.1 kHz, as on the FM-1." : `Running at ${ctx.sampleRate} Hz, resampled from 44.1 kHz.`);
+          say(ctx.sampleRate === 44100 ? "Sound on, at 44.1 kHz as on the FM-1. Point at a control: this line says what it does." : `Sound on, resampled from 44.1 kHz to ${ctx.sampleRate} Hz. Point at a control: this line says what it does.`);
         }
       };
       node.port.postMessage({ t: "wasm", bytes: wasmBytes, seed: (Math.random() * 4294967295) >>> 0, store: loadStore() });
       await ctx.resume();
       running = true;
       armed = true;
-      svg.focus({ preventScroll: true });   /* the readout can start it too: stay where the reader is */
+      sndShow();
+      svg.focus({ preventScroll: true });   /* the bar can start it too: stay where the reader is */
     } catch (e) {
       status("Could not start the audio: " + e.message);
+      say("The sound could not start here: " + e.message);
       $("start").classList.remove("gone");
     }
   }
@@ -495,185 +500,102 @@
     send({ t: "set", i: 0, v });
   }
 
-  // ---------------------------------------------------------------------------------------------- readouts
+  // ---------------------------------------------------------------------------------------- the status line
   let machineNames = [], machineOrder = [];      /* names by number; the numbers in ALGORITHM's order */
-  let startPattern = -1, patNames = [], projNames = [], curPat = 0, queuedPat = 0, playingNow = 0, curProj = 0;
+  let patNames = [], projNames = [];
   const label = (n) => "ABCD"[n >> 4] + String((n & 15) + 1).padStart(2, "0");
-  /* the patterns: the web shows bank A, the demos; the other banks are the FM-1's. While playing, a click queues
-   * the pattern for the end of the bar */
-  function patterns() {
-    const box = $("pats");
-    if (!box.children.length) {
-      for (let i = 0; i < 16; i++) {
-        const b = document.createElement("button");
-        b.type = "button";
-        b.addEventListener("click", () => {
-          if (!running) { startPattern = i; start(); return; }
-          send({ t: "pattern", n: i });
-        });
-        box.appendChild(b);
-      }
-    }
-    [...box.children].forEach((b, n) => {
-      b.innerHTML = `<b>${label(n)}</b>${patNames[n] || ""}`;
-      b.className = n === curPat ? "on" : n === queuedPat && playingNow ? "q" : "";
-    });
-  }
   function namesFrom(x) {
     const nP = x.w_patterns(), nJ = x.w_projects();
     patNames = Array.from({ length: nP }, (_, i) => cstr(x, x.w_pat_name(i)));
     projNames = Array.from({ length: nJ }, (_, i) => cstr(x, x.w_project_name(i)));
   }
+  /* the line under the panel names what the pointer (or the last computer key) is over and what it does there, from the
+   * core's state: the page and its knobs, the keys' mode, the track, the transport (help.js has the words) */
+  const statusEl = $("status");
+  let statusOn = "", statusText = "", I0 = null;
+  const say = (s) => { if (s !== statusText) { statusText = s; statusEl.textContent = s; } };
+  function ctxOf(I) {
+    const c = { page: 0, sub: 0, trk: 0, mach: "", grid: 0, pads: 0, rec: 0, playing: 0, ready: 0, spage: 0, oct: 0, pat: "A01", label: "HOME", knobs: [] };
+    if (!I) return c;
+    Object.assign(c, { page: I[1], sub: I[2], trk: I[0], mach: machineNames[I[6]] || "", grid: I[7], rec: I[8], playing: I[4],
+      pads: I[27], ready: I[29], spage: I[30], oct: (I[14] << 24) >> 24, pat: label(I[3]) });
+    if (pre && pre.w_page_label) {
+      c.label = cstr(pre, pre.w_page_label(I[1], I[2]));
+      c.knobs = [0, 1, 2, 3].map((k) => ({ s4: cstr(pre, pre.w_knob(I[1], I[2], I[6], k)), name: cstr(pre, pre.w_kname(I[1], I[2], I[6], k)) }));
+    }
+    return c;
+  }
+  function statusShow() {
+    if (statusOn === "panel") { say("The panel has the computer's keys: Z to O and S to 9 play, Space PLAY, Enter REC, A GRID, 5 SYN, Tab and the arrows the knobs; Esc gives them back. Keys lists them all."); return; }
+    if (!statusOn) {
+      say(running ? "Point at a knob, a button, a key or the screen: this line says what it does. Click the panel to play it from the computer's keys."
+        : "Press Start for the sound, then point at any knob, button or key: this line says what it does.");
+      return;
+    }
+    say(window.M2K_HELP.line(statusOn, ctxOf(I0)));
+  }
+  const statusAt = (id) => { if (id !== statusOn) { statusOn = id; statusShow(); } };
 
-  const PAGES = ["HOME", "SYN", "AMP", "FILT", "FX", "LFO", "ARP", "GLO"];
-  let lastInfo = "", knobKey = "", curTrk = 0;
+  let lastInfo = "", knobKey = "";
   function info(I) {
     const key = Array.prototype.join.call(I, ",");
     if (key === lastInfo) return;
     lastInfo = key;
+    I0 = I.slice ? I.slice() : Array.from(I);
     midiShow(I);
-    const trk = I[0], pat = I[3];
-    curTrk = trk;
-    /* the four knobs are named for what they turn on this page, as the screen's footer names them */
+    /* the four knobs are named for what they turn on this page, as the screen's knob row names them */
     const kk = I[1] + "," + I[2] + "," + I[6];
     if (kk !== knobKey && pre && pre.w_knob && encEl.length === 8) {
       knobKey = kk;
       for (let k = 0; k < 4; k++) encEl[3 + k].role.textContent = cstr(pre, pre.w_knob(I[1], I[2], I[6], k)) || "—";
     }
-    if (readBtn.step) {
-      readBtn.step.innerHTML = I[4] ? ICON.stop : ICON.play;
-      readBtn.step.setAttribute("aria-label", I[4] ? "Stop" : "Play");
-      readBtn.grid.setAttribute("aria-pressed", String(!!I[7]));
-      readBtn.rec.setAttribute("aria-pressed", String(!!I[8]));
-    }
-    $("r-trk").textContent = "T" + (trk + 1);
-    $("r-mach").textContent = machineNames[I[6]] || "";
-    $("r-pat").textContent = label(pat) + (I[12] !== pat && I[4] ? "›" + label(I[12]) : "");
-    $("r-bpm").textContent = String(I[5] + 30);
-    $("r-step").textContent = I[4] ? String(I[10] + 1).padStart(2, "0") + "/" + I[11] : "—";
-    $("r-mode").textContent = (I[7] ? "GRID" : "PLAY") + (I[9] ? " FILL" : I[8] ? " REC" : "");
-    const ol = $("tracks");
-    if (ol.children.length !== 6) {
-      ol.innerHTML = "";
-      for (let t = 0; t < 6; t++) {
-        const li = document.createElement("li");
-        const sel = ctlButton("", "Track " + (t + 1), () => send({ t: "track", n: t }));
-        const mute = ctlButton("M", "Mute track " + (t + 1), () => send({ t: "mute", n: t }));
-        sel.className = "tsel"; mute.className = "tmute";
-        li.append(sel, mute);
-        ol.appendChild(li);
-      }
-    }
-    for (let t = 0; t < 6; t++) {
-      const li = ol.children[t], muted = (I[13] >> t) & 1, name = machineNames[I[17 + t]] || "";
-      li.className = (t === trk ? "on" : "") + (muted ? " mute" : "");
-      li.firstChild.innerHTML = `<b>${t + 1}</b>${name}`;
-      li.firstChild.setAttribute("aria-label", `Track ${t + 1}, ${name}`);
-      li.firstChild.setAttribute("aria-pressed", String(t === trk));
-      li.lastChild.setAttribute("aria-pressed", String(!!muted));
-    }
-    curPat = pat; queuedPat = I[12]; playingNow = I[4]; curProj = I[23];
-    patterns();
-    void PAGES;
+    if (statusOn) statusShow();
   }
 
-  /* the readout plays too: arrows on track, machine, pattern and tempo (held, the tempo runs; Shift, by ten);
-   * STEP starts and stops; KEYS turns the keys into the grid and arms recording. A track cell selects its track,
-   * its M mutes it. Before the sound is on, the first touch turns it on. */
-  const readBtn = {};
-  /* the controls' icons, drawn on a 10-unit square so each sits in the middle of its button */
-  const ICON = {
-    left: '<svg viewBox="0 0 10 10" aria-hidden="true"><path d="M7.5 1.5v7L2 5z"/></svg>',
-    right: '<svg viewBox="0 0 10 10" aria-hidden="true"><path d="M2.5 1.5v7L8 5z"/></svg>',
-    play: '<svg viewBox="0 0 10 10" aria-hidden="true"><path d="M2.5 1v8L9 5z"/></svg>',
-    stop: '<svg viewBox="0 0 10 10" aria-hidden="true"><path d="M2 2h6v6H2z"/></svg>',
-  };
-  const act = (fn) => { if (running) fn(); else start().then(() => { if (running) fn(); }); };
-  const tap = (b) => { send({ t: "btn", b, d: 1 }); send({ t: "btn", b, d: 0 }); };
-  function ctlButton(txt, label, fn, repeat) {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.textContent = txt;
-    b.setAttribute("aria-label", label);
-    if (!repeat) { b.addEventListener("click", (ev) => act(() => fn(ev))); return b; }
-    let rt = 0, ri = 0;
-    const stop = () => { clearTimeout(rt); clearInterval(ri); };
-    b.addEventListener("click", (ev) => { if (ev.detail === 0) act(() => fn(ev)); });      /* from the keyboard */
-    b.addEventListener("pointerdown", (ev) => {
-      const sh = ev.shiftKey;
-      act(() => fn({ shiftKey: sh }));
-      rt = setTimeout(() => { ri = setInterval(() => fn({ shiftKey: sh }), 70); }, 380);
-    });
-    for (const e of ["pointerup", "pointerleave", "pointercancel"]) b.addEventListener(e, stop);
-    return b;
+  // ------------------------------------------------------------------------------------------------- the bar
+  /* the sound on and off (the context suspended: the instrument pauses, its screen holds), MIDI, the computer's keys,
+   * and the demos back: each a drawer under the bar, one open at a time */
+  function sndShow() {
+    const on = running && ctx && ctx.state === "running";
+    $("snd").setAttribute("aria-pressed", String(!!on));
+    $("snd").textContent = on ? "Sound on" : "Sound off";
   }
-  function readControls() {
-    const box = (id, ...btns) => { const s = document.createElement("span"); s.className = "ctls"; s.append(...btns); $(id).parentElement.appendChild(s); };
-    const arrows = (id, name, fn, repeat) => {
-      const dn = ctlButton("", "Previous " + name, (ev) => fn(-1, ev), repeat), up = ctlButton("", "Next " + name, (ev) => fn(1, ev), repeat);
-      dn.className = up.className = "ar";
-      dn.innerHTML = ICON.left; up.innerHTML = ICON.right;
-      box(id, dn, up);
-    };
-    arrows("r-trk", "track", (d) => send({ t: "track", n: (curTrk + 6 + d) % 6 }));
-    arrows("r-mach", "machine", (d) => turn(1, d));
-    arrows("r-pat", "pattern", (d) => turn(2, d));
-    arrows("r-bpm", "tempo", (d, ev) => send({ t: "tempo", d: d * (ev && ev.shiftKey ? 10 : 1) }), true);
-    readBtn.step = ctlButton("", "Play", () => tap(10));
-    readBtn.step.className = "ar";
-    readBtn.step.innerHTML = ICON.play;
-    box("r-step", readBtn.step);
-    readBtn.grid = ctlButton("Grid", "Keys as steps (GRID)", () => tap(9));
-    readBtn.rec = ctlButton("Rec", "Record", () => tap(11));
-    box("r-mode", readBtn.grid, readBtn.rec);
+  $("snd").addEventListener("click", async () => {
+    if (!running) { await start(); return; }
+    if (ctx.state === "running") await ctx.suspend(); else await ctx.resume();
+    sndShow();
+  });
+  const drawers = [["midi-tog", "midi"], ["keys-tog", "keymap"], ["reset", "reset-ask"]];
+  function drawer(id) {
+    for (const [b, d] of drawers) {
+      const open = d === id && $(d).hidden;
+      $(d).hidden = !open;
+      $(b).setAttribute("aria-expanded", String(open));
+    }
   }
+  for (const [b, d] of drawers) $(b).addEventListener("click", () => drawer(d));
+  $("reset-no").addEventListener("click", () => { drawer(""); $("reset").focus(); });
+  $("reset-yes").addEventListener("click", () => {
+    try { localStorage.removeItem(STORE_KEY); } catch (e) { /* private mode: nothing kept anyway */ }
+    if (node) send({ t: "reset", seed: (Math.random() * 4294967295) >>> 0 });
+    if (pre) { pre.w_init(2000); pre.w_setting(0, isDark() ? 0 : 127); namesFrom(pre); }
+    displayMode();
+    drawer("");
+    say("The factory's demos are back: A01 CIRCUIT, A02 TIDE, A03 SUSPEND, A04 LANTERN; this browser's saves are gone.");
+    $("reset").focus();
+  });
+  document.addEventListener("keydown", (ev) => {           /* Esc closes an open drawer (when the panel has no keys) */
+    if (ev.code !== "Escape" || armed) return;
+    const open = drawers.find(([, d]) => !$(d).hidden);
+    if (open) { drawer(""); $(open[0]).focus(); }
+  });
 
-  // ---------------------------------------------------------------------------------------- machine sheet
+  // ---------------------------------------------------------------------------------------- machine names
   function machines() {
-    const x = pre, n = x.w_machines(), grid = $("mgrid");
+    const x = pre, n = x.w_machines();
     machineNames = Array.from({ length: n }, (_, m) => cstr(x, x.w_mi(m, 0)));   /* by number, as patterns keep them */
     machineOrder = Array.from({ length: n }, (_, k) => (x.w_morder ? x.w_morder(k) : k));   /* (an older m2k.wasm: by number) */
-    grid.innerHTML = "";
-    for (let k = 0; k < n; k++) {                    /* the cards in ALGORITHM's order */
-      const m = machineOrder[k];
-      const name = machineNames[m], style = cstr(x, x.w_mi(m, 2)), cls = cstr(x, x.w_mi(m, 3));
-      const card = document.createElement("article");
-      card.className = "mcard";
-      card.style.setProperty("--i", String(k % 3 + (k / 3 | 0)));   /* dealt out in diagonals when scrolled to */
-      const st = ["PUNCH", "METAL", "PLASTIC"].map((s, i) => {          /* five segments, as the screen's card */
-        const v = x.w_stat(m, i);
-        return `<span class="stat"><b>${s}</b><i>${Array.from({ length: 5 }, (_, k) => `<u class="${k < v ? "on" : ""}"></u>`).join("")}</i></span>`;
-      }).join("");
-      const params = Array.from({ length: 8 }, (_, i) => {
-        const s4 = cstr(x, x.w_syn(m, i, 0)), ln = cstr(x, x.w_syn(m, i, 1));
-        return `<li><b>${"ABCDEFGH"[i]} ${s4}</b>${ln === "-" ? "" : ln}</li>`;
-      }).join("");
-      card.innerHTML = `<div><h4>${name}</h4><div class="meta"><span class="tags"><em class="inv">${cls}</em><em>${style}</em></span>${st}</div></div><canvas width="72" height="72"></canvas><ol>${params}</ol>`;
-      grid.appendChild(card);
-      const cv = card.querySelector("canvas"), g = cv.getContext("2d");
-      const draw = (bits) => {
-        const gs = getComputedStyle(grid);
-        const img = g.createImageData(72, 72), I = hex(gs.getPropertyValue("--ink").trim()), P = hex(gs.getPropertyValue("--paper").trim());
-        for (let p = 0; p < 72 * 72; p++) { const o = p * 4; img.data[o] = P[0]; img.data[o + 1] = P[1]; img.data[o + 2] = P[2]; img.data[o + 3] = 255; }
-        for (let i = 0; i < 512; i++) for (let j = 0; j < 8; j++) {
-          if (!((bits[i] >> (7 - j)) & 1)) continue;
-          const x = (i & 7) * 8 + j + 4, y = (i >> 3) + 4, o = (y * 72 + x) * 4;
-          img.data[o] = I[0]; img.data[o + 1] = I[1]; img.data[o + 2] = I[2];
-        }
-        g.putImageData(img, 0, 0);
-      };
-      const flat = () => draw(new Uint8Array(x.memory.buffer, x.w_mark(m), 512));
-      flat();
-      let anim = 0, f = 0;
-      card.addEventListener("pointerenter", () => {
-        clearInterval(anim);
-        anim = setInterval(() => draw(new Uint8Array(x.memory.buffer, x.w_icon(m, f++ % 12), 512)), 80);
-      });
-      card.addEventListener("pointerleave", () => { clearInterval(anim); flat(); });
-      card._redraw = flat;
-    }
   }
-
   // ---------------------------------------------------------------------------- every parameter, page by page
   /* read off the firmware's own pages, so the list is the panel's: a block for each page (or subpage where it has a
    * name of its own), each knob's short name and its long one; SYN's for the machine chosen */
@@ -716,6 +638,13 @@
     send({ t: "enc", e: i, d });
     turnVisual(i, d);
   }
+  /* the status line follows the pointer over the controls and the screen, and the computer's keys */
+  svg.addEventListener("pointerover", (ev) => statusAt(ctlFrom(ev.target) || ""));
+  svg.addEventListener("pointerleave", () => statusAt(""));
+  lcd.addEventListener("pointerenter", () => statusAt("lcd"));
+  lcd.addEventListener("pointerleave", () => statusAt(""));
+  svg.addEventListener("focus", () => { if (running) armed = true; statusAt(running ? "panel" : ""); });   /* (Tab to it: the keys too) */
+  svg.addEventListener("blur", () => { if (statusOn === "panel") statusAt(""); });
   const pointers = new Map();
   svg.addEventListener("pointerdown", (ev) => {
     if (!running) { start(); return; }
@@ -766,9 +695,10 @@
   document.addEventListener("keydown", (ev) => {
     if (!running || !armed || ev.metaKey || ev.ctrlKey) return;
     if (ev.code === "Escape") { armed = false; svg.blur(); return; }
-    if (ev.code === "Tab") { ev.preventDefault(); selKnob = selKnob >= 6 ? 3 : selKnob + 1; showSel(); return; }
+    if (ev.code === "Tab") { ev.preventDefault(); selKnob = selKnob >= 6 ? 3 : selKnob + 1; showSel(); statusAt("e" + selKnob); return; }
     if (ev.code.startsWith("Arrow")) {
       ev.preventDefault();
+      statusAt("e" + selKnob);
       const d = (ev.code === "ArrowUp" || ev.code === "ArrowRight" ? 1 : -1) * (ev.shiftKey ? 8 : 1);
       turn(selKnob, d);
       return;
@@ -776,6 +706,7 @@
     const m = KEYMAP[ev.code];
     if (!m) return;
     ev.preventDefault();
+    statusAt(m[0] + m[1]);
     if (m[0] === "e") { turn(m[1], m[2] * (ev.shiftKey ? 4 : 1)); return; }
     if (ev.repeat || held.has(ev.code)) return;
     held.add(ev.code);
@@ -810,7 +741,8 @@
   textures();
   buildPanel();
   setPalette(pal);
-  function redrawTheme() { textures(); buildPanel(); wordmark(); document.querySelectorAll(".mcard").forEach((c) => c._redraw && c._redraw()); }
+  /* the page's other drawings (the guide, the machines, the figures) redraw on "m2k-theme", as on the subpages */
+  function redrawTheme() { textures(); buildPanel(); wordmark(); window.dispatchEvent(new Event("m2k-theme")); }
   matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { if (theme === "auto") applyTheme(); });
   themeLabel();
   let rz = 0;
@@ -819,7 +751,6 @@
   (document.fonts ? Promise.all([document.fonts.load('900 64px "Orbitron"'), document.fonts.ready]) : Promise.resolve())
     .then(() => { wordmark(); requestAnimationFrame(wmTick); });
   reveal();
-  readControls();
   boot().catch((e) => status("Could not load the firmware: " + e.message));
 
   /* scroll: each part arrives once, as it comes into view, in steps as the screen moves; nothing moves for those
@@ -836,8 +767,8 @@
       el.style.setProperty("--i", String(Math.max(0, sib.indexOf(el))));
       io.observe(el);
     });
-    watch(".sec, .mgrid");
-    watch(".sec__n, .hero__sub > *, .sec__body .lede, .cols2 > p, .keys", "rv-up");   /* not the foot: at the page's end it never scrolls far enough in */
+    watch(".sec");
+    watch(".sec__n, .hero__sub > *, .sec__body .lede, .cols2 > p, .todo__list > li, .made__steps > li, .made__facts > li", "rv-up");   /* not the foot: at the page's end it never scrolls far enough in */
     watch(".sec__body .display", "rv-wipe");
   }
   /* an accordion a person opens deals its contents in (style.css, gl-deal); one opened by the page does not */
