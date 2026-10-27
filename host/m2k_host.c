@@ -41,7 +41,7 @@ typedef struct { int ms; char kind; int a, b; const char *shot; } ev_t;
 /* the tour: kind b button (a, b = down), e encoder (a, delta), k key (a, down), m MIDI in (a from, b status), s
  * screenshot */
 static const ev_t TOUR[] = {
-    {900, 's', 0, 0, "00_boot"},
+    {1200, 's', 0, 0, "00_boot"},             /* (the splash's waterfall) */
     {2520, 's', 0, 0, "01_home_stopped"},     /* (the splash 2.1 s, its wipe into HOME 0.4 s) */
     {2560, 'b', B_PLAY, 1, 0}, {2580, 'b', B_PLAY, 0, 0},
     {3400, 's', 0, 0, "02_home_playing"},
