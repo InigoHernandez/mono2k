@@ -203,6 +203,71 @@ static void bus_v9(m2k_pattern_t *p)
     g[G_ADPC] = T_V9_ADPC[g[G_ADPC] & 127];
 }
 
+/* format 17: the bus's effects rebuilt, each old value to the new one that measures nearest (tools/conv17.py). The
+ * reverb is a new one: an old DCAY and DAMP to the pair whose octaves' RT60s are nearest (T_V17_RV, a 9 x 9 grid of
+ * the old values, read between), and each track's VERB send, now straight in level, to the old one's level times what
+ * makes up the two reverbs' difference (their energy in the octaves 250 Hz .. 1 kHz; T_V17_RVL); DSND, straight
+ * too, to the old one's level, |d| / 64 for (d / 64)^2; GLCH by its glitch's energy and events (T_V17_GLCH). A lock
+ * goes with its parameter; a send on at all stays on; an LFO on a send keeps its depth */
+static uint8_t spu_v16(int v, int32_t gain)            /* gain Q8 */
+{
+    int n = v ? (v * v * gain + 127 * 128) / (127 * 256) : 0;     /* (16129 x 1700 < 2^31) */
+    return (uint8_t)(v && n < 1 ? 1 : n > 127 ? 127 : n);
+}
+
+static uint8_t dsnd_v16(int v)
+{
+    int d = v - 64, a = d < 0 ? -d : d, n = (a * a + 32) / 64;
+    if (a && !n) n = 1;
+    return (uint8_t)(d < 0 ? 64 - n : 64 + n);
+}
+
+/* a sound of the library saved before format 17: its sends on the straight laws (no reverb of its own to make up) */
+static void fx_kit_v16(uint8_t *k)
+{
+    k[P_SPU] = spu_v16(k[P_SPU] & 127, 256);
+    k[P_DSND] = dsnd_v16(k[P_DSND] & 127);
+}
+
+/* where an old value sits on one of the grid's axes: its cell, and how far into it (Q8) */
+static int grid_at(const uint8_t *axis, int v, int *f)
+{
+    int i = 0;
+    while (i < 7 && v > axis[i + 1]) i++;
+    if (v < axis[0]) v = axis[0];
+    *f = ((v - axis[i]) * 256) / (axis[i + 1] - axis[i]);
+    return i;
+}
+
+static void fx_v16(m2k_pattern_t *p)
+{
+    uint8_t *g = p->glob;
+    int ov = g[G_VERB] & 127, fv, fd;
+    int iv = grid_at(T_V17_RVV, ov ? ov : 64, &fv), id = grid_at(T_V17_RVD, g[G_DAMP] & 127, &fd);
+    int32_t w[4] = {(256 - fv) * (256 - fd), (256 - fv) * fd, fv * (256 - fd), fv * fd};   /* Q16 */
+    const int at[4] = {iv * 9 + id, iv * 9 + id + 1, (iv + 1) * 9 + id, (iv + 1) * 9 + id + 1};
+    int32_t dc = 0, dm = 0, lv = 0;
+    for (int k = 0; k < 4; k++) {
+        dc += w[k] * T_V17_RV[at[k]][0];
+        dm += w[k] * T_V17_RV[at[k]][1];
+        lv += (w[k] >> 4) * T_V17_RVL[at[k]];                          /* (2^12 x 1700) */
+    }
+    g[G_VERB] = (uint8_t)(ov ? CLAMP((dc + 32768) >> 16, 1, 127) : 0);
+    g[G_DAMP] = (uint8_t)CLAMP((dm + 32768) >> 16, 0, 127);
+    int32_t gain = ov ? (lv + 2048) >> 12 : 256;
+    for (int t = 0; t < M2K_TRACKS; t++) {
+        p->kit[t][P_SPU] = spu_v16(p->kit[t][P_SPU] & 127, gain);
+        p->kit[t][P_DSND] = dsnd_v16(p->kit[t][P_DSND] & 127);
+    }
+    for (int i = 0; i < M2K_LOCKS; i++) {
+        m2k_lock_t *l = &p->lock[i];
+        if (l->trk == 0xFF) continue;
+        if (l->param == P_SPU) l->val = spu_v16(l->val & 127, gain);
+        if (l->param == P_DSND) l->val = dsnd_v16(l->val & 127);
+    }
+    g[G_GLCH] = T_V17_GLCH[g[G_GLCH] & 127];
+}
+
 /* FM+STAT and FM+DYN took the Monomachine's pages (version 10). The old ones were MONO2K's own: RAT1 DEP1 DEC1 RAT2
  * DEP2 DEC2 FDBK, then ALGO (STAT) or SWEP (DYN), the second operator fed back and modulating the first in series.
  * Both new machines run their operators side by side, so an old sound is carried over as near as the pages go, not
@@ -874,4 +939,7 @@ static void factory(void)
     /* (A05-A16 have none: blank at the factory, the player's after; DEMO brings these four back alone) */
     /* the four as the owner approved them, written on format 15's amp and LFO laws: onto 16's, once */
     for (int i = 0; i < 4; i++) feel_v15(PAT(i));
+    /* and on format 16's bus: onto 17's, once (their reverbs to the pair measured nearest, their sends at the level
+     * that keeps them as loud) */
+    for (int i = 0; i < 4; i++) fx_v16(PAT(i));
 }

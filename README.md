@@ -54,7 +54,7 @@ cc -O2 -Wall -Wno-unused-function -Ifirmware/src -Ifirmware/gen -o build/host/m2
 | Projects | the modern Elektron way: 4 projects × 4 banks (A–D) × 16 patterns (on the FM-1, one project of 64), each pattern with its own sounds. SAVE keeps the pattern (its reload point), GLO + SAVE reloads it, SAVE held keeps the project; GLO + REC / PLAY / SEQ copy, paste, clear (the pattern on HOME, the track's sound on its pages); GLO > SET picks and loads a project. On the web: a project picker, export / import as `.m2kp` files. Stored packed (a typical pattern 0.5–1 KB; the DEMO project 32 KB) |
 | Factory | project DEMO, bank A: four parts, CIRCUIT, TIDE, SUSPEND and LANTERN (`docs/bank-a.md`: how they were made, key and idea of each), every sound picked by the owner from sound sheets; A05–A16 and banks B–D blank. A store saved with earlier demos takes the new ones where the old still stand |
 | Sequencer | 6 × 64 steps, note / accent / slide, parameter locks, the Monomachine's trig types (each step trigs the amp, the filter's envelope and the LFOs independently: step + VOL, ALL ... NONE, a trigless lock), trig conditions (chance, A:B, 1ST, PRE, FILL), ratchets, swing, live recording and step entry (REC while stopped), pages held to set the length, patterns queued at the bar |
-| Bus | SPU-style reverb at 22 kHz, beat repeat (reverse, halving, tape stop), tape wow and flutter, 4-bit ADPCM crunch, hiss and dust, drive; each control on a law measured over its whole range (GLCH a chance per sixteenth, 0.3–50 %) |
+| Bus | a feedback-delay-network reverb at 22 kHz (RT60 0.3–24 s, DAMP the top's decay 1/1–1/30), a glitch whose one knob grows from rare quiet ghosts to wild (repeats, reverse, gates, octaves, rolls, slowing; every change crossfaded), tape wow and flutter, 4-bit ADPCM crunch, hiss and dust, drive; each control on a law measured over its whole range |
 | MIDI | tracks 1–6 on six channels from GLO > MIDI's CHAN (1–6 at first), the others play the track in view: notes and the Monomachine's CC map (SYN 48–55, AMP 56–63, FILT 72–79, FX 80–87, LFO 1/2/3 on 88/104/112, level 7, mute 3). SYNC IN follows a MIDI clock (its tempo, a step every sixth pulse, the swing kept; start, continue, stop) from USB, the TRS jack or both, SYNC OUT sends one (24 a beat, start, stop), NOTES OUT each track's trigs on its channel. GLO > IN: where notes and CCs come from (both, USB, TRS, none), and a thru of the jack's MIDI out over USB. The emulator picks a MIDI device in (as USB) and one out |
 | Screen | 240 × 240 at 1 bit (a 7.2 KB framebuffer): Orbitron in solid ink (one size for every big value), Model:Cycles-style machine cards, machine marks as one family of isotypes on a 12-unit grid, each moving in its own way in time with the pattern, dissolves, glitches, live envelopes, filters, LFOs and scopes; light or dark (GLO > SET > SCRN; on the web it follows the page's theme) |
 
@@ -304,6 +304,19 @@ GLCH 1); TAPE puts the old 20 (±6.4 c) at 64; HISS's hiss has its own law (65 d
 ADPC keeps 0–64 and its rate falls continuously above. The old extremes stay at 127. Measured on the old engine and
 the new, every old value converts to one that measures alike (the hiss there as loud or louder: its law brings it
 in sooner); `tools/check.sh` holds both.
+
+Pattern format 17 rebuilt the bus's effects at the owner's word ("the glitch sounds intense low", "the reverb always
+sounds the same", "the first third of the delay's send does nearly nothing"). The old reverb's damping left little
+but a dull 0.2 s burst and a bass rumble at most settings (its octaves over 500 Hz died in 0.2 s from DAMP 64): the new
+one is a four-line feedback delay network (Hadamard matrix, two lines turned into each other by a swaying angle,
+every recursive product carrying its remainder, asleep once silent), RT60 0.3–24 s with the room's size, DAMP a
+one-pole a line giving the top's RT60 1/1–1/30 of the bottom's. The sends (VERB, DSND) are straight in level. GLCH
+went from full-level replacements (16 dB under the mix even at 1) to a law in rate, level, length, the dry's share
+and the modes (44 dB under at 1). PERFORM's repeats lock to the grid, every effect crossfades in and out, DRIVE holds
+its level. Old patterns convert by measurement (`tools/conv17.py`: the reverb to the pair nearest by its octaves'
+RT60s and each send by the level that keeps it as loud; GLCH by its glitch's energy and events; the sends' squares to
+straight levels); bank A is turned so at build (its reverb's return within 2 dB of the approved, its octaves within 3 dB at 250 Hz and
+1 kHz). The delay's send leaves the Monomachine's square there (regress.py's delay_send: XFAIL).
 
 DIGI-WAV plays either bank, set on SYN's third page (BANK: M2K, MONO2K's 32 waves across WAVE's range as before; M64,
 the owner's 64, two WAVE values a wave: an even one is that wave exactly, an odd one between two). The owner's play

@@ -1,16 +1,22 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
-# The bus's controls (GLCH HISS ADPC DRIV TAPE), every value, measured on the engine (host/m2k_host DIR --bus):
-#   GLCH  repeats started per bar, the share of the time the mix is replaced (repeats of a sixteenth, at 120)
+# The bus's controls (GLCH HISS ADPC DRIV TAPE DCAY DAMP), every value, measured on the engine (host/m2k_host DIR --bus):
+#   GLCH  repeats started per bar, the share of the time one sounds (repeats of a sixteenth, at 120), and the glitch's
+#         energy on the reference mix (dB against it; format 17's law: quiet and rare low, wild at the top)
 #   HISS  the hiss's level against the reference mix (dB; its rms away from the clicks; 12 s), the crackle's rate (/s)
 #         and level (the median click's peak, dBFS). The hiss is a one-pole lowpass of a bounded white noise, so
 #         whitening the output leaves the hiss inside a bound its gain sets and the crackle outside it: counted where
 #         the hiss leaves the crackle room, not counted (None) where it buries it
 #   ADPC  the error it adds (dB under the mix); DRIV the gain and the distortion (dB under the clean part)
 #   TAPE  wow and flutter (cents, a held sine), the loss at 8.4 kHz (dB)
-# Held to the record (tools/ref/bus_m2k.json) and, through the pattern format's conversion (T_V9_*), to the engine
-# before the laws changed (tools/ref/bus_v8.json, measured on 3e57c61): each old value and the new one it converts
-# to measure alike. --json writes the curves for the page that shows them.
+#   DCAY  the reverb's RT60 (the whole; at 250 Hz, 1 kHz, 4 kHz) and its energy (177 Hz .. 5.7 kHz, dB) at DAMP 32;
+#   DAMP  the same at DCAY 80 (format 17's reverb)
+# Held to the record (tools/ref/bus_m2k.json) and, through the pattern format's conversions, to the engines before:
+# T_V9_* to the one before format 9 (tools/ref/bus_v8.json, measured on 3e57c61), each old value and the new one it
+# converts to measuring alike (GLCH against format 9..16's engine, tools/ref/bus_v16.json, as 9 made it); T_V17_GLCH
+# to the one before format 17 (bus_v16.json, f1f2708): each old value to the one nearest by tools/conv17.py's
+# measure (the glitch's energy, its events a bar); T_V17_RV as tools/conv17.py measured it (tools/ref/conv17.json).
+# --json writes the curves for the page that shows them.
 #   .venv/bin/python tools/bus_curves.py [--record] [--record-old DIR] [--json OUT] [--no-render]
 import json, math, os, re, subprocess, sys
 import numpy as np
@@ -21,6 +27,7 @@ sys.path.insert(0, os.path.join(HERE, "ref"))
 from sweep import SR
 
 REF, OLD = os.path.join(HERE, "ref", "bus_m2k.json"), os.path.join(HERE, "ref", "bus_v8.json")
+V16, C17 = os.path.join(HERE, "ref", "bus_v16.json"), os.path.join(HERE, "ref", "conv17.json")
 A_HISS = 9000 / 32768                              # the hiss's one pole (m2k_fx.c)
 
 
@@ -29,7 +36,11 @@ def tables():
     def tab(n):
         b = h[h.index(n + "["):]
         return [int(v) for v in re.findall(r"-?\d+", b[b.index("{") + 1:b.index("}")])]
-    return {n: tab(n) for n in ("T_HISS_G", "T_CRK_A", "T_V9_GLCH", "T_V9_HISS", "T_V9_DRIV", "T_V9_TAPE", "T_V9_ADPC")}
+    t = {n: tab(n) for n in ("T_HISS_G", "T_CRK_A", "T_V9_GLCH", "T_V9_HISS", "T_V9_DRIV", "T_V9_TAPE", "T_V9_ADPC",
+                             "T_V17_GLCH")}
+    b = h[h.index("T_V17_RV[81][2]"):]
+    t["T_V17_RV"] = [int(v) for v in re.findall(r"-?\d+", b[b.index("{") + 1:b.index(";")])]
+    return t
 
 
 def hiss(path, gain, crk_min):
@@ -61,11 +72,14 @@ def measure(d, old=False):
         rows.setdefault(c[0], {})[int(c[1])] = [float(x) for x in c[2:]]
     mix = rows["DRIV"][0][2]
     out = {"mix_rms": mix,
-           "GLCH": {v: r[:2] for v, r in rows["GLCH"].items()},
+           "GLCH": {v: r[:2] + ([rows["GLCE"][v][0]] if "GLCE" in rows else []) for v, r in rows["GLCH"].items()},
            "ADPC": {v: [r[1], r[0]] for v, r in rows["ADPC"].items()},
            "DRIV": {v: r[:4] for v, r in rows["DRIV"].items()},
            "TAPE": {v: r[:3] for v, r in rows["TAPE"].items()},
            "HISS": {}}
+    for ctl in ("DCAY", "DAMP"):
+        if ctl in rows:
+            out[ctl] = {v: r[:5] for v, r in rows[ctl].items()}
     for v in range(128):
         gain = v * v if old else t["T_HISS_G"][v]
         a = (16 + v) * 16 if old else t["T_CRK_A"][v]
@@ -80,20 +94,45 @@ def keyed(m):
 
 def check_record(new, ref):
     bad = []
-    for ctl in ("GLCH", "ADPC", "DRIV", "TAPE", "HISS"):
-        for v in range(128):
+    for ctl in ("GLCH", "ADPC", "DRIV", "TAPE", "HISS", "DCAY", "DAMP"):
+        for v in range(1 if ctl == "DCAY" else 0, 128):
+            if v not in ref.get(ctl, {}) or len(new[ctl][v]) != len(ref[ctl][v]):
+                bad.append(f"{ctl} {v}: not in the record (--record)")
+                continue
             for i, (a, b) in enumerate(zip(new[ctl][v], ref[ctl][v])):
                 if (a is None) != (b is None) or (a is not None and abs(a - b) > 0.05):
                     bad.append(f"{ctl} {v} [{i}]: {b} -> {a}")
     return bad
 
 
-def check_conversion(new, old, t):
+def smooth(c):
+    """over five values, on a log scale (the events) and in dB (the energy), as tools/conv17.py"""
+    out = {}
+    for v in range(1, 128):
+        win = [c[u] for u in range(max(1, v - 2), min(127, v + 2) + 1)]
+        out[v] = (math.exp(sum(math.log(max(r, 1e-4)) for r, _ in win) / len(win)), sum(e for _, e in win) / len(win))
+    return out
+
+
+def check_conversion(new, old, t, v16):
     """each old value against the new one the format converts it to"""
     bad = []
+    # format 17's GLCH: each old value to the new one nearest by the glitch's energy and its events (conv17.py's
+    # measure, its 512 bars against the 64 here: within their noise of the nearest)
+    o = smooth({v: (v16["GLCH"][v][0], v16["GLCH"][v][2]) for v in range(1, 128)})
+    n = smooth({v: (new["GLCH"][v][0], new["GLCH"][v][2]) for v in range(1, 128)})
+    d = lambda a, b: ((a[1] - b[1]) / 6) ** 2 + math.log2(a[0] / b[0]) ** 2
+    for v in range(1, 128):
+        c = t["T_V17_GLCH"][v]
+        best = min(d(n[u], o[v]) for u in range(1, 128))
+        if d(n[c], o[v]) > 1.4 * best + 0.5:                # (64 bars here: the low values few events)
+            bad.append(f"GLCH (17) {v} -> {c}: {d(n[c], o[v]):.2f} from the old, the nearest {best:.2f}")
+    conv = json.load(open(C17))
+    if conv["glch"] != t["T_V17_GLCH"] or [x for nd in conv["nodes"] for x in nd[:2]] != t["T_V17_RV"]:
+        bad.append("T_V17_GLCH / T_V17_RV are not tools/ref/conv17.json's (tools/gen_tables.py)")
     for o in range(1, 128):
         v = t["T_V9_GLCH"][o]
-        (s1, d1), (s0, d0) = new["GLCH"][v], old["GLCH"][o]
+        (s1, d1), (s0, d0) = v16["GLCH"][v][:2], old["GLCH"][o]
         n1, n0 = s1 * 256, s0 * 256
         if abs(n1 - n0) > 3 * math.sqrt(n0 + n1) + 3 or abs(d1 - d0) > 3 * max(d0, d1) * math.sqrt(2 / max(n0, 1)) + 0.3:
             bad.append(f"GLCH {o} -> {v}: {s0:.3f}/bar {d0:.1f} % -> {s1:.3f}/bar {d1:.1f} %")
@@ -146,11 +185,12 @@ def main():
     elif os.path.exists(REF):
         bad += check_record(new, keyed(json.load(open(REF))))
     old = keyed(json.load(open(OLD)))
-    bad += check_conversion(new, old, t)
+    v16 = keyed({k: v for k, v in json.load(open(V16)).items() if k == "GLCH"})
+    bad += check_conversion(new, old, t, v16)
     if "--json" in sys.argv:
         json.dump({"new": new, "old": old, "conv": {k: t[k] for k in t if k.startswith("T_V9")}},
                   open(sys.argv[sys.argv.index("--json") + 1], "w"))
-    for ctl, mid in (("GLCH", 64), ("DRIV", 64), ("TAPE", 64), ("ADPC", 64), ("HISS", 64)):
+    for ctl, mid in (("GLCH", 64), ("DRIV", 64), ("TAPE", 64), ("ADPC", 64), ("HISS", 64), ("DCAY", 64), ("DAMP", 64)):
         print(f"{ctl} at 1 / {mid} / 127: " + " | ".join(" ".join("-" if x is None else f"{x:.2f}" for x in new[ctl][v])
                                                        for v in (1, mid, 127)))
     print("\n".join(bad) if bad else "the bus: every value as recorded; every old value as it sounded, converted")

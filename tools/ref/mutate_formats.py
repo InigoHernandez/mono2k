@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
-# Mutation tests of the pattern format's conversions (fm_v9, sid_v10, gsin_v11, hold_v12, vox_v13, feel_v15): each mutant is one small change to a conversion;
+# Mutation tests of the pattern format's conversions (fm_v9, sid_v10, gsin_v11, hold_v12, vox_v13, feel_v15, fx_v16): each mutant is one small change to a conversion;
 # the self-test must fail on every one. A survivor is a conversion the self-test does not hold.
 #   .venv/bin/python tools/ref/mutate_formats.py [TREE]     (default: this checkout; it restores each file it touches)
 import subprocess, sys, os
@@ -92,6 +92,21 @@ M = [
  ("FEEL bank A not converted at build", F, "    for (int i = 0; i < 4; i++) feel_v15(PAT(i));", "    (void)0;"),
  ("FEEL the old bank not converted at build", H, "    for (int i = 0; i < 16; i++) feel_v15(PAT(i));", "    (void)0;"),
  ("FEEL a version-3 store's sounds left", P, "            if (ver < 4) feel_kit_v15(snd[i].kit);", "            if (ver < 3) feel_kit_v15(snd[i].kit);"),
+ ("BUS17 not converted", P, "    if (ver < 17) fx_v16(p);", "    if (ver < 1) fx_v16(p);"),
+ ("BUS17 converted on a version-17 pattern", P, "    if (ver < 17) fx_v16(p);", "    if (ver < 18) fx_v16(p);"),
+ ("BUS17 VERB send kept squared", F, "    int n = v ? (v * v * gain + 127 * 128) / (127 * 256) : 0;", "    int n = v ? (v * gain + 128) / 256 : 0;"),
+ ("BUS17 a send on turned off", F, "    return (uint8_t)(v && n < 1 ? 1 : n > 127 ? 127 : n);", "    return (uint8_t)(n > 127 ? 127 : n);"),
+ ("BUS17 DSND kept squared", F, "    int d = v - 64, a = d < 0 ? -d : d, n = (a * a + 32) / 64;", "    int d = v - 64, a = d < 0 ? -d : d, n = a;"),
+ ("BUS17 DSND's side lost", F, "    return (uint8_t)(d < 0 ? 64 - n : 64 + n);", "    return (uint8_t)(64 + n);"),
+ ("BUS17 VERB locks left", F, "        if (l->param == P_SPU) l->val = spu_v16(l->val & 127, gain);", "        (void)0;"),
+ ("BUS17 DSND locks left", F, "        if (l->param == P_DSND) l->val = dsnd_v16(l->val & 127);", "        (void)0;"),
+ ("BUS17 GLCH left", F, "    g[G_GLCH] = T_V17_GLCH[g[G_GLCH] & 127];", "    (void)0;"),
+ ("BUS17 the reverb's level not made up", F, "    int32_t gain = ov ? (lv + 2048) >> 12 : 256;", "    int32_t gain = 256;"),
+ ("BUS17 the grid not read between", F, "    *f = ((v - axis[i]) * 256) / (axis[i + 1] - axis[i]);", "    *f = 0;"),
+ ("BUS17 a reverb off turned on", F, "    g[G_VERB] = (uint8_t)(ov ? CLAMP((dc + 32768) >> 16, 1, 127) : 0);", "    g[G_VERB] = (uint8_t)CLAMP((dc + 32768) >> 16, 1, 127);"),
+ ("BUS17 DAMP left", F, "    g[G_DAMP] = (uint8_t)CLAMP((dm + 32768) >> 16, 0, 127);", "    (void)dm;"),
+ ("BUS17 bank A not converted at build", F, "    for (int i = 0; i < 4; i++) fx_v16(PAT(i));", "    (void)0;"),
+ ("BUS17 the old bank not converted at build", H, "    for (int i = 0; i < 16; i++) fx_v16(PAT(i));", "    (void)0;"),
 ]
 def run():
     r = subprocess.run("cc -O2 -w -Ifirmware/src -Ifirmware/gen -o build/host/m2k_mut host/m2k_host.c -lm && build/host/m2k_mut --selftest",

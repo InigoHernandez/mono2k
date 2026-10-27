@@ -1606,8 +1606,8 @@ static void track_block(int ti, int32_t *restrict L, int32_t *restrict R, int32_
     int32_t fold = PK(t, P_FOLD, 6), xr = P7(t, P_XOR), xm = (xr * xr * 2) & 0x7FFF;
     int32_t pan = P8(t, P_PAN);
     int32_t gl = tq_u16(T_PAN, pan), gr = tq_u16(T_PAN, 127 * 256 - pan);
-    int32_t sd = P8(t, P_DSND) - 64 * 256, ds = (sd * sd) >> 13;           /* the send: (d / 64)^2, Q15 */
-    int32_t rs = tq_u16(T_VOL, P8(t, P_SPU));
+    int32_t sd = P8(t, P_DSND) - 64 * 256, ds = (sd < 0 ? -sd : sd) * 2;   /* the send: |d| / 64, Q15 (format 17) */
+    int32_t rs = tq_u16(T_SEND, P8(t, P_SPU));
     int mtype = PN(t, P_MODT, 3);
     int32_t mmix = PK(t, P_MODM, 2), mdep = PK(t, P_MODD, mtype == 2 ? 206 : mtype ? 200 : 441);
     uint32_t minc = tq_u32(T_MOD_INC, P8(t, P_MODR));

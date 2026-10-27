@@ -122,7 +122,12 @@ static const ev_t MANUAL[] = {
     {27500, 'b', B_LFO, 1, 0}, {27520, 'b', B_LFO, 0, 0},
     {27700, 'e', E_K4, 26, 0}, {27750, 'e', E_K2, 12, 0},
     {28500, 's', 0, 0, "14b_lfo_cycle"},
-    {28600, 'x', 0, 0, 0},
+    /* GLO tapped, then ALGORITHM back to its first page and on to VERB: the reverb's decay drawn (16b) */
+    {28700, 'b', B_GLO, 1, 0}, {28720, 'b', B_GLO, 0, 0}, {29000, 'e', E_ALGO, -1, 0}, {29050, 'e', E_ALGO, -1, 0}, {29100, 'e', E_ALGO, -1, 0},
+    {29150, 'e', E_ALGO, -1, 0}, {29200, 'e', E_ALGO, -1, 0}, {29250, 'e', E_ALGO, -1, 0}, {29300, 'e', E_ALGO, -1, 0},
+    {29400, 'e', E_ALGO, 1, 0}, {29450, 'e', E_ALGO, 1, 0},
+    {30000, 's', 0, 0, "16b_glo_verb"},
+    {30100, 'x', 0, 0, 0},
 };
 
 static void manual_scene(void)
@@ -559,20 +564,153 @@ static void bus_ref(int tracks, int ctl, int v, int gsiz)
     seq_play(1);
 }
 
+/* the reverb measured alone (its bus_block, every other control off), at DCAY dc and DAMP dm: out[0] the RT60 of the
+ * whole, out[1..5] of the octaves at 250 Hz .. 4 kHz (1.5 s of white noise, +-12000 into the send, then its decay:
+ * Schroeder's integral, T20 x 3, or T10 x 6 when the floor comes first), out[6] its impulse response's energy in
+ * 177 Hz .. 5.7 kHz, out[7] in all and out[8..12] in each octave (dB against the impulse's, 30000 into the send) */
+typedef struct { double b0, b1, b2, a1, a2, z1, z2; } vbq_t;
+static void vbq_set(vbq_t *f, int hp, double fc)
+{
+    double w = 2 * M_PI * fc / M2K_SR, c = cos(w), sn = sin(w), al = sn / (2 * 0.7071), a0 = 1 + al;
+    f->b0 = (hp ? (1 + c) : (1 - c)) / 2 / a0; f->b1 = (hp ? -(1 + c) : (1 - c)) / a0; f->b2 = f->b0;
+    f->a1 = -2 * c / a0; f->a2 = (1 - al) / a0; f->z1 = f->z2 = 0;
+}
+static double vbq(vbq_t *f, double x)
+{
+    double y = f->b0 * x + f->z1;
+    f->z1 = f->b1 * x - f->a1 * y + f->z2;
+    f->z2 = f->b2 * x - f->a2 * y;
+    return y;
+}
+typedef struct { vbq_t f[4]; } vband_t;                  /* two high-passes, two low-passes */
+static void vband_set(vband_t *b, double lo, double hi) { for (int k = 0; k < 4; k++) vbq_set(&b->f[k], k < 2, k < 2 ? lo : hi); }
+static double vband(vband_t *b, double x) { for (int k = 0; k < 4; k++) x = vbq(&b->f[k], x); return x; }
+static double vt20(const double *e, int n)
+{
+    double tot = 0, acc, t5 = -1, t15 = -1, t25 = -1;
+    for (int i = 0; i < n; i++) tot += e[i];
+    if (tot <= 0) return 0;
+    acc = tot;
+    for (int i = 0; i < n && t25 < 0; i++) {
+        double d = 10 * log10(acc / tot + 1e-30);
+        if (t5 < 0 && d <= -5) t5 = (double)i / M2K_SR;
+        if (t15 < 0 && d <= -15) t15 = (double)i / M2K_SR;
+        if (d <= -25) t25 = (double)i / M2K_SR;
+        acc -= e[i];
+    }
+    return t25 >= 0 && t5 >= 0 ? 3 * (t25 - t5) : t15 >= 0 && t5 >= 0 ? 6 * (t15 - t5) : 0;
+}
+static void verb_at(int dc, int dm, double sec, double *out)
+{
+    static int32_t L[M2K_SUB], R[M2K_SUB], rs[M2K_SUB];
+    static int16_t o[2 * M2K_SUB];
+    static const double FC[5] = {250, 500, 1000, 2000, 4000};
+    int cut = (int)(1.5 * M2K_SR) / M2K_SUB * M2K_SUB, n = (int)(sec * M2K_SR) / M2K_SUB * M2K_SUB;
+    double *e[6];
+    vband_t bd[5][2], mid[2];
+    for (int k = 0; k < 6; k++) e[k] = calloc((size_t)n, sizeof(double));
+    for (int k = 0; k < 5; k++) for (int c = 0; c < 2; c++) vband_set(&bd[k][c], FC[k] / sqrt(2), FC[k] * sqrt(2));
+    for (int pass = 0; pass < 2; pass++) {               /* the noise, then the impulse */
+        m2k_init(7);
+        m2k_pattern_t *p = &pat[16];
+        p->glob[G_VERB] = (uint8_t)dc;
+        p->glob[G_DAMP] = (uint8_t)dm;
+        cur_pat = 16;
+        uint32_t nz = 12345;
+        double ea = 0, em = 0, eb[5] = {0};
+        vband_set(&mid[0], 177, 5657); vband_set(&mid[1], 177, 5657);
+        if (pass) for (int k = 0; k < 5; k++) for (int c = 0; c < 2; c++) vband_set(&bd[k][c], FC[k] / sqrt(2), FC[k] * sqrt(2));
+        for (int f = 0; f < (pass ? n : cut + n); f += M2K_SUB) {
+            m_set(L, 0, sizeof L); m_set(R, 0, sizeof R); m_set(rs, 0, sizeof rs);
+            if (!pass && f < cut)
+                for (int i = 0; i < M2K_SUB; i++) { nz ^= nz << 13; nz ^= nz >> 17; nz ^= nz << 5; rs[i] = (int32_t)(nz % 24001) - 12000; }
+            if (pass && !f) rs[0] = 30000;
+            bus_block(L, R, rs, o);
+            for (int i = 0; i < M2K_SUB; i++) {
+                double l = o[2 * i], r = o[2 * i + 1];
+                if (!pass) {
+                    for (int k = 0; k < 5; k++) {
+                        double bl = vband(&bd[k][0], l), br = vband(&bd[k][1], r);
+                        if (f >= cut) e[k + 1][f - cut + i] = bl * bl + br * br;
+                    }
+                    if (f >= cut) e[0][f - cut + i] = l * l + r * r;
+                } else {
+                    double ml = vband(&mid[0], l), mr = vband(&mid[1], r);
+                    ea += l * l + r * r; em += ml * ml + mr * mr;
+                    for (int k = 0; k < 5; k++) { double bl = vband(&bd[k][0], l), br = vband(&bd[k][1], r); eb[k] += bl * bl + br * br; }
+                }
+            }
+        }
+        if (pass) {
+            out[6] = 10 * log10(em / 9e8 + 1e-30);
+            out[7] = 10 * log10(ea / 9e8 + 1e-30);
+            for (int k = 0; k < 5; k++) out[8 + k] = 10 * log10(eb[k] / 9e8 + 1e-30);
+        }
+    }
+    for (int k = 0; k < 6; k++) { out[k] = vt20(e[k], n); free(e[k]); }
+}
+
+/* GLCH on the reference mix, every value over BARS bars (tools/conv17.py): the events started a bar, the share of the
+ * time one sounds, the glitch's energy (the output less GLCH 0's, against GLCH 0's, dB) */
+static int glch_curve(int bars)
+{
+    const int frames = bars * 2 * M2K_SR / 16 * 16;
+    int16_t *dry = malloc((size_t)frames * 4), *b = malloc((size_t)frames * 4);
+    bus_ref(1, G_GLCH, 0, 64);
+    for (int f = 0; f < frames; f += 16) m2k_render(dry + 2 * f, 16);
+    double ed = 0;
+    for (int i = 0; i < 2 * frames; i++) ed += (double)dry[i] * dry[i];
+    for (int v = 0; v < 128; v++) {
+        bus_ref(1, G_GLCH, v, 64);
+        long starts = 0, on = 0;
+        int last = 0;
+        for (int f = 0; f < frames; f += 16) {
+            m2k_render(b + 2 * f, 16);
+            starts += mon.glitch && !last;
+            on += mon.glitch != 0;
+            last = mon.glitch;
+        }
+        double e = 0;
+        for (int i = 0; i < 2 * frames; i++) { double d = (double)b[i] - dry[i]; e += d * d; }
+        printf("%d %.4f %.3f %.2f\n", v, (double)starts / bars, 100.0 * on / (frames / 16), e > 0 ? 10 * log10(e / ed) : -150.0);
+        fflush(stdout);
+    }
+    free(dry);
+    free(b);
+    return 0;
+}
+
+/* the reverb on the pairs read from stdin ("DCAY DAMP SECONDS" a line), its measures a line each (tools/conv17.py) */
+static int verb_grid(void)
+{
+    int dc, dm;
+    double sec, m[13];
+    while (scanf("%d %d %lf", &dc, &dm, &sec) == 3) {
+        verb_at(dc, dm, sec, m);
+        printf("%d %d %.3f %.3f %.3f %.3f %.3f %.3f %.2f %.2f %.2f %.2f %.2f %.2f %.2f\n", dc, dm, m[0], m[1], m[2], m[3], m[4], m[5], m[6],
+               m[7], m[8], m[9], m[10], m[11], m[12]);
+        fflush(stdout);
+    }
+    return 0;
+}
+
 /* every value of the bus's controls, measured on the engine's output (DIR/bus.tsv; the hiss as WAVs, separated from
  * its crackle by tools/bus_curves.py):
- *   GLCH  repeats started per bar and the share of the time the mix is replaced (the engine's glitch flag), 256 bars
- *         of the sequencer on silence at 120, repeats of a sixteenth
+ *   GLCH  repeats started per bar and the share of the time one sounds (the engine's glitch flag), 256 bars of the
+ *         sequencer on silence at 120, a sixteenth's slice; and the glitch's energy on the reference mix (its output
+ *         less GLCH 0's, against GLCH 0's, dB; 64 bars)
  *   ADPC  DRIV  the reference mix through the control against itself without: the gain (least squares) and what is
  *         left over it (dB under the clean part), the output's rms and peak
- *   TAPE  wow and flutter (cents, a held 1047 Hz sine), the loss at 8.4 kHz (a held sine, dB) */
+ *   TAPE  wow and flutter (cents, a held 1047 Hz sine), the loss at 8.4 kHz (a held sine, dB)
+ *   DCAY  the reverb's RT60 (the whole; 250 Hz, 1 kHz, 4 kHz) and its energy (dB), at DAMP 32
+ *   DAMP  the same at DCAY 80 */
 static int bus_measure(const char *dir)
 {
     char path[512];
     snprintf(path, sizeof path, "%s/bus.tsv", dir);
     FILE *o = fopen(path, "w");
     if (!o) { perror(path); return 1; }
-    fprintf(o, "ctl\tv\ta\tb\tc\td\n");
+    fprintf(o, "ctl\tv\ta\tb\tc\td\te\n");
     /* the glitch: starts per bar, duty (256 bars: a chance's count wants many) */
     for (int v = 0; v < 128; v++) {
         bus_ref(0, G_GLCH, v, 64);
@@ -583,11 +721,38 @@ static int bus_measure(const char *dir)
         for (int f = 0; f < frames; f += 16) {
             m2k_render(lr, 16);
             starts += mon.glitch && !last;
-            on += mon.glitch;
+            on += mon.glitch != 0;
             last = mon.glitch;
             blocks++;
         }
         fprintf(o, "GLCH\t%d\t%.4f\t%.3f\t0\t0\n", v, (double)starts / bars, 100.0 * on / blocks);
+    }
+    {                                                    /* the glitch's energy over the reference mix */
+        const int frames = 64 * 2 * M2K_SR / 16 * 16;
+        int16_t *dry = malloc((size_t)frames * 4), *b = malloc((size_t)frames * 4);
+        bus_ref(1, G_GLCH, 0, 64);
+        for (int f = 0; f < frames; f += 16) m2k_render(dry + 2 * f, 16);
+        double ed = 0;
+        for (int i = 0; i < 2 * frames; i++) ed += (double)dry[i] * dry[i];
+        for (int v = 0; v < 128; v++) {
+            bus_ref(1, G_GLCH, v, 64);
+            for (int f = 0; f < frames; f += 16) m2k_render(b + 2 * f, 16);
+            double e = 0;
+            for (int i = 0; i < 2 * frames; i++) { double d = (double)b[i] - dry[i]; e += d * d; }
+            fprintf(o, "GLCE\t%d\t%.2f\t0\t0\t0\n", v, e > 0 ? 10 * log10(e / ed) : -150.0);
+        }
+        free(dry);
+        free(b);
+    }
+    for (int v = 1; v < 128; v++) {                      /* the reverb: DCAY at DAMP 32, DAMP at DCAY 80 */
+        double m[13];
+        verb_at(v, 32, 1.5 + 0.18 * pow(80, (v - 1) / 126.0), m);
+        fprintf(o, "DCAY\t%d\t%.3f\t%.3f\t%.3f\t%.3f\t%.2f\n", v, m[0], m[1], m[3], m[5], m[6]);
+    }
+    for (int v = 0; v < 128; v++) {
+        double m[13];
+        verb_at(80, v, 4.0, m);
+        fprintf(o, "DAMP\t%d\t%.3f\t%.3f\t%.3f\t%.3f\t%.2f\n", v, m[0], m[1], m[3], m[5], m[6]);
     }
     /* the hiss and dust: 12 s after a second's fade-in, as mono WAVs (the left: both carry the same) */
     {
@@ -892,6 +1057,21 @@ static int amp_when(const int32_t *lv, int n, int i0, int up, double f, int32_t 
     for (int i = i0; i < n; i++) if (up ? lv[i] >= f * ref : lv[i] < f * ref) return i;
     return -1;
 }
+/* a held 440 Hz sine on T1 (GND-SIN, HOLD and DEC at INF, its note held from the keys: sine_on after eng_go) */
+static void sine_track(m2k_pattern_t *q)
+{
+    kit_default(q, 0, M_GSIN);
+    q->kit[0][P_HOLD] = 127; q->kit[0][P_DEC] = 127;
+}
+static void sine_on(void) { m2k_midi(0x90, 69, 100); }
+/* the largest step from one sample to the next, either channel, in frames [a, b) */
+static double step_max(const int16_t *x, int a, int b)
+{
+    double m = 0;
+    for (int i = (a < 1 ? 1 : a); i < b; i++)
+        for (int c = 0; c < 2; c++) { double d = fabs((double)x[2 * i + c] - x[2 * (i - 1) + c]); if (d > m) m = d; }
+    return m;
+}
 /* track 0's delay has nothing left, in its quiet test's terms: every entry of its line silent, its filters at rest */
 static int eng_dly_quiet(void)
 {
@@ -989,7 +1169,7 @@ static int selftest(void)
         lk(&a, 0, 8, P_SYN + 1, 99);
         lk(&a, 0, 12, P_SYN, 65);
         int n = pat_pack(&a, bl);
-        CHECK(bl[1] == 16, "format: patterns are written as version 16");
+        CHECK(bl[1] == 17, "format: patterns are written as version 17");
         n = pat_pack_v(&a, bl, 4);
         CHECK(pat_unpack(&b, bl, n), "format: a version-4 pattern loads");
         CHECK(b.kit[0][P_DIST] == T_V5_DIST[34] && b.kit[0][P_DTIM] == 32 && b.kit[0][P_DSND] == 64 &&
@@ -1061,6 +1241,7 @@ static int selftest(void)
             for (int t = 0; t < M2K_TRACKS; t++) if (w.machine[t] == M_GSIN) w.machine[t] = M_GPRC;   /* (no page that converts) */
             for (int t = 0; t < M2K_TRACKS; t++) for (int k = 0; k < P_WBNK; k++) w.kit[t][k] = (uint8_t)((t * 31 + k * 7) & 127);
             for (int t = 0; t < M2K_TRACKS; t++) w.kit[t][P_HOLD] = 127;  /* INF: HOLD's conversion (13) leaves it */
+            for (int t = 0; t < M2K_TRACKS; t++) { w.kit[t][P_SPU] = 0; w.kit[t][P_DSND] = 64; }   /* (17 turns sends) */
             int wn = pat_pack_v(&w, wb, 7);
             int same = pat_unpack(&w2, wb, wn);
             static m2k_pattern_t we;                                     /* (16 turns the amp's and the LFOs' alone) */
@@ -1080,7 +1261,7 @@ static int selftest(void)
             int bad = 0;
             for (int o = 1; o < 128; o++) {
                 int vg = T_V9_GLCH[o], vd = T_V9_DRIV[o], vt = T_V9_TAPE[o], va = T_V9_ADPC[o], vh = T_V9_HISS[o];
-                if (fabs(log(T_GLCH_P[vg] / (256.0 * o))) > 0.025) bad++;
+                if (fabs(log(2560.0 * pow(12.7, (vg - 64) / 63.0) / (256.0 * o))) > 0.025) bad++;   /* (9's law) */
                 if (fabs(20 * log10(T_DRIV[vd] / (256.0 + 10 * o))) > 0.15) bad++;
                 if (o > 3 ? fabs(log(T_TAPE_Q8[vt] / (256.0 * o))) > 0.02 : vt != 1) bad++;
                 if ((va * 2 > 127 ? 127 : va * 2) != (o * 2 > 127 ? 127 : o * 2) || T_ADPC_DIV[va] != 256 * (1 + (o > 64 ? (o - 64) / 22 : 0))) bad++;
@@ -1093,11 +1274,11 @@ static int selftest(void)
             m_cpy(&w, &pat[16], sizeof w);
             w.glob[G_GLCH] = 30; w.glob[G_HISS] = 10; w.glob[G_ADPC] = 90; w.glob[G_DRIV] = 20; w.glob[G_TAPE] = 30;
             int wn = pat_pack_v(&w, wb, 8);
-            int conv = pat_unpack(&w2, wb, wn) && w2.glob[G_GLCH] == 91 && w2.glob[G_HISS] == 64 && w2.glob[G_ADPC] == 96 &&
+            int conv = pat_unpack(&w2, wb, wn) && w2.glob[G_GLCH] == T_V17_GLCH[91] && w2.glob[G_HISS] == 64 && w2.glob[G_ADPC] == 96 &&
                        w2.glob[G_DRIV] == 81 && w2.glob[G_TAPE] == 78;
             wn = pat_pack(&w, wb);
             CHECK(conv && pat_unpack(&w2, wb, wn) && !memcmp(w2.glob, w.glob, G_COUNT),
-                  "format: a version-8 pattern's bus converts on load (GLCH 30 -> 91 ...), today's loads as it is");
+                  "format: a version-8 pattern's bus converts on load (GLCH 30 -> 91 at 9, then 17's ...), today's loads as it is");
         }
         /* FM+'s pages (10): an old FM+STAT and FM+DYN (RAT1 DEP1 DEC1 RAT2 DEP2 DEC2 FDBK ALGO / SWEP) carried over */
         {
@@ -1147,7 +1328,8 @@ static int selftest(void)
                 if (w2.machine[t] == M_GSIN || w2.machine[t] == M_SID || w2.machine[t] == M_VOX) w2.machine[t] = M_GPRC;
             wn = pat_pack_v(&w2, wb, 10);                   /* and a version-10 pattern: its FM pages already the new ones */
             wn2 = pat_unpack(&w, wb, wn) ? pat_pack(&w, wb2) : 0;
-            feel_v15(&w2);                                  /* (its amp and LFOs: 16's) */
+            feel_v15(&w2);                                  /* (its amp and LFOs: 16's; its bus: 17's) */
+            fx_v16(&w2);
             int wn3 = pat_pack(&w2, wb);
             CHECK(wn2 == wn3 && !memcmp(wb, wb2, (size_t)wn3), "format: version 10's FM pages load unconverted");
         }
@@ -1936,21 +2118,26 @@ static int selftest(void)
         static uint8_t k0[M2K_SOUNDS][P_COUNT];
         for (int i = 0; i < M2K_SOUNDS; i++) m_cpy(k0[i], snd[i].kit, P_COUNT);
         n = m2k_store_pack();
-        int v4 = store_buf[4] == 4;
+        int v5 = store_buf[4] == 5;
         m2k_init(21);
         ok = m2k_store_unpack(n) == 1;
         for (int i = 0; i < M2K_SOUNDS; i++) ok &= !memcmp(k0[i], snd[i].kit, P_COUNT);
-        store_buf[4] = 3;
-        m2k_init(22);
-        int conv = m2k_store_unpack(n) == 1, moved = 0;
-        for (int i = 0; i < M2K_SOUNDS; i++) {
-            uint8_t e[P_COUNT];
-            m_cpy(e, k0[i], P_COUNT);
-            feel_kit_v15(e);
-            conv &= !memcmp(e, snd[i].kit, P_COUNT);
-            moved += memcmp(e, k0[i], P_COUNT) != 0;
+        int conv = 1, moved = 0;
+        for (int sv = 3; sv <= 4; sv++) {
+            store_buf[4] = (uint8_t)sv;
+            m2k_init(22);
+            conv &= m2k_store_unpack(n) == 1;
+            for (int i = 0; i < M2K_SOUNDS; i++) {
+                uint8_t e[P_COUNT];
+                m_cpy(e, k0[i], P_COUNT);
+                if (sv < 4) feel_kit_v15(e);
+                fx_kit_v16(e);
+                conv &= !memcmp(e, snd[i].kit, P_COUNT);
+                moved += memcmp(e, k0[i], P_COUNT) != 0;
+            }
         }
-        CHECK(v4 && ok && conv && moved > 0, "store: version 4; a version-3 store's sounds take format 16's amp and LFO laws");
+        CHECK(v5 && ok && conv && moved > 0,
+              "store: version 5; a version-4 store's sounds take format 17's sends, a version-3's 16's amp and LFO laws too");
     }
     {   /* OLD_PACKED's row for this revision is today's bank A packed: a bank changed is a new revision */
         int row = -1, same = 1;
@@ -4311,11 +4498,12 @@ static int selftest(void)
         CHECK(quiet, "delay: a tail under unity feedback ends, its line silent and its filters at rest");
     }
     {
-        /* the reverb ends in silence: a GND-NOIS hit into VERB 127 DAMP 127 (its combs ran negative and kept -9331 for
-         * ever), and into VERB 60 DAMP 96 */
+        /* the reverb ends in silence, no DC held (the old combs ran negative and kept -9331 for ever): a GND-NOIS hit into
+         * DCAY 127 DAMP 127 (24 s), DCAY 60 DAMP 96 and DCAY 1 DAMP 0; its lines empty and asleep within three of its
+         * RT60s (from a hit at -3 dBFS to a step), the output at zero */
         int dc = 0;
-        static const uint8_t VB[2][2] = {{127, 127}, {60, 96}};
-        for (int j = 0; j < 2; j++) {
+        static const uint8_t VB[3][2] = {{127, 127}, {60, 96}, {1, 0}};
+        for (int j = 0; j < 3; j++) {
             m2k_pattern_t *q = eng_pat(69);
             q->glob[G_VERB] = VB[j][0]; q->glob[G_DAMP] = VB[j][1];
             kit_default(q, 0, M_GNOI);
@@ -4324,10 +4512,13 @@ static int selftest(void)
             eng_go(q);
             eng_run(0.5);
             seq_play(0);
-            eng_run(10);
-            dc |= eng_out[2 * M2K_SUB - 2] | eng_out[2 * M2K_SUB - 1];
+            double lim = 3 * T_RV_MS[VB[j][0]] / 1000.0 + 2, t = 0;
+            for (; t < lim && !bus.rsleep; t += (double)M2K_SUB / M2K_SR) m2k_render(eng_out, M2K_SUB);
+            eng_run(0.1);
+            dc |= !bus.rsleep || eng_out[2 * M2K_SUB - 2] || eng_out[2 * M2K_SUB - 1];
+            printf("     reverb DCAY %d DAMP %d: silent and asleep after %.1f s\n", VB[j][0], VB[j][1], t);
         }
-        CHECK(!dc, "reverb: its tail ends at zero (no DC left in the combs)");
+        CHECK(!dc, "reverb: its tail ends at zero, its lines empty within three RT60s (no DC held)");
     }
     {
         /* a held PERFORM repeat keeps repeating (the ring went on being written, over its slice after 0.74 s): a
@@ -4347,6 +4538,273 @@ static int selftest(void)
         free(rec);
         bus_perform(PF_R4, 0);
         CHECK(ok, "PERFORM: a held repeat goes on repeating its slice");
+    }
+    {
+        /* format 17: an old pattern's bus turns on load. The sends straight: VERB 64 to 32 (the reverb off: no level made
+         * up), a lock of it too, DSND 80 to 68, a lock of 48 to 60, 0 and 127 as they were, a send of 1 still on; GLCH by
+         * its table. At a node of the reverb's grid (old DCAY 127 DAMP 0: +3 dB) the node's pair, each send with its
+         * level; between four nodes (old 72 72) half of each; today's loads as it is */
+        static m2k_pattern_t w, w2;
+        static uint8_t wb[BLOB_MAX], wb2[BLOB_MAX];
+        m_set(&w, 0, sizeof w);
+        pat_init(&w, "OLD17");
+        w.glob[G_VERB] = 0; w.glob[G_DAMP] = 50; w.glob[G_GLCH] = 30;
+        w.kit[0][P_SPU] = 64; w.kit[1][P_DSND] = 80; w.kit[2][P_DSND] = 0; w.kit[3][P_DSND] = 127; w.kit[4][P_SPU] = 1;
+        lk(&w, 0, 4, P_SPU, 64);
+        lk(&w, 1, 4, P_DSND, 48);
+        int wn = pat_pack_v(&w, wb, 15), ok = pat_unpack(&w2, wb, wn), lks = 0;
+        for (int i = 0; i < M2K_LOCKS; i++) {
+            if (w2.lock[i].trk == 0 && w2.lock[i].param == P_SPU) lks += w2.lock[i].val == 32;
+            if (w2.lock[i].trk == 1 && w2.lock[i].param == P_DSND) lks += w2.lock[i].val == 60;
+        }
+        ok = ok && w2.glob[G_VERB] == 0 && w2.kit[0][P_SPU] == 32 && w2.kit[1][P_DSND] == 68 && w2.kit[2][P_DSND] == 0 &&
+             w2.kit[3][P_DSND] == 126 && w2.kit[4][P_SPU] == 1 && w2.glob[G_GLCH] == T_V17_GLCH[30] && lks == 2;
+        CHECK(ok, "format: version 15 -> 17, the sends straight (VERB 64 -> 32, its lock too, DSND 80 -> 68, a lock 48 -> 60), GLCH by its table");
+        /* a version-16 pattern takes 17's bus alone: today's A01 packed as 16 loads with its amp and LFOs as they are */
+        static m2k_pattern_t x, y;
+        m2k_init(23);
+        x = pat[0];
+        x.glob[G_GLCH] = 40;
+        wn = pat_pack_v(&x, wb, 16);
+        int same16 = pat_unpack(&y, wb, wn) && y.glob[G_GLCH] == T_V17_GLCH[40];
+        for (int t = 0; t < M2K_TRACKS; t++) {
+            same16 &= !memcmp(&y.kit[t][P_ATK], &x.kit[t][P_ATK], 4);
+            for (int l = 0; l < 3; l++) same16 &= y.kit[t][P_LFO + 8 * l + L_SPD] == x.kit[t][P_LFO + 8 * l + L_SPD] &&
+                                                 y.kit[t][P_LFO + 8 * l + L_DPTH] == x.kit[t][P_LFO + 8 * l + L_DPTH];
+        }
+        /* and the bank before is turned at build onto 17's bus too: A03 HAZE, written at DCAY 74 DAMP 80 */
+        m_set(&x, 0, sizeof x);
+        for (int i = 0; i < M2K_LOCKS; i++) x.lock[i].trk = 0xFF;
+        x.glob[G_VERB] = 74; x.glob[G_DAMP] = 80;
+        fx_v16(&x);
+        m2k_init(24);
+        factory_rev9();
+        CHECK(same16 && pat[2].glob[G_VERB] == x.glob[G_VERB] && pat[2].glob[G_DAMP] == x.glob[G_DAMP],
+              "format: version 16 takes 17's bus alone (its amp and LFOs as they are); the bank before turned onto 17's at build");
+        w.glob[G_VERB] = 127; w.glob[G_DAMP] = 0;
+        wn = pat_pack_v(&w, wb, 16);
+        ok = pat_unpack(&w2, wb, wn) && w2.glob[G_VERB] == T_V17_RV[72][0] && w2.glob[G_DAMP] == T_V17_RV[72][1] &&
+             w2.kit[0][P_SPU] == spu_v16(64, T_V17_RVL[72]) && w2.kit[0][P_SPU] != 32;
+        w.glob[G_VERB] = 72; w.glob[G_DAMP] = 72;
+        wn = pat_pack_v(&w, wb, 16);
+        int dc = (T_V17_RV[40][0] + T_V17_RV[41][0] + T_V17_RV[49][0] + T_V17_RV[50][0] + 2) / 4;
+        int dm = (T_V17_RV[40][1] + T_V17_RV[41][1] + T_V17_RV[49][1] + T_V17_RV[50][1] + 2) / 4;
+        ok = ok && pat_unpack(&w2, wb, wn) && abs(w2.glob[G_VERB] - dc) <= 1 && abs(w2.glob[G_DAMP] - dm) <= 1;
+        wn = pat_pack(&w2, wb);
+        int wn2 = pat_unpack(&w, wb, wn) ? pat_pack(&w, wb2) : 0;
+        CHECK(ok && wn2 == wn && !memcmp(wb, wb2, (size_t)wn),
+              "format: 17's reverb pair at a node of its grid and between four, each send by its level; today's loads as it is");
+    }
+    {
+        /* the reverb's length and colour (m2k_host --bus's measure): 0.3 s at DCAY 1, past 18 s at 127, 2 .. 3.3 s at
+         * 64; DAMP 0 bright (the top's RT60 at 4 kHz past 0.8 of the bottom's at 250 Hz), 127 dark (under a quarter) */
+        double a[13], b[13], c[13], d[13], e[13];
+        verb_at(1, 0, 3, a);
+        verb_at(127, 0, 16, b);
+        verb_at(64, 32, 4, c);
+        verb_at(100, 0, 8, d);
+        verb_at(100, 127, 8, e);
+        printf("     reverb RT60: DCAY 1 %.2f s, 64 %.2f s, 127 %.1f s; at 100 the top against the bottom: DAMP 0 %.2f, 127 %.2f\n",
+               a[0], c[0], b[2], d[5] / d[1], e[5] / e[1]);
+        CHECK(a[0] < 0.45 && b[2] > 18 && c[0] > 2 && c[0] < 3.3 && d[5] > 0.8 * d[1] && e[5] < 0.25 * e[1],
+              "reverb: 0.3 s to past 18 s; DAMP from bright (the top as long) to dark (under a quarter)");
+    }
+    {
+        /* the sends straight: a held sine's reverb at VERB 32 is 12 dB under VERB 127's (it was 24, the square); the
+         * delay's first echo of a DRM-HATS hit at DSND 80 is 12 dB under DSND 127's (25 dB under the hit, it was) */
+        double r[2];
+        static int16_t o[2][2 * 2 * M2K_SR];
+        static const uint8_t SV[2] = {32, 127};
+        for (int k = 0; k < 2; k++) {
+            for (int z = 0; z < 2; z++) {
+                m2k_pattern_t *q = eng_pat(73);
+                q->glob[G_VERB] = 64; q->glob[G_DAMP] = 0;
+                kit_default(q, 0, M_GSIN);
+                q->kit[0][P_HOLD] = 127; q->kit[0][P_DEC] = 127; q->kit[0][P_GATE] = 127; q->kit[0][P_SPU] = z ? SV[k] : 0;
+                q->step[0][0] = (m2k_step_t){.note = 69, .flags = ST_TRIG};
+                eng_go(q);
+                for (int f = 0; f < 2 * M2K_SR / M2K_SUB * M2K_SUB; f += M2K_SUB) m2k_render(o[z] + 2 * f, M2K_SUB);
+            }
+            double s = 0;
+            for (int i = M2K_SR; i < 4 * M2K_SR; i++) { double dd = (double)o[1][i] - o[0][i]; s += dd * dd; }
+            r[k] = s;
+        }
+        double rv = 10 * log10(r[0] / r[1]), ec[2], hit = 0;
+        static const uint8_t DV[2] = {80, 127};
+        for (int k = 0; k < 2; k++) {
+            m2k_pattern_t *q = eng_pat(74);
+            q->glob[G_VERB] = 0;
+            kit_default(q, 0, M_DHAT);
+            q->kit[0][P_DTIM] = 32; q->kit[0][P_DFB] = 64; q->kit[0][P_DSND] = DV[k];
+            q->step[0][0] = (m2k_step_t){.note = 60, .flags = ST_TRIG};
+            eng_go(q);
+            int n = M2K_SR / M2K_SUB * M2K_SUB;
+            for (int f = 0; f < n; f += M2K_SUB) m2k_render(o[0] + 2 * f, M2K_SUB);
+            double pk = 0, h = 0;
+            for (int i = 0; i < 2 * n; i++) {
+                double v = fabs((double)o[0][i]);
+                if (i < 2 * M2K_SR / 10) h = v > h ? v : h;
+                else if (i >= 2 * (int)(0.15 * M2K_SR) && i < 2 * (int)(0.45 * M2K_SR)) pk = v > pk ? v : pk;
+            }
+            ec[k] = pk;
+            hit = h;
+        }
+        printf("     sends: VERB 32 against 127 %.1f dB; DSND 80's first echo %.1f dB under DSND 127's, %.1f under the hit\n",
+               rv, 20 * log10(ec[1] / ec[0]), 20 * log10(hit / ec[0]));
+        CHECK(fabs(rv + 12) < 1.5 && fabs(20 * log10(ec[1] / ec[0]) - 12) < 1.5 && 20 * log10(hit / ec[0]) < 16,
+              "sends: straight in level, VERB and DSND (a hat's echo at DSND 80 well heard, 12 dB under 127's)");
+    }
+    {
+        /* GLCH low is subtle: at 5, over 64 bars of the reference mix, its glitch 35 dB under the mix (each repeat whole
+         * was 16 under), every event leaving the dry whole with the wet 15 dB under it at most; and it draws its own dice:
+         * the trigs on chances play the same with GLCH 0 and 100 */
+        const int frames = 64 * 2 * M2K_SR / 16 * 16;
+        int16_t *dry = malloc((size_t)frames * 4), *b = malloc((size_t)frames * 4);
+        bus_ref(1, G_GLCH, 0, 64);
+        for (int f = 0; f < frames; f += 16) m2k_render(dry + 2 * f, 16);
+        bus_ref(1, G_GLCH, 5, 64);
+        int whole = 1, events = 0, last = 0;
+        for (int f = 0; f < frames; f += 16) {
+            m2k_render(b + 2 * f, 16);
+            if (bus.g_on && !last) { events++; whole &= bus.g_dry == 32767 && bus.g_wet <= 5833; }
+            last = bus.g_on;
+        }
+        double e = 0, ed = 0;
+        for (int i = 0; i < 2 * frames; i++) { double dd = (double)b[i] - dry[i]; e += dd * dd; ed += (double)dry[i] * dry[i]; }
+        free(dry);
+        free(b);
+        printf("     GLCH 5: %d events in 64 bars, the glitch %.1f dB under the mix\n", events, -10 * log10(e / ed + 1e-30));
+        CHECK(events > 0 && whole && 10 * log10(e / ed + 1e-30) < -35, "GLCH: low is subtle (rare, under the dry, quiet)");
+        static uint8_t seen[2][4096];
+        for (int k = 0; k < 2; k++) {
+            m2k_init(75);
+            m2k_pattern_t *q = &pat[0];
+            q->glob[G_GLCH] = k ? 100 : 0;
+            for (int t = 0; t < 4; t++) for (int s = 0; s < 16; s++) q->step[t][s] = (m2k_step_t){.note = 60, .flags = ST_TRIG, .cond = C_P50};
+            cur_pat = 0; sq.queued = 0;
+            lockmap_build();
+            for (int t = 0; t < M2K_TRACKS; t++) m_cpy(trk[t].eff, q->kit[t], P_COUNT);
+            seq_play(1);
+            uint8_t tr[M2K_TRACKS];
+            m_cpy(tr, mon.trig, sizeof tr);
+            for (int f = 0; f < 4096; f++) {               /* (4096 blocks: 1.5 s, six bars' trigs at 120) */
+                m2k_render(eng_out, M2K_SUB);
+                seen[k][f] = 0;
+                for (int t = 0; t < 4; t++) if (mon.trig[t] != tr[t]) { seen[k][f] |= (uint8_t)(1u << t); tr[t] = mon.trig[t]; }
+            }
+        }
+        CHECK(!memcmp(seen[0], seen[1], sizeof seen[0]), "GLCH: its own dice (the trigs' chances play alike with it up)");
+    }
+    {
+        /* every glitch and PERFORM change crossfades: on a held 440 Hz sine, no sample step larger than 1.3 x the sine's
+         * own (a hard cut or a seam's jump is up to twice its swing a step: 1.3 x catches it); GLCH 10 (plain repeats)
+         * over 48 bars, and each PERFORM key pressed mid-beat and let go a beat later, against the louder of the sine's
+         * and the effect's own steps (a crush's stairs, a drive's edge) */
+        const int frames = 48 * 2 * M2K_SR / 16 * 16;
+        int16_t *b = malloc((size_t)frames * 4);
+        double ds = 0, gs = 0;
+        for (int k = 0; k < 2; k++) {
+            m2k_pattern_t *q = eng_pat(76);
+            q->glob[G_VERB] = 0; q->glob[G_GLCH] = k ? 10 : 0;
+            sine_track(q);
+            eng_go(q);
+            sine_on();
+            int on = 0;
+            for (int f = 0; f < frames; f += 16) { m2k_render(b + 2 * f, 16); on += bus.g_on; }
+            double m = step_max(b, M2K_SR, frames);
+            if (k) gs = m; else ds = m;
+            if (k && !on) gs = 1e9;
+        }
+        int bad = gs > 1.3 * ds;
+        printf("     GLCH 10 on a sine: its largest step %.2f x the sine's\n", gs / ds);
+        double worst = 0;
+        int wk = -1;
+        for (int k = 0; k < PF_COUNT; k++) {
+            m2k_pattern_t *q = eng_pat(77);
+            q->glob[G_VERB] = 0;
+            sine_track(q);
+            eng_go(q);
+            sine_on();
+            int n = 3 * M2K_SR / 16 * 16, at = (int)(1.1 * M2K_SR) / 16 * 16, off = at + M2K_SR / 2 / 16 * 16;
+            for (int f = 0; f < n; f += 16) {
+                if (f == at) bus_perform(k, 1);
+                if (f == off) bus_perform(k, 0);
+                m2k_render(b + 2 * f, 16);
+            }
+            double own = step_max(b, at + M2K_SR / 10, off), ref = own > ds ? own : ds;
+            double s1 = step_max(b, at - 441, at + 882), s2 = step_max(b, off - 441, off + 882);
+            double r = (s1 > s2 ? s1 : s2) / ref;
+            if (r > worst) worst = r, wk = k;
+        }
+        free(b);
+        printf("     PERFORM on a sine: the worst entry or exit %.2f x the steps about it (key %d)\n", worst, wk + 1);
+        CHECK(!bad && worst < 1.3, "glitch and PERFORM: every entry, exit and seam crossfades (no step past the sound's own)");
+    }
+    {
+        /* PERFORM's repeats on the grid: R8 pressed 40 ms past a step plays the eighth that began on the last eighth
+         * (a quarter is a quarter at 120 BPM: 11025 half-rate samples, it was cut to 8192), coming round on each eighth;
+         * the stop slows in a straight line to nothing within its beat and spins back up once let go; the stutter is
+         * gated, about half of each 1/32 silent; DRIVE stays at the dry's level, never at full scale */
+        m2k_pattern_t *q = eng_pat(78);
+        q->glob[G_VERB] = 0;
+        sine_track(q);
+        eng_go(q);
+        sine_on();
+        eng_run(1.0 + 0.040);
+        bus_perform(PF_R4, 1);
+        int r4 = bus.g_len == (sps_q8 >> 9) * 4;
+        bus_perform(PF_R4, 0);
+        eng_run(0.3);
+        bus_perform(PF_R8, 1);
+        int grid = bus.g_start == bus.g_grid[1] && bus.g_len == (sps_q8 >> 9) * 2, round_ok = 1, was = sq.step;
+        for (int f = 0; f < M2K_SR; f += M2K_SUB) {
+            m2k_render(eng_out, M2K_SUB);
+            if (sq.step != was && !((sq.step - 1) & 1)) round_ok &= (bus.g_pos >> 12) < M2K_SUB;   /* (an eighth begins) */
+            was = sq.step;
+        }
+        bus_perform(PF_R8, 0);
+        eng_run(0.2);
+        bus_perform(PF_STOP, 1);
+        uint32_t last = bus.g_rate, beat = (sps_q8 >> 9) * 4;
+        int mono = 1, ticks = 0;
+        while (bus.g_rate && ticks < (int)beat * 2) { m2k_render(eng_out, M2K_SUB); mono &= bus.g_rate <= last; last = bus.g_rate; ticks += M2K_SUB / 2; }
+        int stop_ok = mono && !bus.g_rate && ticks <= (int)beat + 16;
+        eng_run(0.2);
+        bus_perform(PF_STOP, 0);
+        eng_run(0.4);
+        stop_ok &= !bus.g_on;
+        bus_perform(PF_STUT, 1);
+        eng_run(0.1);
+        int n = M2K_SR / 2 / M2K_SUB * M2K_SUB, quiet = 0, loud = 0;
+        static int16_t sb[2 * M2K_SR];
+        for (int f = 0; f < n; f += M2K_SUB) m2k_render(sb + 2 * f, M2K_SUB);
+        for (int i = 0; i + 32 <= n; i += 32) {
+            int pk = 0;
+            for (int j = 0; j < 32; j++) pk = abs(sb[2 * (i + j)]) > pk ? abs(sb[2 * (i + j)]) : pk;
+            quiet += pk < 100; loud += pk > 3000;
+        }
+        bus_perform(PF_STUT, 0);
+        int gated = quiet * 100 > 30 * (n / 32) && loud * 100 > 30 * (n / 32);
+        printf("     PERFORM: R4 %s, R8 on the grid %d, came round on each eighth %d; the stop %d ticks to rest; the stutter %d %% silent, %d %% sounding\n",
+               r4 ? "a quarter" : "cut", grid, round_ok, ticks, quiet * 100 / (n / 32), loud * 100 / (n / 32));
+        /* DRIVE on the reference mix: its rms within 1.5 dB of the dry's, no sample at full scale */
+        const int frames = 4 * M2K_SR / 16 * 16;
+        int16_t *b = malloc((size_t)frames * 4), *dr = malloc((size_t)frames * 4);
+        for (int k = 0; k < 2; k++) {
+            bus_ref(1, G_GLCH, 0, 64);
+            int16_t *dst = k ? b : dr;
+            for (int f = 0; f < frames; f += 16) { if (k && f == M2K_SR / 16 * 16) bus_perform(PF_DRIV, 1); m2k_render(dst + 2 * f, 16); }
+            if (k) bus_perform(PF_DRIV, 0);
+        }
+        double s0 = 0, s1 = 0;
+        int full = 0;
+        for (int i = 2 * 2 * M2K_SR; i < 2 * frames; i++) { s0 += (double)dr[i] * dr[i]; s1 += (double)b[i] * b[i]; full += abs(b[i]) >= 32767; }
+        free(b);
+        free(dr);
+        double dd = 10 * log10(s1 / s0);
+        printf("     PERFORM DRIVE: %+.1f dB against the dry, %d samples at full scale\n", dd, full);
+        CHECK(r4 && grid && round_ok && stop_ok && gated && fabs(dd) < 1.5 && !full,
+              "PERFORM: repeats on the grid, the stop slows to rest in its beat and spins up, the stutter gated, DRIVE level");
     }
     {
         /* DSND's LFO across 64 leaves the lines' layout (it followed the modulated value: a 16 KB line wiped at every
@@ -4454,6 +4912,8 @@ int main(int argc, char **argv)
 {
     if (argc > 1 && !strcmp(argv[1], "--selftest")) return selftest();
     if (argc > 1 && !strcmp(argv[1], "--text-sweep")) return text_sweep();
+    if (argc > 1 && !strcmp(argv[1], "--verb-grid")) return verb_grid();
+    if (argc > 2 && !strcmp(argv[1], "--glch-curve")) return glch_curve(atoi(argv[2]));
     if (argc > 1 && !strcmp(argv[1], "--bank-hash")) {        /* as host/m2k_link_test.c prints it, through the FM-1's cache */
         m2k_init(3);
         uint32_t h = 2166136261u;

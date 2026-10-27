@@ -1,8 +1,9 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /* MONO2K's effects. Each track has its own delay, as on the Monomachine (time in 1/64 notes, feedback, and a
  * base / width band in the loop); here it runs at half rate in 8-bit mu-law, which is the memory budget and the
- * colour. The bus is the lofi part: an SPU-flavoured reverb at 22 kHz, a beat-repeat glitch, tape wow and flutter,
- * a 4-bit ADPCM crunch, hiss and crackle, and a drive into the soft clip. */
+ * colour. The bus is the lofi part: a reverb at 22 kHz (a feedback delay network, 0.3 to 24 s), a glitch that grows
+ * from rare quiet repeats to wild, tape wow and flutter, a 4-bit ADPCM crunch, hiss and crackle, and a drive into the
+ * soft clip; and PERFORM's effects over them while FX is held. */
 
 static uint8_t mulaw_enc(int32_t x)
 {
@@ -39,8 +40,9 @@ static inline uint8_t mulaw_line(int32_t x, int32_t gate)
     return q;
 }
 
-/* the track's delay, after the Monomachine's (measured): DTIM in 256ths of a note plus 7.6 ms; the send (d / 64)^2,
- * negative keeping the source's side, positive ping-pong; feedback DFB / 64, unity at 64 and saturating above; the
+/* the track's delay, after the Monomachine's (measured): DTIM in 256ths of a note plus 7.6 ms; the send |d| / 64
+ * (format 17: the Monomachine's square, (d / 64)^2, left a third of the knob near silent), negative keeping the
+ * source's side, positive ping-pong; feedback DFB / 64, unity at 64 and saturating above; the
  * echoes through a one-pole HP at DBAS and a one-pole LP at DBAS + DWID. The line runs at half rate in 8-bit mu-law;
  * a time longer than the line slows its clock instead, the echoes darker, as a tape or a BBD would. Ping-pong
  * keeps a sum and a difference line, each half the memory */
@@ -160,28 +162,53 @@ static void delay_block(int ti, const int32_t *restrict in, int32_t *restrict L,
 #define GL_LEN 16384u
 static int16_t gl_buf[GL_LEN][2] POOL;
 static int16_t tp_buf[2048][2] POOL;
-static const uint16_t CB_LEN[4] = {557, 593, 641, 677};
-static const uint16_t AP_LEN[4] = {225, 341, 248, 367};
-static int16_t cb_buf[557 + 593 + 641 + 677] POOL;
-static int16_t ap_buf[225 + 341 + 248 + 367] POOL;
+/* the reverb's four lines at their whole size (22 kHz: 31 .. 47 ms, primes) and its two input diffusers, all in one
+ * ring with one write place: each sits its longest (and the sample read past it) behind the next, so none reaches
+ * another's, and none needs a wrap of its own */
+static const uint16_t RV_LEN[4] = {683, 797, 907, 1031}, RD_LEN[2] = {149, 211};
+#define RV_N 4096u
+static const uint16_t RV_AT[6] = {685, 685 + 799, 685 + 799 + 909, 685 + 799 + 909 + 1033,
+                                  685 + 799 + 909 + 1033 + 151, 685 + 799 + 909 + 1033 + 151 + 213};   /* (3790) */
+static int16_t rv_buf[RV_N] POOL;
 static const int8_t ADPCM_IDX[8] = {-1, -1, -1, -1, 2, 4, 6, 8};
 
 static struct {
     /* reverb */
-    uint16_t cb_pos[4], ap_pos[4];
-    int32_t cb_lp[4], cb_r[4];         /* the combs' damping and its remainders */
-    int32_t rv_acc, rv_l, rv_r;
-    /* glitch */
-    uint32_t gw, g_start, g_len, g_left, g_pos, g_rate;   /* g_pos, g_rate: Q12 */
-    uint8_t g_on, g_mode, g_phase;
-    int32_t g_fade;
-    int32_t gacc_l, gacc_r, gout_l, gout_r;
+    uint32_t rw;                       /* the ring's write place */
+    int32_t rlp[4], rlr[4];            /* the lines' damping and its remainders */
+    int32_t rq[4], rdq[2], rrq[2];     /* the lines', the diffusers' and the swing's remainders */
+    int32_t rbw, rbr;                  /* the input's top, and its remainder */
+    int32_t rv_l, rv_r;                /* the last output, for the half-rate's in-between */
+    uint32_t rsz;                      /* the room's size now, Q12 (it glides to DCAY's) */
+    uint32_t rmph;                     /* the swing's phase */
+    uint8_t rv_v, rv_d, rsleep;        /* DCAY and DAMP the coefficients were worked out for, rv_s the room */
+    uint32_t rv_s;
+    int32_t rgh, ra;                   /* the lines' gain / 2 and damping, Q15 */
+    int32_t rfade;                     /* turned off: the tail's way out, Q15 */
+    uint32_t rquiet;                   /* half-rate samples with nothing in and the lines within a step */
+    /* glitch: the ring (half rate) and the one event it plays, a GLCH repeat or a PERFORM key's */
+    uint32_t gw;                       /* the ring's write place */
+    uint32_t g_start, g_len;           /* the slice (or, stopping, the read's start) and its length */
+    uint32_t g_pos, g_rate;            /* the read: Q12 into the slice; its step Q24 (1 << 24 at pitch) */
+    uint32_t g_left, g_dec;            /* half-rate samples before it fades out (G_HELD: until let go); a stop's slowing */
+    int32_t g_env, g_wet, g_dry;       /* its level, Q10, fading in and out; the wet's and the dry's under it, Q15 */
+    uint8_t g_on, g_mode, g_phase, g_pk, g_next, g_spin;   /* g_pk, g_next: the PERFORM key holding it, waiting (+1) */
+    int32_t gacc_l, gacc_r, gout_l, gout_r, gprev_l, gprev_r;
+    uint32_t g_grid[3];                /* the ring's place at the last sixteenth, eighth and beat */
+    uint32_t grng;                     /* the glitch's own dice: the trigs' chances keep theirs */
     /* tape */
     uint32_t tw, wow, flut;
     int32_t tlp_l, tlp_r;
+    int32_t tq;                        /* the depth now (it glides to the control's or WOW's) */
+    int32_t tp_mix;                    /* the tape's share, Q15: all of it while TAPE is up, WOW's way in and out */
+    uint32_t tp_fill;                  /* samples into the line since it started (WOW from TAPE 0) */
     /* adpcm */
     int32_t ad_pred[2], ad_idx[2], ad_hold[2];
     uint16_t ad_acc;                   /* Q8 samples since the 4-bit sample was taken */
+    int32_t ad_mixq;                   /* the mix now, Q8 of the 0..127 one (around CRUSH it glides) */
+    uint8_t ad_perf, ad_warm;          /* CRUSH held (until its mix is back); blocks of its coder running unheard */
+    /* drive: PERFORM's, glided, its level held to the dry's */
+    int32_t dv, dv_e0, dv_e1, dv_g;    /* the gain now, Q8; the two levels; the hold, Q15 */
     /* hiss */
     uint32_t hs;
     int32_t hlp, crackle, hgain;       /* hgain: Q15, follows tape_rolling over ~0.3 s */
@@ -203,149 +230,452 @@ static inline int32_t adpcm_step(int c, int32_t x)
     return bus.ad_pred[c];
 }
 
-/* PERFORM (FX held): a black key's effect while it is held. Repeats of the last 1/4 .. 1/32 note, reversed, a tape
- * stop, a stutter (the glitch's own modes, held on); the crush, the wow and the drive at their most; a kill (the bus
- * silent). Let go, each fades out over the glitch's own 32 samples */
+/* ------------------------------------------------------------------------------ the glitch and PERFORM */
+
+/* the glitch plays one event at a time from the ring: a GLCH repeat (bus_step) or a PERFORM key's (bus_perform). Each
+ * fades in and out over GL_XF, and a slice's seam (its end into its start) crossfades over as much, so nothing cuts.
+ * The modes: a slice repeated, reversed, gated, an octave up or down, halved each time round (a roll), slowing (a
+ * tape stop on the slice); and PERFORM's stop, the live sound slowed to a halt as a tape */
+enum { GM_RPT, GM_REV, GM_GATE, GM_OCTU, GM_OCTD, GM_ROLL, GM_TSTOP, GM_STOP };
+#define GL_XF 64u                      /* 2.9 ms */
+#define GL_MAX (GL_LEN - 4 * GL_XF - 512)   /* the longest slice: a quarter from 85 BPM (slower, an eighth) */
+#define G_HELD 0x7FFFFFFFu
+#define G_UNITY (1u << 24)
+
+/* PERFORM (FX held): a black key's effect while it is held. Repeats of 1/4 .. 1/32 note, the last beat reversed, a
+ * tape stop, a gated stutter (1/32 hits of the last sixteenth): each locked to the sequencer's grid (a repeat's slice
+ * the one that began on the last beat, eighth or sixteenth, its first time round the sound coming in; the reverse the
+ * beat that ended there), played from where that puts it now, so the repeats fall on the beat however late the key;
+ * the crush, the wow and the drive at their most, each gliding in and out, the drive's level held to the dry's; a
+ * kill (the bus silent). Let go, each fades out (the stop spins back up first) */
 enum { PF_R4, PF_R8, PF_R16, PF_R32, PF_REV, PF_STOP, PF_STUT, PF_CRSH, PF_WOW, PF_DRIV, PF_KILL, PF_COUNT };
 static struct { uint8_t on[PF_COUNT]; int32_t kill; } perf = {{0}, 32767};
+
+static int seq_running(void);
+
+static uint32_t gl_rnd(void) { uint32_t x = bus.grng; x ^= x << 13; x ^= x >> 17; x ^= x << 5; return bus.grng = x; }
+
+static void gl_start(uint32_t start, uint32_t len, uint32_t pos, int mode, uint32_t left, int32_t wet, int32_t dry)
+{
+    bus.g_start = start;
+    bus.g_len = len;
+    bus.g_pos = pos << 12;
+    bus.g_rate = G_UNITY;
+    bus.g_left = left;
+    bus.g_mode = (uint8_t)mode;
+    bus.g_wet = wet;
+    bus.g_dry = dry;
+    bus.g_spin = 0;
+    bus.g_on = 1;
+}
+
+static void gl_perform(int k)
+{
+    uint32_t six = sps_q8 >> 9;                           /* a sixteenth in half-rate samples */
+    if (k == PF_STOP) {                                   /* the live sound from here, slowing over a beat */
+        gl_start(bus.gw - 2, GL_MAX, 0, GM_STOP, G_HELD, 32768, 0);
+        bus.g_dec = G_UNITY / (six * 4 > 64 ? six * 4 : 64);
+        bus.g_pk = (uint8_t)(k + 1);
+        return;
+    }
+    static const uint8_t EIGHTHS[7] = {32, 16, 8, 4, 32, 0, 4};   /* the slice in eighths of a sixteenth */
+    static const uint8_t GRID[7] = {2, 1, 0, 0, 2, 0, 0};         /* locked to the last beat, eighth, sixteenth */
+    uint32_t len = (six * EIGHTHS[k]) >> 3;
+    int res = GRID[k];
+    while (len > GL_MAX) { len >>= 1; if (res) res--; }   /* (slower than 85 BPM a quarter is too long: an eighth) */
+    if (len < 32) len = 32;
+    uint32_t space = six << res, e = bus.gw - bus.g_grid[res];
+    if (!seq_running() || e >= space + (six >> 1)) e = 0, bus.g_grid[res] = bus.gw;   /* no grid: from now */
+    /* a repeat's slice begins on the grid (its first time round the live sound coming in, so it starts on the
+     * attack); the reverse plays the beat that ended there */
+    uint32_t at = bus.g_grid[res] - (k == PF_REV ? len : 0);
+    gl_start(at, len, e % len, k == PF_REV ? GM_REV : k == PF_STUT ? GM_GATE : GM_RPT, G_HELD, 32768, 0);
+    bus.g_pk = (uint8_t)(k + 1);
+}
 
 static void bus_perform(int k, int down)
 {
     if (k < 0 || k >= PF_COUNT) return;
     perf.on[k] = (uint8_t)down;
     if (k > PF_STUT) return;
-    if (!down) {                                         /* the repeat lets go: its fade */
-        if (bus.g_on && bus.g_left > 32) bus.g_left = 32;
+    if (!down) {                                          /* let go: its own effect ends (a stop spins up first) */
+        if (bus.g_next == k + 1) bus.g_next = 0;
+        if (bus.g_on && bus.g_pk == k + 1) {
+            bus.g_pk = 0;
+            if (bus.g_mode == GM_STOP) bus.g_spin = 1;
+            else bus.g_left = 0;
+        }
         return;
     }
-    static const uint8_t SIXT[4] = {16, 8, 4, 2};        /* a quarter, an eighth, a sixteenth, a thirty-second, in eighths of a sixteenth */
-    uint32_t half_step = sps_q8 >> 9;                     /* a sixteenth in half-rate samples */
-    uint32_t len = k <= PF_R32 ? (half_step * SIXT[k]) >> 2 : half_step * 4;
-    len = CLAMP(len, 64u, 8192u);
-    bus.g_len = len;
-    bus.g_start = bus.gw - len;
-    bus.g_left = 0x7FFFFFFFu;                             /* until it is let go */
-    bus.g_pos = 0;
-    bus.g_rate = 4096;
-    bus.g_mode = (uint8_t)(k == PF_REV ? 1 : k == PF_STOP ? 2 : k == PF_STUT ? 3 : 0);
-    bus.g_on = 1;
-    bus.g_fade = 0;
+    if (bus.g_on) {                                       /* the one sounding fades out first, then this begins */
+        bus.g_next = (uint8_t)(k + 1);
+        bus.g_pk = 0;
+        bus.g_spin = 0;
+        bus.g_left = 0;
+        return;
+    }
+    gl_perform(k);
 }
 
-/* the sequencer calls this on every sixteenth: maybe start a repeat */
-static void bus_step(void)
+/* the sequencer calls this on each of the pattern's steps: the grid's places, then maybe a repeat. GLCH's laws
+ * (tools/gen_tables.py): low, a rare short repeat of a short slice under the dry, quietly; up the knob more often,
+ * louder, longer, the slice up to SIZE's, the dry giving way and the modes coming in, to wild at the top */
+static void bus_step(int s)
 {
+    bus.g_grid[0] = bus.gw;
+    if (!(s & 1)) bus.g_grid[1] = bus.gw;
+    if (!(s & 3)) bus.g_grid[2] = bus.gw;
     const uint8_t *g = PAT(cur_pat)->glob;
-    if (!g[G_GLCH] || bus.g_on) return;
-    if ((rnd32() & 0xFFFF) >= T_GLCH_P[g[G_GLCH]]) return;     /* a sixteenth's chance: 0.3 % at 1, 3.9 % at 64, 50 % at 127 */
-    static const uint8_t frac4[5] = {1, 2, 4, 8, 16};          /* 1/64 .. 1/4 in quarters of a sixteenth */
-    int n = (g[G_GSIZ] * 5) >> 7;
-    uint32_t half_step = sps_q8 >> 9;                           /* a sixteenth in half-rate samples */
-    uint32_t len = (half_step * frac4[n]) >> 2;
-    len = CLAMP(len, 64u, 8192u);
-    uint32_t dur = half_step > len ? half_step : len * 2;
-    if (rnd32() & 1) dur *= 2;
-    dur = CLAMP(dur, len, GL_LEN - len - 256);
-    bus.g_len = len;
-    bus.g_start = bus.gw - len;
-    bus.g_left = dur;
-    bus.g_pos = 0;
-    bus.g_rate = 4096;
-    bus.g_mode = (uint8_t)(rnd32() & 3);
-    bus.g_on = 1;
-    bus.g_fade = 0;
+    int v = g[G_GLCH];
+    if (!v || bus.g_on) return;
+    if ((gl_rnd() & 0xFFFF) >= T_GLCH_P[v]) return;
+    int n = (g[G_GSIZ] * 5) >> 7;                         /* 1/64 .. 1/4, at most the law's */
+    if (n > T_GL_CAP[v]) n = T_GL_CAP[v];
+    uint32_t six = sps_q8 >> 9, len = (six << n) >> 2;
+    len = CLAMP(len, 32u, GL_MAX);
+    uint32_t r = gl_rnd(), reps = T_GL_REP[v];            /* Q4 */
+    if (v > 50) reps = (reps * (12 + (r & 7))) >> 4;      /* the upper half, a length of its own each */
+    uint32_t dur = (len * reps) >> 4;
+    dur = CLAMP(dur, len, GL_LEN - len - 4 * GL_XF);
+    int mode = (int)((r >> 8) & 255) < T_GL_ART[v] ? 1 + (int)((r >> 16) % T_GL_NM[v]) : GM_RPT;
+    gl_start(bus.gw - len, len, 0, mode, dur, T_GL_WET[v], T_GL_DRY[v]);
+    if (mode == GM_OCTU) bus.g_rate = G_UNITY * 2;
+    if (mode == GM_OCTD) bus.g_rate = G_UNITY / 2;
+    if (mode == GM_TSTOP) bus.g_dec = G_UNITY / dur;
+}
+
+/* one half-rate sample of the event: the wet's next (gout), its read moved on */
+static void gl_tick(void)
+{
+    const uint32_t M = GL_LEN - 1;
+    uint32_t p = bus.g_pos >> 12, len = bus.g_len, mode = bus.g_mode;
+    int32_t fr = (int32_t)(bus.g_pos & 4095), l, r;
+    if (mode == GM_STOP) {
+        uint32_t k = bus.g_start + p;
+        l = gl_buf[k & M][0] + (((gl_buf[(k + 1) & M][0] - gl_buf[k & M][0]) * fr) >> 12);
+        r = gl_buf[k & M][1] + (((gl_buf[(k + 1) & M][1] - gl_buf[k & M][1]) * fr) >> 12);
+        /* a tape's head gives less as it slows: s (2 - s), nearly its square root, so the fall is heard to the end */
+        int32_t sp = (int32_t)(bus.g_rate >> 9), a = (sp * (65536 - sp)) >> 15;        /* Q15 */
+        l = (l * a) >> 15;
+        r = (r * a) >> 15;
+        if (bus.g_spin) {                                 /* let go: back up to speed over an eighth, then out */
+            uint32_t up = G_UNITY / ((sps_q8 >> 8) > 64 ? (sps_q8 >> 8) : 64);
+            bus.g_rate = bus.g_rate + up >= G_UNITY ? G_UNITY : bus.g_rate + up;
+            if (bus.g_rate == G_UNITY) { bus.g_spin = 0; bus.g_left = 0; }
+        } else bus.g_rate = bus.g_rate > bus.g_dec ? bus.g_rate - bus.g_dec : 0;   /* slowing in a straight line */
+    } else {
+        int rev = mode == GM_REV;
+        uint32_t k = rev ? bus.g_start + len - 1 - p : bus.g_start + p, k1 = rev ? k - 1 : k + 1;
+        l = gl_buf[k & M][0];
+        r = gl_buf[k & M][1];
+        if (fr) {                                         /* (only off pitch: a repeat reads whole samples) */
+            l += ((gl_buf[k1 & M][0] - l) * fr) >> 12;
+            r += ((gl_buf[k1 & M][1] - r) * fr) >> 12;
+        }
+        uint32_t xf = len >> 2 < GL_XF ? len >> 2 : GL_XF;
+        if (p + xf >= len) {                              /* the seam: into what leads to the slice's start */
+            uint32_t j = rev ? bus.g_start + 2 * len - 1 - p : bus.g_start + p - len;
+            int32_t w = (int32_t)(((p + xf - len) << 12) + (uint32_t)fr) / (int32_t)xf;   /* Q12 */
+            l += ((gl_buf[j & M][0] - l) * w) >> 12;
+            r += ((gl_buf[j & M][1] - r) * w) >> 12;
+        }
+        if (mode == GM_GATE) {                            /* open the first half of each time round, edges faded */
+            uint32_t on = len >> 1, e = len >> 3 < GL_XF / 2 ? len >> 3 : GL_XF / 2;
+            int32_t gt = p < e ? (int32_t)((p << 12) / e) : p < on - e ? 4096 : p < on ? (int32_t)(((on - p) << 12) / e) : 0;
+            l = (l * gt) >> 12;
+            r = (r * gt) >> 12;
+        } else if (mode == GM_TSTOP) {
+            int32_t sp = (int32_t)(bus.g_rate >> 9), a = (sp * (65536 - sp)) >> 15;
+            l = (l * a) >> 15;
+            r = (r * a) >> 15;
+            bus.g_rate = bus.g_rate > bus.g_dec ? bus.g_rate - bus.g_dec : 0;
+        }
+    }
+    bus.gprev_l = bus.gout_l;
+    bus.gprev_r = bus.gout_r;
+    bus.gout_l = l;
+    bus.gout_r = r;
+    bus.g_pos += bus.g_rate >> 12;
+    if (mode != GM_STOP && (bus.g_pos >> 12) >= len) {
+        bus.g_pos -= len << 12;
+        if (mode == GM_ROLL && len >= 128) bus.g_len = len >> 1;
+    }
+    if (bus.g_left != G_HELD && bus.g_left) bus.g_left--;
+}
+
+/* the ring's place w is one the event still reads: its slice and seams a lap on (its first time round they are
+ * the live sound coming in), or what a stop will read spinning up */
+static inline int gl_kept(uint32_t w)
+{
+    if (bus.g_mode == GM_STOP) return ((w - (bus.g_start + (bus.g_pos >> 12) - 2)) & (GL_LEN - 1)) < 8192u;
+    uint32_t d = w - (bus.g_start - GL_XF);
+    return d >= GL_LEN && (d & (GL_LEN - 1)) < bus.g_len + 2 * GL_XF;
+}
+
+static uint32_t isqrt32(uint32_t x)
+{
+    uint32_t r = 0, b = 1u << 30;
+    while (b > x) b >>= 2;
+    while (b) { if (x >= r + b) { x -= r + b; r = (r >> 1) + b; } else r >>= 1; b >>= 2; }
+    return r;
+}
+
+/* 2^(-e / 65536), Q16: T_EXP2F's 1/256 octaves read between (a long tail's gain a line a pass wants the finer steps) */
+static uint32_t exp2neg(uint32_t e)
+{
+    uint32_t n = e >> 16, g = 65536u - (e & 0xFFFFu);           /* 2^-e = 2^(g / 65536) / 2^(n + 1) */
+    if (n > 15) return 0;
+    if (g == 65536u) return 65536u >> n;
+    uint32_t i = g >> 8, r = g & 255u, a = T_EXP2F[i], b = i < 255 ? T_EXP2F[i + 1] : 131072u;
+    return (a + (((b - a) * r) >> 8)) >> (n + 1);
+}
+
+/* the reverb's coefficients for DCAY v, DAMP d, the room as it stands, at the lines' mean length (the matrix shares
+ * every pass out among them): their gain g for the RT60, and their damping, a one-pole whose loss at the top gives the
+ * top DAMP's share a of the bottom's RT60 (there the loop wants g^(1/a): the pole's r = g^(1/a - 1) = (1 - b) /
+ * (1 + b)) */
+#define RV_MEAN 855                    /* (683 + 797 + 907 + 1031) / 4 */
+static void rv_coef(int v, int d)
+{
+    int32_t len = (int32_t)((RV_MEAN * bus.rsz) >> 4);                                /* Q8 samples */
+    uint32_t e = (uint32_t)mul_sh((int32_t)T_RV_K[v], len, 16);                       /* Q16 octaves, < 2^16 */
+    bus.rgh = (int32_t)(exp2neg(e) >> 2);
+    uint32_t r = exp2neg((e * T_RV_DA[d]) >> 8);                                      /* 1/a - 1 Q8: < 2^28 */
+    uint32_t bq = ((65536u - r) << 15) / (65536u + r);
+    bus.ra = 32767 - (int32_t)(bq > 31000u ? 31000u : bq);
+    bus.rv_v = (uint8_t)v;
+    bus.rv_d = (uint8_t)d;
+    bus.rv_s = bus.rsz;
+}
+
+static void rv_clear(void)
+{
+    m_set(rv_buf, 0, sizeof rv_buf);
+    m_set(bus.rlp, 0, sizeof bus.rlp);
+    m_set(bus.rlr, 0, sizeof bus.rlr);
+    m_set(bus.rq, 0, sizeof bus.rq);
+    bus.rdq[0] = bus.rdq[1] = bus.rrq[0] = bus.rrq[1] = 0;
+    bus.rbw = bus.rbr = bus.rv_l = bus.rv_r = 0;
+    bus.rquiet = 0;
+}
+
+/* a block of the reverb in three passes (each with few enough values live to stay in registers): the input through
+ * its top and the diffusers; the lines; out into the mix. Specialised for a room settled (each line's read whole
+ * samples behind its write: a read between two dulls the top every pass) or gliding (between them) */
+static inline __attribute__((always_inline)) void rv_run(const int32_t *rsend, int32_t *L, int32_t *R, int v,
+                                                         int damp, int32_t fade, int32_t rs_, int32_t rc_, int glide)
+{
+    int32_t xin[M2K_SUB / 2], ol[M2K_SUB / 2], orr[M2K_SUB / 2];
+    int16_t *b = rv_buf;
+    const uint32_t M = RV_N - 1;
+    uint32_t w0 = bus.rw;
+    {
+        int32_t gi = T_RV_GI[v], bw = T_RV_BW[damp], rbw = bus.rbw, rbr = bus.rbr, dq0 = bus.rdq[0], dq1 = bus.rdq[1];
+        uint32_t w = w0;
+        for (int k = 0; k < M2K_SUB / 2; k++, w++) {
+            int32_t x = (((rsend[2 * k] + rsend[2 * k + 1]) >> 3) * gi) >> 15;   /* (six tracks' sends at most: < 2^16) */
+            if (bw < 32767) {                             /* the input's top, its remainder carried */
+                int32_t q = (x - rbw) * bw + rbr;
+                rbw += q >> 15;
+                rbr = q & 32767;
+                x = rbw;
+            }
+            /* two allpasses smear the attack */
+            int32_t d = b[(RV_AT[4] - RD_LEN[0] + w) & M], p = d * 20480 + dq0, u = sat16(x + (p >> 15));
+            dq0 = p & 32767;
+            b[(RV_AT[4] + w) & M] = (int16_t)u;
+            x = d - ((u * 20480 + 16384) >> 15);
+            d = b[(RV_AT[5] - RD_LEN[1] + w) & M]; p = d * 20480 + dq1; u = sat16(x + (p >> 15));
+            dq1 = p & 32767;
+            b[(RV_AT[5] + w) & M] = (int16_t)u;
+            xin[k] = d - ((u * 20480 + 16384) >> 15);
+        }
+        bus.rbw = rbw; bus.rbr = rbr; bus.rdq[0] = dq0; bus.rdq[1] = dq1;
+    }
+    {
+        uint32_t rd[4];
+        int32_t fr[4];
+        for (int c = 0; c < 4; c++) {
+            int32_t d = (int32_t)((RV_LEN[c] * bus.rsz) >> 4);                   /* Q8 */
+            if (!glide) d = (d + 128) & ~255;
+            rd[c] = RV_AT[c] - (uint32_t)(d >> 8);
+            fr[c] = d & 255;
+        }
+        int32_t a = bus.ra, h = bus.rgh;
+        int32_t lp0 = bus.rlp[0], lp1 = bus.rlp[1], lp2 = bus.rlp[2], lp3 = bus.rlp[3];
+        int32_t lr0 = bus.rlr[0], lr1 = bus.rlr[1], lr2 = bus.rlr[2], lr3 = bus.rlr[3];
+        int32_t q0 = bus.rq[0], q1 = bus.rq[1], q2 = bus.rq[2], q3 = bus.rq[3], rr0 = bus.rrq[0], rr1 = bus.rrq[1];
+        uint32_t w = w0;
+#define RV_RD(c) (glide ? b[(rd[c] + w) & M] + (((b[(rd[c] + w - 1) & M] - b[(rd[c] + w) & M]) * fr[c] + 128) >> 8) \
+                        : b[(rd[c] + w) & M])
+#define RV_LP(s, lp, lr) do { int32_t q_ = ((s) - lp) * a + lr; lp += q_ >> 15; lr = q_ & 32767; } while (0)
+        for (int k = 0; k < M2K_SUB / 2; k++, w++) {
+            int32_t s0 = RV_RD(0), s1 = RV_RD(1), s2 = RV_RD(2), s3 = RV_RD(3);
+            RV_LP(s0, lp0, lr0);                          /* (|s - lp| < 2^16) */
+            RV_LP(s1, lp1, lr1);
+            RV_LP(s2, lp2, lr2);
+            RV_LP(s3, lp3, lr3);
+            /* (the angle under 0.2 rad: each sum under 2^31) */
+            int32_t p1 = rc_ * lp1 - rs_ * lp3 + rr0, p3 = rs_ * lp1 + rc_ * lp3 + rr1;
+            rr0 = p1 & 32767;
+            rr1 = p3 & 32767;
+            int32_t y1 = p1 >> 15, y3 = p3 >> 15;
+            int32_t s01 = lp0 + y1, d01 = lp0 - y1, s23 = lp2 + y3, d23 = lp2 - y3;
+            /* the matrix's rows (< 2^17) by the gain / 2 (under 2^14), each with its remainder */
+            int32_t f0 = (s01 + s23) * h + q0, f1 = (d01 + d23) * h + q1, f2 = (s01 - s23) * h + q2, f3 = (d01 - d23) * h + q3;
+            q0 = f0 & 32767; q1 = f1 & 32767; q2 = f2 & 32767; q3 = f3 & 32767;
+            int32_t x = xin[k];
+            b[(RV_AT[0] + w) & M] = (int16_t)sat16(x + (f0 >> 15));
+            b[(RV_AT[1] + w) & M] = (int16_t)sat16((f1 >> 15) - x);
+            b[(RV_AT[2] + w) & M] = (int16_t)sat16(x + (f2 >> 15));
+            b[(RV_AT[3] + w) & M] = (int16_t)sat16((f3 >> 15) - x);
+            /* out before the damping: each pass darker than the last, the first as it came in */
+            ol[k] = s0 + s2;
+            orr[k] = -s1 - s3;
+        }
+#undef RV_RD
+#undef RV_LP
+        bus.rw = w;
+        bus.rlp[0] = lp0; bus.rlp[1] = lp1; bus.rlp[2] = lp2; bus.rlp[3] = lp3;
+        bus.rlr[0] = lr0; bus.rlr[1] = lr1; bus.rlr[2] = lr2; bus.rlr[3] = lr3;
+        bus.rq[0] = q0; bus.rq[1] = q1; bus.rq[2] = q2; bus.rq[3] = q3;
+        bus.rrq[0] = rr0; bus.rrq[1] = rr1;
+    }
+    {
+        int32_t go = T_RV_GO[v], pl = bus.rv_l, pr = bus.rv_r;
+        if (fade < 32767) go = (go * fade) >> 15;         /* (go < 2^15) */
+        for (int k = 0; k < M2K_SUB / 2; k++) {
+            int32_t l = (ol[k] * go) >> 12, r = (orr[k] * go) >> 12;           /* (|ol| < 2^16) */
+            L[2 * k] += (pl + l) >> 1; R[2 * k] += (pr + r) >> 1;            /* the half rate's in-between */
+            L[2 * k + 1] += l; R[2 * k + 1] += r;
+            pl = l;
+            pr = r;
+        }
+        bus.rv_l = pl; bus.rv_r = pr;
+    }
+}
+
+/* the reverb at half rate: four lines through a Hadamard matrix (each feeds all: dense soon, smooth long), damped,
+ * two of them turned into each other by a swaying angle. Every recursive product carries its remainder (a tail
+ * decays at its rate to the last step, not faster, and holds no DC); once the input and the lines stay within a step
+ * for a whole pass it empties and sleeps. Turned to 0 its tail fades in 6 ms */
+static void reverb_block(int verb, int damp, const int32_t *rsend, int32_t *L, int32_t *R)
+{
+    int v = verb ? verb : bus.rv_v;
+    if (!v) return;
+    int in = 0;
+    for (int i = 0; i < M2K_SUB; i++) in |= rsend[i];
+    if (bus.rsleep && !in && verb == bus.rv_v) return;
+    bus.rsleep = 0;
+    uint32_t tgt = (uint32_t)T_RV_SZ[v] << 4;            /* the room, Q12: it glides a 4096th a block (0.3 .. 1 in 1 s) */
+    if (!bus.rv_v) bus.rsz = tgt;
+    else if (verb && bus.rsz != tgt) bus.rsz += bus.rsz < tgt ? 1 : (uint32_t)-1;
+    if (v != bus.rv_v || damp != bus.rv_d || bus.rsz != bus.rv_s) rv_coef(v, damp);
+    int32_t fade = verb ? 32767 : bus.rfade;
+    if (!verb) {
+        bus.rfade -= 2048;
+        if (bus.rfade <= 0) { rv_clear(); bus.rv_v = 0; return; }   /* the lines start empty next time */
+    } else bus.rfade = 32767;
+    /* the swing: lines 2 and 4 turned into each other by a small angle swaying at 0.7 Hz (energy kept, no line's
+     * gain moves: a long tail's modes smeared instead of ringing) */
+    bus.rmph += 1090862u;
+    uint32_t ang = (uint32_t)(sinp(bus.rmph) * (int32_t)T_RV_MD[v]);
+    if (bus.rsz == tgt) rv_run(rsend, L, R, v, damp, fade, sinp(ang), sinp(ang + 0x40000000u), 0);
+    else rv_run(rsend, L, R, v, damp, fade, sinp(ang), sinp(ang + 0x40000000u), 1);
+    int32_t big = 0;
+    for (int c = 0; c < 4; c++) big |= bus.rlp[c] > 1 || bus.rlp[c] < -1;
+    /* quiet: nothing in, the lines within a step, a whole pass of the longest */
+    bus.rquiet = in || big ? 0 : bus.rquiet + M2K_SUB / 2;   /* (the lines looked at once a block) */
+    if (bus.rquiet > RV_LEN[3] + 2u && verb) { rv_clear(); bus.rsleep = 1; }
 }
 
 static void bus_block(int32_t *L, int32_t *R, const int32_t *rsend, int16_t *out)
 {
     const uint8_t *g = PAT(cur_pat)->glob;
-    /* reverb at half rate */
-    int verb = g[G_VERB];
-    if (verb) {
-        int32_t fb = 22938 + verb * 72;
-        int32_t damp = T_OP_H[127 - g[G_DAMP]];
-        for (int i = 0; i < M2K_SUB; i += 2) {
-            int32_t x = (rsend[i] + rsend[i + 1]) >> 2;
-            int32_t sum = 0, off = 0;
-            for (int c = 0; c < 4; c++) {
-                int16_t *b = &cb_buf[off];
-                int32_t y = b[bus.cb_pos[c]];
-                /* the damping carries its remainder and the feedback rounds towards zero: both rounded down, the
-                 * combs ran negative and kept a DC for ever (VERB 127 DAMP 127: -9331); to the nearest, each could
-                 * still hold +-23 */
-                int32_t q = (y - bus.cb_lp[c]) * damp + bus.cb_r[c];
-                bus.cb_lp[c] += q >> 15;
-                bus.cb_r[c] = q & 32767;
-                int32_t v = bus.cb_lp[c] * fb;
-                b[bus.cb_pos[c]] = (int16_t)sat16(x + ((v + (v < 0 ? 32767 : 0)) >> 15));
-                if (++bus.cb_pos[c] >= CB_LEN[c]) bus.cb_pos[c] = 0;
-                sum += y;
-                off += CB_LEN[c];
-            }
-            int32_t ch[2] = {sum, sum};                   /* the input came in at a quarter, for the combs' headroom */
-            off = 0;
-            for (int a = 0; a < 4; a++) {
-                int16_t *b = &ap_buf[off];
-                int c = a >> 1;
-                int32_t d = b[bus.ap_pos[a]];
-                int32_t v = ch[c] + (d >> 1);
-                b[bus.ap_pos[a]] = (int16_t)sat16(v);
-                ch[c] = d - (v >> 1);
-                if (++bus.ap_pos[a] >= AP_LEN[a]) bus.ap_pos[a] = 0;
-                off += AP_LEN[a];
-            }
-            bus.rv_l = ch[0];
-            bus.rv_r = ch[1];
-            L[i] += bus.rv_l; R[i] += bus.rv_r;
-            L[i + 1] += bus.rv_l; R[i + 1] += bus.rv_r;
+    reverb_block(g[G_VERB], g[G_DAMP], rsend, L, R);
+    /* the controls on their laws (tools/gen_tables.py, the bus's controls). The tape's depth glides to its control's
+     * or WOW's (no jump in the line's read); TAPE up, the tape is all there is, as it was; WOW from TAPE 0 fills the
+     * line, then fades the tape in, and out again once its depth is back down */
+    int32_t tq_t = T_TAPE_Q8[perf.on[PF_WOW] ? 127 : g[G_TAPE]];
+    int tape_on = g[G_TAPE] || perf.on[PF_WOW] || bus.tp_mix;
+    int32_t tq0 = bus.tq, tqd = 0;                  /* (gliding, the depth moves sample by sample over the block) */
+    if (!tape_on) bus.tq = 0;
+    else if (!bus.tq && g[G_TAPE] && !perf.on[PF_WOW]) bus.tq = tq_t;          /* TAPE turned up: at once */
+    else { int32_t d = tq_t - bus.tq; bus.tq = d > -256 && d < 256 ? tq_t : bus.tq + (d >> 8); tqd = bus.tq - tq0; }
+    if (g[G_TAPE]) bus.tp_mix = 32767;
+    else if (tape_on) {
+        if (!bus.tp_fill && !bus.tp_mix) bus.tlp_l = bus.tlp_r = 0;   /* (from off: the head loss from rest) */
+        bus.tp_fill += M2K_SUB;
+        int32_t want = perf.on[PF_WOW] || bus.tq > 64 ? 32767 : 0;
+        if (bus.tp_fill > 1024 && want != bus.tp_mix)     /* (the line read 420 +- 285 samples back: filled) */
+            bus.tp_mix = want > bus.tp_mix ? (bus.tp_mix + 1024 > 32767 ? 32767 : bus.tp_mix + 1024)
+                                           : (bus.tp_mix > 1024 ? bus.tp_mix - 1024 : 0);
+        if (!bus.tp_mix && !perf.on[PF_WOW]) bus.tp_fill = 0;
+    } else bus.tp_fill = 0;
+    int32_t tq = bus.tq, tpm = bus.tp_mix;
+    /* the crush: its control's at once; CRUSH glides in and out over 10 ms, the coder (idle under ADPC 0) first taking
+     * up the sound it meets for 2 ms, unheard, so it comes in tracking it */
+    int adpc = perf.on[PF_CRSH] ? 127 : g[G_ADPC];
+    int32_t ad_t = (adpc * 2 > 127 ? 127 : adpc * 2) << 8;
+    if (perf.on[PF_CRSH] && !bus.ad_perf) {
+        bus.ad_perf = 1;
+        if (!bus.ad_mixq) {
+            bus.ad_pred[0] = sat16(L[0]); bus.ad_pred[1] = sat16(R[0]); bus.ad_idx[0] = bus.ad_idx[1] = 40;
+            bus.ad_warm = 6;
         }
     }
-    /* the controls on their laws (tools/gen_tables.py, the bus's controls) */
-    int tape = perf.on[PF_WOW] ? 127 : g[G_TAPE], adpc = perf.on[PF_CRSH] ? 127 : g[G_ADPC], hiss = g[G_HISS];
-    int32_t tq = T_TAPE_Q8[tape];                   /* the depth, in the old control's units, Q8 */
-    int32_t drv = T_DRIV[perf.on[PF_DRIV] ? 127 : g[G_DRIV]];
+    if (!bus.ad_perf) bus.ad_mixq = ad_t;
+    else if (bus.ad_warm) bus.ad_warm--;
+    else {
+        int32_t d = ad_t - bus.ad_mixq;
+        bus.ad_mixq += d > 1200 ? 1200 : d < -1200 ? -1200 : d;
+        if (!perf.on[PF_CRSH] && bus.ad_mixq == ad_t) bus.ad_perf = 0;
+    }
+    int32_t ad_mix = bus.ad_mixq >> 8, ad_div = T_ADPC_DIV[adpc], ad_run = ad_mix || bus.ad_warm;
+    /* the drive: its control's; DRIVE glides up and down over 20 ms, its output held to the level the control's would
+     * give: while it rises, by the gain's own ratio (a small sound's level, a loud one's a little under), then by the
+     * two outputs measured (one-poles on both, ~23 ms), rising to it, and so back down; never louder, never at full
+     * scale */
+    int32_t drv0 = T_DRIV[g[G_DRIV]], drv_t = perf.on[PF_DRIV] ? T_DRIV[127] : drv0;
+    if (!bus.dv) bus.dv = drv0, bus.dv_g = 32767;          /* (from init: the control's, nothing held) */
+    { int32_t d = drv_t - bus.dv; bus.dv += d > 24 ? 24 : d < -24 ? -24 : d; }
+    int32_t drv = bus.dv, pdrv = drv != drv0 || bus.dv_g < 32767;
+    if (!pdrv) bus.dv_e0 = bus.dv_e1 = 0;                 /* (both from 0: their ratio right from the start) */
+    int32_t dvg = bus.dv_g;
     int32_t mvol = T_MVOL[master_vol];
-    int32_t ad_mix = adpc * 2 > 127 ? 127 : adpc * 2, ad_div = T_ADPC_DIV[adpc];
     uint32_t wow_inc = 54000, flut_inc = 620000;    /* 0.55 Hz, 6.3 Hz */
     uint8_t g_phase = bus.g_phase;                  /* (a block's in locals: no byte stored a sample) */
-    int32_t hgain = bus.hgain, htgt = tape_rolling ? 32767 : 0;
+    int32_t hgain = bus.hgain, htgt = tape_rolling ? 32767 : 0, hiss = g[G_HISS];
+    uint32_t e0 = 0, e1 = 0;
     for (int i = 0; i < M2K_SUB; i++) {
         int32_t l = L[i], r = R[i];
-        /* glitch: the ring is written at half rate; a repeat replaces the mix */
+        /* glitch: the ring written at half rate (never under the event's read); the event mixed in over the dry */
         if (!(g_phase ^= 1)) {
-            /* never over the slice a repeat plays (a held PERFORM's comes round the ring after 0.74 s; the glitch's
-             * own end first) */
-            if (!bus.g_on || ((bus.gw - bus.g_start) & (GL_LEN - 1)) >= bus.g_len) {
+            if (!bus.g_on || !gl_kept(bus.gw)) {
                 gl_buf[bus.gw & (GL_LEN - 1)][0] = (int16_t)sat16((bus.gacc_l + l) >> 1);
                 gl_buf[bus.gw & (GL_LEN - 1)][1] = (int16_t)sat16((bus.gacc_r + r) >> 1);
             }
             bus.gw++;
-            if (bus.g_on) {
-                uint32_t p = bus.g_pos >> 12;
-                uint32_t k = bus.g_mode == 1 ? bus.g_start + bus.g_len - 1 - p : bus.g_start + p;
-                bus.gout_l = gl_buf[k & (GL_LEN - 1)][0];
-                bus.gout_r = gl_buf[k & (GL_LEN - 1)][1];
-                bus.g_pos += bus.g_rate;
-                if (bus.g_mode == 2 && bus.g_rate > 1024) bus.g_rate -= 1;   /* tape stop */
-                if ((bus.g_pos >> 12) >= bus.g_len) {
-                    bus.g_pos -= bus.g_len << 12;
-                    if (bus.g_mode == 3 && bus.g_len > 128) bus.g_len >>= 1;
-                }
-                if (bus.g_fade < 32) bus.g_fade++;
-                if (bus.g_left-- <= 32) bus.g_fade = (int32_t)bus.g_left;
-                if (bus.g_left == 0) bus.g_on = 0;
-            }
+            if (bus.g_on) gl_tick();
         } else {
             bus.gacc_l = l;
             bus.gacc_r = r;
         }
-        if (bus.g_on || bus.g_fade > 0) {
-            int32_t f = bus.g_on ? bus.g_fade : 0;
-            l += ((bus.gout_l - l) * f) >> 5;
-            r += ((bus.gout_r - r) * f) >> 5;
+        if (bus.g_on) {
+            if (bus.g_left) { if (bus.g_env < 1024) bus.g_env += 8; }
+            else if ((bus.g_env -= 8) <= 0) {             /* faded out: over, or the next key's begins */
+                bus.g_env = 0;
+                bus.g_on = 0;
+                if (bus.g_next) { int k = bus.g_next - 1; bus.g_next = 0; gl_perform(k); }
+            }
+            /* the wet between its half-rate samples; l + env (wet W - l (1 - D)) (|l| < 2^18, the products < 2^31) */
+            int32_t wl = g_phase ? bus.gout_l : (bus.gprev_l + bus.gout_l) >> 1, wr = g_phase ? bus.gout_r : (bus.gprev_r + bus.gout_r) >> 1;
+            int32_t dm = (32768 - bus.g_dry) >> 3, env = bus.g_env;          /* (both whole: exactly the wet) */
+            l += ((((wl * bus.g_wet) >> 3) - l * dm) >> 12) * env >> 10;
+            r += ((((wr * bus.g_wet) >> 3) - r * dm) >> 12) * env >> 10;
         }
         /* tape: wow and flutter on a short line, head loss, a little compression */
-        if (tape) {
+        if (tape_on) {
             tp_buf[bus.tw & 2047][0] = (int16_t)sat16(l);
             tp_buf[bus.tw & 2047][1] = (int16_t)sat16(r);
             bus.wow += wow_inc;
@@ -353,6 +683,7 @@ static void bus_block(int32_t *L, int32_t *R, const int32_t *rsend, int16_t *out
             /* the pitch a swing of the line makes grows with its rate: the flutter (6.3 Hz, 11x the wow's) takes 1/48
              * of the wow's swing, so it wobbles about a quarter as far in pitch (at TAPE 127: wow ~+-40 c, flutter ~+-10 c) */
             int32_t m = (sinp(bus.wow) * 48 + sinp(bus.flut)) >> 6;           /* +-24600 */
+            if (tqd) tq = tq0 + ((tqd * (i + 1)) >> 4);
             int32_t d = (420 << 8) + (int32_t)mul_sh(m, tq * 3, 15);         /* Q8 samples */
             uint32_t pos = (bus.tw << 8) - (uint32_t)d;                       /* unsigned: it wraps after 3 minutes */
             uint32_t j = pos >> 8;
@@ -364,11 +695,11 @@ static void bus_block(int32_t *L, int32_t *R, const int32_t *rsend, int16_t *out
             int32_t a = T_OP[lj] + (((T_OP[lj < 127 ? lj + 1 : 127] - T_OP[lj]) * (li & 1023)) >> 10);
             bus.tlp_l += ((tl - bus.tlp_l) * a) >> 15;
             bus.tlp_r += ((tr - bus.tlp_r) * a) >> 15;
-            l = bus.tlp_l;
-            r = bus.tlp_r;
+            if (tpm >= 32767) { l = bus.tlp_l; r = bus.tlp_r; }
+            else { l += (int32_t)mul_sh(bus.tlp_l - l, tpm, 15); r += (int32_t)mul_sh(bus.tlp_r - r, tpm, 15); }
         }
         /* the 4-bit crunch, its rate falling to a third at the top */
-        if (adpc) {
+        if (ad_run) {
             bus.ad_acc += 256;
             if (bus.ad_acc >= ad_div) {
                 bus.ad_acc -= (uint16_t)ad_div;
@@ -393,23 +724,45 @@ static void bus_block(int32_t *L, int32_t *R, const int32_t *rsend, int16_t *out
             l += h;
             r += h;
         }
+        if (pdrv) {                                       /* DRIVE: the control's output beside it, for the level */
+            uint64_t lr0 = mul2_q15(mvol, (l * drv0) >> 8, (r * drv0) >> 8);
+            int32_t l0 = lim_soft((int32_t)lr0) >> 4, r0 = lim_soft((int32_t)(lr0 >> 32)) >> 4;
+            e0 += (uint32_t)(l0 * l0 + r0 * r0) >> 5;
+        }
         uint64_t lr = mul2_q15(mvol, (l * drv) >> 8, (r * drv) >> 8);
         l = lim_soft((int32_t)lr);
         r = lim_soft((int32_t)(lr >> 32));
-        if (perf.kill != (perf.on[PF_KILL] ? 0 : 32767)) {   /* KILL: down and back over a millisecond, then exact */
-            int32_t tgt = perf.on[PF_KILL] ? 0 : 32767;
-            perf.kill += (tgt - perf.kill) >> 5;
-            if (tgt && perf.kill > 32767 - 64) perf.kill = 32767;
-            if (!tgt && perf.kill < 64) perf.kill = 0;
+        if (pdrv) {
+            e1 += (uint32_t)((l >> 4) * (l >> 4) + (r >> 4) * (r >> 4)) >> 5;
+            l = (l * dvg) >> 15;
+            r = (r * dvg) >> 15;
+        }
+        if (perf.kill != (perf.on[PF_KILL] ? 0 : 32767)) {   /* KILL: down and back in a straight line over 4 ms */
+            perf.kill += perf.on[PF_KILL] ? -186 : 186;
+            perf.kill = CLAMP(perf.kill, 0, 32767);
         }
         if (perf.kill < 32767) { l = (l * perf.kill) >> 15; r = (r * perf.kill) >> 15; }
         out[2 * i] = (int16_t)l;
         out[2 * i + 1] = (int16_t)r;
         if ((i & 7) == 0) mon.scope[mon.scope_w++] = (int16_t)((l + r) >> 1);
     }
+    if (pdrv) {                                           /* the level DRIVE may have: the control's, under 31/32 of full */
+        bus.dv_e0 += ((int32_t)e0 - bus.dv_e0) >> 6;
+        bus.dv_e1 += ((int32_t)e1 - bus.dv_e1) >> 6;
+        int32_t want = 32767;
+        if (drv != drv0) {                                /* (at least the small signal's: drv0 / drv) */
+            uint32_t w = bus.dv_e1 > 0 ? isqrt32(((uint32_t)bus.dv_e0 << 9) / ((uint32_t)bus.dv_e1 >> 11 | 1u)) << 5 : 32767;
+            int32_t lo = (drv0 << 15) / drv;
+            want = drv < drv_t ? lo : CLAMP((int32_t)w, lo, 31743);   /* (rising, at the gain's ratio) */
+        }
+        if (want < bus.dv_g) bus.dv_g = want;             /* down at once, up gently */
+        else bus.dv_g += (want - bus.dv_g) >> 4;
+        if (want == 32767 && bus.dv_g > 32767 - 16) bus.dv_g = 32767;
+    }
     bus.g_phase = g_phase;
     bus.hgain = hgain;
     mon.glitch = bus.g_on;
+    mon.gmode = bus.g_mode;
 }
 
 /* ------------------------------------------------------------------------------------------- the render */
@@ -443,7 +796,7 @@ static void par_job(void)
  * instructions a sample, measured as T_MCOST is */
 #define C_CORE1 140                    /* the sequencer, the mix, the bus dry */
 #define C_LFO 8                        /* an LFO that moves something */
-#define C_VERB 72
+#define C_VERB 85                      /* (the feedback delay network; the combs were 72) */
 #define C_TAPE 97
 #define C_ADPC 129
 #define C_HISS 34

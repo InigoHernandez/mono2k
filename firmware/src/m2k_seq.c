@@ -255,7 +255,7 @@ static void fire_track(int t, int s, int32_t len)
 static void fire_step(int s)                         /* the pattern's step: the tracks at 1x */
 {
     for (int t = 0; t < M2K_TRACKS; t++) if (spd_of(t) == 4) fire_track(t, s, step_len(s));
-    bus_step();
+    bus_step(s);
 }
 
 /* the tracks off 1x start over with the pattern, from their first step with its first */
@@ -759,7 +759,8 @@ static const uint8_t MACH_DEF[M_COUNT][8] = {
 /* each machine's INIT, a sound for its purpose: kit_default's chain and MACH_DEF's page, then these (param, value)
  * pairs, levelled to about -18 LUFS (the INIT sheet's A takes: its B or C replaces a row whole); and its home note,
  * the note it was made at, where a machine picked or INITed puts its track's new trigs and keys. Their ATK DEC REL and
- * LFO SPD DPTH are on format 16's laws: the sheet's values (format 15's) through feel_v15's tables, as approved */
+ * LFO SPD DPTH are on format 16's laws: the sheet's values (format 15's) through feel_v15's tables, as approved; their
+ * sends (VERB, DSND) on format 17's, through fx_v16 at the INIT pattern's reverb (40 -> 11, 52 -> 18, DSND 88 -> 73) */
 #define KV_END 0xFF
 #define KV(...) ((const uint8_t[]){__VA_ARGS__, KV_END})
 static const struct { uint8_t home; const uint8_t *kv; } MACH_INIT[M_COUNT] = {
@@ -767,53 +768,53 @@ static const struct { uint8_t home; const uint8_t *kv; } MACH_INIT[M_COUNT] = {
     [M_GSIN] = {48, KV(SA, 18, SG, 50, P_HOLD, 24, P_DEC, 113, P_REL, 37, P_LEVL, 104)},
     /* the supersaw: a wide, lush pad */
     [M_SAW] = {60, KV(SA, 100, SB, 60, SC, 80, SD, 10, P_ATK, 14, P_HOLD, 127, P_DEC, 127, P_REL, 87, P_GATE, 56,
-                      P_BASE, 8, P_WDTH, 40, P_LPQ, 20, P_SPU, 40, P_LEVL, 127, P_VOL, 112)},
+                      P_BASE, 8, P_WDTH, 40, P_LPQ, 20, P_SPU, 11, P_LEVL, 127, P_VOL, 112)},
     /* the pulse: a hollow reed lead, a vibrato on TUNE */
     [M_PUL] = {60, KV(P_ATK, 11, P_HOLD, 127, P_DEC, 127, P_REL, 54, P_GATE, 48, P_BASE, 8, P_WDTH, 36, P_LPQ, 12,
-                      P_SPU, 24, L1 + L_DEST, 8, L1 + L_WAVE, 27, L1 + L_MULT, 72, L1 + L_SPD, 52, L1 + L_DPTH, 78,
+                      P_SPU, 4, L1 + L_DEST, 8, L1 + L_WAVE, 27, L1 + L_MULT, 72, L1 + L_SPD, 52, L1 + L_DPTH, 78,
                       P_LEVL, 127, P_VOL, 127)},
     /* chords on one key: a minor-7 pad, chorused */
     [M_ENS] = {60, KV(SA, 73, SC, 116, SD, 82, SE, 56, SF, 44, SG, 71, P_ATK, 11, P_HOLD, 127, P_DEC, 127, P_REL, 113,
-                      P_BASE, 10, P_WDTH, 46, P_LPQ, 40, P_GATE, 60, P_SPU, 52, P_MODT, 21, P_MODR, 18, P_MODD, 83,
+                      P_BASE, 10, P_WDTH, 46, P_LPQ, 40, P_GATE, 60, P_SPU, 18, P_MODT, 21, P_MODR, 18, P_MODD, 83,
                       P_MODM, 58, P_LEVL, 127, P_VOL, 124)},
     /* FM keys: an e-piano */
     [M_FMS] = {60, KV(SA, 98, SB, 63, SC, 105, SD, 8, SE, 109, SF, 19, SG, 55, P_HOLD, 7, P_DEC, 80, P_REL, 93,
-                      P_BASE, 9, P_WDTH, 54, P_HPQ, 7, P_LPQ, 49, P_DTIM, 48, P_DSND, 88, P_DFB, 43, P_DWID, 92,
-                      P_SPU, 22, P_LEVL, 127, P_VOL, 81)},
+                      P_BASE, 9, P_WDTH, 54, P_HPQ, 7, P_LPQ, 49, P_DTIM, 48, P_DSND, 73, P_DFB, 43, P_DWID, 92,
+                      P_SPU, 3, P_LEVL, 127, P_VOL, 81)},
     /* FM metal: a gong-like bell */
-    [M_FMP] = {60, KV(SA, 120, SB, 80, SC, 98, SD, 76, SE, 88, SF, 72, P_DEC, 92, P_REL, 92, P_SPU, 40, P_LEVL, 127,
+    [M_FMP] = {60, KV(SA, 120, SB, 80, SC, 98, SD, 76, SE, 88, SF, 72, P_DEC, 92, P_REL, 92, P_SPU, 11, P_LEVL, 127,
                       P_VOL, 67)},
     /* the FM bass: a modulator whose depth moves */
     [M_FMD] = {48, KV(SC, 32, SD, 96, SE, 127, SF, 90, SG, 0, P_HOLD, 10, P_DEC, 69, P_REL, 49, P_WDTH, 40, P_LPQ, 16,
                       P_LEVL, 127, P_VOL, 72)},
     /* the voice: an 'aah' choir */
-    [M_VOX] = {60, KV(SA, 120, SB, 56, SD, 10, P_ATK, 14, P_HOLD, 127, P_DEC, 127, P_REL, 87, P_GATE, 60, P_SPU, 50,
+    [M_VOX] = {60, KV(SA, 120, SB, 56, SD, 10, P_ATK, 14, P_HOLD, 127, P_DEC, 127, P_REL, 87, P_GATE, 60, P_SPU, 17,
                       P_MODT, 21, P_MODR, 30, P_MODD, 80, P_MODM, 60, L1 + L_DEST, 8, L1 + L_WAVE, 27, L1 + L_MULT, 72,
                       L1 + L_SPD, 52, L1 + L_DPTH, 75, P_LEVL, 127, P_VOL, 115)},
     /* the wavetable voice: a pluck that scans as it falls */
-    [M_WAV] = {60, KV(SA, 13, SB, 70, SC, 76, SF, 65, SG, 40, P_DEC, 71, P_REL, 61, P_BASE, 8, P_WDTH, 52, P_SPU, 30,
+    [M_WAV] = {60, KV(SA, 13, SB, 70, SC, 76, SF, 65, SG, 40, P_DEC, 71, P_REL, 61, P_BASE, 8, P_WDTH, 52, P_SPU, 6,
                       P_LEVL, 127, P_VOL, 99)},
     /* the chip voice: a sync lead */
     [M_SID] = {60, KV(SD, 38, SE, 80, SG, 80, P_ATK, 1, P_HOLD, 127, P_DEC, 127, P_REL, 61, P_GATE, 48, P_BASE, 8,
-                      P_WDTH, 36, P_LPQ, 20, P_SPU, 30, P_LEVL, 105)},
+                      P_WDTH, 36, P_LPQ, 20, P_SPU, 6, P_LEVL, 105)},
     /* the kick, at C2 */
     [M_DKIK] = {36, KV(SA, 16, SB, 18, SC, 10, SD, 12, SG, 30, SH, 30, P_HOLD, 10, P_DEC, 51, P_REL, 26, P_LEVL, 127,
                        P_VOL, 68)},
     /* the snare */
     [M_DSNR] = {60, KV(SA, 16, SB, 0, SC, 0, SD, 100, SE, 80, P_DEC, 35, P_REL, 20, P_BASE, 8, P_WDTH, 52, P_HPQ, 18,
-                       P_LPQ, 9, P_EQF, 72, P_EQG, 53, P_SPU, 24, P_LEVL, 127, P_VOL, 105)},
+                       P_LPQ, 9, P_EQF, 72, P_EQG, 53, P_SPU, 4, P_LEVL, 127, P_VOL, 105)},
     /* the closed hat */
     [M_DHAT] = {60, KV(SA, 127, SB, 70, SC, 10, SD, 84, SE, 100, SF, 117, SG, 12, P_HOLD, 7, P_DEC, 65, P_REL, 20,
                        P_VOL, 121, P_BASE, 46, P_WDTH, 40, P_HPQ, 23, P_FATK, 21, P_FDEC, 20, P_BOF, 71, P_EQF, 108,
                        P_EQG, 80, P_LEVL, 127)},
     /* the crash */
     [M_DCYM] = {60, KV(SA, 94, SB, 83, SC, 90, SD, 119, SE, 100, SF, 65, SH, 90, P_DEC, 100, P_REL, 74, P_BASE, 36,
-                       P_WDTH, 20, P_SPU, 30, P_LEVL, 127, P_VOL, 101)},
+                       P_WDTH, 20, P_SPU, 6, P_LEVL, 127, P_VOL, 101)},
     /* a metal hit */
-    [M_GPRC] = {60, KV(SC, 127, P_DEC, 42, P_BASE, 24, P_WDTH, 48, P_SPU, 20, P_LEVL, 127, P_VOL, 103)},
+    [M_GPRC] = {60, KV(SC, 127, P_DEC, 42, P_BASE, 24, P_WDTH, 48, P_SPU, 3, P_LEVL, 127, P_VOL, 103)},
     /* noise played: wind, its filter on the key */
     [M_GNOI] = {60, KV(SA, 64, SB, 64, SC, 127, P_ATK, 24, P_HOLD, 127, P_DEC, 127, P_REL, 87, P_GATE, 48, P_BASE, 12,
-                       P_WDTH, 20, P_HPQ, 20, P_LPQ, 56, P_SPU, 40, P_LEVL, 78)},
+                       P_WDTH, 20, P_HPQ, 20, P_LPQ, 56, P_SPU, 11, P_LEVL, 78)},
     /* the FX open from a trig to the gate's end and long after (kit_default's HOLD 127): the track before made wide,
      * punched and held, turned to metal; at the basses' octave, as they were made */
     [M_FXC] = {48, KV(SB, 60, SD, 127, SF, 127, SG, 100, SH, 127, P_DEC, 127, P_REL, 100, P_GATE, 127, P_LEVL, 127,
@@ -880,8 +881,8 @@ static void pat_init(m2k_pattern_t *p, const char *name)
     p->glob[G_TMPO] = 90;
     p->glob[G_LEN] = 16;
     p->glob[G_ACNT] = 60;
-    p->glob[G_VERB] = 60;
-    p->glob[G_DAMP] = 50;
+    p->glob[G_VERB] = 38;                    /* (format 17's 1 s, a little dark: the old 60 and 50 as they sounded) */
+    p->glob[G_DAMP] = 92;
     for (int t = 0; t < M2K_TRACKS; t++) p->glob[G_SPD1 + t] = SPD_1X;
 }
 
@@ -930,8 +931,7 @@ void m2k_init(uint32_t seed)
     m_set(mod_mem, 0, sizeof mod_mem);           /* the MOD effect's lines too: a reset hears no old chorus */
     m_set(gl_buf, 0, sizeof gl_buf);
     m_set(tp_buf, 0, sizeof tp_buf);
-    m_set(cb_buf, 0, sizeof cb_buf);
-    m_set(ap_buf, 0, sizeof ap_buf);
+    m_set(rv_buf, 0, sizeof rv_buf);
     for (int t = 0; t < M2K_TRACKS; t++) {
         trk[t].dl = dl_mem[t];
         trk[t].dquiet = DL_LEN;        /* the lines start silent */
@@ -941,6 +941,7 @@ void m2k_init(uint32_t seed)
         trk[t].dt_q8 = 400 << 8;
     }
     bus.hs = 0xACE1u;
+    bus.grng = 0x6C078965u ^ seed;
     for (int i = 0; i < M2K_TRACKS; i++) sq.rec_skip[i] = -1;
     m_set(store_.set, 0, sizeof store_.set);
     projects_factory();

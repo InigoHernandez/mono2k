@@ -242,14 +242,17 @@
     </tbody>
   </table>
   <h2>Hold FX: PERFORM</h2>
-  <p>The black keys are the bus's effects while you hold them; the white keys go on playing the track. The knobs are the bus's GLCH, TAPE, ADPC and DRIV, and what you turn stays.</p>
+  <p>The black keys are the bus's effects while you hold them; the white keys go on playing the track. The knobs are the bus's GLCH, TAPE, ADPC and DRIV, and what you turn stays. Every effect fades in and out in a few milliseconds, so nothing clicks, and the repeats keep to the beat: press late and they still land on it.</p>
   <table>
     <thead><tr><th>Black key</th><th>Effect</th></tr></thead>
     <tbody>
-      <tr><td>1–4</td><td>Repeat the last 1/4, 1/8, 1/16 or 1/32 of a bar.</td></tr>
-      <tr><td>5 / 6</td><td>REVERSE; STOP, a tape stop.</td></tr>
-      <tr><td>7 / 8 / 9 / 10</td><td>STUTTER; CRUSH; WOW; DRIVE.</td></tr>
-      <tr><td>11</td><td>KILL: silence, at once and clean.</td></tr>
+      <tr><td>1–4</td><td>REPEAT a quarter, an eighth, a sixteenth or a thirty-second note, caught from the last beat (or eighth, or sixteenth) as the grid starts it: the first time round is what is playing, then it comes round on the grid, its join crossfaded. Below 85 BPM a quarter is too long for the memory and repeats an eighth.</td></tr>
+      <tr><td>5</td><td>REVERSE: the last beat backwards, on the beat.</td></tr>
+      <tr><td>6</td><td>STOP: a tape stop. The sound slows in a straight line to a halt over a beat, its pitch and level falling as a tape's; let go and it spins back up over an eighth, then gives way to the live sound.</td></tr>
+      <tr><td>7</td><td>STUTTER: thirty-second hits of the sixteenth that started on the grid, gated, half of each one silent.</td></tr>
+      <tr><td>8 / 9</td><td>CRUSH, the 4-bit ADPCM crunch at its most, gliding in and out; WOW, the tape's wow and flutter at their most, the depth swelling in and easing back out.</td></tr>
+      <tr><td>10</td><td>DRIVE: the bus driven hard into its soft clip, held to the level it had, so it gets denser and dirtier but not louder, and never clips.</td></tr>
+      <tr><td>11</td><td>KILL: silence, down in 4 ms and back as clean.</td></tr>
     </tbody>
   </table>
   <h2>Hold LFO</h2>
@@ -629,7 +632,7 @@
   <h2>Filter</h2>
   <p>A high-pass and a low-pass as one band: BASE is the bottom of the band, WDTH its width (at the top, BASE alone is a high-pass; at the bottom, WDTH alone is a low-pass), HPQ and LPQ their resonance. The filter follows the note. Its envelope (ATCK, DEC) moves the base and the width by B-OF and W-OF.</p>
   <h2>FX</h2>
-  <p>EQF and EQG are one band of EQ; SRR reduces the sample rate; the delay (DTIM, DSND, DFB, DBAS, DWID) is the track's own, in 8-bit mu-law. DSTR: BITS crushes, FOLD folds the wave over itself, XOR mangles the samples, VERB sends the track to the bus's reverb. MOD is a chorus, a flanger or a phaser across the stereo.</p>
+  <p>EQF and EQG are one band of EQ; SRR reduces the sample rate; the delay (DTIM, DSND, DFB, DBAS, DWID) is the track's own, in 8-bit mu-law. DSTR: BITS crushes, FOLD folds the wave over itself, XOR mangles the samples, VERB sends the track to the bus's reverb. Both sends, DSND and VERB, are straight in level: half way is 6 dB under the most, so a little is already heard. MOD is a chorus, a flanger or a phaser across the stereo.</p>
   <h2>LFOs</h2>
   <div class="figs">
     <figure class="fig"><canvas data-scr="14b_lfo_cycle"></canvas><figcaption>LFO 1B: SPD as the time a cycle takes, a bar; DPTH against full.</figcaption></figure>
@@ -643,19 +646,25 @@
 
 <article id="bus" data-group="Sound">
   <h1>The bus</h1>
-  <p class="sub">Where the six tracks meet: a reverb, a beat repeat, tape, ADPCM, hiss and a drive into the soft clip.</p>
+  <p class="sub">Where the six tracks meet: a reverb, a glitch, tape, ADPCM, hiss and a drive into the soft clip.</p>
   <div class="figs">
-    <figure class="fig"><canvas data-scr="16_glo_bus"></canvas><figcaption>GLO, GLITCH: tape, ADPCM, the glitch's chance and the repeat's size.</figcaption></figure>
+    <figure class="fig"><canvas data-scr="16_glo_bus"></canvas><figcaption>GLO, GLITCH: tape, ADPCM, how much glitch and the repeat's size.</figcaption></figure>
+    <figure class="fig"><canvas data-scr="16b_glo_verb"></canvas><figcaption>GLO, VERB: the reverb's decay, its bottom solid and its top dotted, over 0.1 to 30 s.</figcaption></figure>
   </div>
   <table>
     <thead><tr><th>Page</th><th>Knobs</th></tr></thead>
     <tbody>
       <tr><td>TIME</td><td>BPM the tempo, SWNG the swing, LEN the pattern's length, ACNT how hard an accent plays.</td></tr>
-      <tr><td>GLITCH</td><td>TAPE wow and flutter, ADPC a 4-bit ADPCM crunch, GLCH the chance of a beat repeat each step, SIZE the slice it repeats.</td></tr>
-      <tr><td>VERB</td><td>DCAY and DAMP the SPU-style reverb at 22 kHz; HISS adds hiss and dust; DRIV drives the bus into its soft clip.</td></tr>
+      <tr><td>GLITCH</td><td>TAPE wow and flutter, ADPC a 4-bit ADPCM crunch, GLCH how much glitch, SIZE the longest slice it repeats.</td></tr>
+      <tr><td>VERB</td><td>DCAY the reverb's length, DAMP how much sooner its top dies; HISS adds hiss and dust; DRIV drives the bus into its soft clip.</td></tr>
       <tr><td>SET</td><td>SCRN the screen light or dark. In the browser PROJ and LOAD pick a project and load it, WIPE makes every pattern INIT; on the FM-1 WIPE and DEMO (bank A's demos back). Each asks first: OCT+ YES, OCT− NO.</td></tr>
     </tbody>
   </table>
+  <h2>The glitch</h2>
+  <p>GLCH is one knob for how much. Low, it is a ghost: now and then (one in sixteen bars at 1) a short slice, at most a thirty-second, comes back twice under the music, 18 dB down, the music left whole. Turning up, the repeats come more often (half the sixteenths at 127), louder (as loud as the music from three quarters up), longer (up to eight times round) and with SIZE's whole slice; past a third the music gives way under them, and the other kinds come in one by one: reversed, gated, an octave up, an octave down, a roll that halves each time round, a slice slowing to a stop. At the top it is wild. Every repeat fades in and out and its joins are crossfaded, so nothing cuts. The screen's value is the chance a sixteenth has; the tag under the scope names what is playing.</p>
+  <h2>The reverb</h2>
+  <p>Four delay lines feeding each other through a matrix, at 22 kHz, two of them turned slowly into each other so a long tail does not ring. DCAY sets its length, RT60 from 0.3 s (a small room: the lines are made shorter with it) to about 24 s, a ratio a step; 0 turns it off, its tail fading in 6 ms. DAMP sets how much sooner the top dies: 1/1 keeps the top as long as the bottom (bright), 1/30 lets it die thirty times sooner (dark), and darkens what goes in with it. Short and bright, long and dark, short and dark, long and bright: each is its own space. The first reflection keeps the sound's top; each pass after is darker. Each track sends to it with DSTR's VERB.</p>
+  <p>Patterns saved before this reverb load on it at the setting that measures nearest (each part of the old decay matched), their sends carried at the level that keeps the reverb as loud.</p>
   <p>The bus's settings belong to the pattern, so each part of a song can be worn differently.</p>
 </article>
 
