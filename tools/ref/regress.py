@@ -873,9 +873,12 @@ def cases():
         add("pul", "chain_pul38", f"p38_pw_{v:03d}", "rms", {}, 0.5 if v > 8 else 1.5)
         add("pul", "chain_pul38", f"p38_pw_{v:03d}", "fm_side", {"hz": [fc * k for k in range(1, 9)], "floor": -30.0}, 2.0)   # its
                                                    # zeros (the duty's) are sharp: floored
+    bounce = ("the owner's PWAD sweep bounces between 4 % and 96 %, where the reference's wraps round through the silent "
+              "ends (a dropout every turn, the owner's report): the level at a moment is another")
     for v in (16, 64):
         for a in (0.1, 0.4, 0.7, 1.0, 1.3):
-            add("pul", "chain_pul38", f"p38_pwad_{v:03d}", "rms", {"t": (a, a + 0.06)}, 1.5)
+            add("pul", "chain_pul38", f"p38_pwad_{v:03d}", "rms", {"t": (a, a + 0.06)}, 1.5,
+                xfail=bounce if (v, a) in ((16, 0.1), (16, 0.7), (16, 1.0), (64, 0.1), (64, 0.7), (64, 1.3)) else None)
     for l, w in ((64, 64), (127, 16), (127, 127)):
         add("pul", "chain_pul38", f"p38_uni_l{l:03d}_w{w:03d}", "rms", {}, 0.5)
     for k in (1, 2):
