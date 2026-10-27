@@ -127,7 +127,50 @@ EXPORT const uint8_t *w_info(void)
     w_inf[24] = (clk_from() & 1) != 0;       /* GLO > MIDI: the clock taken from USB, where the page's MIDI comes in */
     w_inf[25] = store_.set[S_SYNO] >= 64;
     w_inf[26] = store_.set[S_NOTO] >= 64;
+    w_inf[27] = ui.pads;                     /* the keys' mode with [7]: KEYS, PADS or GRID, for the page's status line */
+    w_inf[28] = ui.latch;                    /* a latched layer: its button + 1 */
+    w_inf[29] = sq.ready;                    /* Ready: the first note starts it */
+    w_inf[30] = ui.spage;                    /* GRID's page of steps */
     return w_inf;
+}
+
+/* the site's machine sheet, in a copy of the core of its own (never the one that plays): the open pattern made INIT and
+ * stopped, machine m at its INIT on track 1, in view on SYN (an FX machine on track 2, after a plain SWAV-SAW at its
+ * loudest on track 1, as its INIT was voiced). Returns the track; w_hit then trigs it at its home note as a pad does (a
+ * step's trig and gate), an FX's source with it */
+static int w_aud_t = 0, w_aud_m = 0;
+EXPORT int w_audition(int m)
+{
+    if (m < 0 || m >= M_COUNT) return -1;
+    m2k_pattern_t *p = PAT(cur_pat);
+    seq_play(0);
+    pattern_init_blank(p);
+    int fx = m == M_FXC || m == M_FXR || m == M_FXD, t = fx ? 1 : 0;
+    if (fx) {
+        kit_default(p, 0, M_SAW);
+        feel_kit_v15(p->kit[0]);
+        p->kit[0][P_LEVL] = 127;
+        p->kit[0][P_VOL] = 127;
+    }
+    kit_init(p, t, m);
+    track_home(t, mach_home(m));
+    if (fx) track_home(0, mach_home(m));
+    lockmap_build();
+    for (int i = 0; i < M2K_TRACKS; i++) m_cpy(trk[i].eff, p->kit[i], P_COUNT);
+    track_to(t);
+    ui.page = PG_SYN;
+    ui.sub = 0;
+    ui.focus_t = 0;
+    w_aud_t = t;
+    w_aud_m = m;
+    return t;
+}
+EXPORT int w_home_note(int m) { return mach_home(m % M_COUNT); }
+EXPORT void w_hit(void)
+{
+    int n = mach_home(w_aud_m);
+    if (w_aud_t) pad_hit(0, n);
+    pad_hit(w_aud_t, n);
 }
 
 /* the machines, for the page's machine sheet */

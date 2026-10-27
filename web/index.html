@@ -10,7 +10,7 @@
 <meta name="description" content="MONO2K: six mono machines, a 64-step sequencer with parameter locks and trig conditions, and a lofi bus, for the M-VAVE FM-1. Running in your browser.">
 <script>try { const t = localStorage.getItem("mono2k.theme"); if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t); } catch (e) {}</script>
 <link rel="icon" href="brand/mono2k-iso.svg" type="image/svg+xml">
-<link rel="stylesheet" href="style.css?v=52">
+<link rel="stylesheet" href="style.css?v=53">
 </head>
 <body>
 <!-- the controls' glitch (style.css): rows slipped sideways, in hard bands -->
@@ -32,30 +32,30 @@
   <canvas id="wordmark" aria-label="MONO2K"></canvas>
   <div class="hero__sub">
     <p class="title kicker">Six mono machines</p>
-    <p class="lede">A Monomachine-style synthesizer for a palm-sized FM synth. Six tracks, each one machine: sine, noise, chip, three kinds of FM, supersaw and pulse, chord, digital waves, a voice, and three FX machines. A 64-step sequencer with parameter locks, the Monomachine's trig types, conditions and ratchets. A bus that breaks the sound beautifully.</p>
+    <div class="hero__text">
+      <p class="lede">A Monomachine-style synthesizer for a palm-sized FM synth. Six tracks, each one machine: a sine, two noises, a chip, three kinds of FM, a supersaw and a pulse, a chord, digital waves, a voice, four drums and three FX machines. A 64-step sequencer with parameter locks, the Monomachine's trig types, conditions and ratchets. A bus that breaks the sound beautifully.</p>
+      <p class="hero__acts"><a class="btn" href="#play">Play it</a><a class="btn ghost" href="#guide">How to play</a><a class="btn ghost" href="installer.html">Install on your FM-1</a></p>
+    </div>
   </div>
 </section>
 
-<section class="play" id="play">
-  <div class="play__main">
-    <div class="panel" id="panelwrap">
-      <svg id="panel" viewBox="14 14 876 538" role="application" tabindex="0" aria-label="The FM-1 panel"></svg>
-      <canvas id="lcd" width="240" height="240" aria-label="The screen"></canvas>
-      <button id="start" class="start" type="button"><span>Start</span><small>Sound on. Click the panel, then play the keys.</small></button>
+<section class="play" id="play" aria-label="The emulator: MONO2K's firmware running in this page">
+  <div class="panel" id="panelwrap">
+    <svg id="panel" viewBox="14 14 876 538" role="application" tabindex="0" aria-label="The FM-1 panel: click it, then play it from the computer's keys" aria-describedby="status"></svg>
+    <canvas id="lcd" width="240" height="240" role="img" aria-label="The screen"></canvas>
+    <button id="start" class="start" type="button"><span>Start</span><small>Sound on. Click the panel, then play the keys.</small></button>
+  </div>
+  <div class="playbar">
+    <p class="status" id="status" role="status" aria-live="polite">Press Start for the sound, then point at any knob, button or key: this line says what it does.</p>
+    <div class="playbar__acts">
+      <button class="pbtn" id="snd" type="button" aria-pressed="false">Sound off</button>
+      <button class="pbtn" id="midi-tog" type="button" aria-expanded="false" aria-controls="midi">MIDI</button>
+      <button class="pbtn" id="keys-tog" type="button" aria-expanded="false" aria-controls="keymap">Keys</button>
+      <button class="pbtn" id="reset" type="button" aria-expanded="false" aria-controls="reset-ask">Reset to demos</button>
     </div>
   </div>
-  <aside class="play__side">
-    <dl class="read" id="read">
-      <div><dt>Track</dt><dd id="r-trk">T1</dd></div>
-      <div><dt>Machine</dt><dd id="r-mach">GND-SIN</dd></div>
-      <div><dt>Pattern</dt><dd id="r-pat">A01</dd></div>
-      <div><dt>Tempo</dt><dd id="r-bpm">122</dd></div>
-      <div><dt>Step</dt><dd id="r-step">—</dd></div>
-      <div><dt>Keys</dt><dd id="r-mode">PLAY</dd></div>
-    </dl>
-    <ol class="tracks" id="tracks"></ol>
-    <div class="pats" id="pats" role="group" aria-label="The demo patterns, bank A"></div>
-    <div class="midi" id="midi" aria-label="MIDI">
+  <div class="drawer" id="midi" hidden>
+    <div class="drawer__in midi" aria-label="MIDI">
       <div class="midi__head"><b>MIDI</b><button id="midi-on" type="button">Connect</button></div>
       <label>In<select id="midi-in" disabled><option value="">None</option></select></label>
       <label>Out<select id="midi-out" disabled><option value="">None</option></select></label>
@@ -64,59 +64,81 @@
         <button id="midi-syno" type="button" aria-pressed="false" title="Send the clock, start and stop">Sync out</button>
         <button id="midi-noto" type="button" aria-pressed="false" title="Send each track's notes on its channel">Notes out</button>
       </div>
-      <p class="midi__note" id="midi-note">Tracks 1–6 listen on channels 1–6 (GLO &gt; MIDI moves them); the others play the track in view.</p>
+      <p class="midi__note" id="midi-note">A device plugged into the computer plays the emulator as the FM-1's USB would. Tracks 1–6 listen on channels 1–6 (GLO &gt; MIDI moves them); the others play the track in view; the Monomachine's CC numbers turn the knobs. The three switches are GLO &gt; MIDI's SYIN, SYOU and NOTE.</p>
     </div>
-  </aside>
+  </div>
+  <div class="drawer" id="keymap" hidden>
+    <div class="drawer__in keymap">
+      <div class="keys">
+        <h3 class="label">Keys and buttons</h3>
+        <dl>
+          <dt><kbd>Z</kbd>–<kbd>M</kbd> <kbd>Q</kbd>–<kbd>O</kbd></dt><dd>The 16 white keys: notes, or the steps in GRID.</dd>
+          <dt><kbd>S</kbd> <kbd>D</kbd> <kbd>F</kbd> <kbd>H</kbd> <kbd>J</kbd> <kbd>2</kbd>…<kbd>9</kbd></dt><dd>The 11 black keys: notes, or in GRID tracks 1–6, pages 1–4, mute.</dd>
+          <dt><kbd>P</kbd> <kbd>0</kbd> <kbd>8</kbd> <kbd>L</kbd> <kbd>5</kbd> <kbd>G</kbd> <kbd>1</kbd> <kbd>\</kbd> <kbd>K</kbd> <kbd>A</kbd></dt><dd>FX, SEL, ENV, LFO, EDIT, GLO, HOME, SAVE, ARP, SEQ; <kbd>F1</kbd>–<kbd>F10</kbd> too.</dd>
+          <dt><kbd>Space</kbd> <kbd>Enter</kbd></dt><dd>PLAY, REC (held: FILL).</dd>
+          <dt><kbd>-</kbd> <kbd>=</kbd></dt><dd>OCT− and OCT+; in GRID the page; a held step's ratchet.</dd>
+        </dl>
+      </div>
+      <div class="keys">
+        <h3 class="label">Knobs</h3>
+        <dl>
+          <dt><kbd>;</kbd> <kbd>'</kbd></dt><dd>SELECT: the track; a held step's note.</dd>
+          <dt><kbd>,</kbd> <kbd>.</kbd></dt><dd>ALGORITHM: on EDIT the machine, elsewhere the page's pages; a held step's accent and slide.</dd>
+          <dt><kbd>[</kbd> <kbd>]</kbd></dt><dd>PRESETS: the pattern; a held step's condition.</dd>
+          <dt><kbd>/</kbd></dt><dd>A held step's trig type (MASTER on the FM-1).</dd>
+          <dt><kbd>Tab</kbd>, <kbd>↑</kbd> <kbd>↓</kbd></dt><dd>Picks KNOB 1–4 and turns it; Shift turns it faster.</dd>
+        </dl>
+      </div>
+      <div class="keys">
+        <h3 class="label">Mouse and touch</h3>
+        <dl>
+          <dt>Click the panel</dt><dd>It takes the computer's keys until <kbd>Esc</kbd> or a click elsewhere.</dd>
+          <dt>Keys and buttons</dt><dd>Play while held, several at once: hold GLO and press a key, as on the FM-1.</dd>
+          <dt>A knob</dt><dd>Drag it up or down, or scroll over it.</dd>
+        </dl>
+      </div>
+    </div>
+  </div>
+  <div class="drawer" id="reset-ask" hidden>
+    <div class="drawer__in ask" role="group" aria-labelledby="reset-q">
+      <p id="reset-q">Erase what this browser keeps of MONO2K (your patterns, the four projects and the sound library) and start again from the factory's demos? The Patch Editor's copy of an FM-1 stays.</p>
+      <p class="ask__acts"><button class="pbtn solid" id="reset-yes" type="button">Erase and restore the demos</button><button class="pbtn" id="reset-no" type="button">Keep my saves</button></p>
+    </div>
+  </div>
 </section>
 
-<section class="sec" id="controls">
+<section class="sec" id="guide">
   <p class="sec__n">01</p>
   <div class="sec__body">
-    <h2 class="display">Controls</h2>
-    <p class="lede">Solid labels are computer keys; the F-keys work too, F1 FX to F10 SEQ. Click the panel first, Esc leaves it. Drag or scroll a knob to turn it.</p>
+    <h2 class="display">How to play</h2>
+    <p class="lede">Every knob, button and key, every page and every layer. Point at a control on the drawing or at a line of the list: the FM-1's own screen shows it, drawn by the firmware as it runs.</p>
   </div>
-  <div class="keys">
-    <h3 class="label">Keys</h3>
-    <dl>
-      <dt><kbd>Z</kbd>–<kbd>M</kbd> <kbd>Q</kbd>–<kbd>O</kbd></dt><dd>The 16 lower keys: notes, or the steps in GRID (a new step takes the last note played).</dd>
-      <dt><kbd>S</kbd> <kbd>D</kbd> <kbd>F</kbd> <kbd>H</kbd> <kbd>J</kbd> <kbd>2</kbd>…<kbd>9</kbd></dt><dd>The 11 upper keys: notes, or in GRID tracks 1–6, pages 1–4 (held: the pattern ends there), mute.</dd>
-      <dt>Step + knob</dt><dd>A parameter lock.</dd>
-      <dt>Step + <kbd>[</kbd> <kbd>]</kbd></dt><dd>Its condition: chance, 1:2 … 4:4, 1ST, PRE, FILL.</dd>
-      <dt>Step + <kbd>-</kbd> <kbd>=</kbd></dt><dd>Its ratchet, 1–4 hits.</dd>
-      <dt>Step + <kbd>;</kbd> <kbd>'</kbd></dt><dd>Its note, a semitone a click.</dd>
-      <dt><kbd>Enter</kbd> REC, stopped</dt><dd>Step entry: each note played is the next step. <kbd>5</kbd> EDIT a rest, <kbd>[</kbd> <kbd>]</kbd> the cursor.</dd>
-      <dt>Step + <kbd>,</kbd> <kbd>.</kbd></dt><dd>Accent, slide.</dd>
-      <dt>Step + <kbd>/</kbd> or VOL</dt><dd>Its trig type: ALL, AMP, FILTER, LFO, AMP+FLT, AMP+LFO, FLT+LFO, NONE.</dd>
-      <dt>Step + upper keys</dt><dd>1–5 its trig type, 6–11 its condition, at once.</dd>
-    </dl>
+  <div class="guide">
+    <div class="guide__stage">
+      <div class="guide__dev" id="gdev" aria-hidden="true">
+        <svg id="gpanel" viewBox="14 14 876 538"></svg>
+        <canvas id="glcd" width="240" height="240"></canvas>
+      </div>
+      <div class="guide__box" id="gbox" aria-live="polite">
+        <p class="guide__tag" id="gbox-t">Point at a control</p>
+        <p id="gbox-p">On the drawing or in the list. Each control works in the emulator above as on the FM-1, and the screen in the drawing shows what it does.</p>
+        <p class="guide__where" id="gbox-w"></p>
+      </div>
+    </div>
+    <div class="guide__list" id="glist"></div>
   </div>
-  <div class="keys">
-    <h3 class="label">Buttons</h3>
-    <dl>
-      <dt><kbd>5</kbd> EDIT</dt><dd>SYN: the machine's A–H.</dd>
-      <dt><kbd>8</kbd> ENV</dt><dd>AMP: envelope, distortion, pan.</dd>
-      <dt><kbd>0</kbd> SEL</dt><dd>FILT: base and width, resonance, envelope.</dd>
-      <dt><kbd>P</kbd> FX</dt><dd>EQ and rate, delay, destroy.</dd>
-      <dt><kbd>L</kbd> LFO</dt><dd>Three LFOs, two pages each.</dd>
-      <dt><kbd>K</kbd> ARP</dt><dd>The track's arpeggiator.</dd>
-      <dt><kbd>G</kbd> GLO</dt><dd>Tempo, lofi bus, SPU reverb, settings. Held: REC copy, PLAY paste, SEQ clear, <kbd>-</kbd> <kbd>=</kbd> undo and redo, mutes and solos on the keys.</dd>
-      <dt><kbd>1</kbd> HOME</dt><dd>The pattern in six lanes. Held: the keys pick patterns.</dd>
-      <dt><kbd>A</kbd> SEQ</dt><dd>The keys play, or set the steps (GRID), sixteen at a time. Held: step tools, the sequencer's knobs.</dd>
-      <dt><kbd>P</kbd> FX held</dt><dd>PERFORM: the upper keys break the bus while held. Double-tap GLO, SEQ, HOME or FX to keep the layer.</dd>
-      <dt><kbd>Space</kbd> PLAY <kbd>Enter</kbd> REC</dt><dd>REC held: FILL.</dd>
-      <dt><kbd>\</kbd> SAVE</dt><dd>Keeps the pattern; held, the project.</dd>
-    </dl>
-  </div>
-  <div class="keys">
-    <h3 class="label">Knobs</h3>
-    <dl>
-      <dt><kbd>;</kbd> <kbd>'</kbd> SELECT</dt><dd>The track.</dd>
-      <dt><kbd>,</kbd> <kbd>.</kbd> ALGORITHM</dt><dd>The track's machine.</dd>
-      <dt><kbd>[</kbd> <kbd>]</kbd> PRESETS</dt><dd>The pattern, queued while playing.</dd>
-      <dt><kbd>Tab</kbd></dt><dd>Picks KNOB 1–4.</dd>
-      <dt><kbd>↑</kbd> <kbd>↓</kbd></dt><dd>Turns it; Shift is faster.</dd>
-      <dt><kbd>-</kbd> <kbd>=</kbd></dt><dd>OCT− OCT+; in GRID, the page.</dd>
-    </dl>
+  <div class="todo">
+    <h3 class="title">Eight things to do</h3>
+    <ol class="todo__list">
+      <li><h4>Hear the demos</h4><p>Start, then PLAY. PRESETS turns to the next demo, queued to the end of the bar: A01 CIRCUIT, A02 TIDE, A03 SUSPEND, A04 LANTERN. Holding HOME, white 1–4 do the same.</p><p class="where"><kbd>Space</kbd> PLAY, <kbd>[</kbd> <kbd>]</kbd> PRESETS</p></li>
+      <li><h4>Make a beat</h4><p>SEQ for GRID, SELECT for the track, then tap the white keys: each places a trig with the last note played. PLAY. A quick tap on a trig takes it away. SAVE keeps the pattern.</p><p class="where"><kbd>A</kbd> SEQ, <kbd>;</kbd> <kbd>'</kbd> SELECT, <kbd>\</kbd> SAVE</p></li>
+      <li><h4>Lock a step</h4><p>In GRID, hold a step and turn any knob, on any page: that step plays its own value, and its cell turns checkered. OCT− held with a knob takes the lock away.</p><p class="where">Hold <kbd>Z</kbd>, then <kbd>Tab</kbd> <kbd>↑</kbd></p></li>
+      <li><h4>Three trigs in one</h4><p>Hold a step and turn MASTER: ALL, AMP, FILTER, LFO or a pair, NONE. A bass with one long filter sweep: ALL on the first step, AMP on the others.</p><p class="where">Hold a step, <kbd>/</kbd></p></li>
+      <li><h4>Shape a sound</h4><p>EDIT for SYN, ALGORITHM for the machine, KNOB 1–4 its A–D (EDIT again, E–H). ENV, SEL and FX for the chain. OCT− held and a knob: back to its INIT.</p><p class="where"><kbd>5</kbd> EDIT, <kbd>,</kbd> <kbd>.</kbd> ALGORITHM</p></li>
+      <li><h4>Break the bus</h4><p>Hold FX while it plays: the black keys repeat, reverse, tape-stop, stutter, crush, wow, drive or kill the whole mix, on the beat. Double-tap FX to keep both hands free.</p><p class="where">Hold <kbd>P</kbd>, then <kbd>S</kbd>…<kbd>9</kbd></p></li>
+      <li><h4>Record a take</h4><p>PLAY, then REC: what you play lands on the nearest step. Stopped, REC then PLAY is Ready: the first note starts the pattern. REC held and SEQ clears the take.</p><p class="where"><kbd>Enter</kbd> REC, <kbd>Space</kbd> PLAY</p></li>
+      <li><h4>Play it live</h4><p>Double-tap GLO: white 1–6 mute the tracks, 9–14 solo them while held, 7 fills the next loop, 8 taps the tempo. GLO + OCT− undoes the last edit.</p><p class="where"><kbd>G</kbd> <kbd>G</kbd>, then <kbd>Z</kbd>…</p></li>
+    </ol>
   </div>
 </section>
 
@@ -124,9 +146,43 @@
   <p class="sec__n">02</p>
   <div class="sec__body">
     <h2 class="display">Machines</h2>
-    <p class="lede">Nineteen machines in eight families, sixteen that sound and three FX that work on the track before them: after what is published about the Monomachine's, and four drums after the LXR's voices; written from scratch for MONO2K, integer only, to be tuned against the original by ear and by measurement. Point at a card and its mark turns, as on the screen.</p>
+    <p class="lede">Nineteen machines in ALGORITHM's order: ten that play notes, four drums, two noises and three FX that work on the track before them. Each starts as a sound for what it is for. Pick one and hit it: the firmware's own core renders its INIT at its home note, here in the page, apart from the emulator.</p>
   </div>
-  <div class="mgrid" id="mgrid"></div>
+  <div class="eng" id="eng">
+    <div class="eng__side">
+      <div class="eng__head">
+        <h3 class="title" id="eng-name">GND-SIN</h3>
+        <p class="eng__tags" id="eng-tags"></p>
+      </div>
+      <p class="eng__desc" id="eng-desc"></p>
+      <p class="eng__init" id="eng-init"></p>
+      <figure class="eng__screen">
+        <canvas id="eng-lcd" width="240" height="240" role="img" aria-label="The FM-1's screen for this machine"></canvas>
+        <figcaption>The FM-1's own screen, drawn by the firmware: EDIT, then ALGORITHM to this machine.</figcaption>
+      </figure>
+    </div>
+    <div class="eng__plate">
+      <div class="eng__pick" id="eng-pick" role="group" aria-label="The machines"></div>
+      <div class="eng__scope">
+        <figure class="eng__plot">
+          <canvas id="eng-wave" role="img" aria-label="The hit's waveform"></canvas>
+          <figcaption><span>Waveform</span><span id="eng-wave-r"></span></figcaption>
+        </figure>
+        <figure class="eng__plot">
+          <canvas id="eng-spec" role="img" aria-label="The hit's spectrum"></canvas>
+          <figcaption><span>Spectrum</span><span id="eng-spec-r"></span></figcaption>
+        </figure>
+      </div>
+      <p class="eng__nums" id="eng-nums">Press Hit to render the sound.</p>
+      <div class="eng__ctl">
+        <div class="eng__knobs" id="eng-knobs"></div>
+        <div class="eng__acts">
+          <button class="hit" id="eng-hit" type="button"><span>Hit</span><small id="eng-hit-n">C3</small></button>
+          <button class="pbtn" id="eng-reset" type="button">INIT knobs</button>
+        </div>
+      </div>
+    </div>
+  </div>
   <details class="params" id="params">
     <summary><span class="label">Every parameter</span><span class="label" id="pcount">Eight pages</span></summary>
     <div class="pgrid" id="pgrid"></div>
@@ -140,7 +196,11 @@
     <div class="cols2">
       <p>Four projects of four banks (A–D) of sixteen patterns. As on the modern Elektron boxes, each pattern is a whole song part with its own sounds. SAVE keeps a pattern, GLO + SAVE reloads it, SAVE held keeps the project. GLO + REC, PLAY and SEQ copy, paste and clear.</p>
       <p>Six tracks of up to 64 steps. Hold a step and turn a knob to lock a value to it. Trig conditions: a chance, every A of B loops, the first loop, after the previous condition, or only on FILL. A chance is drawn as its own density of dither; ratchets repeat a step two to four times.</p>
-      <p>As on the Monomachine, each step trigs the amp, the filter's envelope and the LFOs independently: hold a step and turn VOL for ALL, AMP, FILTER, LFO, any two, or NONE, a trigless step that moves the pitch and its locks and restarts nothing. The step shows a third filled for each trig it keeps.</p>
+      <p>As on the Monomachine, each step trigs the amp, the filter's envelope and the LFOs independently: hold a step and turn MASTER for ALL, AMP, FILTER, LFO, any two, or NONE, a trigless step that moves the pitch and its locks and restarts nothing. The step shows a third filled for each trig it keeps.</p>
+    </div>
+    <div class="figs2">
+      <figure class="scr"><canvas width="240" height="240" data-screen="b PLAY; w 1600" role="img" aria-label="HOME while A01 plays"></canvas><figcaption>HOME while A01 plays: six lanes, the step under way framed.</figcaption></figure>
+      <figure class="scr"><canvas width="240" height="240" data-screen="b SEQ; w 2300; kd 4; w 700" role="img" aria-label="A step held in GRID"></canvas><figcaption>A step held in GRID: its note, condition and ratchet.</figcaption></figure>
     </div>
   </div>
 </section>
@@ -150,19 +210,86 @@
   <div class="sec__body">
     <h2 class="display">Destroy</h2>
     <div class="cols2">
-      <p>Every track has the Monomachine's chain: HP and LP filters as a base and a width, distortion, an EQ band, sample rate reduction and a delay of its own in 8-bit mu-law. Then bits, a wavefold and an XOR that mangles the samples.</p>
-      <p>The bus: an SPU-style reverb at 22 kHz, a beat repeat that slices the last sixteenth, tape wow and flutter, a 4-bit ADPCM crunch, hiss and dust, and a drive into the soft clip.</p>
+      <p>Every track has the Monomachine's chain: HP and LP filters as a base and a width, distortion into the machine's own clip, an EQ band, sample rate reduction and a delay of its own in 8-bit mu-law. Then MONO2K's bits, a wavefold and an XOR that mangles the samples.</p>
+      <p>The bus: a reverb of four lines feeding each other at 22 kHz, 0.3 to 24 seconds; a glitch from a ghost to wild; tape wow and flutter; a 4-bit ADPCM crunch; hiss and dust; a drive into the soft clip. Hold FX and the black keys break it live.</p>
+    </div>
+    <div class="figs2">
+      <figure class="scr"><canvas width="240" height="240" data-screen="b GLO; w 100; e 1 1; w 500" role="img" aria-label="GLO's GLITCH page"></canvas><figcaption>GLO, GLITCH: tape, ADPCM, how much glitch, the repeat's size.</figcaption></figure>
+      <figure class="scr"><canvas width="240" height="240" data-screen="b PLAY; w 600; B FX; w 900" role="img" aria-label="PERFORM, FX held"></canvas><figcaption>FX held: PERFORM's eleven effects on the black keys.</figcaption></figure>
     </div>
   </div>
 </section>
 
-<section class="sec" id="status-sec">
+<section class="sec" id="made">
   <p class="sec__n">05</p>
+  <div class="sec__body">
+    <h2 class="display">How it was made</h2>
+    <p class="lede">Every machine was written from scratch, then held against a Monomachine: the same notes and the same knobs played on both, rendered and measured, until the numbers agreed. 944 cases, each a number taken from the Monomachine's own output.</p>
+  </div>
+  <ol class="made__steps">
+    <li><b>The reference</b><p>The owner's own Monomachine OS image (1.32B) runs in an emulator, gearmulator-md-mm, played over MIDI only, as the instrument is played. It is read from a path on the owner's computer and never copied: no ROM, no ROM code and no recording of it is in the repository.</p></li>
+    <li><b>The same lines on both</b><p>A spec line is a note, its machine and every knob it depends on. The same specs (<code>tools/ref/*.spec</code>) play on the Monomachine (<code>mm_ref</code>) and on MONO2K (<code>m2k_ref</code>); a short note before each line, so none inherits the last one's resonance.</p></li>
+    <li><b>Measured</b><p>Levels, partials, spectra, envelope times, echoes, stereo: only the numbers are kept, 2,605 of them in <code>regress_ref.json</code>. Products are read with a flat-top window: the two carriers sit 0.04 Hz apart, and a Hanning's scalloping read them 1 dB off.</p></li>
+    <li><b>Held</b><p><code>regress.py check</code> renders MONO2K again and compares every case: PASS, a known gap (XFAIL) held at its measured size, which may only narrow, or INFO, measured and not asserted. Every fix to the sound adds a case that failed before it.</p></li>
+  </ol>
+  <div class="made__suite">
+    <div class="made__tiles" id="made-tiles"></div>
+    <figure class="chart" id="ch-suite">
+      <figcaption><b>The suite, group by group</b><span>Today's run of <code>regress.py check</code>, on MONO2K 1.1: every case of each group, by what it found.</span></figcaption>
+      <div class="chart__legend" id="ch-suite-l"></div>
+      <div class="chart__plot" id="ch-suite-p"></div>
+      <details class="chart__table"><summary class="label">The numbers</summary><div id="ch-suite-t"></div></details>
+    </figure>
+    <div class="made__gaps">
+      <h3 class="title">The 90 known gaps</h3>
+      <p>Each is measured, written down with its reason and held at its size: if one grows, the suite fails. 27 are departures the owner chose on purpose; the rest are still open.</p>
+      <dl class="gaps">
+        <dt>27 <span>chosen</span></dt><dd>The amp's DEC on MONO2K's own law since format 16, so a kick decays sooner at the same knob (13); the delay's send straight in level since format 17, where the Monomachine's knob is a square (8); SWAV-PUL's width sweep bouncing between its ends where the Monomachine's wraps through silence (6).</dd>
+        <dt>36 <span>the high-pass</span></dt><dd>The Monomachine's high-pass saturates inside its resonance and its Q moves with the cutoff; MONO2K's stays near clean with one Q a setting (the saturation 24, the far stopband and the resonant edges 12).</dd>
+        <dt>21 <span>oscillators</span></dt><dd>SID's mixed wave and its top (6); FM feedback past 48, where the Monomachine's carrier leaves the note (4); SWAV-ENS's chorus at its narrowest and a residue where two saws cancel (4); a kick's first 4 ms, where the Monomachine's sine starts from a free-running phase after a short burst (3); FX-RING's carrier above WAVE 96 (2); SWAV-SAW's sine sub at C1, 1.2 dB short (2).</dd>
+        <dt>6 <span>the chain's corners</span></dt><dd>The EQ's top band (3); a spur of the rate reduction, the filter envelope's first milliseconds and a 375 ms ping-pong darkening past MONO2K's line (1 each).</dd>
+      </dl>
+      <p class="small">And 4 that fail today: the delay's longest times (DTIM 48 to 127) land 1.6 to 18.5 ms early, under 2 %. They are the next fix.</p>
+    </div>
+  </div>
+  <div class="made__cases">
+    <article class="case">
+      <h3 class="title">The DIST ceiling of each machine</h3>
+      <p>Bank A's first demos were written on a distortion that clipped every machine at GND-SIN's ceiling. Every sine case passed, and a driven SWAV-SAW bass came out 10.7 dB louder than the Monomachine's. Measured machine by machine, the ceilings differ; MONO2K now clips each at its own, and a whole loop played on both instruments matches within 0.3 dB.</p>
+      <figure class="chart" id="ch-dist">
+        <figcaption><b>Each machine's clip against GND-SIN's</b><span>dB, measured on the Monomachine at DIST 80 to 127 (<code>chain_dist21</code>); MONO2K follows within 1 dB on all of them.</span></figcaption>
+        <div class="chart__plot" id="ch-dist-p"></div>
+        <details class="chart__table"><summary class="label">The numbers</summary><div id="ch-dist-t"></div></details>
+      </figure>
+    </article>
+    <article class="case">
+      <h3 class="title">SWAV-ENS's chorus, side by side</h3>
+      <p>Two copies off a half-rate line, each swung by a sine at 0.2 Hz, ±16.8 cents, the second a quarter turn on; CHRW sets them apart across the stereo. How alike the left and the right stay, on both instruments, at five settings of CHRW (12 s held, <code>chain_ens41</code>).</p>
+      <figure class="chart" id="ch-ens">
+        <figcaption><b>Left against right: their correlation</b><span>1 is mono; lower is wider.</span></figcaption>
+        <div class="chart__legend" id="ch-ens-l"></div>
+        <div class="chart__plot" id="ch-ens-p"></div>
+        <details class="chart__table"><summary class="label">The numbers</summary><div id="ch-ens-t"></div></details>
+      </figure>
+    </article>
+  </div>
+  <ul class="made__facts">
+    <li><b>24 steps, every value</b><p>FM+'s ratio knobs step through 24 ratios. They decode as the Monomachine's sound does, (v × 24 + 8) >> 7, not as its screen labels them: the owner's sheet of ratios, checked against the sound with seven ratio knobs swept, had FM+PAR's columns copying the screen and FM STATIC's not what it plays. MONO2K matched at every value: 80 cases of 80.</p></li>
+    <li><b>A voice in four formants</b><p>VOX-6 is the Monomachine's VO-6 measured as a cascade: an impulse and a noise, F1 187 to 705 Hz, F2 451 to 2757 Hz, F3 and F4 fixed. F1 and F2 within 0.2 % of its peaks, its level within 0.3 dB over vowels: 39 of 39. Its consonants (CONS CLEN CVOL) are on the page; their model comes next.</p></li>
+    <li><b>The owner's 64 waves</b><p>DIGI-WAV plays MONO2K's own 32 waves and the owner's own 64 (GPL-3.0 with the project), the owner's each in tune within 0.2 cents at C2, C4 and C6. The Monomachine's DigiPro waves are never copied, so DIGI-WAV is not compared with them.</p></li>
+    <li><b>The bus on laws of its own</b><p>The reverb, the glitch and the sends were rebuilt on the owner's word: an RT60 of 0.3 to 24 s, a ratio a step; a glitch from a ghost, one slice in sixteen bars 18 dB down, to wild; sends straight in level. Old patterns convert by measurement, through a 9 × 9 grid measured on the old engine.</p></li>
+    <li><b>Bit for bit</b><p>Integer DSP only, no floats in the firmware: the FM-1, this page and a computer render the same samples. The checks hold bank A byte for byte through the FM-1's pattern cache against the browser's, and the FM-1's two-core render against one core, sample for sample.</p></li>
+    <li><b>Clean-room</b><p>No Elektron code, waves or samples: the machines are MONO2K's own, after what is published about the Monomachine's, and measured against its output. The drums follow the laws of the Erica Synths LXR's voices, written anew. Not affiliated with Elektron or M-VAVE.</p></li>
+  </ul>
+</section>
+
+<section class="sec" id="status-sec">
+  <p class="sec__n">06</p>
   <div class="sec__body">
     <h2 class="display">Status</h2>
     <div class="cols2">
-      <p>MONO2K 1.0. This page runs the firmware's C core as it is; the FM-1 build adds Felucca's platform (the hardware layer, USB, storage, the update loader and the installer). Install it on the FM-1 from <a href="https://thefirmwarehub.com" target="_blank" rel="noopener">The Firmware Hub</a> or the <a href="installer.html">installer</a>. Older saves are converted as they load.</p>
-      <p>Built on the open FM-1 work: Felucca by Leo Kuroshita (Hügelton Instruments), CS-1, X0X, FoMni and the others. Orbitron and Inter Tight under the SIL OFL. Not affiliated with Elektron or M-VAVE; Monomachine is Elektron's.</p>
+      <p>MONO2K 1.1. This page runs the firmware's C core as it is; the FM-1 build adds Felucca's platform (the hardware layer, USB, storage, the update loader and the installer). Install it on the FM-1 from <a href="https://thefirmwarehub.com" target="_blank" rel="noopener">The Firmware Hub</a> or the <a href="installer.html">installer</a>; edit its patterns with the <a href="editor.html">Patch Editor</a>; read the <a href="manual.html">manual</a>. Older saves are converted as they load.</p>
+      <p>Built on the open FM-1 work: Felucca by Leo Kuroshita (Hügelton Instruments), CS-1, X0X, FoMni and the others. Orbitron and Inter Tight under the SIL OFL. Not affiliated with Elektron or M-VAVE; Monomachine is Elektron's, FM-1 is M-VAVE's.</p>
     </div>
   </div>
 </section>
@@ -181,6 +308,11 @@
 </footer>
 
 <script src="panel.js?v=2"></script>
-<script src="app.js?v=97"></script>
+<script src="help.js?v=1"></script>
+<script src="app.js?v=98"></script>
+<script src="screens.js?v=1"></script>
+<script src="guide.js?v=1"></script>
+<script src="engines.js?v=1"></script>
+<script src="made.js?v=1"></script>
 </body>
 </html>
