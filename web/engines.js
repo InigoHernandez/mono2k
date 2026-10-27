@@ -11,27 +11,27 @@
   const cstr = (x, p) => { const m = new Uint8Array(x.memory.buffer); let s = ""; while (m[p]) s += String.fromCharCode(m[p++]); return s; };
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const SR = 44100;
-  /* what each is, and what its INIT is for (docs/init-sounds.md, MACH_INIT in m2k_seq.c, the manual's pages) */
+  /* what each is in a sentence, and what its INIT is (docs/init-sounds.md, MACH_INIT in m2k_seq.c, the manual) */
   const TEXT = {
-    "GND-SIN": ["The Monomachine's sine, TUNE on H as on its page; on A to G MONO2K's own: a fold, a sub an octave down, noise, a pitch drop and its time, a click, a second harmonic. Kicks, subs, bells.","INIT: a round sine bass, a touch of fold and of the second harmonic."],
-    "SWAV-SAW": ["A supersaw on SWAVE-SAW's page: the unison's level and width, an extended pair, drift, a square an octave down and sines one and two octaves down.", "INIT: a wide, lush pad, slow to swell and long to fade."],
-    "SWAV-PUL": ["A pulse on SWAVE-PULS's page: its width and the width's sweep, a unison pair, sines an octave and two down.", "INIT: a hollow reed lead with a vibrato on TUNE."],
-    "SWAV-ENS": ["An ensemble: three more voices at their intervals over the note, a saw turning to a pulse, a chorus and its width across the stereo. Chords on one track.", "INIT: a minor-7 pad on one key, chorused."],
-    "FM+STAT": ["Two operators on the Monomachine's page, each ratio on its 24 steps: the first with a fine tune, a depth that can fall from the trig and feedback; the second's depth; a tone.", "INIT: an e-piano, with a short echo of its own."],
-    "FM+PAR": ["Three modulators side by side on one carrier, each a ratio on the 24 steps and a depth, steady or falling from the trig; a tone. The Monomachine's metal, with FX-CHORUS after it.", "INIT: a gong-like bell."],
-    "FM+DYN": ["Two operators whose ratios sweep smoothly, the first's depth and ratio moved by an envelope of their own, feedback on the second.", "INIT: an FM bass whose modulator's depth moves."],
-    "VOX-6": ["The Monomachine's VO-6: a formant voice, VOC1 and VOC2 its vowel, VOIC a whisper; its level holds itself and fades in from each trig. Its consonants are on the page; their model comes next.", "INIT: an “aah” choir, a slow vibrato under it."],
-    "DIGI-WAV": ["Digital waves: MONO2K's own 32 or the owner's 64 (BANK), a wave, a scan through them and its time, sync, bits, a second oscillator detuned and mixed in.", "INIT: a pluck that scans as it falls."],
-    "SID-6581": ["After the chip: a pulse width and its sweep, a triangle, saw, pulse, their mix or noise, and ring, sync or both from a frequency of its own or the track before.", "INIT: a sync lead."],
-    "DRM-KICK": ["A drum voice after the LXR's: a carrier swept down from up to 33 times its pitch on the LXR's laws, FM riding the sweep, a snap of pitch and a click. Kicks and toms.", "INIT: a kick."],
-    "DRM-SNAR": ["The LXR's snare: a swept tone and a sample-and-hold noise crossfaded, the noise through a filter of its own, a clap's repeats at a spacing.", "INIT: a snare."],
-    "DRM-HATS": ["The LXR's hats: a carrier phase-modulated by a sine and a held noise, each tuned in semitones, closed or open, each hit choking the last.", "INIT: a closed hat."],
-    "DRM-CYMB": ["The hats' engine at full level for cymbals: a swell and a long fall on the LXR's laws.", "INIT: a crash."],
-    "GND-PERC": ["MONO2K's own noise percussion: a colour, a pitched hold, a metal mix and its spread, a pitch drop and 8-bit grit.", "INIT: a metal hit."],
-    "GND-NOIS": ["The Monomachine's noise: RED from white through pink to red, ST a second noise, STON spreading it across the stereo; the filter follows the key.", "INIT: a wind you play."],
-    "FX-CHORS": ["An FX machine: a chorus on the track before, two taps swept against each other, feedback up to a ringing comb, its width and a lowpass. It makes no sound of its own.", "INIT: the track before made wide (here a plain SWAV-SAW, as its INIT was voiced)."],
-    "FX-DYNMX": ["An FX machine: dynamics on the track before, attack, release, threshold, ratio, make-up gain, RMS or peak, mixed in parallel. It makes no sound of its own.", "INIT: the track before punched and held (here a plain SWAV-SAW)."],
-    "FX-RING": ["An FX machine: the track before ring-modulated by a carrier on the note, a sine through a triangle to a square, rebuilt on the Monomachine's RINGMOD as measured. It makes no sound of its own.", "INIT: the track before turned to metal, the carrier six semitones up (here a plain SWAV-SAW)."],
+    "GND-SIN": ["The Monomachine's sine, with MONO2K's own fold, sub, noise, pitch drop and click.", "a round sine bass"],
+    "SWAV-SAW": ["A supersaw: unison, drift, a square sub and two sine subs.", "a wide, lush pad"],
+    "SWAV-PUL": ["A pulse: its width and sweep, a unison pair, two sine subs.", "a hollow reed lead"],
+    "SWAV-ENS": ["Four voices at their intervals, chorused across the stereo: chords on one track.", "a minor-7 pad"],
+    "FM+STAT": ["Two FM operators on 24 ratio steps, with a falling depth, feedback and tone.", "an e-piano"],
+    "FM+PAR": ["Three FM modulators side by side on one carrier.", "a gong-like bell"],
+    "FM+DYN": ["Two FM operators whose ratio and depth an envelope sweeps.", "an FM bass"],
+    "VOX-6": ["The Monomachine's VO-6 formant voice: two formants make the vowel.", "an “aah” choir"],
+    "DIGI-WAV": ["Digital waves, MONO2K's 32 or the owner's 64, scanned through as they play.", "a pluck that scans as it falls"],
+    "SID-6581": ["After the chip: five waves, a swept pulse width, ring and sync.", "a sync lead"],
+    "DRM-KICK": ["A kick on the LXR's laws: a swept carrier, FM, a snap and a click.", "a kick"],
+    "DRM-SNAR": ["The LXR's snare: a swept tone, a held noise and a clap's repeats.", "a snare"],
+    "DRM-HATS": ["The LXR's hats: a carrier modulated by a sine and a noise, closed or open.", "a closed hat"],
+    "DRM-CYMB": ["The hats' engine for cymbals: a swell and a long fall.", "a crash"],
+    "GND-PERC": ["MONO2K's own noise percussion: colour, metal, a pitch drop and grit.", "a metal hit"],
+    "GND-NOIS": ["The Monomachine's noise, white to red, its filter on the key.", "a wind you play"],
+    "FX-CHORS": ["A chorus on the track before, here a plain SWAV-SAW.", "the track before made wide"],
+    "FX-DYNMX": ["A compressor on the track before, here a plain SWAV-SAW.", "the track before punched"],
+    "FX-RING": ["The track before ring-modulated, here a plain SWAV-SAW, as the Monomachine's RINGMOD.", "the track before turned to metal"],
   };
   const GROUPS = [["Notes", 10], ["Drums", 4], ["Noise", 2], ["FX", 3]];   /* ALGORITHM's order, in its families */
 
@@ -143,15 +143,16 @@
     return g.createPattern(c, "repeat");
   }
   const AX = 16;                                       /* the axis band at the foot, in CSS px */
+  /* the waveform: each column's min and max; while it plays, drawn up to the playhead, the rest a dotted line */
   function drawWave(h, at) {
     const { g, w, h: H0, dpr } = sized(wave), { ink, paper } = col();
     g.fillStyle = paper; g.fillRect(0, 0, w, H0);
-    const ax = AX * dpr, ph = H0 - ax, mid = ph / 2;
+    const ax = AX * dpr, ph = H0 - ax, mid = ph / 2, upto = at == null ? w : Math.round(at * (w - 1));
     g.fillStyle = ink;
-    g.globalAlpha = 0.35; g.fillRect(0, Math.round(mid), w, 1); g.globalAlpha = 1;
+    for (let x = 0; x < w; x += 3 * dpr) g.fillRect(x, Math.round(mid), dpr, 1);
+    if (!h) return;
     g.font = `${10 * dpr}px "Helvetica Neue", Helvetica, Arial, sans-serif`;
     g.textBaseline = "middle";
-    if (!h) { g.textAlign = "center"; g.fillText("Hit renders the sound here", w / 2, mid); return; }
     const dur = h.n / SR, step = dur > 2 ? 1 : dur > 1 ? 0.5 : dur > 0.5 ? 0.25 : 0.1;
     for (let s = 0; s <= dur + 1e-9; s += step) {
       const x = Math.round((s / dur) * (w - 1));
@@ -159,16 +160,25 @@
       g.textAlign = s === 0 ? "left" : x > w - 30 * dpr ? "right" : "center";
       g.fillText(s === 0 ? "0 s" : +s.toFixed(2) + "", x, ph + ax / 2);
     }
-    for (let x = 0; x < w; x++) {                      /* each column's min and max, both channels */
+    for (let x = 0; x < upto; x++) {
       const a = Math.floor((x / w) * h.n), b = Math.max(a + 1, Math.floor(((x + 1) / w) * h.n));
       let lo = 0, hi = 0;
       for (let i = a; i < b; i++) { const v = (h.L[i] + h.R[i]) / 2; if (v < lo) lo = v; if (v > hi) hi = v; }
       const y0 = Math.round(mid - hi * mid), y1 = Math.round(mid - lo * mid);
       g.fillRect(x, y0, 1, Math.max(1, y1 - y0));
     }
-    if (at != null) { const x = Math.round(at * (w - 1)); g.fillStyle = paper; g.fillRect(x - dpr, 0, 3 * dpr, ph); g.fillStyle = ink; g.fillRect(x, 0, dpr, ph); }
+    if (at != null) g.fillRect(upto, 0, dpr, ph);
   }
   const F0 = 30, F1 = 16000, DB = 80;
+  /* the spectrum: the hit's average, or while it plays the 2048 samples under the playhead */
+  function liveSpec(h, at) {
+    const N = 2048, re = new Float64Array(N), im = new Float64Array(N), o = Math.max(0, Math.min(h.n - N, Math.floor(at * h.n) - N / 2));
+    for (let i = 0; i < N; i++) { const j = o + i; re[i] = j < h.n ? ((h.L[j] + h.R[j]) / 2) * (0.5 - 0.5 * Math.cos((2 * Math.PI * i) / (N - 1))) : 0; }
+    fft(re, im);
+    const P = new Float64Array(N / 2);
+    for (let k = 0; k < N / 2; k++) P[k] = re[k] * re[k] + im[k] * im[k];
+    return { P, N, max: (hit.sp.max / Math.max(1, hit.sp.frames)) * (N / hit.sp.N) ** 2 };   /* against the average's peak: it breathes */
+  }
   function drawSpec(sp) {
     const { g, w, h: H0, dpr } = sized(spec), { ink, paper } = col();
     g.fillStyle = paper; g.fillRect(0, 0, w, H0);
@@ -191,7 +201,7 @@
       const ka = Math.max(1, Math.floor((fa * sp.N) / SR)), kb = Math.max(ka + 1, Math.ceil((fb * sp.N) / SR));
       let p = 0;
       for (let k = ka; k < kb && k < sp.N / 2; k++) p = Math.max(p, sp.P[k]);
-      const d = Math.max(-DB, 10 * Math.log10(p / sp.max + 1e-30));
+      const d = Math.max(-DB, Math.min(0, 10 * Math.log10(p / sp.max + 1e-30)));
       ys[x] = (-d / DB) * ph;
     }
     if (!checker) checker = dither(g, ink);
@@ -205,6 +215,22 @@
     g.stroke();
     spec._ys = ys; spec._ph = ph;
   }
+  /* the machine's own mark on the Hit, in the button's paper: still, or turning with the sound as the screen's does */
+  const markCv = $("eng-mark");
+  let markF = 0;
+  function drawMark(bits) {
+    if (!markCv) return;
+    const g = markCv.getContext("2d"), img = g.createImageData(64, 64), cs = getComputedStyle(markCv);
+    const P = cs.color.match(/\d+/g).map(Number);
+    for (let i = 0; i < 512; i++) for (let j = 0; j < 8; j++) {
+      if (!((bits[i] >> (7 - j)) & 1)) continue;
+      const o = ((i >> 3) * 64 + (i & 7) * 8 + j) * 4;
+      img.data[o] = P[0]; img.data[o + 1] = P[1]; img.data[o + 2] = P[2]; img.data[o + 3] = 255;
+    }
+    g.putImageData(img, 0, 0);
+  }
+  const markStill = () => drawMark(new Uint8Array(core.memory.buffer, core.w_mark(m), 512));
+  const hitBtn = $("eng-hit");
 
   // ---------------------------------------------------------------------------------------- the hit
   async function play() {
@@ -224,23 +250,35 @@
     const t0 = hctx.currentTime + 0.02;
     src.start(t0);
     checker = null;
-    drawSpec(sp);
-    let pk = 0, ss = 0;
-    for (let i = 0; i < h.n; i++) { pk = Math.max(pk, Math.abs(h.L[i]), Math.abs(h.R[i])); ss += (h.L[i] * h.L[i] + h.R[i] * h.R[i]) / 2; }
-    let tail = h.n;
+    let pk = 0, tail = h.n;
+    for (let i = 0; i < h.n; i++) pk = Math.max(pk, Math.abs(h.L[i]), Math.abs(h.R[i]));
     while (tail > 1 && Math.abs(h.L[tail - 1]) < 1e-3 && Math.abs(h.R[tail - 1]) < 1e-3) tail--;
-    $("eng-nums").textContent = `${names[m]} at ${H.note(core.w_home_note(m))}: peak ${fmtDb(db(pk))} dBFS · RMS ${fmtDb(10 * Math.log10(ss / h.n + 1e-30))} dBFS · above −60 dBFS for ${(tail / SR).toFixed(2)} s · strongest partial ${fmtHz(sp.peakHz)} (${noteOf(sp.peakHz)}) · centroid ${fmtHz(sp.centroid)}`;
-    const me = src;
+    $("eng-nums").textContent = `Peak ${fmtDb(db(pk))} dBFS · ${(tail / SR).toFixed(2)} s · centroid ${fmtHz(sp.centroid)}`;
+    $("eng-nums").title = `Strongest partial ${fmtHz(sp.peakHz)} (${noteOf(sp.peakHz)}); length above −60 dBFS`;
+    const me = src, live = S.motion();
+    /* while it plays: the screen's frames, the waveform drawn to the playhead, the spectrum under it, the Hit's level */
     const anim = () => {
       if (src !== me) return;
       const el = hctx.currentTime - t0, p = el / (h.n / SR);
-      if (p >= 1) { drawWave(h, null); S.draw(lcd, h.frames[h.frames.length - 1]); return; }
-      drawWave(h, Math.max(0, p));
-      if (S.motion()) S.draw(lcd, h.frames[Math.min(h.frames.length - 1, Math.max(0, Math.floor((el * SR) / 1455)))]);
+      if (p >= 1) {
+        drawWave(h, null); drawSpec(sp); S.draw(lcd, h.frames[h.frames.length - 1]);
+        hitBtn.style.setProperty("--lv", "0"); markStill();
+        return;
+      }
+      const at = Math.max(0, p), i0 = Math.floor(at * h.n);
+      let s2 = 0;
+      for (let i = i0; i < Math.min(h.n, i0 + 1024); i++) s2 += (h.L[i] * h.L[i] + h.R[i] * h.R[i]) / 2;
+      const lv = Math.max(0, Math.min(1, (10 * Math.log10(s2 / 1024 + 1e-12) + 48) / 42));
+      drawWave(h, at);
+      drawSpec(el > 0 ? liveSpec(h, at) : null);
+      S.draw(lcd, h.frames[Math.min(h.frames.length - 1, Math.max(0, Math.floor((el * SR) / 1455)))]);
+      hitBtn.style.setProperty("--lv", lv.toFixed(3));
+      markF += 0.15 + lv * 0.9;
+      drawMark(new Uint8Array(core.memory.buffer, core.w_icon(m, Math.floor(markF) % 12), 512));
       requestAnimationFrame(anim);
     };
-    if (!S.motion()) S.draw(lcd, h.frames[Math.min(h.frames.length - 1, 4)]);
-    requestAnimationFrame(anim);
+    if (live) requestAnimationFrame(anim);
+    else { drawWave(h, null); drawSpec(sp); S.draw(lcd, h.frames[Math.min(h.frames.length - 1, 4)]); }
   }
 
   // ----------------------------------------------------------------------------------- the machine
@@ -248,12 +286,9 @@
     m = order[k];
     const x = core, name = names[m];
     $("eng-name").textContent = name;
-    const cls = cstr(x, x.w_mi(m, 3)), badge = cstr(x, x.w_mi(m, 1));   /* (an FX machine's family is its class) */
-    $("eng-tags").innerHTML = `<em class="on">${esc(cls)}</em>${badge !== cls ? `<em>${esc(badge)}</em>` : ""}<em>${esc(cstr(x, x.w_mi(m, 2)))}</em>` +
-      ["PUNCH", "METAL", "PLASTIC"].map((s, i) => `<span class="stat"><b>${s}</b><i>${Array.from({ length: 5 }, (_, j) => `<u class="${j < x.w_stat(m, i) ? "on" : ""}"></u>`).join("")}</i></span>`).join("");
     const [d, ini] = TEXT[name] || ["", ""];
     $("eng-desc").textContent = d;
-    $("eng-init").textContent = `${ini} Home note ${H.note(x.w_home_note(m))}.`;
+    $("eng-init").textContent = `INIT: ${ini}, home ${H.note(x.w_home_note(m))}.`;
     $("eng-hit-n").textContent = H.note(x.w_home_note(m));
     document.querySelectorAll("#eng-pick button").forEach((b) => b.setAttribute("aria-pressed", String(+b.dataset.m === m)));
     /* the knobs: the machine's A-H at its INIT */
@@ -262,11 +297,13 @@
     for (let i = 0; i < 8; i++) init[i] = vals[i] = kit[i];
     knobs();
     S.draw(lcd, frameAt(2400));
+    markStill();
     hit = null;
     if (src) { try { src.stop(); } catch (e) { /* ended */ } src = null; }
+    hitBtn.style.setProperty("--lv", "0");
     drawWave(null); drawSpec(null);
     $("eng-wave-r").textContent = ""; $("eng-spec-r").textContent = "";
-    $("eng-nums").textContent = `Hit renders ${name}'s INIT at ${H.note(x.w_home_note(m))} in the firmware's own core: its waveform, its spectrum and its numbers here.`;
+    $("eng-nums").textContent = " "; $("eng-nums").title = "";
     if (sound) play();
   }
   function knobs() {
@@ -274,7 +311,7 @@
     box.innerHTML = Array.from({ length: 8 }, (_, k) => {
       const s4 = cstr(x, x.w_syn(m, k, 0)), ln = cstr(x, x.w_syn(m, k, 1)), off = s4 === "-" || !s4;
       const lo = off ? 0 : x.w_kmin(t, k), hi = off ? 127 : x.w_kmax(t, k);
-      return `<div class="ek${off ? " off" : ""}"><label for="ek${k}"><b>${"ABCDEFGH"[k]} ${esc(off ? "—" : s4)}</b><span>${esc(off ? "" : ln)}</span></label><output id="ek${k}o">${off ? "" : esc(cstr(x, x.w_fmt(t, k, vals[k])))}</output>` +
+      return `<div class="ek${off ? " off" : ""}" title="${esc(off ? "" : ln)}"><label for="ek${k}"><b>${"ABCDEFGH"[k]} ${esc(off ? "—" : s4)}</b></label><output id="ek${k}o">${off ? "" : esc(cstr(x, x.w_fmt(t, k, vals[k])))}</output>` +
         `<input type="range" id="ek${k}" min="${lo}" max="${hi}" value="${vals[k]}" ${off ? "disabled" : ""} aria-label="${esc(off ? "unused" : ln)}"></div>`;
     }).join("");
     box.querySelectorAll("input").forEach((inp, k) => {
@@ -321,6 +358,7 @@
     if (!core) return;
     prepare(0);
     S.draw(lcd, hit ? hit.h.frames[hit.h.frames.length - 1] : frameAt(2400));
+    markStill();
     drawWave(hit && hit.h); drawSpec(hit && hit.sp);
   }
   window.addEventListener("m2k-theme", redraw);

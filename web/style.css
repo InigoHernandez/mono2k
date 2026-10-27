@@ -99,14 +99,13 @@ header.bar > .acts { grid-column: span 6; display: flex; justify-content: flex-e
 .themebtn:hover { background: var(--ink); color: var(--paper); }
 .themebtn:hover::before { border-color: var(--paper); }
 
-/* the hero: the wordmark across the grid, then the kicker (4 columns) and the lede (7), its three ways in under it */
+/* the hero: the wordmark across the grid, then its one line (7 columns) and its three ways in (5) */
 .hero { position: relative; z-index: 1; padding: var(--s3) var(--gut) 0; }
 #wordmark { display: block; width: 100%; height: auto; image-rendering: pixelated; }
 .hero::after { content: ""; display: block; height: var(--s3); margin-top: var(--s2); background: var(--g-across) 0 0 / 100% 100% no-repeat; image-rendering: pixelated; }
 .hero__sub { padding: var(--s3) 0 var(--s4); border-top: 3px solid var(--ink); margin-top: var(--s2); }
-.hero__sub .kicker { grid-column: 1 / span 4; }
-.hero__text { grid-column: 5 / span 7; display: grid; gap: var(--s3); }
-.hero__acts { display: flex; flex-wrap: wrap; gap: var(--s1); }
+.hero__line { grid-column: 1 / span 7; align-self: center; font: 400 clamp(20px, 2vw, 28px) / 1.25 var(--text); }
+.hero__acts { grid-column: 8 / span 5; display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: var(--s1); }
 .btn {                                                                   /* a way in, in the page's ink; ghost: outlined */
   display: inline-flex; align-items: center; height: 40px; padding: 0 var(--s2); white-space: nowrap;
   font: var(--label); text-transform: uppercase; letter-spacing: 0.1em; text-decoration: none;
@@ -144,6 +143,10 @@ header.bar > .acts { grid-column: span 6; display: flex; justify-content: flex-e
 .start.gone { display: none; }
 .playbar { display: flex; align-items: center; gap: var(--s2); margin-top: var(--s2); padding: var(--s1) 0; border-top: 3px solid var(--ink); border-bottom: 1px solid var(--ink); }
 .status { flex: 1 1 auto; min-width: 0; min-height: 40px; display: flex; align-items: center; font: var(--small); }
+.pts { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; max-width: 44em; }
+.pts li { display: grid; grid-template-columns: 8.5em minmax(0, 1fr); gap: var(--s2); padding: var(--s1) 0; border-bottom: 1px dotted var(--ink); font: var(--small); }
+.pts b { font: var(--label); text-transform: uppercase; letter-spacing: 0.1em; padding-top: 2px; }
+.fails { padding-top: var(--s1); border-top: 3px solid var(--ink); }
 .playbar__acts { flex: 0 0 auto; display: flex; gap: 4px; }
 .pbtn {                                                                  /* the bar's and the plates' small buttons */
   display: inline-flex; align-items: center; justify-content: center; height: var(--s4); padding: 0 var(--s1); white-space: nowrap; cursor: pointer;
@@ -215,7 +218,7 @@ kbd { display: inline-block; min-width: 1.5em; padding: 0 4px; font: 700 11px / 
 #gpanel .gc.on .gc__hit { fill: url(#gHi); stroke-width: 3; }
 #gpanel .gc.on .gc__t { paint-order: stroke; stroke: var(--paper); stroke-width: 3px; }
 #gpanel .gc[data-c="lcd"].on .gc__hit { fill: none; stroke-width: 4; }
-.guide__box { margin-top: var(--s2); padding: var(--s2); border: 1px solid var(--ink); border-left-width: 6px; min-height: 172px; background: var(--paper); }
+.guide__box { margin-top: var(--s2); padding: var(--s2); border: 1px solid var(--ink); border-left-width: 6px; min-height: 112px; background: var(--paper); }
 .guide__tag { display: inline-block; margin-bottom: var(--s1); padding: 2px var(--s1); font: var(--label); text-transform: uppercase; letter-spacing: 0.1em; background: var(--ink); color: var(--paper); }
 .guide__box p:not(.guide__tag) { font: var(--small); max-width: 46em; }
 .guide__where { margin-top: var(--s1) !important; font: var(--label) !important; text-transform: uppercase; letter-spacing: 0.08em; }
@@ -234,12 +237,12 @@ kbd { display: inline-block; min-width: 1.5em; padding: 0 4px; font: 700 11px / 
 .gl__more { display: none; }
 /* eight things to do */
 .todo { grid-column: 1 / -1; display: grid; gap: var(--s3); margin-top: var(--s8); }
-.todo__list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--gut); counter-reset: td; }
+.todo__list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--gut); counter-reset: td; }
 .todo__list li { counter-increment: td; position: relative; display: grid; gap: var(--s1); align-content: start; padding: var(--s2); border: 1px solid var(--ink); }
 .todo__list li::before { content: counter(td, decimal-leading-zero); font: 400 20px / 24px var(--head); }
 .todo__list h4 { margin: 0; font: 700 16px / 20px var(--head); text-transform: uppercase; }
 .todo__list p { font: var(--small); }
-.todo__list .where, .made__note { font: var(--label); text-transform: uppercase; letter-spacing: 0.06em; padding-top: var(--s1); border-top: 1px dotted var(--ink); }
+.todo__list .where { font: var(--label); text-transform: uppercase; letter-spacing: 0.06em; padding-top: var(--s1); border-top: 1px dotted var(--ink); }
 
 /* the machines: the one chosen (its text and the FM-1's screen) on 4 columns, the plate on 8: the nineteen in their
  * families, the hit's waveform and spectrum, its numbers, the eight knobs and the Hit */
@@ -247,13 +250,6 @@ kbd { display: inline-block; min-width: 1.5em; padding: 0 4px; font: 700 11px / 
 .eng__side { grid-column: 1 / span 4; display: grid; gap: var(--s2); align-content: start; }
 .eng__head { display: grid; gap: var(--s1); padding-bottom: var(--s1); border-bottom: 3px solid var(--ink); }
 .eng__head .title { margin: 0; font-size: 32px; line-height: 36px; }
-.eng__tags { display: flex; flex-wrap: wrap; align-items: center; gap: 4px var(--s1); font: var(--label); text-transform: uppercase; letter-spacing: 0.1em; }
-.eng__tags em { font-style: normal; padding: 1px 6px; border: 1px solid var(--ink); }
-.eng__tags em.on { background: var(--ink); color: var(--paper); }
-.eng__tags .stat { display: inline-flex; align-items: center; gap: 6px; }
-.eng__tags .stat i { display: flex; gap: 2px; }
-.eng__tags .stat u { display: block; width: 10px; height: 8px; border: 1px solid var(--ink); }
-.eng__tags .stat u.on { background: var(--ink); }
 .eng__desc { font: var(--body); }
 .eng__init { font: var(--small); padding: var(--s1) 0; border-top: 1px dotted var(--ink); border-bottom: 1px dotted var(--ink); }
 .eng__screen { margin: 0; }
@@ -285,10 +281,17 @@ kbd { display: inline-block; min-width: 1.5em; padding: 0 4px; font: 700 11px / 
 .ek input { grid-column: 1 / -1; width: 100%; margin: 4px 0 0; }
 .ek.off { opacity: 0.35; }
 .eng__acts { display: grid; gap: var(--s1); align-content: stretch; min-width: 144px; }
-.hit { display: grid; place-content: center; gap: 4px; min-height: 96px; padding: var(--s2) var(--s3); cursor: pointer; font: var(--display); text-transform: uppercase; color: var(--paper); background: var(--ink); border: 0; }
-.hit small { font: var(--label); letter-spacing: 0.1em; }
+.hit {
+  position: relative; isolation: isolate; overflow: hidden; display: grid; grid-template-columns: auto auto; grid-template-areas: "mk t" "mk n"; align-content: center; justify-content: center; column-gap: var(--s2);
+  min-height: 96px; padding: var(--s2) var(--s3); cursor: pointer; font: var(--display); text-transform: uppercase; color: var(--paper); background: var(--ink); border: 0;
+  transform: scale(calc(1 + var(--lv, 0) * 0.04)); transition: transform 60ms linear;
+}
+.hit > span { grid-area: t; line-height: 0.9; }
+.hit small { grid-area: n; font: var(--label); letter-spacing: 0.1em; }
+.hit canvas { grid-area: mk; width: 48px; height: 48px; image-rendering: pixelated; color: var(--paper); }
+.hit::before { content: ""; position: absolute; left: 0; right: 0; bottom: 0; z-index: -1; height: calc(var(--lv, 0) * 100%); background: var(--d-check-p); background-size: 2px 2px; image-rendering: pixelated; }
 .hit:hover { outline: 3px solid var(--ink); outline-offset: 3px; }
-.hit:active { background-image: var(--g-down-inv); background-size: 4px 100%; image-rendering: pixelated; }
+.hit:active { transform: translateY(2px); }
 /* a slider in one bit, as the editor's */
 .eng input[type="range"] { -webkit-appearance: none; appearance: none; height: 16px; background: transparent; cursor: pointer; }
 .eng input[type="range"]::-webkit-slider-runnable-track { height: 6px; background-image: var(--d-dots); background-size: 2px 2px; image-rendering: pixelated; border: 1px solid var(--ink); }
@@ -300,7 +303,7 @@ kbd { display: inline-block; min-width: 1.5em; padding: 0 4px; font: 700 11px / 
 
 /* the sections' screens, two side by side */
 .figs2 { display: flex; flex-wrap: wrap; gap: var(--s3); }
-.scr { margin: 0; flex: 0 1 288px; min-width: 0; }
+.scr { margin: 0; flex: 1 1 140px; max-width: 288px; min-width: 0; }
 
 /* how it was made: the four steps, the suite (its tiles, its chart, the gaps), two cases with their charts, the facts */
 .made__steps { grid-column: 1 / -1; list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--gut); counter-reset: ms; }
@@ -313,7 +316,6 @@ kbd { display: inline-block; min-width: 1.5em; padding: 0 4px; font: 700 11px / 
 .tile { display: grid; gap: var(--s1); padding: var(--s2); border: 1px solid var(--ink); }
 .tile b { font: 400 clamp(40px, 5vw, 64px) / 1 var(--head); letter-spacing: -0.02em; }
 .made__tiles .tile:first-child { background: var(--ink); color: var(--paper); }
-.made__note { grid-column: 1 / -1; border-top: 0; padding-top: 0; }
 #ch-suite { grid-column: 1 / span 7; }
 .made__gaps { grid-column: 8 / span 5; display: grid; gap: var(--s2); align-content: start; }
 .made__gaps > p { font: var(--small); }
@@ -371,13 +373,61 @@ kbd { display: inline-block; min-width: 1.5em; padding: 0 4px; font: 700 11px / 
 .pblk li { font-weight: 400; }
 .pblk li b { display: block; font-weight: 700; }
 
-/* scroll: parts arrive once, in steps like the screen (app.js adds .reveal only when motion is welcome) */
+/* the page's one motion, from the screen's own idiom (app.js adds .reveal only when motion is welcome): a block wipes in
+ * through a dithered edge, a screen scans in from its top, stepped as the FM-1's transitions; the .in comes once */
 .reveal .rv-up { opacity: 0; transform: translateY(var(--s2)); transition: opacity 480ms steps(6), transform 480ms steps(6); transition-delay: calc(var(--i, 0) * 80ms); }
 .reveal .rv-up.in { opacity: 1; transform: none; }
-.reveal .rv-wipe { clip-path: inset(0 100% 0 0); transition: clip-path 560ms steps(14); }
-.reveal .rv-wipe.in { clip-path: inset(0 0 0 0); }
+.reveal .wipe { -webkit-mask: var(--m-wipe) 100% 0 / 300% 100% no-repeat; mask: var(--m-wipe) 100% 0 / 300% 100% no-repeat;
+  transition: -webkit-mask-position 620ms steps(12), mask-position 620ms steps(12); transition-delay: calc(var(--i, 0) * 70ms); }
+.reveal .wipe.in { -webkit-mask-position: 0 0; mask-position: 0 0; }
+.reveal .scan { -webkit-mask: var(--m-scan) 0 100% / 100% 300% no-repeat; mask: var(--m-scan) 0 100% / 100% 300% no-repeat;
+  transition: -webkit-mask-position 700ms steps(14), mask-position 700ms steps(14); transition-delay: calc(var(--i, 0) * 90ms); }
+.reveal .scan.in { -webkit-mask-position: 0 0; mask-position: 0 0; }
+.reveal :is(.wipe, .scan).done { -webkit-mask: none; mask: none; }   /* (arrived: nothing left to clip a focus ring) */
 .reveal .sec::before { transform: scaleX(0); transform-origin: 0 50%; transition: transform 720ms steps(18); }
 .reveal .sec.in::before { transform: none; }
+/* the charts draw in, row by row, when they arrive */
+.reveal .chart.wipe .bar { transform: scaleX(0); transform-box: fill-box; transform-origin: 0 50%; transition: transform 480ms steps(8); transition-delay: calc(240ms + var(--i, 0) * 24ms); }
+.reveal .chart.wipe .bar.neg { transform-origin: 100% 50%; }
+.reveal .chart.wipe.in .bar { transform: none; }
+/* the status line: each new line scans in */
+.status.flip { animation: st-in 160ms steps(4, end); }
+@keyframes st-in { 0% { clip-path: inset(0 100% 0 0); } 100% { clip-path: inset(0); } }
+
+/* what you point at answers: a button fills with the dither from its edge, a card's dither rises, a pressed one goes
+ * down; on the panels a knob turns a little, a key or a button sinks as it is pressed */
+:is(.btn, .pbtn, .eng__btns button, .gl__item) { position: relative; isolation: isolate; }
+:is(.btn, .pbtn, .eng__btns button, .gl__item)::after {
+  content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  background: var(--d-check) 0 0 / 2px 2px; image-rendering: pixelated; clip-path: inset(0 100% 0 0); transition: clip-path 180ms steps(5);
+}
+:is(.pbtn[aria-pressed="true"], .pbtn[aria-expanded="true"], .pbtn.solid, .eng__btns button[aria-pressed="true"])::after { background-image: var(--d-check-p); }
+:is(.btn, .pbtn, .eng__btns button, .gl__item):hover::after, :is(.btn, .pbtn, .eng__btns button, .gl__item):focus-visible::after { clip-path: inset(0); }
+:is(.btn, .pbtn, .eng__btns button):hover, .gl__item:hover { background-image: none; }
+:is(.btn, .pbtn, .eng__btns button):active { transform: translateY(1px); }
+:is(.todo__list li, .made__facts li, .made__steps li, .tile, .case) { position: relative; }
+:is(.todo__list li, .tile)::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 0; pointer-events: none; opacity: 0.3; background: currentColor;
+  -webkit-mask: var(--g-up) 0 100% / 4px 100% repeat-x; mask: var(--g-up) 0 100% / 4px 100% repeat-x; transition: height 280ms steps(7);
+}
+:is(.todo__list li, .tile):hover::after { height: 100%; }
+#panel .ctl, #gpanel .gc { transform-box: fill-box; transform-origin: 50% 50%; transition: transform 110ms steps(3); }
+#panel .ctl[data-c^="e"]:hover { transform: rotate(9deg); }
+#panel .ctl.down, #gpanel .gc:active { transform: translateY(1.5px) scale(0.97); }
+#panel .ctl:is([data-c^="b"], [data-c^="k"]):hover > rect:first-child { stroke-width: 2.5; }
+#gpanel .gc[data-c^="e"]:hover { transform: rotate(9deg); }
+#gpanel .gmark { pointer-events: none; }
+/* the FM-1 lands: tilted back on the page as it comes into view, flat once it is all there (app.js sets --tilt) */
+.land { perspective: 1800px; perspective-origin: 50% 0; }
+.land .panel { transform-origin: 50% 100%; transform: translateY(calc(var(--tilt, 0) * 48px)) rotateX(calc(var(--tilt, 0) * 24deg)) scale(calc(1 - var(--tilt, 0) * 0.06)); will-change: transform; }
+.land.flat .panel { transform: none; will-change: auto; }
+@media (prefers-reduced-motion: reduce) {
+  .land .panel { transform: none; }
+  .status.flip { animation: none; }
+  :is(.btn, .pbtn, .eng__btns button, .gl__item)::after, :is(.todo__list li, .tile)::after, #panel .ctl, #gpanel .gc, .hit { transition: none; }
+  #panel .ctl[data-c^="e"]:hover, #gpanel .gc[data-c^="e"]:hover { transform: none; }
+  .hit { transform: none; }
+}
 
 @media (max-width: 1100px) {
   .pgrid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -411,7 +461,8 @@ kbd { display: inline-block; min-width: 1.5em; padding: 0 4px; font: 700 11px / 
   .bar { row-gap: var(--s1); padding-top: var(--s2); padding-bottom: var(--s2); }   /* bars that wrap: rows apart */
   header.bar > :nth-child(2) { display: none; }                  /* the name, the Ko-fi and the switch */
   .cta .long { display: none; }                                   /* on a phone just "Ko-fi" */
-  .hero__sub .kicker, .hero__text, .sec__n, .sec__body, .keys { grid-column: 1 / -1; }
+  .hero__line, .hero__acts, .sec__n, .sec__body, .keys { grid-column: 1 / -1; }
+  .hero__acts { justify-content: flex-start; }
   .hero__sub { row-gap: var(--s2); }
   .cols2 { grid-template-columns: 1fr; }
   .pgrid { grid-template-columns: 1fr; }

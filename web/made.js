@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // "How it was made": the fidelity suite's numbers and two of its stories, drawn in one bit. Every number here is the
 // repository's own: the suite from a run of tools/ref/regress.py check (944 cases against tools/ref/regress_ref.json),
-// the clip ceilings from tools/gen_tables.py's DIST_M, the chorus from README's calibration (chain_ens41).
+// the clip ceilings from tools/gen_tables.py's DIST_M.
 (() => {
   "use strict";
   const $ = (id) => document.getElementById(id);
@@ -31,8 +31,6 @@
   /* tools/gen_tables.py DIST_M: each machine's clip against GND-SIN's, dB, measured on the Monomachine */
   const DIST = [["SWAV-SAW", -10.5], ["DIGI-WAV", -7.0], ["SWAV-PUL", -2.75], ["FM+STAT", -1.4], ["VOX-6", -1.4], ["GND-SIN", 0], ["GND-NOIS", 0],
     ["SID-6581", 0], ["FM+DYN", 0], ["FM+PAR", 0.3], ["SWAV-ENS", 1.7]];
-  /* README, SWAV-ENS: L/R correlation at CHRW 0 32 64 96 127 */
-  const ENS = { x: [0, 32, 64, 96, 127], mm: [1.0, 0.99, 0.956, 0.89, 0.787], m2k: [1.0, 0.991, 0.954, 0.887, 0.795] };
 
   const svgEl = (tag, a, p) => { const e = document.createElementNS(NS, tag); for (const k in a) e.setAttribute(k, a[k]); if (p) p.appendChild(e); return e; };
   const text = (p, x, y, s, a = {}) => { const t = svgEl("text", { x, y, fill: "currentColor", "font-size": 11, ...a }, p); t.textContent = s; return t; };
@@ -68,9 +66,20 @@
 
   // ------------------------------------------------------------------------------------------ the tiles
   const tot = SUITE.reduce((a, r) => [a[0] + r[1], a[1] + r[2], a[2] + r[3], a[3] + r[4]], [0, 0, 0, 0]);
-  $("made-tiles").innerHTML = [["Cases", tot.reduce((a, b) => a + b, 0)], ["PASS", tot[0]], ["Known gaps", tot[2]], ["INFO", tot[3]], ["FAIL", tot[1]]]
-    .map(([l, v]) => `<div class="tile"><span class="label">${l}</span><b>${v}</b></div>`).join("") +
-    `<p class="small made__note">${SUITE.length} groups, 2,605 measured values; every case a line rendered on both instruments.</p>`;
+  const tiles = [["Cases", tot.reduce((a, b) => a + b, 0)], ["PASS", tot[0]], ["Known gaps", tot[2]], ["INFO", tot[3]], ["FAIL", tot[1]]];
+  $("made-tiles").innerHTML = tiles.map(([l, v], i) => `<div class="tile"><span class="label">${l}</span><b data-v="${v}">${v}</b></div>`).join("");
+  const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  function count(b) {                               /* 0 to its value in stepped frames, as the screen counts */
+    const v = +b.dataset.v, t0 = performance.now(), T = 700 + Math.min(500, v);
+    const f = (t) => { const p = Math.min(1, (t - t0) / T); b.textContent = String(Math.round(v * (1 - Math.pow(1 - p, 3)))); if (p < 1) requestAnimationFrame(f); };
+    requestAnimationFrame(f);
+  }
+  if (!still && "IntersectionObserver" in window) {
+    const bs = [...document.querySelectorAll("#made-tiles b[data-v]")];
+    bs.forEach((b) => { b.textContent = "0"; });
+    const io = new IntersectionObserver((es) => { if (es.some((e) => e.isIntersecting)) { bs.forEach(count); io.disconnect(); } }, { threshold: 0.4 });
+    io.observe($("made-tiles"));
+  }
 
   // ------------------------------------------------------------------------------------- the suite chart
   function suite() {
@@ -98,7 +107,7 @@
         const v = r.v[j];
         if (!v) return;
         const w = Math.max(1, v * sx - (x > LW ? 2 : 0));
-        svgEl("rect", { x: x + (x > LW ? 2 : 0), y: y + (RH - BH) / 2, width: w, height: BH, fill: fillOf(kind) }, g);
+        svgEl("rect", { x: x + (x > LW ? 2 : 0), y: y + (RH - BH) / 2, width: w, height: BH, fill: fillOf(kind), class: "bar", style: `--i:${i}` }, g);
         x += v * sx;
       });
       text(g, x + 6, y + RH / 2 + 4, String(r.n), { class: "val" });
@@ -132,7 +141,7 @@
       svgEl("rect", { x: 0, y, width: W, height: RH, fill: "transparent" }, g);
       text(g, LW - 8, y + RH / 2 + 4, name, { "text-anchor": "end" });
       const w = Math.abs(v) * sx, x = v < 0 ? x0 - w : x0;
-      if (v) svgEl("rect", { x, y: y + (RH - BH) / 2, width: Math.max(1, w), height: BH, fill: "currentColor" }, g);
+      if (v) svgEl("rect", { x, y: y + (RH - BH) / 2, width: Math.max(1, w), height: BH, fill: "currentColor", class: v < 0 ? "bar neg" : "bar", style: `--i:${i}` }, g);
       else svgEl("rect", { x: x0 - 1, y: y + (RH - BH) / 2, width: 3, height: BH, fill: "currentColor" }, g);
       const lab = v ? minus(v, Math.abs(v) % 1 ? (Math.abs(v * 10) % 1 ? 2 : 1) : 1) : "0";
       const inside = v < 0 && x - LW < 40;             /* no room at the tip: the value inside the bar, in paper */
@@ -145,50 +154,7 @@
   }
   $("ch-dist-t").innerHTML = `<table><thead><tr><th>Machine</th><th>Ceiling against GND-SIN's</th></tr></thead><tbody>${DIST.map(([n, v]) => `<tr><td>${n}</td><td>${minus(v, 2)} dB</td></tr>`).join("")}</tbody></table>`;
 
-  // ------------------------------------------------------------------------------------- the chorus, side by side
-  function ens() {
-    const plot = $("ch-ens-p");
-    plot.innerHTML = "";
-    const W = Math.max(280, plot.clientWidth), H = 220, L = 44, R = W < 420 ? 104 : 140, T = 10, B = 30;
-    const sx = (v) => L + (v / 127) * (W - L - R), y0 = 0.75, y1 = 1.0, sy = (v) => T + ((y1 - v) / (y1 - y0)) * (H - T - B);
-    const svg = svgEl("svg", { width: W, height: H, viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "SWAV-ENS's chorus: left-right correlation against CHRW on the Monomachine and on MONO2K; the table has the numbers" }, plot);
-    const tip = tipper(plot);
-    for (const v of [0.75, 0.8, 0.85, 0.9, 0.95, 1.0]) {
-      svgEl("rect", { x: L, y: sy(v), width: W - L - R, height: 1, fill: "currentColor", opacity: 0.18 }, svg);
-      text(svg, L - 8, sy(v) + 4, v.toFixed(2), { "text-anchor": "end", class: "ax" });
-    }
-    ENS.x.forEach((x) => text(svg, sx(x), H - 10, String(x), { "text-anchor": "middle", class: "ax" }));
-    text(svg, sx(127) + 24, H - 10, "CHRW", { class: "ax" });
-    const path = (ys) => ys.map((v, i) => `${i ? "L" : "M"}${sx(ENS.x[i]).toFixed(1)} ${sy(v).toFixed(1)}`).join(" ");
-    svgEl("path", { d: path(ENS.mm), fill: "none", stroke: "currentColor", "stroke-width": 2, "stroke-linejoin": "round", opacity: 0.45 }, svg);
-    svgEl("path", { d: path(ENS.m2k), fill: "none", stroke: "currentColor", "stroke-width": 2, "stroke-linejoin": "round" }, svg);
-    ENS.x.forEach((x, i) => {
-      svgEl("rect", { x: sx(x) - 5, y: sy(ENS.mm[i]) - 5, width: 10, height: 10, fill: "var(--paper)", stroke: "currentColor", "stroke-width": 2 }, svg);
-      svgEl("circle", { cx: sx(x), cy: sy(ENS.m2k[i]), r: 4, fill: "currentColor", stroke: "var(--paper)", "stroke-width": 2 }, svg);
-    });
-    const last = ENS.x.length - 1;
-    text(svg, sx(127) + 12, sy(ENS.m2k[last]) - 2, (W < 420 ? "" : "MONO2K ") + ENS.m2k[last].toFixed(3), { class: "val" });
-    text(svg, sx(127) + 12, sy(ENS.mm[last]) + 12, (W < 420 ? "MM " : "Monomachine ") + ENS.mm[last].toFixed(3), { class: "val" });
-    /* the crosshair finds the nearest CHRW */
-    const hair = svgEl("rect", { x: 0, y: T, width: 1, height: H - T - B, fill: "currentColor", opacity: 0 }, svg);
-    const hit = svgEl("rect", { x: L - 12, y: 0, width: W - L - R + 24, height: H - B, fill: "transparent", tabindex: 0, class: "mk", "aria-label": "Each CHRW's two values: use the table" }, svg);
-    const at = (i) => {
-      hair.setAttribute("x", sx(ENS.x[i])); hair.setAttribute("opacity", 0.6);
-      tip.show(`<b>CHRW ${ENS.x[i]}</b><span>MONO2K ${ENS.m2k[i].toFixed(3)}</span><span>Monomachine ${ENS.mm[i].toFixed(3)}</span>`, sx(ENS.x[i]), Math.min(sy(ENS.m2k[i]), sy(ENS.mm[i])));
-    };
-    hit.addEventListener("pointermove", (ev) => {
-      const r = svg.getBoundingClientRect(), v = ((ev.clientX - r.left - L) / (W - L - R)) * 127;
-      let best = 0;
-      ENS.x.forEach((x, i) => { if (Math.abs(x - v) < Math.abs(ENS.x[best] - v)) best = i; });
-      at(best);
-    });
-    hit.addEventListener("focus", () => at(last));
-    for (const e of ["pointerleave", "blur"]) hit.addEventListener(e, () => { tip.hide(); hair.setAttribute("opacity", 0); });
-  }
-  legend($("ch-ens-l"), [["MONO2K", "", "dot"], ["The Monomachine", "", "sq"]]);
-  $("ch-ens-t").innerHTML = `<table><thead><tr><th>CHRW</th><th>MONO2K</th><th>Monomachine</th></tr></thead><tbody>${ENS.x.map((x, i) => `<tr><td>${x}</td><td>${ENS.m2k[i].toFixed(3)}</td><td>${ENS.mm[i].toFixed(3)}</td></tr>`).join("")}</tbody></table>`;
-
-  const all = () => { suite(); dist(); ens(); };
+  const all = () => { suite(); dist(); };
   all();
   let rz = 0, lastW = window.innerWidth;
   window.addEventListener("resize", () => { if (window.innerWidth === lastW) return; lastW = window.innerWidth; clearTimeout(rz); rz = setTimeout(all, 150); });
