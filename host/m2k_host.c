@@ -547,7 +547,6 @@ static void bus_ref(int tracks, int ctl, int v, int gsiz)
         p->kit[1][P_SYN] = 112; p->kit[1][P_DEC] = 12; p->kit[1][P_BASE] = 40;
         p->kit[2][P_DEC] = 44; p->kit[2][P_WDTH] = 40;
         p->kit[3][P_HOLD] = 127; p->kit[3][P_DEC] = 127; p->kit[3][P_GATE] = 127; p->kit[3][P_WDTH] = 40;
-        for (int t = 0; t < 4; t++) feel_kit_v15(p->kit[t]);   /* (written on format 15's amp: the mix as recorded) */
         static const uint8_t BASS[16] = {36, 0, 0, 36, 0, 0, 43, 0, 0, 0, 46, 0, 0, 0, 0, 0};
         for (int s = 0; s < 16; s++) {
             if (s % 4 == 0) p->step[0][s] = (m2k_step_t){.note = 36, .flags = ST_TRIG};
@@ -555,6 +554,7 @@ static void bus_ref(int tracks, int ctl, int v, int gsiz)
             if (BASS[s]) p->step[2][s] = (m2k_step_t){.note = BASS[s], .flags = ST_TRIG};
         }
         p->step[3][0] = (m2k_step_t){.note = 60, .flags = ST_TRIG};
+        for (int t = 0; t < 4; t++) feel_kit_v15(p->kit[t]);   /* written on format 15's amp: the same mix since */
     }
     p->glob[ctl] = (uint8_t)v;
     cur_pat = 16;
@@ -4560,6 +4560,27 @@ static int selftest(void)
         ok = ok && w2.glob[G_VERB] == 0 && w2.kit[0][P_SPU] == 32 && w2.kit[1][P_DSND] == 68 && w2.kit[2][P_DSND] == 0 &&
              w2.kit[3][P_DSND] == 126 && w2.kit[4][P_SPU] == 1 && w2.glob[G_GLCH] == T_V17_GLCH[30] && lks == 2;
         CHECK(ok, "format: version 15 -> 17, the sends straight (VERB 64 -> 32, its lock too, DSND 80 -> 68, a lock 48 -> 60), GLCH by its table");
+        /* a version-16 pattern takes 17's bus alone: today's A01 packed as 16 loads with its amp and LFOs as they are */
+        static m2k_pattern_t x, y;
+        m2k_init(23);
+        x = pat[0];
+        x.glob[G_GLCH] = 40;
+        wn = pat_pack_v(&x, wb, 16);
+        int same16 = pat_unpack(&y, wb, wn) && y.glob[G_GLCH] == T_V17_GLCH[40];
+        for (int t = 0; t < M2K_TRACKS; t++) {
+            same16 &= !memcmp(&y.kit[t][P_ATK], &x.kit[t][P_ATK], 4);
+            for (int l = 0; l < 3; l++) same16 &= y.kit[t][P_LFO + 8 * l + L_SPD] == x.kit[t][P_LFO + 8 * l + L_SPD] &&
+                                                 y.kit[t][P_LFO + 8 * l + L_DPTH] == x.kit[t][P_LFO + 8 * l + L_DPTH];
+        }
+        /* and the bank before is turned at build onto 17's bus too: A03 HAZE, written at DCAY 74 DAMP 80 */
+        m_set(&x, 0, sizeof x);
+        for (int i = 0; i < M2K_LOCKS; i++) x.lock[i].trk = 0xFF;
+        x.glob[G_VERB] = 74; x.glob[G_DAMP] = 80;
+        fx_v16(&x);
+        m2k_init(24);
+        factory_rev9();
+        CHECK(same16 && pat[2].glob[G_VERB] == x.glob[G_VERB] && pat[2].glob[G_DAMP] == x.glob[G_DAMP],
+              "format: version 16 takes 17's bus alone (its amp and LFOs as they are); the bank before turned onto 17's at build");
         w.glob[G_VERB] = 127; w.glob[G_DAMP] = 0;
         wn = pat_pack_v(&w, wb, 16);
         ok = pat_unpack(&w2, wb, wn) && w2.glob[G_VERB] == T_V17_RV[72][0] && w2.glob[G_DAMP] == T_V17_RV[72][1] &&
