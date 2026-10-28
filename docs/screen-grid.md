@@ -73,12 +73,38 @@ y 224-239 footer  ink bar: [bars] T2 > DRM-SNAR > AMP                 1/2
 - **Meter**: a 1 px frame, the level solid inset 2.
 - **Rule**: a band's solid (the knobs' cells and foot), a cell's or a reference dotted on the screen's checker,
   (x + y) even, so dotted lines meet in step.
-- **Window**: paper, a 1 px frame, a 2 px solid shadow; x 4-232 from y 64, its shadow no lower than row 201; its
-  title a tag 4 px in, rows of key tags 15 apart from y + 21 (a column's text after its widest key), lines 13 apart.
+- **Window**: see Windows below.
 - **Picture**: curves 2 px (3 for the part being turned), axes 1 px solid, references dotted, areas hatched (the part
   being turned solid), handles 5 x 5 framed or 7 x 7 solid; the LFOs' waves filled with a checker to their middle.
 - **Message**: over the header, its inverse (paper, F_S ink type, capitals rows 3-11; two lines 31 rows, the second
   from row 18) for a moment, a gradient tail into the bar.
+
+## Windows
+
+Every window over the stage is one system (`window()`, `pairs()`, `white_keys()` in m2k_ui.c): the held layers (GLO,
+GLO latched, HOME, HOME latched, EDIT, SEQ, SEQ latched, LFO), the button cards (SEL ENV ARP PLAY OCT- OCT+), the
+question (`ask`), the clear's ring and HOME's knob popup. PERFORM still draws its own and should take this one.
+
+- **Box**: x 3-235 (w 233), from y 64 (the question 85, the ring and the popup 75, narrower), h whole rows as below,
+  its shadow no lower than row 201. Paper, a 1 px ink frame, a 2 px ink shadow right and below (`win`).
+- **Title bar**: inside the frame, rows y + 1 .. y + 14, ink across the whole inner width. Its title in F_B, paper, x
+  + 5, capitals y + 4 .. y + 11 (cut to fit, never past the mark); a mark right-aligned to x + w - 5 in F_B paper
+  (LATCHED; a fact of the layer: GLO's SELECT: BPM, HOME's BLACK 1-4: BANKS; the popup's knob). No tag in the bar.
+- **Content**: x + 5 .. x + w - 6 (4 blank columns each side of it), its first row's top y + 20 (5 blank rows under
+  the bar), rows 15 apart (a tag's 11 rows and 4), lines of F_S 13 apart; 5 blank rows under the last before the
+  frame: h = 22 + 15 x rows for a window of rows. Nothing within 3 px of the frame (the audit: a text in a window
+  begins 4 px in and ends 4 px in).
+- **Pairs** (`pairs`): a true table of key -> action, one or two columns (a gutter of 7), filled row by row; every
+  key's tag in the table one width, the widest key's plus 2 each side, its type centred, ink with paper type, rows
+  y .. y + 10; every action 4 after the tags, aligned, F_S ink (fit to its column, a shorter form where it does not).
+  Two tables in one window (SEQ's tools, then REC / PLAY) each keep their own tag width.
+- **White keys** (`white_keys`, GLO and GLO latched): the 15 white keys drawn, 12 x 14 at a 14 px pitch (208 px,
+  centred in the content), their groups labelled in F_S: FILL (7) and ALL (15) over their keys, MUTE (1-6), TAP (8)
+  and SOLO (9-14) under theirs; 38 rows with the labels. The mute keys show the tracks (heard solid, muted framed,
+  soloed away a dot, one waiting for the bar blinking between), a solo key solid while held, FILL solid while one is
+  queued. It replaces the white keys' text.
+- **Text**: a line only where a picture cannot say it (TAP GLO TO LET GO, AGAIN: AT ONCE), F_S, at x + 5.
+- **The message** (toast) is not a window: the header's inverse for a moment, as above.
 
 ## Dithering
 

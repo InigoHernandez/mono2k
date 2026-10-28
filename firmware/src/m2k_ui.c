@@ -2292,6 +2292,16 @@ static int text_fit(int x, int y, const char *s, const char *s2, int w, int ink)
     return r < w ? r : w;
 }
 
+/* a line of f in at most w, cut if it must be (the audit fails it) */
+static int text_fit_f(const m2k_font_t *f, int x, int y, const char *s, int w, int ink)
+{
+    if (text_w(f, s, 0) <= w) return text(f, x, y, s, ink, 0);
+    clip(x, y, w, f->h);
+    int r = text(f, x, y, s, ink, 0);
+    noclip();
+    return r < w ? r : w;
+}
+
 /* the big name or value, from the stage's BIG_TOP in the size asked (a size down where too wide); as it changes two
  * bands of it slip sideways a moment (the glitch in motion, still type at rest). Its last row */
 static int big_value(int x, int y, int w, const char *s, const m2k_font_t *f, uint32_t roll)
@@ -3383,6 +3393,55 @@ static void lfo_scopes(const uint8_t *k)
 
 /* ---- the pages */
 
+/* the windows' system (docs/screen-grid.md, Windows): x 3-235 (its shadow to 237), from y 64 (its shadow no lower than
+ * 201); paper, a 1 px frame, a 2 px shadow; a title bar inside the frame, ink, 14 rows, its title in the bars' type
+ * (paper) 5 px in, a mark (LATCHED) at its right; the content 5 px in from the frame (4 blank), its first row 5 under
+ * the bar, rows W_ROW apart (a tag's 11 and 4); pairs a true table (pairs()); nothing within 3 px of the frame */
+#define W_X 3
+#define W_W 233
+#define W_IN 5
+#define W_BAR 14
+#define W_ROW 15
+#define W_TOP (1 + W_BAR + 5)
+#define W_H(rows) (W_TOP + (rows) * W_ROW + 2)   /* (the last row's 11, 5 blank, the frame) */
+
+/* a window and its title bar; the first row's y */
+static int window(int x, int y, int w, int h, const char *title, const char *mark)
+{
+    win(x, y, w, h);
+    rect(x + 1, y + 1, w - 2, W_BAR, 1);
+    int mw = mark ? text_w(&F_B, mark, 0) + 8 : 0;
+    text_fit_f(&F_B, x + W_IN, y + 4, title, w - 2 * W_IN - mw, 0);
+    if (mark) text_r(&F_B, x + w - W_IN, y + 4, mark, 0, 0);
+    return y + W_TOP;
+}
+
+static const char *latch_title(int b) { return ui.latch == b + 1 ? "LATCHED" : 0; }   /* (a title bar's mark) */
+
+/* a latched layer's map says so, at its top right (PERFORM's, until it takes the system's title bar) */
+static void latch_mark(int x, int y, int w, int b)
+{
+    if (ui.latch != b + 1) return;
+    tag(x + w - 4 - tag_w("LATCHED"), y, "LATCHED", 0);
+}
+
+/* a table of n key -> action pairs (kv: key, action, ...) in cols columns, filled row by row, from (x, y), w wide:
+ * the keys' tags one width (the widest's and 2 each side), their type centred, the actions 4 after and aligned; a
+ * column's gutter 7. Its rows */
+static int pairs(int x, int y, int w, const char *const *kv, int n, int cols)
+{
+    int kt = 0;
+    for (int i = 0; i < n; i++) { int t = text_w(&F_S, kv[2 * i], 0) + 4; if (t > kt) kt = t; }
+    const int cw = cols > 1 ? (w - 7 * (cols - 1)) / cols : w;
+    for (int i = 0; i < n; i++) {
+        int cx = x + (i % cols) * (cw + 7), cy = y + (i / cols) * W_ROW;
+        rect(cx, cy, kt, F_S.base + 2, 1);
+        text(&F_S, cx + (kt - text_w(&F_S, kv[2 * i], 0)) / 2, cy + TY, kv[2 * i], 0, 0);
+        text_fit(cx + kt + 4, cy + TY, kv[2 * i + 1], 0, cw - kt - 4, 1);
+    }
+    return (n + cols - 1) / cols;
+}
+
 /* a knob turned on HOME: its value in big type in a window over the lanes */
 static void focus_popup(int code)
 {
@@ -3390,12 +3449,10 @@ static void focus_popup(int code)
     char v[16];
     const char *u;
     fmt(pi, ui.trk, knob_value(code), v, &u);
-    const int x = 30, y = STAGE_Y + 20, w = 180, h = 84;
-    win(x, y, w, h);
-    int tw = tag(x + 4, y + 4, pi->s4, 1);
-    text_fit(x + 4 + tw + 6, y + 4 + TY, pi->name, 0, w - tw - 16, 1);
-    int b = big_value(x + 6, y + 22, w - 12, v, value_font(pi, code), ui.now - ui.roll_t);
-    if (*u) text_fit(x + 6, b + 8, u, 0, w - 12, 1);
+    const int x = 30, y = STAGE_Y + 14, w = 180, h = 88;
+    int r = window(x, y, w, h, pi->name, pi->s4);
+    int b = big_value(x + W_IN, r, w - 2 * W_IN, v, value_font(pi, code), ui.now - ui.roll_t);
+    if (*u) text_fit(x + W_IN, b + 8, u, 0, w - 2 * W_IN, 1);
 }
 
 static void home(void)
@@ -3711,30 +3768,35 @@ static void wipe(int p)
 #define WW 229
 #define WY 64
 
-/* a latched layer's map says so, at its top right */
-static void latch_mark(int x, int y, int w, int b)
-{
-    if (ui.latch != b + 1) return;
-    tag(x + w - 4 - tag_w("LATCHED"), y, "LATCHED", 0);
-}
-
-/* the six tracks' mutes, a box each: heard solid, muted framed, soloed away a dot in it; one waiting for the bar blinks
- * between what it is and what it will be */
-static void mute_map(int x, int y)
+/* GLO's white keys drawn, 15 of 12 x 14 a 14 px pitch from x (208 px), y the labels' first row: FILL and ALL over their
+ * keys, MUTE, TAP and SOLO under theirs (no label crosses another). The mute keys show the tracks (heard solid, muted
+ * framed, soloed away a dot; one waiting for the bar blinks between), the solo keys solid while held, FILL solid
+ * while one is queued. Its height, 38 */
+static int white_keys(int x, int y)
 {
     const m2k_pattern_t *p = PAT(cur_pat);
-    const int fast = (ui.now >> 7) & 1;
-    for (int t = 0; t < M2K_TRACKS; t++) {
-        const int b = 1 << t;
-        int muted = p->mute & b, solo = sq.solo;
-        if (fast && (sq.mq_m & b)) muted = sq.mq_v & b;
-        if (fast && (sq.sq_m & b)) solo = (solo & ~b) | (sq.sq_v & b);
-        if (fast && (sq.solo_rel & b)) solo |= b;
-        int heard = !muted && (!solo || (solo & b)), bx = x + t * 12;
-        if (heard) rect(bx, y, 9, 9, 1);
-        else frame(bx, y, 9, 9, 1);
-        if (!muted && !heard) px(bx + 4, y + 4, 1);
+    const int fast = (ui.now >> 7) & 1, ky = y + 12;
+    for (int i = 0; i < 15; i++) {
+        int bx = x + i * 14, on = 0, dot = 0;
+        if (i < M2K_TRACKS) {
+            const int b = 1 << i;
+            int muted = p->mute & b, solo = sq.solo;
+            if (fast && (sq.mq_m & b)) muted = sq.mq_v & b;
+            if (fast && (sq.sq_m & b)) solo = (solo & ~b) | (sq.sq_v & b);
+            if (fast && (sq.solo_rel & b)) solo |= b;
+            on = !muted && (!solo || (solo & b));
+            dot = !muted && !on;
+        } else if (i >= 8 && i < 8 + M2K_TRACKS) on = (sq.solo >> (i - 8)) & 1;
+        else if (i == 6) on = sq.fill_next;
+        if (on) rect(bx, ky, 12, 14, 1); else frame(bx, ky, 12, 14, 1);
+        if (dot) rect(bx + 5, ky + 6, 2, 2, 1);
     }
+    text_c(&F_S, x + 6 * 14 + 6, y, "FILL", 1, 0);
+    text_r(&F_S, x + 14 * 14 + 12, y, "ALL", 1, 0);
+    text_c(&F_S, x + (5 * 14 + 12) / 2, ky + 17, "MUTE", 1, 0);
+    text_c(&F_S, x + 7 * 14 + 6, ky + 17, "TAP", 1, 0);
+    text_c(&F_S, x + 8 * 14 + (5 * 14 + 12) / 2, ky + 17, "SOLO", 1, 0);
+    return 38;
 }
 
 /* GLO held a moment alone: what it does with each, in a window over the page */
@@ -3742,38 +3804,18 @@ static void glo_help(void)
 {
     if (ui.latch != B_GLO + 1 && (!ui.btn[B_GLO] || !ui.glo_t0 || (!ui.glo_used && ui.now - (ui.glo_t0 & ~1u) < 350))) return;
     if (ring.t0 && !ring.done) return;                 /* the ring has the stage */
-    const int x = WX, y = WY, w = WW, h = 136;   /* (its shadow to the stage's last row) */
-    win(x, y, w, h);
-    int tw = tag(x + 4, y + 4, "GLO", 1);
-    text(&F_S, x + 4 + tw + 6, y + 4 + TY, ui.latch == B_GLO + 1 ? "THE KEYS:" : "HELD, AND", 1, 0);
-    if (ui.latch == B_GLO + 1) {                      /* latched: its keys (the combos want it held) */
-        latch_mark(x, y + 4, w, B_GLO);
-        static const char *const K[12] = {"1-6", "MUTE", "9-14", "SOLO", "7", "FILL", "8", "TAP", "15", "ALL ON",
-                                          "SELECT", "BPM"};
-        for (int i = 0; i < 6; i++) {
-            int cx = x + 4 + (i & 1) * 112, cy = y + 21 + (i >> 1) * 15;
-            int kw = tag(cx, cy, K[2 * i], 1);
-            text(&F_S, cx + kw + 4, cy + TY, K[2 * i + 1], 1, 0);
-        }
-        text(&F_S, x + 6, y + 70, "HOLD GLO FOR ITS COMBOS,", 1, 0);
-        text(&F_S, x + 6, y + 83, "TAP IT TO LET GO", 1, 0);
-        mute_map(x + 6, y + 101);
+    const int x = W_X, y = WY, w = W_W, lat = ui.latch == B_GLO + 1;
+    if (lat) {                                         /* latched: its keys (the combos want it held) */
+        int r = window(x, y, w, W_TOP + 38 + 5 + 9 + 7, "GLO KEYS", "LATCHED");
+        r += white_keys(x + 12, r) + 5;
+        text(&F_S, x + W_IN, r, "TAP GLO TO LET GO", 1, 0);
         return;
     }
     static const char *const L[16] = {"REC", "COPY", "PLAY", "PASTE", "SEQ", "CLEAR", "SAVE", "RELOAD",
                                       "OCT-", "UNDO", "OCT+", "REDO", "EDIT", "SOUNDS", "HOME", "KEYS"};
-    int kw[2] = {0, 0};
-    for (int i = 0; i < 8; i++) { int t = tag_w(L[2 * i]); if (t > kw[i & 1]) kw[i & 1] = t; }
-    for (int i = 0; i < 8; i++) {                      /* two columns of key, what it does */
-        int cx = x + 4 + (i & 1) * 112, cy = y + 21 + (i >> 1) * 15;
-        tag(cx, cy, L[2 * i], 1);
-        text(&F_S, cx + kw[i & 1] + 4, cy + TY, L[2 * i + 1], 1, 0);
-    }
-    mute_map(x + w - 6 - 69, y + 6);
-    text(&F_S, x + 6, y + 84, ui.grid ? "THE TRACK. WHITE:" : "THE PATTERN. WHITE:", 1, 0);
-    text(&F_S, x + 6, y + 97, "1-6 MUTE 9-14 SOLO", 1, 0);
-    text(&F_S, x + 6, y + 110, "7 FILL 8 TAP 15 ALL ON", 1, 0);
-    text(&F_S, x + 6, y + 123, "SELECT: BPM", 1, 0);
+    int r = window(x, y, w, W_TOP + 4 * W_ROW + 2 + 38 + 7, "GLO HELD", "SELECT: BPM");
+    r += pairs(x + W_IN, r, w - 2 * W_IN, L, 8, 2) * W_ROW + 2;
+    white_keys(x + 12, r);
 }
 
 /* HOME held a moment: the bank's 16 patterns as the white keys pick them, a cell each (the open one inverted, those
@@ -3781,20 +3823,19 @@ static void glo_help(void)
  * does */
 static void hold_help(void)
 {
-    int lat = ui.latch == B_HOME + 1;
+    const int lat = ui.latch == B_HOME + 1;
     if (held(B_GLO) || (!lat && (!ui.hold_t0 || ui.now - (ui.hold_t0 & ~1u) < 350))) return;
-    const int x = WX, y = WY, w = WW;
+    const int x = W_X, y = WY, w = W_W;
     if (held(B_HOME)) {
-        const int h = 126;
-        win(x, y, w, h);
         int f = sq.playing ? sq.queued : cur_pat;      /* (a pick opens or queues its pattern) */
-        char a[8];
-        s_pat(a, f);
-        int tw = tag(x + 4, y + 4, a, 1);
-        text_fit(x + 4 + tw + 6, y + 4 + TY, pat_name(f), 0, lat ? 80 : w - tw - 16, 1);
-        latch_mark(x, y + 4, w, B_HOME);
+        char a[24], *e = s_pat(a, f);
+        *e++ = ' ';
+        s_cpy(e, pat_name(f));
+        static const char *const P[6] = {"SEQ", "CLEAR", "REC", "COPY", "PLAY", "PASTE"};
+        int r = window(x, y, w, W_TOP + 4 * W_ROW + 1 + (lat ? 13 + 9 + 6 : W_H(2) - W_TOP), a,
+                       lat ? "LATCHED" : "BLACK 1-4: BANKS");
         for (int i = 0; i < 16; i++) {                 /* a cell a key: its slot, an INIT one dotted */
-            int n = ui.pbank * 16 + i, cx = x + 4 + (i & 3) * 56, cy = y + 20 + (i >> 2) * 15, cw = 53, ch = 13;
+            int n = ui.pbank * 16 + i, cw = 52, ch = 13, cx = x + W_IN + (i & 3) * (cw + 5), cy = r + (i >> 2) * W_ROW;
             if (n >= M2K_PATTERNS) continue;
             int on = n == cur_pat, picked = ui.pick[n >> 3] >> (n & 7) & 1, blank = name_is(pat_name(n), "INIT");
             if (on) rect(cx, cy, cw, ch, 1);
@@ -3805,25 +3846,16 @@ static void hold_help(void)
             s_pat(num, n);
             text(&F_S, cx + 4, cy + 2, num, !on, 0);
         }
-        text(&F_S, x + 6, y + 84, "BLACK 1-4: BANKS A-D", 1, 0);
-        text(&F_S, x + 6, y + 97, lat ? "AGAIN: AT ONCE" : "SEQ CLEAR, HELD: INIT", 1, 0);
-        text(&F_S, x + 6, y + 110, lat ? "TAP HOME TO LET GO" : "REC COPY, PLAY PASTE", 1, 0);
+        r += 4 * W_ROW + 1;
+        if (lat) { text(&F_S, x + W_IN, r, "AGAIN: AT ONCE", 1, 0); text(&F_S, x + W_IN, r + 13, "TAP HOME TO LET GO", 1, 0); }
+        else pairs(x + W_IN, r, w - 2 * W_IN, P, 3, 2);
         return;
     }
     if (ui.btn[B_EDIT] && !ui.hold_used) {
-        const int h = 84;
-        win(x, y, w, h);
-        int tw = tag(x + 4, y + 4, "EDIT", 1);
-        text(&F_S, x + 4 + tw + 6, y + 4 + TY, "HELD, AND", 1, 0);
-        static const char *const L[8] = {"SEQ", "THE SOUND INIT", "SAVE", "INTO THE LIBRARY", "REC", "COPY THE SOUND",
+        static const char *const L[8] = {"SEQ", "INIT THE SOUND", "SAVE", "INTO THE LIBRARY", "REC", "COPY THE SOUND",
                                          "PLAY", "PASTE IT"};
-        int kw = 0;
-        for (int i = 0; i < 4; i++) { int t = tag_w(L[2 * i]); if (t > kw) kw = t; }
-        for (int i = 0; i < 4; i++) {
-            int cy = y + 21 + i * 15;
-            tag(x + 4, cy, L[2 * i], 1);
-            text(&F_S, x + 4 + kw + 4, cy + TY, L[2 * i + 1], 1, 0);
-        }
+        int r = window(x, y, w, W_H(4), "EDIT HELD", 0);
+        pairs(x + W_IN, r, w - 2 * W_IN, L, 4, 1);
     }
 }
 
@@ -3831,20 +3863,17 @@ static void hold_help(void)
 static void seq_help(void)
 {
     if (!seq_layer() || (ui.latch != B_SEQ + 1 && (!ui.seq_t0 || ui.now - (ui.seq_t0 & ~1u) < 350))) return;
-    const int x = WX, y = WY, w = WW, h = 98;
-    win(x, y, w, h);
-    int tw = tag(x + 4, y + 4, "SEQ", 1);
-    char o[24] = {'T', (char)('1' + ui.trk), ' ', 0};
-    s_cpy(o + 3, ui.latch == B_SEQ + 1 ? "STEPS:" : "STEPS, KEY:");   /* (room for LATCHED) */
-    text(&F_S, x + 4 + tw + 6, y + 4 + TY, o, 1, 0);
-    latch_mark(x, y + 4, w, B_SEQ);
-    for (int i = 0; i < 8; i++) {
-        int cx = x + 4 + (i >> 2) * 112, cy = y + 21 + (i & 3) * 15;
-        char n[2] = {(char)('1' + i), 0};
-        int kw = tag(cx, cy, n, 1);
-        text(&F_S, cx + kw + 4, cy + TY, SEQ_TOOL[i], 1, 0);
-    }
-    text(&F_S, x + 6, y + h - 16, ui.latch == B_SEQ + 1 ? "TAP SEQ TO LET GO" : "REC COPY, PLAY PASTE", 1, 0);
+    const int x = W_X, y = WY, w = W_W, lat = ui.latch == B_SEQ + 1;
+    char o[16] = {'S', 'E', 'Q', ' ', 'T', (char)('1' + ui.trk), 0};
+    s_cpy(o + 6, " STEPS");
+    static const char *const P[4] = {"REC", "COPY", "PLAY", "PASTE"};
+    int r = window(x, y, w, lat ? W_TOP + 4 * W_ROW + 9 + 6 : W_H(5), o, latch_title(B_SEQ));
+    const char *kv[16];
+    static const char N[8][2] = {"1", "2", "3", "4", "5", "6", "7", "8"};
+    for (int i = 0; i < 8; i++) { kv[2 * i] = N[(i & 1) * 4 + (i >> 1)]; kv[2 * i + 1] = SEQ_TOOL[(i & 1) * 4 + (i >> 1)]; }
+    r += pairs(x + W_IN, r, w - 2 * W_IN, kv, 8, 2) * W_ROW;   /* (1-4 down the left, 5-8 the right) */
+    if (lat) text(&F_S, x + W_IN, r, "TAP SEQ TO LET GO", 1, 0);
+    else pairs(x + W_IN, r, w - 2 * W_IN, P, 2, 2);
 }
 
 /* FX held a moment: PERFORM's effects on the black keys, the bus's knobs; LFO held: the knobs snap back */
@@ -3855,10 +3884,11 @@ static void lay_help(void)
     const int x = WX, y = WY, w = WW, h = i ? 52 : 108;
     win(x, y, w, h);
     int tw = tag(x + 4, y + 4, i ? "LFO" : "PERFORM", 1);
-    if (i) {
-        text(&F_S, x + 4 + tw + 6, y + 4 + TY, "HELD: THE KNOBS", 1, 0);
-        text(&F_S, x + 6, y + 22, "SNAP BACK WHEN LET GO.", 1, 0);
-        text(&F_S, x + 6, y + 35, "OCT+ KEEPS THEM.", 1, 0);
+    if (i) {                                           /* (drawn again on the windows' system) */
+        static const char *const P[2] = {"OCT+", "KEEPS THEM"};
+        int r = window(W_X, y, W_W, W_H(2), "LFO HELD", 0);
+        text(&F_S, W_X + W_IN, r + TY, "THE KNOBS SNAP BACK", 1, 0);
+        pairs(W_X + W_IN, r + W_ROW, W_W - 2 * W_IN, P, 1, 1);
         return;
     }
     if (ui.latch != B_FX + 1) text(&F_S, x + 4 + tw + 6, y + 4 + TY, "BLACK KEYS:", 1, 0);   /* (else LATCHED) */
@@ -3897,14 +3927,10 @@ static void card_draw(void)
                          : b == B_OCTD ? C_OCTD : C_OCTU;
     int rows = 0;
     while (c[1 + 2 * rows]) rows++;
-    const int x = WX, y = WY, w = WW, h = 24 + rows * 15;   /* over the stage, whatever the page has there */
-    win(x, y, w, h);
-    int tw = tag(x + 4, y + 4, BTN_N[b], 1);
-    text(&F_S, x + 4 + tw + 6, y + 4 + TY, c[0], 1, 0);
-    for (int i = 0; i < rows; i++) {
-        int cy = y + 21 + i * 15, kw = tag(x + 4, cy, c[1 + 2 * i], 1);
-        text_fit(x + 4 + kw + 4, cy + TY, c[2 + 2 * i], 0, w - kw - 14, 1);
-    }
+    char t[24];
+    s_cpy(s_cpy(s_cpy(t, BTN_N[b]), " "), c[0]);
+    int r = window(W_X, WY, W_W, W_H(rows), t, 0);    /* over the stage, whatever the page has there */
+    pairs(W_X + W_IN, r, W_W - 2 * W_IN, c + 1, rows, 1);
 }
 
 /* a clear held on: a ring of twelve fills in a second, then INIT */
@@ -3913,32 +3939,28 @@ static void ring_draw(void)
     if (!ring.t0 || ring.done) return;
     uint32_t a = ui.now - (ring.t0 & ~1u);
     if (a < 150) return;
-    const int cx = 120, cy = STAGE_Y + 64, w = 120, h = 110, x = cx - w / 2, y = cy - h / 2;
-    win(x, y, w, h);
+    const int w = 120, h = 104, x = 120 - w / 2, y = STAGE_Y + 14, cx = 120, cy = y + W_TOP + 34;
+    window(x, y, w, h, "HOLD: INIT", 0);
     static const int8_t RX[12] = {0, 14, 24, 28, 24, 14, 0, -14, -24, -28, -24, -14};
     static const int8_t RY[12] = {-28, -24, -14, 0, 14, 24, 28, 24, 14, 0, -14, -24};
     int n = (int)(a > 1000 ? 12 : a * 12 / 1000);
     for (int i = 0; i < 12; i++) {
-        int px0 = cx + RX[i] - 4, py0 = cy - 8 + RY[i] - 4;
+        int px0 = cx + RX[i] - 4, py0 = cy + RY[i] - 4;
         if (i < n) rect(px0, py0, 8, 8, 1); else frame(px0, py0, 8, 8, 1);
     }
-    text_c(&F_S, cx, y + h - 15, "HOLD: INIT", 1, 0);
 }
 
 static void ask_draw(void)
 {
     if (!ask.kind) return;
     if (ui.now - (ask.t & ~1u) > 8000) { ask.kind = ASK_NONE; return; }
-    const int x = 20, y = STAGE_Y + 24, w = 200, h = 76;
-    win(x, y, w, h);
-    int tw = tag(x + 4, y + 4, ask.a, 1);
-    text(&F_S, x + 4 + tw + 6, y + 4 + TY, "?", 1, 0);
-    text_fit(x + 6, y + 26, ask.b, 0, w - 12, 1);
-    int nw = tag(x + 4, y + h - 19, "OCT-", 1);
-    text(&F_S, x + 4 + nw + 6, y + h - 19 + TY, "NO", 1, 0);
-    int ys = text_w(&F_S, "YES", 0);
-    tag(x + w - 6 - ys - 6 - tag_w("OCT+"), y + h - 19, "OCT+", (ui.now >> 9) & 1);
-    text_r(&F_S, x + w - 6, y + h - 19 + TY, "YES", 1, 0);
+    const int x = 20, y = STAGE_Y + 24, w = 200;
+    char t[16];
+    s_cpy(s_cpy(t, ask.a), " ?");
+    int r = window(x, y, w, W_H(2), t, 0);
+    text_fit(x + W_IN, r + TY, ask.b, 0, w - 2 * W_IN, 1);
+    static const char *const P[4] = {"OCT-", "NO", "OCT+", "YES"};
+    pairs(x + W_IN, r + W_ROW, w - 2 * W_IN, P, 2, 2);
 }
 
 /* a message takes the header for a moment: inverted, its text, a gradient tail (a long one the line under it too) */
