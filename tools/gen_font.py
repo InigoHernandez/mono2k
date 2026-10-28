@@ -1,104 +1,63 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
-# MONO2K's 1-bit fonts: one pixel font of its own, 4 x 5 capitals drawn here a pixel at a time, at three integer
-# sizes (2x every label, value and line, 10 px; 3x and 4x the stage's names and big values), so every stroke is whole
-# pixels and every size the same design; plus the logotype, rasterized from the brand's paths. Writes
-# firmware/gen/m2k_fonts.h.
+# MONO2K's 1-bit fonts: Orbitron (The League of Moveable Type, SIL OFL 1.1), MONO2K's type since 0.1, rendered
+# without anti-aliasing (FreeType mono hinting) at four sizes, each glyph cropped to its ink and set a whole tracking
+# apart, every capital and digit between the same two rows (no overshoot: the line stays straight); plus the
+# logotype, rasterized from the brand's paths. Writes firmware/gen/m2k_fonts.h.
 #   .venv/bin/python tools/gen_font.py [--sheet build/fonts.png]
 import os, sys
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.join(HERE, "..")
+TTF = os.path.join(ROOT, "assets", "fonts", "orbitron", "Orbitron[wght].ttf")
 OUT = os.path.join(ROOT, "firmware", "gen", "m2k_fonts.h")
 
-# MONO2K's pixel font: one 4 x 5 design (3 and 5 wide where a letter needs it), drawn here a pixel at a time
-# (squared, the round letters chamfered a pixel as the wordmark's rounded blocks; a slashed zero; a flat-topped 2),
-# generated at 2x, 3x and 4x: every stroke two, three or four pixels, as Hortator's chunky type, in MONO2K's letters
-GLYPHS = {
-    ' ': ["..", "..", "..", "..", ".."],
-    '!': ["#", "#", "#", ".", "#"],
-    '"': ["#.#", "#.#", "...", "...", "..."],
-    '#': [".#.#", "####", ".#.#", "####", ".#.#"],
-    '$': [".###", "##..", ".##.", "..##", "###."],
-    '%': ["#..#", "...#", "..#.", ".#..", "#..#"],
-    '&': [".#..", "#.#.", ".#..", "#.#.", ".#.#"],
-    "'": ["#", "#", ".", ".", "."],
-    '(': [".#", "#.", "#.", "#.", ".#"],
-    ')': ["#.", ".#", ".#", ".#", "#."],
-    '*': ["#.#", ".#.", "###", ".#.", "#.#"],
-    '+': ["...", ".#.", "###", ".#.", "..."],
-    ',': ["..", "..", "..", ".#", "#."],
-    '-': ["...", "...", "###", "...", "..."],
-    '.': [".", ".", ".", ".", "#"],
-    '/': ["..#", "..#", ".#.", "#..", "#.."],
-    '0': [".##.", "#.##", "##.#", "#..#", ".##."],
-    '1': [".#.", "##.", ".#.", ".#.", "###"],
-    '2': ["###.", "...#", ".##.", "#...", "####"],
-    '3': ["###.", "...#", ".##.", "...#", "###."],
-    '4': ["#..#", "#..#", "####", "...#", "...#"],
-    '5': ["####", "#...", "###.", "...#", "###."],
-    '6': [".##.", "#...", "###.", "#..#", ".##."],
-    '7': ["####", "...#", "..#.", ".#..", ".#.."],
-    '8': [".##.", "#..#", ".##.", "#..#", ".##."],
-    '9': [".##.", "#..#", ".###", "...#", ".##."],
-    ':': [".", "#", ".", "#", "."],
-    ';': ["..", ".#", "..", ".#", "#."],
-    '<': ["..#", ".#.", "#..", ".#.", "..#"],
-    '=': ["...", "###", "...", "###", "..."],
-    '>': ["#..", ".#.", "..#", ".#.", "#.."],
-    '?': ["###.", "...#", ".##.", "....", ".#.."],
-    '@': [".##.", "#..#", "#.##", "#...", ".###"],
-    'A': [".##.", "#..#", "####", "#..#", "#..#"],
-    'B': ["###.", "#..#", "###.", "#..#", "###."],
-    'C': [".###", "#...", "#...", "#...", ".###"],
-    'D': ["###.", "#..#", "#..#", "#..#", "###."],
-    'E': ["####", "#...", "###.", "#...", "####"],
-    'F': ["####", "#...", "###.", "#...", "#..."],
-    'G': [".###", "#...", "#.##", "#..#", ".###"],
-    'H': ["#..#", "#..#", "####", "#..#", "#..#"],
-    'I': ["###", ".#.", ".#.", ".#.", "###"],
-    'J': ["...#", "...#", "...#", "#..#", ".##."],
-    'K': ["#..#", "#.#.", "##..", "#.#.", "#..#"],
-    'L': ["#...", "#...", "#...", "#...", "####"],
-    'M': ["#...#", "##.##", "#.#.#", "#...#", "#...#"],
-    'N': ["#..#", "##.#", "#.##", "#..#", "#..#"],
-    'O': [".##.", "#..#", "#..#", "#..#", ".##."],
-    'P': ["###.", "#..#", "###.", "#...", "#..."],
-    'Q': [".##.", "#..#", "#..#", "#.#.", ".#.#"],
-    'R': ["###.", "#..#", "###.", "#.#.", "#..#"],
-    'S': [".###", "#...", ".##.", "...#", "###."],
-    'T': ["###", ".#.", ".#.", ".#.", ".#."],
-    'U': ["#..#", "#..#", "#..#", "#..#", ".##."],
-    'V': ["#...#", "#...#", ".#.#.", ".#.#.", "..#.."],
-    'W': ["#...#", "#...#", "#.#.#", "##.##", "#...#"],
-    'X': ["#..#", "#..#", ".##.", "#..#", "#..#"],
-    'Y': ["#.#", "#.#", ".#.", ".#.", ".#."],
-    'Z': ["####", "..#.", ".#..", "#...", "####"],
-    '[': ["##", "#.", "#.", "#.", "##"],
-    '\\': ["#..", "#..", ".#.", "..#", "..#"],
-    ']': ["##", ".#", ".#", ".#", "##"],
-    '^': [".#.", "#.#", "...", "...", "..."],
-    '_': ["....", "....", "....", "....", "####"],
-}
-
-# name, scale: each size the 1x glyphs blown up whole pixels at a time, its tracking a pixel of its own
-FONTS = [("F_S", 2), ("F_M", 3), ("F_L", 4)]
+# name, pixel size, weight, tracking (the columns between two glyphs' ink)
+FONTS = [
+    ("F_B", 11, 700, 1),       # the header's and the footer's: the first redesign's small type, paper on their bars
+    ("F_S", 12, 800, 2),       # every label, value and line: strokes two pixels, capitals 9 rows, as Hortator's chunky
+    ("F_M", 16, 800, 2),       # the big type a size down
+    ("F_L", 24, 800, 3),       # the stage's names and big values
+]
 FIRST, LAST = 32, 95
 
 
-def glyph_image(ch, k):
-    rows = GLYPHS[ch]
-    w, h = len(rows[0]), len(rows)
-    assert h == 5 and all(len(r) == w for r in rows), ch
-    im = Image.new("1", (w * k, h * k), 0)
-    for y, r in enumerate(rows):
-        for x, c in enumerate(r):
-            if c == "#":
-                for j in range(k):
-                    for i in range(k):
-                        im.putpixel((x * k + i, y * k + j), 1)
-    return im
+def load(size, wght):
+    f = ImageFont.truetype(TTF, size)
+    f.set_variation_by_axes([wght])
+    return f
+
+
+def glyph(font, ch, cap_top, cap, desc):
+    """a glyph cropped to its ink sideways, its rows from the capitals' top (0) to the descenders (cap + desc): a
+    capital or digit set between rows 0 and cap - 1 whatever the hinting did (a round one cut to them)"""
+    adv = round(font.getlength(ch))
+    pad = 8
+    im = Image.new("1", (adv + 2 * pad, cap + desc + 2 * pad), 0)
+    d = ImageDraw.Draw(im)
+    d.fontmode = "1"
+    d.text((pad, pad - cap_top), ch, font=font, fill=1)
+    px = im.load()
+    W, H = im.size
+    cols = [x for x in range(W) if any(px[x, y] for y in range(H))]
+    rows = [y for y in range(H) if any(px[x, y] for x in range(W))]
+    if not cols:                                         # the space: its advance, no ink
+        return Image.new("1", (max(1, adv), cap + desc), 0)
+    dy = 0
+    if (ch.isdigit() or "A" <= ch <= "Z") and ch not in "QJ":
+        t, b = rows[0], rows[-1] + 1
+        dy = (pad + cap - b) if b - t <= cap else (pad - t)
+    out = Image.new("1", (cols[-1] - cols[0] + 1, cap + desc), 0)
+    q = out.load()
+    for y in range(cap + desc):
+        sy = y + pad - dy
+        for x in range(out.size[0]):
+            if 0 <= sy < H and px[cols[0] + x, sy]:
+                if (ch.isdigit() or "A" <= ch <= "Z") and ch not in "QJ" and y >= cap:
+                    continue
+                q[x, y] = 1
+    return out
 
 
 def logo_paths():
@@ -196,20 +155,25 @@ def main():
     sheet = None
     if "--sheet" in sys.argv:
         sheet = sys.argv[sys.argv.index("--sheet") + 1]
-    lines = ["/* generated by tools/gen_font.py: MONO2K's pixel font at four sizes, and the logotype: do not edit */\n",
+    lines = ["/* generated by tools/gen_font.py from Orbitron (SIL OFL 1.1) at four sizes, and the logotype: do not "
+             "edit */\n",
              "typedef struct { uint8_t h, base, first, last; int8_t track; const uint16_t *off; const uint8_t *w;"
              " const uint8_t *bits; } m2k_font_t;\n"]
     previews = []
-    for name, k in FONTS:
-        h = 5 * k
+    for name, size, wght, track in FONTS:
+        font = load(size, wght)
+        hb = font.getbbox("H")
+        cap_top, cap = hb[1], hb[3] - hb[1]
+        desc = max(2, round(size * 0.18))
+        h = cap + desc
         offs, widths, bits = [], [], []
-        prev = Image.new("1", (16 * (6 * k + 4), ((LAST - FIRST) // 16 + 1) * (h + 4)), 0)
+        prev = Image.new("1", (16 * (size + 4), ((LAST - FIRST) // 16 + 1) * (h + 4)), 0)
         for i, c in enumerate(range(FIRST, LAST + 1)):
-            im = glyph_image(chr(c), k)
+            im = glyph(font, chr(c), cap_top, cap, desc)
             offs.append(len(bits))
             widths.append(im.size[0])
             bits.extend(pack(im))
-            prev.paste(im, ((i % 16) * (6 * k + 4), (i // 16) * (h + 4)))
+            prev.paste(im, ((i % 16) * (size + 4), (i // 16) * (h + 4)))
         previews.append(prev)
         lines.append("static const uint16_t %s_OFF[%d] = {%s};\n" % (name, len(offs), ",".join(map(str, offs))))
         lines.append("static const uint8_t %s_W[%d] = {%s};\n" % (name, len(widths), ",".join(map(str, widths))))
@@ -217,10 +181,10 @@ def main():
         for j in range(0, len(bits), 24):
             lines.append("    " + ",".join("0x%02x" % b for b in bits[j:j + 24]) + ",\n")
         lines.append("};\n")
-        # the line box is the capitals (h = base: their last row base - 1); a pixel of tracking a scale
+        # h: the capitals and the descenders; base: the capitals' rows (y .. y + base - 1), what every layout plans on
         lines.append("static const m2k_font_t %s = {%d, %d, %d, %d, %d, %s_OFF, %s_W, %s_BITS};\n" %
-                     (name, h, h, FIRST, LAST, k, name, name, name))
-        print("%s: %dx, %d px, %d bytes" % (name, k, h, len(bits)))
+                     (name, h, cap, FIRST, LAST, track, name, name, name))
+        print("%s: %d px w%d, capitals %d, line %d, %d bytes" % (name, size, wght, cap, h, len(bits)))
 
     # the logotype: the brand's (web/panel.js, LOGO), 232 px wide, rasterized from its paths (each its own fill rule,
     # sampled 4 x 4 a pixel). LOGO_BITS its fill, LOGO_EDGE its outline (a fill pixel with an empty neighbour), as the

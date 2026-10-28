@@ -410,7 +410,7 @@ static void fmt(const pi_t *pi, int t, int v, char *out, const char **unit)
     case K_SIDW: s_cpy(out, SIDW_N[c]); break;
     case K_SIDM: s_cpy(out, SIDM_N[c]); break;
     case K_ONOFF: s_cpy(out, c ? "ON" : "OFF"); break;
-    case K_MSRC: s_cpy(out, c ? "PRCH" : "MFRQ"); *unit = c ? "PREV TRACK" : ""; break;
+    case K_MSRC: s_cpy(out, c ? "PRCH" : "MFRQ"); *unit = c ? "PREV TRK" : ""; break;
     case K_MFRQ: s_note(out, 48 + (v * 3 + 4) / 8); *unit = "NOTE"; break;     /* C3 at 0, an octave every 32 */
     case K_ALGO: s_cpy(out, ALGO_N[c]); break;
     case K_VOIC: s_int(out, c + 1); *unit = "VOICES"; break;
@@ -2197,59 +2197,56 @@ static int big_value(int x, int y, int w, const char *s, const m2k_font_t *f, ui
     if (!g) g = &F_S;                                   /* (cut: the audit says so) */
     text(g, x, y, c, TX_INK, tr);
     if (roll < 90) {
-        row_slip(x, y + g->h / 3, w, 2 * (g->h / 7), roll < 45 ? 4 : 2);
-        row_slip(x, y + (2 * g->h) / 3, w, g->h / 7, roll < 45 ? -3 : -1);
+        row_slip(x, y + g->base / 3, w, 2 * (g->base / 7), roll < 45 ? 4 : 2);
+        row_slip(x, y + (2 * g->base) / 3, w, g->base / 7, roll < 45 ? -3 : -1);
     }
-    return y + g->h - 1;
+    return y + g->base - 1;
 }
 
-/* ---- the header, an ink bar: the transport and the tempo, the pattern's four bars, the modes; the track in the
- * middle; REC and the pattern at the right. What does not fit goes, the modes from the last */
-static const uint8_t REC_ON[8] = {0x3C, 0x3C, 0xFF, 0xFF, 0xFF, 0xFF, 0x3C, 0x3C};   /* (4 x 4 at 2x) */
-static const uint8_t REC_OFF[8] = {0x3C, 0x3C, 0xC3, 0xC3, 0xC3, 0xC3, 0x3C, 0x3C};
+/* ---- the header, an ink bar (the first redesign's, filled), in the bars' type: the pattern (its slot a paper tag,
+ * its name), the keys' and the sequencer's modes, REC, the tempo, the transport. What does not fit goes, the name
+ * first (whole or not at all), then the modes from the last */
+static const uint8_t REC_ON[8] = {0x3C, 0x7E, 0xFF, 0xFF, 0xFF, 0xFF, 0x7E, 0x3C};
+static const uint8_t REC_OFF[8] = {0x3C, 0x42, 0x81, 0x81, 0x81, 0x81, 0x42, 0x3C};
+#define BAR_TY 4                        /* the bars' type: its capitals 4 px into the bar, 4 clear under them */
 
-static void bars4(int x, int y, int on_ink)
+/* a tag on a bar: a paper box, its type ink (on); else a paper frame round paper type. 12 rows from the bar's third */
+static int bar_tag(int x, int y, const char *s, int on)
 {
-    /* a box a bar, 8 x 8: the one in view solid, those past the end its corners, the playing one a dot inside */
-    for (int pg = 0; pg < 4; pg++) {
-        int bx = x + pg * 10, used = pg * 16 < seq_len(), on = pg == ui.spage, c = on_ink ? 0 : 1;
-        if (!used) { px(bx, y, c); px(bx + 7, y, c); px(bx, y + 7, c); px(bx + 7, y + 7, c); continue; }
-        if (on) rect(bx, y, 8, 8, c); else frame(bx, y, 8, 8, c);
-        if (sq.playing && (int)(sq.step ? sq.step - 1 : 0) / 16 == pg) rect(bx + 3, y + 3, 2, 2, on ? !c : c);
-    }
+    int w = text_w(&F_B, s, 0) + 6;
+    if (on) rect(x, y + BAR_TY - 2, w, F_B.base + 4, 0);
+    else frame(x, y + BAR_TY - 2, w, F_B.base + 4, 0);
+    text(&F_B, x + 3, y + BAR_TY, s, !!on, 0);
+    return w;
 }
 
 static void header(void)
 {
     rect(0, 0, 240, HEAD_H, 1);
-    CELL(0, 0, 240, HEAD_H, 3, 1, 237, HEAD_H - 1);
-    const int y = 3;                                    /* the type's rows 3..12: 3 px above, 3 below */
-    static const uint8_t TRI[5] = {1, 2, 3, 2, 1};
-    if (sq.playing) for (int j = 0; j < 10; j++) hline(4, y + j, 2 * TRI[j >> 1], 0);   /* a triangle, 3 x 5 at 2x */
-    else rect(4, y + 1, 8, 8, 0);
+    CELL(0, 0, 240, HEAD_H, 2, 1, 238, HEAD_H - 1);
+    const int y = BAR_TY;                               /* the capitals' rows 4..11 */
+    int xr = 236;                                       /* the free space's last column */
+    if (sq.playing) for (int j = 0; j < 8; j++) hline(xr - 4, y + j, j < 4 ? j + 2 : 9 - j, 0);
+    else rect(xr - 7, y, 8, 8, 0);
+    xr -= 8 + 6;
     char t[8];
     s_int(t, (int)seq_bpm());
-    int x = 18 + text(&F_S, 18, y, t, 0, 0) + 8;
-    bars4(x, y + 1, 1);
-    x += 4 * 10 + 2;
-    char tr[3] = {'T', (char)('1' + ui.trk), 0};
-    int tw = text_w(&F_S, tr, 0);
-    text(&F_S, 120 - tw / 2, y, tr, 0, 0);
-    /* the right: the pattern, REC, then the modes, as many as fit before the track */
+    xr -= text_r(&F_B, xr + 1, y, t, 0, 0) + 6;
+    if (sq.rec) { blit((ui.now >> 8) & 1 ? REC_ON : REC_OFF, 8, 8, xr - 7, y, 0); xr -= 8 + 6; }
     char a[8];
     s_pat(a, cur_pat);
-    int xr = 237 - text_r(&F_S, 237, y, a, 0, 0) - 6;
-    if (sq.rec) { blit((ui.now >> 8) & 1 ? REC_ON : REC_OFF, 8, 8, xr - 8, y + 1, 3); xr -= 8 + 6; }
+    int pw = 2 + bar_tag(2, 0, a, 1);
     static const char *const MODE[4] = {"GRID", "PADS", "READY", "FILL"};
     const int on[4] = {ui.grid, ui.pads, sq.ready, sq.fill};
     for (int i = 0; i < 4; i++) {
         if (!on[i]) continue;
-        int w = text_w(&F_S, MODE[i], 0);
-        if (xr - w < 120 + tw / 2 + 8) continue;
-        text(&F_S, xr - w, y, MODE[i], 0, 0);
-        xr -= w + 8;
+        int w = text_w(&F_B, MODE[i], 0) + 6;
+        if (xr - w + 1 < pw + 6) continue;
+        bar_tag(xr - w + 1, 0, MODE[i], i >= 2);
+        xr -= w + 4;
     }
-    (void)x;
+    const char *nm = pat_name(cur_pat);
+    if (text_w(&F_B, nm, 0) <= xr - (pw + 6) + 1) text(&F_B, pw + 6, y, nm, 0, 0);
 }
 
 /* ---- the knobs, along the top as on the panel: each cell its label (inverted while turned), a dotted rule, its value; a dial
@@ -2299,7 +2296,7 @@ static void knobs(void)
         if (pi->s4[0] == '-') { text_c(&F_S, x + 30, KNOB_Y + 4, "-", 1, 0); continue; }
         int v = knob_value(code), lk = knob_locked(code);
         int focus = ui.focus_t && ui.focus == k && ui.now - ui.focus_t < 2500;
-        if (focus) rect(x + 2, KNOB_Y + 3, 57, 12, 1);
+        if (focus) rect(x + 2, KNOB_Y + 3, 57, F_S.base + 2, 1);
         int lw = text_w(&F_S, pi->s4, 0);
         text(&F_S, x + 30 - lw / 2, KNOB_Y + 4, pi->s4, !focus, 0);
         char o[16];
@@ -2307,13 +2304,13 @@ static void knobs(void)
         fmt(pi, ui.trk, v, o, &u);
         int n = kind_choices(pi->kind), mx = kind_max(pi->kind), mn = kind_min(pi->kind);
         int ranged = !action(pi->kind) && !(n && n <= 8);
-        const int vy = KNOB_Y + 26;                         /* the value: rows 42..51 */
+        const int vy = KNOB_Y + 27;                         /* the value: rows 43..51, about the dial's middle */
         int room = ranged ? CW - 15 : CW, tr = 0;
         const char *c = o;
         const m2k_font_t *vf = fit_font(&F_S, &c, 0, room, &tr);
         if (!vf && ranged) { ranged = 0; room = CW; c = o; vf = fit_font(&F_S, &c, 0, room, &tr); }   /* (no room: no dial) */
         int w = vf ? text_w(&F_S, c, tr) : room, vx = ranged ? cx + CW - w : x + 30 - w / 2;
-        if (lk) rect(vx - 2, vy - 1, w + 4, 12, 1);
+        if (lk) rect(vx - 2, vy - 1, w + 4, F_S.base + 2, 1);
         if (vf) text(&F_S, vx, vy, c, !lk, tr);
         else text_fit(cx + CW - room, vy, o, 0, room, !lk);   /* (too wide: cut, the audit says so) */
         if (!ranged) continue;
@@ -2375,31 +2372,40 @@ static void strip(void)
     }
 }
 
-/* ---- the footer, an ink bar: the breadcrumb (the track, its machine, the page; on GLO the section) and the page
- * among its section's (HOME: the pattern's name) */
+/* ---- the footer, an ink bar (the first redesign's, filled), in the bars' type: the pattern's four bars (the one in
+ * view solid, those past its end dotted, the playing one marked), the breadcrumb (the track, its machine, the page; on
+ * GLO the section) and the page among its section's */
 static int crumb_w(const char *const *it, int n)
 {
     int w = 0;
-    for (int i = 0; i < n; i++) w += text_w(&F_S, it[i], 0) + (i ? 14 : 0);
+    for (int i = 0; i < n; i++) w += text_w(&F_B, it[i], 0) + (i ? 11 : 0);
     return w;
 }
 
 static void foot(void)
 {
-    const int y = FOOT_Y + 3;                           /* the type's rows 227..236 */
+    const int y = FOOT_Y + BAR_TY;                      /* the capitals' rows 228..235 */
     rect(0, FOOT_Y, 240, 240 - FOOT_Y, 1);
-    CELL(0, FOOT_Y, 240, 240, 3, FOOT_Y + 1, 237, 240);
-    char pl[12], r[24] = {0};
+    CELL(0, FOOT_Y, 240, 240, 2, FOOT_Y + 1, 238, 239);
+    for (int pg = 0; pg < 4; pg++) {
+        int x = 4 + pg * 11, used = pg * 16 < seq_len(), on = pg == ui.spage;
+        if (!used) {                                    /* past the end: dotted, in step with the checker */
+            for (int i = 0; i < 9; i++)
+                for (int j = 0; j < 8; j++)
+                    if ((i == 0 || i == 8 || j == 0 || j == 7) && !((x + i + y + j) & 1)) px(x + i, y + j, 0);
+            continue;
+        }
+        if (on) rect(x, y, 9, 8, 0); else frame(x, y, 9, 8, 0);
+        if (sq.playing && play_step() / 16 == pg) rect(x + 3, y + 3, 3, 2, on);
+    }
+    char pl[12], cnt[8];
     page_label(ui.page, ui.sub, pl);
-    int n = nsub(ui.page);
-    if (n > 1) { char *e = s_int(r, ui.sub + 1); *e++ = '/'; s_int(e, n); }
-    if (ui.page == PG_HOME) s_cpyn(r, pat_name(cur_pat), sizeof r);
-    int xr = 237;
-    if (r[0]) {                                         /* a paper tag, 2 px of the bar round it */
-        int rw = text_w(&F_S, r, 0), rx = 234 - rw;
-        rect(rx, FOOT_Y + 2, rw + 4, 12, 0);
-        text(&F_S, rx + 2, y, r, 1, 0);
-        xr = rx - 6;
+    int n = nsub(ui.page), xr = 236;
+    if (n > 1) {
+        char *e = s_int(cnt, ui.sub + 1);
+        *e++ = '/';
+        s_int(e, n);
+        xr -= text_r(&F_B, 237, y, cnt, 0, 0) + 8;
     }
     const mi_t *mi = &MI[PAT(cur_pat)->machine[ui.trk]];
     char tn[3] = {'T', (char)('1' + ui.trk), 0};
@@ -2408,13 +2414,12 @@ static void foot(void)
     if (ui.page == PG_GLO) it[k++] = "GLO";
     else { it[k++] = tn; it[k++] = mi->name; }
     it[k++] = pl;
-    const int x0 = 4, room = xr - x0 + 1;
+    const int x0 = 52, room = xr - x0 + 1;
     if (k == 3 && crumb_w(it, k) > room) it[1] = mi->badge;       /* the machine's badge, else none */
     if (k == 3 && crumb_w(it, k) > room) { it[1] = it[2]; k = 2; }
-    static const uint8_t TRI[5] = {1, 2, 3, 2, 1};
     for (int i = 0, x = x0; i < k; i++) {
-        if (i) { for (int j = 0; j < 10; j++) hline(x + 4, y + j, 2 * TRI[j >> 1], 0); x += 14; }   /* a 3 x 5 at 2x */
-        x += text(&F_S, x, y, it[i], 0, 0);
+        if (i) { for (int j = 0; j < 5; j++) hline(x + 4, y + 2 + j, j < 3 ? j + 1 : 5 - j, 0); x += 11; }
+        x += text(&F_B, x, y, it[i], 0, 0);
     }
 }
 
@@ -2509,7 +2514,7 @@ static void step_card(void)
     text_fit(VX, L_TOP, o, 0, VW, 1);
     s_note(o, st.note);
     int y = big_value(VX, BIG_TOP, VW, o, &F_L, 1000) + 8;
-    text_fit(VX, y, "TRACK: NOTE", "TRACK", VW, 1);      /* the TRACK knob turns the note */
+    text_fit(VX, y, "TRACK: NOTE", "TRK: NOTE", VW, 1);  /* the TRACK knob turns the note */
     int x = VX - 2;
     y += 15;
     const char *tg[5] = {COND_N[st.cond], 0, (st.flags & ST_TTYPE) ? TTYPE_N[ttype_of(st.flags)] : 0,
@@ -2676,7 +2681,7 @@ static void picture(void)
                 int i = snd_nth(first + r), y = Y0 + r * 14, on = i == ui.snd_sel;
                 char o[4];
                 s_num3(o, i + 1);
-                if (on) rect(X, y - 1, W, 12, 1);
+                if (on) rect(X, y - 1, W, F_S.base + 2, 1);
                 text(&F_S, X + 2, y, o, !on, 0);
                 int nx = X + 2 + text_w(&F_S, "000", 0) + 6;
                 if (snd[i].name[0]) {
@@ -3510,7 +3515,7 @@ static void hold_help(void)
         text_fit(x + 4 + tw + 6, y + 4 + TY, pat_name(f), 0, lat ? 80 : w - tw - 16, 1);
         latch_mark(x, y + 4, w, B_HOME);
         for (int i = 0; i < 16; i++) {                 /* a cell a key: its slot, an INIT one dotted */
-            int n = ui.pbank * 16 + i, cx = x + 4 + (i & 3) * 56, cy = y + 20 + (i >> 2) * 15, cw = 53, ch = 14;
+            int n = ui.pbank * 16 + i, cx = x + 4 + (i & 3) * 56, cy = y + 20 + (i >> 2) * 15, cw = 53, ch = 13;
             if (n >= M2K_PATTERNS) continue;
             int on = n == cur_pat, picked = ui.pick[n >> 3] >> (n & 7) & 1, blank = name_is(pat_name(n), "INIT");
             if (on) rect(cx, cy, cw, ch, 1);
@@ -3584,7 +3589,7 @@ static void lay_help(void)
     for (int k = 0; k < PF_COUNT; k++) {
         int cx = x + 4 + (k / 6) * 112, cy = y + 21 + (k % 6) * 14;
         char n[3] = {(char)(k < 9 ? '1' + k : '1'), (char)(k < 9 ? 0 : '0' + k - 9), 0};
-        if (perf.on[k]) rect(cx, cy, 108, 12, 1);
+        if (perf.on[k]) rect(cx, cy, 108, F_S.base + 2, 1);
         text(&F_S, cx + 2, cy + TY, n, !perf.on[k], 0);
         text(&F_S, cx + 22, cy + TY, PF_N[k], !perf.on[k], 0);
     }
@@ -3599,8 +3604,8 @@ static void card_draw(void)
                                         "OCT- +", "A KNOB TO DEFAULT", 0};
     static const char *const C_ENV[] = {"THE AMP", "TAP", "ITS PAGES IN TURN", "STEP +", "A KNOB LOCKS IT",
                                         "OCT- +", "A KNOB TO DEFAULT", 0};
-    static const char *const C_ARP[] = {"THE ARP", "TAP", "THE ARP PAGE", "GLO +", "PADS: KEYS HIT T1-T6", 0};
-    static const char *const C_PLAY[] = {"AND PASTE", "TAP", "PLAY, STOP", "GLO +", "THE PATTERN (STEPS)",
+    static const char *const C_ARP[] = {"THE ARP", "TAP", "THE ARP PAGE", "GLO +", "PADS: KEYS T1-T6", 0};
+    static const char *const C_PLAY[] = {"AND PASTE", "TAP", "PLAY, STOP", "GLO +", "THE PATTERN",
                                          "HOME +", "ON THE PICKED", "EDIT +", "THE SOUND", "SEQ +", "THE STEPS",
                                          "STEP +", "ONTO IT", 0};
     static const char *const C_OCTD[] = {"AND NO", "TAP", "OCTAVE, GRID PAGE", "+ KNOB", "ITS DEFAULT",
@@ -3668,7 +3673,7 @@ static void overlays(void)
     rect(0, 0, w, hgt, 0);
     CELL(0, 0, 240, hgt, 3, 0, 237, hgt - 1);
     clip(0, 0, w, hgt);
-    int x = 4 + text(&F_S, 4, 3, ui.toast, 1, 0) + 8;
+    int x = 4 + text(&F_S, 4, 3, ui.toast, 1, 0) + 8;   /* (the capitals 3..11, a comma's foot 3 clear of the rule) */
     if (two) text(&F_S, 4, 18, ui.toast2, 1, 0);
     else if (ui.toast2[0]) x += text(&F_S, x, 3, ui.toast2, 1, 0) + 8;
     noclip();

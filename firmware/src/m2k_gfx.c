@@ -384,12 +384,12 @@ static int text_c(const m2k_font_t *f, int cx, int y, const char *s, int fill, i
     return w;
 }
 
-/* a tag: the small type on a solid box, a pixel of ink above and below it and two each side (on); off, the same
- * type plain in the same place. Its box: rows y .. y + 8, its type's capitals y + 1 .. y + 7 */
+/* a tag: the small type on a solid box, a pixel of ink above and below its capitals and two each side (on); off, the
+ * same type plain in the same place. Its box: rows y .. y + base + 1, its type's capitals y + 1 .. y + base */
 static int tag(int x, int y, const char *s, int on)
 {
     int w = text_w(&F_S, s, 0) + 4;
-    if (on) rect(x, y, w, F_S.h + 2, 1);
+    if (on) rect(x, y, w, F_S.base + 2, 1);
     text(&F_S, x + 2, y + 1, s, !on, 0);
     return w;
 }
