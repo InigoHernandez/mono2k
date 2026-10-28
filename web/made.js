@@ -67,7 +67,13 @@
   // ------------------------------------------------------------------------------------------ the tiles
   const tot = SUITE.reduce((a, r) => [a[0] + r[1], a[1] + r[2], a[2] + r[3], a[3] + r[4]], [0, 0, 0, 0]);
   const tiles = [["Cases", tot.reduce((a, b) => a + b, 0)], ["PASS", tot[0]], ["Known gaps", tot[2]], ["INFO", tot[3]], ["FAIL", tot[1]]];
-  $("made-tiles").innerHTML = tiles.map(([l, v], i) => `<div class="tile"><span class="label">${l}</span><b data-v="${v}">${v}</b></div>`).join("");
+  const TIP = {
+    "Known gaps": "<b>27</b> chosen: the owner's own laws<br><b>36</b> the high-pass's saturation<br><b>21</b> oscillators' edges<br><b>6</b> the chain's corners",
+    FAIL: "The longest delay times land up to 2 % early",
+  };
+  $("made-tiles").innerHTML = tiles.map(([l, v]) => TIP[l]
+    ? `<div class="tile has-tip" tabindex="0"><span class="label">${l}</span><b data-v="${v}">${v}</b><span class="tip" role="tooltip">${TIP[l]}</span></div>`
+    : `<div class="tile"><span class="label">${l}</span><b data-v="${v}">${v}</b></div>`).join("");
   const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
   function count(b) {                               /* 0 to its value in stepped frames, as the screen counts */
     const v = +b.dataset.v, t0 = performance.now(), T = 700 + Math.min(500, v);
@@ -82,11 +88,18 @@
   }
 
   // ------------------------------------------------------------------------------------- the suite chart
+  let allRows = false;
+  $("ch-suite-all").addEventListener("click", (ev) => {
+    allRows = !allRows;
+    ev.currentTarget.setAttribute("aria-expanded", String(allRows));
+    ev.currentTarget.textContent = allRows ? "Top 10" : "Show all 33";
+    suite();
+  });
   function suite() {
     const plot = $("ch-suite-p");
     plot.innerHTML = "";
     const W = Math.max(280, plot.clientWidth), narrow = W < 560;
-    const rows = SUITE.map((r) => ({ g: r[0], v: [r[1], r[2], r[3], r[4]], n: r[1] + r[2] + r[3] + r[4] })).sort((a, b) => b.n - a.n);
+    const rows = SUITE.map((r) => ({ g: r[0], v: [r[1], r[2], r[3], r[4]], n: r[1] + r[2] + r[3] + r[4] })).sort((a, b) => b.n - a.n).slice(0, allRows ? SUITE.length : 10);
     const LW = narrow ? 128 : 190, RW = 36, BH = 10, RH = 20, top = 4, H = top + rows.length * RH + 22;
     const max = Math.max(...rows.map((r) => r.n)), sx = (W - LW - RW) / max;
     const svg = svgEl("svg", { width: W, height: H, viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "The suite's cases by group and result; the table under it has the numbers" }, plot);
@@ -119,9 +132,8 @@
       g.addEventListener("pointerleave", () => tip.hide());
     });
   }
-  legend($("ch-suite-l"), ST.map(([s, k]) => [ST_TEXT[s], k]));
-  $("ch-suite-t").innerHTML = `<table><thead><tr><th>Group</th><th>Cases</th><th>PASS</th><th>XFAIL</th><th>INFO</th><th>FAIL</th></tr></thead><tbody>${SUITE.map((r) =>
-    `<tr><td>${esc(GNAME[r[0]])} <code>${r[0]}</code></td><td>${r[1] + r[2] + r[3] + r[4]}</td><td>${r[1]}</td><td>${r[3]}</td><td>${r[4]}</td><td>${r[2]}</td></tr>`).join("")}</tbody></table>`;
+  legend($("ch-suite-l"), ST.map(([s, k]) => [s, k]));
+  $("ch-suite-l").querySelectorAll(".key").forEach((k, i) => { k.title = ST_TEXT[ST[i][0]]; });   /* what each means, on hover */
 
   // ---------------------------------------------------------------------------------- the DIST ceilings
   function dist() {
@@ -152,7 +164,6 @@
       g.addEventListener("pointerleave", () => tip.hide()); g.addEventListener("blur", () => tip.hide());
     });
   }
-  $("ch-dist-t").innerHTML = `<table><thead><tr><th>Machine</th><th>Ceiling against GND-SIN's</th></tr></thead><tbody>${DIST.map(([n, v]) => `<tr><td>${n}</td><td>${minus(v, 2)} dB</td></tr>`).join("")}</tbody></table>`;
 
   const all = () => { suite(); dist(); };
   all();
