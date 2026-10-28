@@ -201,6 +201,11 @@ static struct {
     /* FREEZE and the octaves: three Hann grains a third apart, g_gl long (g_wst the window's angle a sample); a
      * freeze's grains each start somewhere in its slice */
     uint32_t g_gl, g_g3, g_gph, g_wst, g_gp[3];
+    uint8_t g_sc[2], g_rl;             /* SCATTER's slice now and before (0-3, 4 reversed, 8 its first half twice); ROLL's laps */
+    int32_t g_srt;                     /* SPIN: its speed, signed, Q24; its ticks, the pull's and the spin's */
+    uint32_t g_st, g_t1, g_t2;
+    int32_t gtd;                       /* GATE: its depth, Q15; its place in the sixteenth with no grid */
+    uint32_t gt_ph;
     int32_t g_tgt, g_lev, g_agc, g_agt;   /* a freeze's level: wanted, followed; its gain (Q15) and the gain it glides to */
     uint8_t g_nb;                      /* (blocks, for its gain) */
     int32_t olev;                      /* the output's level, followed over ~0.4 s (every 8th sample's, Q4) */
@@ -345,7 +350,21 @@ static void gl_perform(int k)
         bus.g_pk = (uint8_t)(k + 1);
         return;
     }
-    if (k > PF_STUT) return;                              /* (the rest of bank B: their own) */
+    if (k == PF_SPIN) {                                   /* the live sound from here, pulled back and spun backwards */
+        uint32_t t1 = CLAMP(six >> 1, 256u, 1024u), t2 = six * 4;
+        if (t1 + t2 > 12000u) t2 = 12000u - t1;           /* (what it reads back, about t1 + t2: within the ring) */
+        gl_start(bus.gw - 2, t1 + t2 + 64, 0, GM_SPIN, G_HELD, 32768, 0);
+        bus.g_srt = (int32_t)G_UNITY;
+        bus.g_st = 0;
+        bus.g_t1 = t1;
+        bus.g_t2 = t2;
+        bus.g_pk = (uint8_t)(k + 1);
+        return;
+    }
+    if (k > PF_STUT && k != PF_SCAT && k != PF_ROLL) return;   /* (the rest of bank B: no ring) */
+    int mk = k == PF_SCAT ? GM_SCAT : k == PF_ROLL ? GM_PROLL : -1;
+    if (k == PF_SCAT) k = PF_REV;                         /* (the scatter's slices: the beat the reverse plays) */
+    if (k == PF_ROLL) k = PF_R4;                          /* (the roll's: the quarter's, halved a beat at a time) */
     if (k == PF_STOP) {                                   /* the live sound from here, slowing over a beat */
         gl_start(bus.gw - 2, GL_MAX, 0, GM_STOP, G_HELD, 32768, 0);
         bus.g_dec = G_UNITY / (six * 4 > 64 ? six * 4 : 64);
@@ -365,8 +384,10 @@ static void gl_perform(int k)
     /* a repeat's slice begins on the grid (its first time round the live sound coming in, so it starts on the
      * attack); the reverse plays the beat that ended there */
     uint32_t at = bus.g_grid[res] - (k == PF_REV ? len : 0);
-    gl_start(at, len, e % len, k == PF_REV ? GM_REV : k == PF_STUT ? GM_GATE : GM_RPT, G_HELD, 32768, 0);
-    bus.g_pk = (uint8_t)(k + 1);
+    gl_start(at, len, e % len, mk >= 0 ? mk : k == PF_REV ? GM_REV : k == PF_STUT ? GM_GATE : GM_RPT, G_HELD, 32768, 0);
+    bus.g_sc[0] = bus.g_sc[1] = (uint8_t)((e % len) / (len >> 2));   /* (a scatter starts where it is, a beat back) */
+    bus.g_rl = 0;
+    bus.g_pk = (uint8_t)((mk == GM_SCAT ? PF_SCAT : mk == GM_PROLL ? PF_ROLL : k) + 1);
 }
 
 /* a key's effect on (down) or off; 0 when it cannot play (the key then holds nothing) */
@@ -485,12 +506,74 @@ static void gl_stop_land(void)
     bus.g_spin = 1;
 }
 
+/* SCATTER's slice d (0-3 of the beat, 4 reversed, 8 its first half twice), its sample o (past the slice: where it
+ * goes on, for the crossfade into the next) */
+static inline uint32_t sc_at(uint32_t d, uint32_t o, uint32_t sl)
+{
+    uint32_t pos = d & 4 ? sl - 1 - o : d & 8 ? (o < sl / 2 ? o : o - sl / 2) : o;
+    return bus.g_start + (d & 3) * sl + pos;
+}
+
 /* one half-rate sample of the event: the wet's next (gout), its read moved on */
 static void gl_tick(void)
 {
     const uint32_t M = GL_LEN - 1;
     uint32_t p = bus.g_pos >> 12, len = bus.g_len, mode = bus.g_mode;
     int32_t fr = (int32_t)(bus.g_pos & 4095), l, r;
+    if (mode == GM_SPIN) {                                /* SPIN: the speed and the read, then out */
+        uint32_t st = bus.g_st++, t1 = bus.g_t1, t2 = bus.g_t2;
+        if (st < t1) bus.g_srt = (int32_t)G_UNITY - (int32_t)(((st << 12) / t1) << 14);      /* pulled: 1 to -3 */
+        else if (st < t1 + t2) {                          /* let spin: -3 to rest, slowing as (1 - u)^2 */
+            int32_t v = 4096 - (int32_t)(((st - t1) << 12) / t2);
+            bus.g_srt = -(((v * v) >> 12) * 12288);
+        } else bus.g_srt = 0;
+        uint32_t k = bus.g_start + (bus.g_pos >> 12);
+        int32_t a = bus.g_srt < 0 ? -bus.g_srt : bus.g_srt;
+        if (a > (int32_t)G_UNITY) {                       /* past its speed: [1 2 1] against the fold */
+            l = (gl_buf[(k - 1) & M][0] + 2 * gl_buf[k & M][0] + gl_buf[(k + 1) & M][0]) >> 2;
+            r = (gl_buf[(k - 1) & M][1] + 2 * gl_buf[k & M][1] + gl_buf[(k + 1) & M][1]) >> 2;
+            a = (int32_t)G_UNITY;
+        } else {
+            l = gl_buf[k & M][0] + (((gl_buf[(k + 1) & M][0] - gl_buf[k & M][0]) * fr) >> 12);
+            r = gl_buf[k & M][1] + (((gl_buf[(k + 1) & M][1] - gl_buf[k & M][1]) * fr) >> 12);
+        }
+        int32_t sp = a >> 9, g = (sp * (65536 - sp)) >> 15;          /* (as the stop's: s (2 - s)) */
+        bus.gprev_l = bus.gout_l;
+        bus.gprev_r = bus.gout_r;
+        bus.gout_l = (l * g) >> 15;
+        bus.gout_r = (r * g) >> 15;
+        bus.g_pos += (uint32_t)(bus.g_srt >> 12);
+        if (bus.g_left != G_HELD && bus.g_left) bus.g_left--;
+        return;
+    }
+    if (mode == GM_SCAT) {                                /* SCATTER: a quarter of the beat at a time, from anywhere in it */
+        uint32_t sl = len >> 2, o = p % sl, i = p / sl;
+        if (!o) {
+            uint32_t q = gl_rnd();
+            uint8_t d = (q & 7) < 3 ? (uint8_t)i : (uint8_t)((q >> 3) & 3);   /* (3 in 8 where it was) */
+            if (d != i && !((q >> 5) & 3)) d |= 4;        /* reversed */
+            else if (d != i && !((q >> 7) & 7)) d |= 8;   /* its first half twice */
+            bus.g_sc[1] = bus.g_sc[0];
+            bus.g_sc[0] = d;
+        }
+        uint32_t k = sc_at(bus.g_sc[0], o, sl);
+        l = gl_buf[k & M][0];
+        r = gl_buf[k & M][1];
+        if (o < GL_XF) {                                  /* the slice before, on past its end, crossfaded out */
+            uint32_t j = sc_at(bus.g_sc[1], o + sl, sl);
+            int32_t w = (int32_t)(o << 12) / (int32_t)GL_XF;
+            l = gl_buf[j & M][0] + (((l - gl_buf[j & M][0]) * w) >> 12);
+            r = gl_buf[j & M][1] + (((r - gl_buf[j & M][1]) * w) >> 12);
+        }
+        bus.gprev_l = bus.gout_l;
+        bus.gprev_r = bus.gout_r;
+        bus.gout_l = l;
+        bus.gout_r = r;
+        bus.g_pos += 1u << 12;
+        if ((bus.g_pos >> 12) >= len) bus.g_pos -= len << 12;
+        if (bus.g_left != G_HELD && bus.g_left) bus.g_left--;
+        return;
+    }
     if (mode == GM_FRZ || mode == GM_PSU || mode == GM_PSD) {
         gl_grains(&l, &r);
         bus.gprev_l = bus.gout_l;
@@ -554,6 +637,8 @@ static void gl_tick(void)
     if (mode != GM_STOP && (bus.g_pos >> 12) >= len) {
         bus.g_pos -= len << 12;
         if (mode == GM_ROLL && len >= 128) bus.g_len = len >> 1;
+        /* ROLL: halved once its laps make a beat (a quarter, two eighths, four sixteenths), to a 1/32 */
+        if (mode == GM_PROLL && ++bus.g_rl >= (sps_q8 >> 9) * 4 / len && len > (sps_q8 >> 10)) { bus.g_len = len >> 1; bus.g_rl = 0; }
     }
     if (bus.g_left != G_HELD && bus.g_left) bus.g_left--;
 }
@@ -567,6 +652,10 @@ static inline int gl_kept(uint32_t w)
      * sound (gl_stop_land): it keeps nothing (it kept what was ahead of its read from the press, so it slowed down
      * the sound of a ring's lap before, 0.74 s) */
     if (bus.g_mode == GM_STOP) return 0;
+    if (bus.g_mode == GM_SPIN) {                          /* what it spins back over, behind where it began */
+        uint32_t d = w - (bus.g_start - bus.g_len - GL_XF);
+        return d >= GL_LEN && (d & (GL_LEN - 1)) < bus.g_len + 2 * GL_XF;
+    }
     uint32_t d = w - (bus.g_start - GL_XF);
     return d >= GL_LEN && (d & (GL_LEN - 1)) < bus.g_len + 2 * GL_XF;
 }
@@ -849,6 +938,17 @@ static void bus_block(int32_t *L, int32_t *R, const int32_t *rsend, int16_t *out
     int32_t dvg = bus.dv_g, dgp = bus.dv_gp;
     bus.dv_gp = dvg;
     int fl_run = bus_filters();
+    /* GATE: its depth in and out over 6 ms; its place in the sixteenth the sequencer's (a free one without it) */
+    int32_t gtd0 = bus.gtd;                                /* (ramped across the block) */
+    if (perf.on[PF_GATE]) bus.gtd = bus.gtd + 2048 > 32767 ? 32767 : bus.gtd + 2048;
+    else bus.gtd = bus.gtd > 2048 ? bus.gtd - 2048 : 0;
+    int gate = bus.gtd > 0 || gtd0 > 0;
+    uint32_t gsix = (sps_q8 >> 8) > 512 ? (sps_q8 >> 8) : 512, gph = 0;
+    if (gate) {
+        gph = seq_running() ? (bus.gw - bus.g_grid[0]) * 2u + bus.g_phase : bus.gt_ph;
+        gph %= gsix;
+        bus.gt_ph = gph + M2K_SUB;
+    }
     int32_t mvol = T_MVOL[master_vol];
     uint32_t wow_inc = 54000, flut_inc = 620000;    /* 0.55 Hz, 6.3 Hz */
     uint8_t g_phase = bus.g_phase;                  /* (a block's in locals: no byte stored a sample) */
@@ -969,6 +1069,18 @@ static void bus_block(int32_t *L, int32_t *R, const int32_t *rsend, int16_t *out
             int32_t s = (perf.kill * perf.kill) >> 15, kg = (s * ((98304 - 2 * perf.kill) >> 1)) >> 14;   /* u^2 (3 - 2u) */
             l = (l * kg) >> 15;
             r = (r * kg) >> 15;
+        }
+        if (gate) {                                       /* GATE: open the first half of each sixteenth */
+            uint32_t q = gph + (uint32_t)i;
+            while (q >= gsix) q -= gsix;
+            int32_t o;
+            if (q < 64) { int32_t u = (int32_t)q << 9; o = (((u * u) >> 15) * ((98304 - 2 * u) >> 1)) >> 14; }   /* 1.5 ms on an S */
+            else if (q < gsix / 2) o = 32767;
+            else if (q < gsix / 2 + 256) o = (int32_t)(gsix / 2 + 256 - q) << 7;
+            else o = 0;
+            int32_t gd = gtd0 + (((bus.gtd - gtd0) * (i + 1)) >> 4), gg = 32767 - (((32767 - o) * gd) >> 15);
+            l = (l * gg) >> 15;
+            r = (r * gg) >> 15;
         }
         out[2 * i] = (int16_t)l;
         out[2 * i + 1] = (int16_t)r;
