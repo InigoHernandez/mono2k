@@ -2487,6 +2487,15 @@ static void step_cell(int x, int y, int w, int h, int t, int s)
     int held = 0;
     if (ui.grid && t == ui.trk) for (int i = 0; i < ui.nheld; i++) if (ui.held[i] == s) held = 1;
     if (s >= seq_len()) { px(x + w / 2, y + h / 2, 1); return; }
+    if (lane_of(p, t)) {               /* following a lane: its trigs in this loop (stopped, a PLAY's first), dotted round */
+        uint32_t len = (uint32_t)seq_len(), n = !sq.playing ? 0 : spd_of(t) == 4 ? sq.n1x : sq.tk[t];
+        int hit = grids_hit(p, lane_of(p, t) - 1, (n ? (n - 1) / len * len : 0) + (uint32_t)s, 0);
+        if (hit) { rect(x, y, w, h, 1); if (hit == 2) rect(x + 2, y + 2, 2, 2, 0); }
+        else dots_frame(x, y, w, h);
+        if (playing) frame(x - 2, y - 2, w + 4, h + 4, 1);
+        if (held && ((ui.now >> 7) & 1)) rect(x, y, w, h, 2);
+        return;
+    }
     if (st.flags & ST_TRIG) {
         int c = st.cond, lk = has_locks(t, s), in = c == C_ALWAYS ? 0 : 2;
         unsigned sk = st.flags & ST_TTYPE;
