@@ -316,13 +316,23 @@ static void writeback_tests(void)
     /* a store whose working image leaves no room (a browser's, near the FM-1's room): A01 grows past it */
     memset(flash, 0xFF, sizeof flash);
     m2k_init(3);
-    for (int i = 16; i < M2K_PATTERNS; i++) {
+    int fi = 16;
+    for (; fi < M2K_PATTERNS; fi++) {
         pattern_init_blank(&pat_tmp);
-        for (int t = 0; t < M2K_TRACKS; t++) for (int s = 0; s < M2K_STEPS; s++) { pat_tmp.step[t][s].flags = ST_TRIG; pat_tmp.step[t][s].note = (uint8_t)(30 + i); }
+        for (int t = 0; t < M2K_TRACKS; t++) for (int s = 0; s < M2K_STEPS; s++) { pat_tmp.step[t][s].flags = ST_TRIG; pat_tmp.step[t][s].note = (uint8_t)(30 + fi); }
         int n = pat_pack_img(&pat_tmp);
         if (work_img.used + (uint32_t)n > IMG_DATA - 300u) break;
         pat_drop();
-        img_put(&work_img, i, blob, n);
+        img_put(&work_img, fi, blob, n);
+    }
+    if (fi < M2K_PATTERNS) {               /* the next one in part, so 200 bytes are left whatever a pattern packs to */
+        pattern_init_blank(&pat_tmp);
+        pat_tmp.step[0][0].flags = ST_TRIG;
+        int n1 = pat_pack_img(&pat_tmp), k = 1 + ((int)(IMG_DATA - work_img.used) - 200 - n1) / 4;
+        for (int j = 0; j < k && j < M2K_TRACKS * M2K_STEPS; j++) pat_tmp.step[j / M2K_STEPS][j % M2K_STEPS].flags = ST_TRIG;
+        int n = pat_pack_img(&pat_tmp);
+        pat_drop();
+        if (k > 0 && work_img.used + (uint32_t)n <= IMG_DATA) img_put(&work_img, fi, blob, n);
     }
     pat_drop();
     cur_pat = 0;

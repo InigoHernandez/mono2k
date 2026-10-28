@@ -300,7 +300,7 @@ static int text_sweep(void)
     m2k_init(2001);
     ui.page = PG_HOME; ui.grid = 1;
     m2k_step_t *st = &PAT(cur_pat)->step[0][3];
-    st->flags = ST_TRIG | ST_ACC | ST_SLD | ST_NOFLT; st->cond = C_COUNT - 1; st->rtrg = 4; st->note = 61;
+    st->flags = ST_TRIG | ST_ACC | ST_SLD | ST_NOFLT; st->cond = C_NFILL; st->rtrg = 4; st->note = 61;
     ui.trk = 0; ui.held[0] = 3; ui.nheld = 1;
     now += 4000; ui.trans_t = 0; ui.toast_t = 0;
     m2k_frame(now); ta_check((int)now);

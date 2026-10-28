@@ -39,7 +39,8 @@ y 224-239 footer  ink bar: [bars] T2 > DRM-SNAR > AMP                 1/2
   at x 2 (ink type, rows 2-13), its name 6 px after it (whole or not at all); from the right, the transport (a 5 x 8
   triangle or an 8 x 8 square, x 229-236), the tempo 6 before it, REC (an 8 x 8 disc, blinking) 6 before that, then
   the modes as tags: GRID and PADS a paper frame round paper type, the arp's HOLD, READY and FILL paper boxes with ink
-  type, 4 apart, dropped from the last when they would reach the name's room.
+  type, MUTE (a mute waiting for the bar) turning between the two every 128 ms in its place, 4 apart, dropped from the
+  last when they would reach the name's room.
 - **Knobs** (rows 16-60): cell k is `[60k, 60k + 60)`, its content `[60k + 5, 60k + 56)`: 4 blank columns each side
   of it before the rules. All left-aligned on `60k + 5`: the label, rows 21-29 (inverted while turned: rows 20-30,
   x `60k + 3` to `60k + 57`); the value, its last row 47 (F_M, rows 36-47, where every value of all four knobs fits

@@ -53,7 +53,7 @@ cc -O2 -Wall -Wno-unused-function -Ifirmware/src -Ifirmware/gen -o build/host/m2
 | Per track | the Monomachine's chain and pages: SYN A–H · AMP (ATK HOLD DEC REL DIST VOL PAN PORT) · FILT (HP / LP as base and width following the note, resonance, envelope) · FX (EQ, SRR, a delay of its own in 8-bit mu-law, ping-pong on positive sends) · DSTR (bits, fold, xor, SPU send) · 3 LFOs (any track's parameter) · ARP |
 | Projects | the modern Elektron way: 4 projects × 4 banks (A–D) × 16 patterns (on the FM-1, one project of 64), each pattern with its own sounds. SAVE keeps the pattern (its reload point), GLO + SAVE reloads it, SAVE held keeps the project; GLO + REC / PLAY / SEQ copy, paste, clear (the pattern on HOME, the track's sound on its pages); GLO > SET picks and loads a project. On the web: a project picker, export / import as `.m2kp` files. Stored packed (a typical pattern 0.5–1 KB; the DEMO project 32 KB) |
 | Factory | project DEMO, bank A: four parts, CIRCUIT, TIDE, SUSPEND and LANTERN (`docs/bank-a.md`: how they were made, key and idea of each), every sound picked by the owner from sound sheets; A05–A16 and banks B–D blank. A store saved with earlier demos takes the new ones where the old still stand |
-| Sequencer | 6 × 64 steps, note / accent / slide, parameter locks, the Monomachine's trig types (each step trigs the amp, the filter's envelope and the LFOs independently: step + VOL, ALL ... NONE, a trigless lock), trig conditions (chance, A:B, 1ST, PRE, FILL), ratchets, swing, live recording and step entry (REC while stopped), pages held to set the length, patterns queued at the bar |
+| Sequencer | 6 × 64 steps, note / accent / slide, parameter locks, the Monomachine's trig types (each step trigs the amp, the filter's envelope and the LFOs independently: step + VOL, ALL ... NONE, a trigless lock), trig conditions (chance, A:B, 1ST, PRE, FILL), ratchets, Grids' lanes (Mutable Instruments' map), mutes on the bar, swing, live recording and step entry (REC while stopped), pages held to set the length, patterns queued at the bar |
 | Bus | a feedback-delay-network reverb at 22 kHz (RT60 0.3–24 s, DAMP the top's decay 1/1–1/30), a glitch whose one knob grows from rare quiet ghosts to wild (repeats, reverse, gates, octaves, rolls, slowing; every change crossfaded), tape wow and flutter, 4-bit ADPCM crunch, hiss and dust, drive; each control on a law measured over its whole range |
 | MIDI | tracks 1–6 on six channels from GLO > MIDI's CHAN (1–6 at first), the others play the track in view: notes and the Monomachine's CC map (SYN 48–55, AMP 56–63, FILT 72–79, FX 80–87, LFO 1/2/3 on 88/104/112, level 7, mute 3). SYNC IN follows a MIDI clock (its tempo, a step every sixth pulse, the swing kept; start, continue, stop) from USB, the TRS jack or both, SYNC OUT sends one (24 a beat, start, stop), NOTES OUT each track's trigs on its channel. GLO > IN: where notes and CCs come from (both, USB, TRS, none), and a thru of the jack's MIDI out over USB. The emulator picks a MIDI device in (as USB) and one out |
 | Screen | 240 × 240 at 1 bit (a 7.2 KB framebuffer): Orbitron in solid ink (one size for every big value), Model:Cycles-style machine cards, machine marks as one family of isotypes on a 12-unit grid, each moving in its own way in time with the pattern, dissolves, glitches, live envelopes, filters, LFOs and scopes; light or dark (GLO > SET > SCRN; on the web it follows the page's theme) |
@@ -318,6 +318,14 @@ RT60s and each send by the level that keeps it as loud; GLCH by its glitch's ene
 straight levels); bank A is turned so at build (its reverb's return within 2 dB of the approved, its octaves within 3 dB at 250 Hz and
 1 kHz). The delay's send leaves the Monomachine's square there (regress.py's delay_send: XFAIL).
 
+Pattern format 18 adds Grids (ARP's GRIDS and LANES pages: X, Y, CHAOS, its cycle, the three densities, each track's
+lane, after the speeds) and the chances 90 60 40 10 % (after the other conditions, so a saved one keeps its number;
+a condition past 17's read as ALWAYS, as 17 read it). Older patterns load with no lane followed. A track on a lane
+plays the lane's trigs on its own clock: its K-th step since the pattern's start is Grids' step 2 (K mod 16) (RES 16:
+Grids' clock at 4 ppqn, a bar) or K mod 32 (RES 32, two bars), CHAOS's byte a hash of the cycle and the part (the
+same every PLAY, on every core). GLO > PLAY's MUTE (BAR, the default; NOW): a mute, a solo or an unmute made while
+playing waits for the next of the pattern's bars of 16 steps (its start always one).
+
 DIGI-WAV plays either bank, set on SYN's third page (BANK: M2K, MONO2K's 32 waves across WAVE's range as before; M64,
 the owner's 64, two WAVE values a wave: an even one is that wave exactly, an odd one between two). The owner's play
 without their DC (each cycle's mean, up to -29 % of the peak, taken out at playback, the files and the table kept as
@@ -343,6 +351,11 @@ The DRM- drums' voice design is after the Erica Synths LXR drum voices (lxr-desk
 Julian Schmidt's Sonic Potions LXR): their laws (the sweep, its curve and time, the PM hats, the clap's repeats),
 written anew in fixed point and measured against a float model of them; none of its code or transient samples is
 here. LXR is Erica Synths' mark.
+
+GRIDS (`firmware/src/m2k_grids.c`) is Émilie Gillet's Grids, Mutable Instruments' topographic drum sequencer
+([pichenettes/eurorack](https://github.com/pichenettes/eurorack), `grids/`, GPL-3.0): its 25 nodes of pattern data
+and its rules (ReadDrumMap, EvaluateDrums) ported, with credit, to MONO2K's integer core; `tools/ref/grids_ref.py`
+holds the port to the original's rules. Grids is Mutable Instruments' name.
 
 The 64-wave bank (`assets/waves/mono2k64/`) is the project owner's own waveforms, licensed with the project
 (GPL-3.0-only) unless the owner says otherwise.
