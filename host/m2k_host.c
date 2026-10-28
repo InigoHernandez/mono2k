@@ -207,8 +207,9 @@ static void ta_check(int ms)
         for (int k = ta_nbox - 1; k >= 0; k--) {         /* begun in a box, the last drawn on top */
             const ta_box_t *w = &ta_box[k];
             if (w->win) {                                 /* a window: it must end inside its frame */
-                if (a->x0 > w->x0 && a->y0 > w->y0 && a->x0 < w->x1 && a->y0 < w->y1) {
-                    if (a->x1 > w->x1 - 2 || a->y1 > w->y1 - 2) ta_report("past its window", a, 0, ms);
+                if (a->x0 > w->x0 && a->y0 > w->y0 && a->x0 < w->x1 && a->y0 < w->y1) {   /* (3 px clear of its frame) */
+                    if (a->x0 < w->x0 + 4 || a->y0 < w->y0 + 4 || a->x1 > w->x1 - 4 || a->y1 > w->y1 - 4)
+                        ta_report("past its window", a, 0, ms);
                     break;
                 }
             } else if (a->x0 >= w->x0 && a->y0 >= w->y0 && a->x0 <= w->x1 && a->y0 <= w->y1) {   /* a cell: in its content */
