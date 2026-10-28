@@ -127,7 +127,15 @@ static const ev_t MANUAL[] = {
     {29150, 'e', E_ALGO, -1, 0}, {29200, 'e', E_ALGO, -1, 0}, {29250, 'e', E_ALGO, -1, 0}, {29300, 'e', E_ALGO, -1, 0},
     {29400, 'e', E_ALGO, 1, 0}, {29450, 'e', E_ALGO, 1, 0},
     {30000, 's', 0, 0, "16b_glo_verb"},
-    {30100, 'x', 0, 0, 0},
+    /* PADS off (GLO + ARP), the ARP page, MODE on, ARP twice: the arp's HOLD (in the header and on the stage); a chord
+     * played and let go, the arp playing it on (20b) */
+    {30050, 'b', B_GLO, 1, 0}, {30060, 'b', B_ARP, 1, 0}, {30070, 'b', B_ARP, 0, 0}, {30080, 'b', B_GLO, 0, 0},
+    {30500, 'b', B_ARP, 1, 0}, {30520, 'b', B_ARP, 0, 0}, {30700, 'e', E_K1, 30, 0},
+    {31000, 'b', B_ARP, 1, 0}, {31020, 'b', B_ARP, 0, 0}, {31100, 'b', B_ARP, 1, 0}, {31120, 'b', B_ARP, 0, 0},
+    {31300, 'k', 0, 1, 0}, {31310, 'k', 4, 1, 0}, {31320, 'k', 7, 1, 0},
+    {31500, 'k', 0, 0, 0}, {31510, 'k', 4, 0, 0}, {31520, 'k', 7, 0, 0},
+    {33600, 's', 0, 0, "20b_arp_hold"},
+    {33700, 'x', 0, 0, 0},
 };
 
 static void manual_scene(void)
@@ -207,8 +215,9 @@ static void ta_check(int ms)
  * each knob turned to its least, middle and most; a held step with every tag; the library's lists */
 static int text_sweep(void)
 {
+    const char *dump = getenv("M2K_SWEEP_DIR");
     m2k_init(2000);
-    sq.rec = 1; sq.ready = 1; ui.pads = 1; sq.fill = 1;   /* the header at its fullest: REC, READY, PADS, FILL */
+    sq.rec = 1; sq.ready = 1; ui.pads = 1; sq.fill = 1; sq.arp_hold = 1;   /* the header at its fullest: REC and the modes */
     uint32_t now = 4000;
     static int16_t b[256];
     for (int f = 0; f < 44100 * 3; f += 128) m2k_render(b, 128);
@@ -220,7 +229,13 @@ static int text_sweep(void)
             for (int sub = 0; sub < nsub(pg); sub++) {
                 ui.page = (uint8_t)pg; ui.sub = (uint8_t)sub;
                 now += 3000; ui.trans_t = 0; ui.toast_t = 0; ui.card_t = 0; ui.focus_t = 0;
-                m2k_frame(now); ta_check((int)now);
+                const uint8_t *fbuf = m2k_frame(now);
+                ta_check((int)now);
+                if (dump) {                    /* M2K_SWEEP_DIR: every machine's every page, to look at */
+                    char path[512];
+                    snprintf(path, sizeof path, "%s/m%02d_p%d_%d.pbm", dump, m, pg, sub);
+                    pbm_write(path, fbuf);
+                }
                 for (int k = 0; k < 4; k++) {
                     int code = knob_param(pg, sub, k);
                     if (code == NONE) continue;
@@ -238,6 +253,23 @@ static int text_sweep(void)
                     if (set >= 0) store_.set[set] = kept;
                 }
             }
+    }
+    /* the layers' knobs (SEQ held: LEN SPD SWNG BPM; PERFORM: the bus), each at its least, middle and most */
+    static const uint8_t LAY[2] = {B_SEQ, B_FX};
+    for (int l = 0; l < 2; l++) {
+        ui.page = PG_AMP; ui.sub = 0; ui.btn[LAY[l]] = 1;          /* (held a moment: before its map shows) */
+        for (int k = 0; k < 4; k++) {
+            int code = knob_at(k);
+            static const int V[3] = {0, 64, 127};
+            for (int vi = 0; vi < 3; vi++) {
+                if (code >= 0x80 && code < 0xC0) PAT(cur_pat)->glob[code & 0x7F] = (uint8_t)V[vi];
+                ui.focus = (uint8_t)k; ui.focus_t = now; ui.roll_t = now - 2000;
+                now += 40; ui.trans_t = 0; ui.toast_t = 0;
+                ui.seq_t0 = ui.lay_t0[0] = (now - 100) | 1u;
+                m2k_frame(now); ta_check((int)now);
+            }
+        }
+        ui.btn[LAY[l]] = 0;
     }
     /* a held step in GRID with every tag: a condition, a ratchet, a trig type, accent and slide */
     m2k_init(2001);
@@ -3670,7 +3702,7 @@ static int selftest(void)
         uint32_t r = 12345u;
         int same = 1;
         #define RN(n) ((int)(((r = r * 1103515245u + 12345u) >> 8) % (uint32_t)(n)))
-        static const m2k_font_t *const FT[4] = {&F_S, &F_M, &F_L, &F_V};
+        static const m2k_font_t *const FT[4] = {&F_S, &F_M, &F_L, &F_S};
         static const char *const TX[4] = {"WAVE 12", "S&H -3 X", "#%/;", "AW MQ"};
         for (int i = 0; i < 3000 && same; i++) {
             for (int b = 0; b < M2K_FB_BYTES; b++) fb[b] = ux_ref[b] = (uint8_t)RN(256);
@@ -4986,7 +5018,7 @@ static int selftest(void)
         cls();
         rule_v(GX, STAGE_Y + 2, STAGE_H - 4, 1);
         CELL(0, STAGE_Y, GX, STRIP_Y - 1, VX, STAGE_Y + 2, VX + VW, STRIP_Y - 2);
-        text(&F_M, VX, 100, "SWAV-SAW", 1, 0);                      /* (109 px from 4: over the rule at 104) */
+        text(&F_L, VX, 100, "SWAV-SAW", 1, 0);                      /* (178 px from 4: over the rule at 104) */
         ta_check((int)ux_now);
         int found = ta_found - before;
         cls();

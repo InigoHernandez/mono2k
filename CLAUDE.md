@@ -54,14 +54,18 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   update also adds what it taught to `../FM1-FIRMWARE-HANDBOOK.md` (outside the repo: the owner's handbook of MONO2K's
   and Demake's lessons, for the next firmware), in its section and its Updates log. After a wasm build bump `m2k.wasm?v=` in
   `app.js`, `manual.js` and `editor.js` alike (and `worklet.js?v=` in `app.js` and `editor.js` with the worklet).
-- The screen's grid (m2k_ui.c, `docs/screen-grid.md`): five bands, the header 0-15, the knobs 16-57 (four cells of 60,
-  dotted rules at 60 120 180), the stage 58-187 (the value's column [4, 101) left of a dotted rule at x 104, the picture
-  `PIC_W` x `PIC_H`, 129 x 122 from 108, 62), the steps 188-212, the footer 213-239, each band closed by a solid rule on
-  its last row; held windows (GLO, HOME, EDIT, SEQ) over the stage. The host's text audit (`M2K_TEXT_AUDIT`: every
-  text's ink box; the cells and rules as drawn, `CELL`, `rule_h` / `rule_v`; a paper fill hides what it covers) fails
-  the tour and `m2k_host --text-sweep` (every page, machine and knob value) on any two texts that touch, one cut, one
-  past its cell or within 2 px of a rule: run it after any change to the screen, and fit text with `text_fit` /
-  `fit_font` rather than guessing widths. The splash (2.1 s, then a 0.4 s wipe; a press skips it and is swallowed):
+- The screen's grid (m2k_ui.c, `docs/screen-grid.md`): Orbitron, MONO2K's type (`tools/gen_font.py`: each glyph
+  cropped to its ink, the capitals on two rows; F_S 12 px at 800, 9 rows, the labels, values and lines; F_M 16 and
+  F_L 24 the stage's big type; F_B 11 px at 700 the bars); five bands: the header an ink bar 0-15 (the pattern's slot
+  a paper tag and its name, the modes, REC, tempo, transport: the first redesign's), the knobs 16-60 (four cells of
+  60 on solid rules: label, dotted rule, dial and value), the stage 61-201 (the value's column [4, 101), the picture
+  `PIC_W` x `PIC_H`, 129 x 134 from 108, 64), the steps 202-223, the footer an ink bar 224-239 (the bars, the
+  breadcrumb, the page); held windows (GLO, HOME, EDIT, SEQ) over the stage. The
+  host's text audit (`M2K_TEXT_AUDIT`: every text's ink box; the cells and rules as drawn, `CELL`, `rule_h` /
+  `rule_v`; a paper fill hides what it covers) fails the tour and `m2k_host --text-sweep` (every page, machine and
+  knob value) on any two texts that touch, one cut, one past its cell or within 2 px of a rule: run it after any
+  change to the screen, and fit text with `text_fit` / `fit_font` rather than guessing widths. The splash (2.1 s,
+  then a 0.4 s wipe; a press skips it and is swallowed; `w_skip_splash` for the site's scripted cores):
   `m2k_host DIR --splash`, `tools/splash.py DIR`; a frame's instructions, `host/m2k_draw.c` (built as the FM-1 builds).
 - Checks: `sh tools/check.sh` (~6 min): clang (and GCC, when installed) -Wall -Wextra with no warnings; the core built
   for armv7m soft float calls no float helper and no 64-bit division (flash / RAM printed); the self-test, every
@@ -196,5 +200,5 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
 ## Style
 
 C99, 4 spaces, unity build, static everything, short comments that say why. The screen's grid is the five bands above
-(header 0..15, knobs 16..57 under the physical knobs, stage 58..187, steps 188..212, footer 213..239, each its rule on
-its last row), `docs/screen-grid.md`.
+(header bar 0..15, knobs 16..60 under the physical knobs, stage 61..201, steps 202..223, footer bar 224..239),
+`docs/screen-grid.md`.

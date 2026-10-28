@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
-# MONO2K's 1-bit fonts: Orbitron (The League of Moveable Type, SIL OFL 1.1), rendered without anti-aliasing
-# (FreeType mono hinting) at four sizes, plus the logotype. Every capital and digit sits between the same two rows
-# (straighten). Writes firmware/gen/m2k_fonts.h.
+# MONO2K's 1-bit fonts: Orbitron (The League of Moveable Type, SIL OFL 1.1), MONO2K's type since 0.1, rendered
+# without anti-aliasing (FreeType mono hinting) at four sizes, each glyph cropped to its ink and set a whole tracking
+# apart, every capital and digit between the same two rows (no overshoot: the line stays straight); plus the
+# logotype, rasterized from the brand's paths. Writes firmware/gen/m2k_fonts.h.
 #   .venv/bin/python tools/gen_font.py [--sheet build/fonts.png]
 import os, sys
 from PIL import Image, ImageDraw, ImageFont
@@ -12,13 +13,52 @@ ROOT = os.path.join(HERE, "..")
 TTF = os.path.join(ROOT, "assets", "fonts", "orbitron", "Orbitron[wght].ttf")
 OUT = os.path.join(ROOT, "firmware", "gen", "m2k_fonts.h")
 
-# name, pixel size, weight, first, last, extra advance
+# name, pixel size, weight, tracking (the columns between two glyphs' ink)
 FONTS = [
-    ("F_S", 11, 700, 32, 95, 1),       # labels
-    ("F_M", 15, 700, 32, 95, 0),       # values
-    ("F_L", 24, 800, 32, 95, 0),       # the odd large word
-    ("F_V", 36, 800, 32, 95, -1),      # every big value: one size, between the two
+    ("F_B", 11, 700, 2),       # the header's and the footer's: the first redesign's small type (its advances and a
+                               # pixel: two columns between letters), paper on their bars
+    ("F_S", 12, 800, 2),       # every label, value and line: strokes two pixels, capitals 9 rows, as Hortator's chunky
+    ("F_M", 16, 800, 2),       # the big type a size down
+    ("F_L", 24, 800, 3),       # the stage's names and big values
 ]
+FIRST, LAST = 32, 95
+
+
+def load(size, wght):
+    f = ImageFont.truetype(TTF, size)
+    f.set_variation_by_axes([wght])
+    return f
+
+
+def glyph(font, ch, cap_top, cap, desc):
+    """a glyph cropped to its ink sideways, its rows from the capitals' top (0) to the descenders (cap + desc): a
+    capital or digit set between rows 0 and cap - 1 whatever the hinting did (a round one cut to them)"""
+    adv = round(font.getlength(ch))
+    pad = 8
+    im = Image.new("1", (adv + 2 * pad, cap + desc + 2 * pad), 0)
+    d = ImageDraw.Draw(im)
+    d.fontmode = "1"
+    d.text((pad, pad - cap_top), ch, font=font, fill=1)
+    px = im.load()
+    W, H = im.size
+    cols = [x for x in range(W) if any(px[x, y] for y in range(H))]
+    rows = [y for y in range(H) if any(px[x, y] for x in range(W))]
+    if not cols:                                         # the space: its advance, no ink
+        return Image.new("1", (max(1, adv), cap + desc), 0)
+    dy = 0
+    if (ch.isdigit() or "A" <= ch <= "Z") and ch not in "QJ":
+        t, b = rows[0], rows[-1] + 1
+        dy = (pad + cap - b) if b - t <= cap else (pad - t)
+    out = Image.new("1", (cols[-1] - cols[0] + 1, cap + desc), 0)
+    q = out.load()
+    for y in range(cap + desc):
+        sy = y + pad - dy
+        for x in range(out.size[0]):
+            if 0 <= sy < H and px[cols[0] + x, sy]:
+                if (ch.isdigit() or "A" <= ch <= "Z") and ch not in "QJ" and y >= cap:
+                    continue
+                q[x, y] = 1
+    return out
 
 
 def logo_paths():
@@ -96,56 +136,6 @@ def logo_mask(width):
     return img
 
 
-def load(size, wght):
-    f = ImageFont.truetype(TTF, size)
-    try:
-        f.set_variation_by_axes([wght])
-    except Exception as e:
-        print("no variation axes:", e, file=sys.stderr)
-    return f
-
-
-def render_glyph(font, ch, h, top):
-    adv = round(font.getlength(ch))
-    w = max(1, adv)
-    im = Image.new("1", (w + 8, h + 8), 0)
-    d = ImageDraw.Draw(im)
-    d.fontmode = "1"
-    d.text((0, -top), ch, font=font, fill=1)
-    im = im.crop((0, 0, w, h))
-    return im, adv
-
-
-def straighten(im, ch, top, bot, size):
-    """every capital and digit between the same two rows: the line stays straight. Hinting at small sizes can
-    lift a round glyph a pixel; this sets its foot back on the baseline. Rounds keep their overshoot (centred)
-    only from 24 px up; below, they are cut to the cap height."""
-    if not (ch.isdigit() or "A" <= ch <= "Z") or ch in "QJ":
-        return im
-    px = im.load()
-    w, h = im.size
-    rows = [y for y in range(h) if any(px[x, y] for x in range(w))]
-    if not rows:
-        return im
-    t, b = rows[0], rows[-1] + 1
-    cap = bot - top
-    over = (b - t) - cap
-    if over <= 0 or size < 24:
-        dy = (bot - b) if over <= 0 else (top - t)
-        if over > 0:                                   # small sizes: no overshoot, cut to the cap rows
-            over = 0
-    else:
-        dy = (top - over // 2) - t
-    out = Image.new("1", im.size, 0)
-    out.paste(im, (0, dy))
-    if size < 24:
-        q = out.load()
-        for y in list(range(0, top)) + list(range(bot, h)):
-            for x in range(w):
-                q[x, y] = 0
-    return out
-
-
 def pack(im):
     w, h = im.size
     bpr = (w + 7) // 8
@@ -166,29 +156,23 @@ def main():
     sheet = None
     if "--sheet" in sys.argv:
         sheet = sys.argv[sys.argv.index("--sheet") + 1]
-    lines = ["/* generated by tools/gen_font.py from Inter Tight (SIL OFL 1.1): do not edit */\n",
+    lines = ["/* generated by tools/gen_font.py from Orbitron (SIL OFL 1.1) at four sizes, and the logotype: do not "
+             "edit */\n",
              "typedef struct { uint8_t h, base, first, last; int8_t track; const uint16_t *off; const uint8_t *w;"
              " const uint8_t *bits; } m2k_font_t;\n"]
     previews = []
-    for name, size, wght, first, last, track in FONTS:
+    for name, size, wght, track in FONTS:
         font = load(size, wght)
-        asc, desc = font.getmetrics()
-        # the line box: from a row above the capitals to the descenders; the capitals of every glyph then sit
-        # between the same two rows (see straighten)
         hb = font.getbbox("H")
-        cap_top, cap_bot = hb[1], hb[3]
+        cap_top, cap = hb[1], hb[3] - hb[1]
         desc = max(2, round(size * 0.18))
-        box_top = cap_top - max(1, round(size * 0.06))
-        box_bot = cap_bot + desc
-        h = box_bot - box_top
-        base = asc - box_top
+        h = cap + desc
         offs, widths, bits = [], [], []
-        prev = Image.new("1", (16 * (size + 4), ((last - first) // 16 + 1) * (h + 4)), 0)
-        for i, c in enumerate(range(first, last + 1)):
-            im, adv = render_glyph(font, chr(c), h, box_top)
-            im = straighten(im, chr(c), cap_top - box_top, cap_bot - box_top, size)
+        prev = Image.new("1", (16 * (size + 4), ((LAST - FIRST) // 16 + 1) * (h + 4)), 0)
+        for i, c in enumerate(range(FIRST, LAST + 1)):
+            im = glyph(font, chr(c), cap_top, cap, desc)
             offs.append(len(bits))
-            widths.append(adv)
+            widths.append(im.size[0])
             bits.extend(pack(im))
             prev.paste(im, ((i % 16) * (size + 4), (i // 16) * (h + 4)))
         previews.append(prev)
@@ -198,9 +182,10 @@ def main():
         for j in range(0, len(bits), 24):
             lines.append("    " + ",".join("0x%02x" % b for b in bits[j:j + 24]) + ",\n")
         lines.append("};\n")
+        # h: the capitals and the descenders; base: the capitals' rows (y .. y + base - 1), what every layout plans on
         lines.append("static const m2k_font_t %s = {%d, %d, %d, %d, %d, %s_OFF, %s_W, %s_BITS};\n" %
-                     (name, h, base, first, last, track, name, name, name))
-        print("%s: %dpx w%d, line %d, %d bytes" % (name, size, wght, h, len(bits)))
+                     (name, h, cap, FIRST, LAST, track, name, name, name))
+        print("%s: %d px w%d, capitals %d, line %d, %d bytes" % (name, size, wght, cap, h, len(bits)))
 
     # the logotype: the brand's (web/panel.js, LOGO), 232 px wide, rasterized from its paths (each its own fill rule,
     # sampled 4 x 4 a pixel). LOGO_BITS its fill, LOGO_EDGE its outline (a fill pixel with an empty neighbour), as the
