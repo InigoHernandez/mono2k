@@ -1,24 +1,103 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
-# MONO2K's 1-bit fonts: Orbitron (The League of Moveable Type, SIL OFL 1.1), rendered without anti-aliasing
-# (FreeType mono hinting) at four sizes, plus the logotype. Every capital and digit sits between the same two rows
-# (straighten). Writes firmware/gen/m2k_fonts.h.
+# MONO2K's 1-bit fonts: one pixel font of its own, 5 x 7 capitals drawn here a pixel at a time, at four integer
+# sizes (1x the labels, values and lines; 2x the stage's names; 3x the big values), so every stroke is whole
+# pixels and every size the same design; plus the logotype, rasterized from the brand's paths. Writes
+# firmware/gen/m2k_fonts.h.
 #   .venv/bin/python tools/gen_font.py [--sheet build/fonts.png]
 import os, sys
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.join(HERE, "..")
-TTF = os.path.join(ROOT, "assets", "fonts", "orbitron", "Orbitron[wght].ttf")
 OUT = os.path.join(ROOT, "firmware", "gen", "m2k_fonts.h")
 
-# name, pixel size, weight, first, last, extra advance
-FONTS = [
-    ("F_S", 11, 700, 32, 95, 1),       # labels
-    ("F_M", 15, 700, 32, 95, 0),       # values
-    ("F_L", 24, 800, 32, 95, 0),       # the odd large word
-    ("F_V", 36, 800, 32, 95, -1),      # every big value: one size, between the two
-]
+# MONO2K's pixel font: one 5 x 7 design, drawn here a pixel at a time (squared, the round letters chamfered a pixel,
+# as the wordmark's rounded blocks; a slashed zero; a flat-middled 2), generated at 1x, 2x, 3x and 4x
+GLYPHS = {
+    ' ': ["...", "...", "...", "...", "...", "...", "..."],
+    '!': ["#", "#", "#", "#", "#", ".", "#"],
+    '"': ["#.#", "#.#", "...", "...", "...", "...", "..."],
+    '#': [".#.#.", "#####", ".#.#.", ".#.#.", ".#.#.", "#####", ".#.#."],
+    '$': ["..#..", ".####", "#.#..", ".###.", "..#.#", "####.", "..#.."],
+    '%': ["##...", "##..#", "...#.", "..#..", ".#...", "#..##", "...##"],
+    '&': [".##..", "#..#.", "#.#..", ".#...", "#.#.#", "#..#.", ".##.#"],
+    "'": ["#", "#", ".", ".", ".", ".", "."],
+    '(': [".#", "#.", "#.", "#.", "#.", "#.", ".#"],
+    ')': ["#.", ".#", ".#", ".#", ".#", ".#", "#."],
+    '*': [".....", "#.#.#", ".###.", "#####", ".###.", "#.#.#", "....."],
+    '+': ["...", "...", ".#.", "###", ".#.", "...", "..."],
+    ',': ["..", "..", "..", "..", "..", ".#", "#."],
+    '-': ["...", "...", "...", "###", "...", "...", "..."],
+    '.': [".", ".", ".", ".", ".", ".", "#"],
+    '/': ["....#", "....#", "...#.", "..#..", ".#...", "#....", "#...."],
+    '0': [".###.", "#...#", "#..##", "#.#.#", "##..#", "#...#", ".###."],
+    '1': [".#.", "##.", ".#.", ".#.", ".#.", ".#.", "###"],
+    '2': ["####.", "....#", "....#", ".###.", "#....", "#....", "#####"],
+    '3': ["####.", "....#", "....#", ".###.", "....#", "....#", "####."],
+    '4': ["#...#", "#...#", "#...#", "#####", "....#", "....#", "....#"],
+    '5': ["#####", "#....", "#....", "####.", "....#", "....#", "####."],
+    '6': [".###.", "#....", "#....", "####.", "#...#", "#...#", ".###."],
+    '7': ["#####", "....#", "....#", "...#.", "..#..", "..#..", "..#.."],
+    '8': [".###.", "#...#", "#...#", ".###.", "#...#", "#...#", ".###."],
+    '9': [".###.", "#...#", "#...#", ".####", "....#", "....#", ".###."],
+    ':': [".", "#", ".", ".", ".", "#", "."],
+    ';': ["..", ".#", "..", "..", "..", ".#", "#."],
+    '<': ["...#", "..#.", ".#..", "#...", ".#..", "..#.", "...#"],
+    '=': ["....", "....", "####", "....", "####", "....", "...."],
+    '>': ["#...", ".#..", "..#.", "...#", "..#.", ".#..", "#..."],
+    '?': ["####.", "....#", "....#", "..##.", "..#..", ".....", "..#.."],
+    '@': [".###.", "#...#", "#.###", "#.#.#", "#.###", "#....", ".####"],
+    'A': [".###.", "#...#", "#...#", "#####", "#...#", "#...#", "#...#"],
+    'B': ["####.", "#...#", "#...#", "####.", "#...#", "#...#", "####."],
+    'C': [".####", "#....", "#....", "#....", "#....", "#....", ".####"],
+    'D': ["####.", "#...#", "#...#", "#...#", "#...#", "#...#", "####."],
+    'E': ["#####", "#....", "#....", "####.", "#....", "#....", "#####"],
+    'F': ["#####", "#....", "#....", "####.", "#....", "#....", "#...."],
+    'G': [".####", "#....", "#....", "#..##", "#...#", "#...#", ".###."],
+    'H': ["#...#", "#...#", "#...#", "#####", "#...#", "#...#", "#...#"],
+    'I': ["###", ".#.", ".#.", ".#.", ".#.", ".#.", "###"],
+    'J': ["....#", "....#", "....#", "....#", "....#", "#...#", ".###."],
+    'K': ["#...#", "#..#.", "#.#..", "##...", "#.#..", "#..#.", "#...#"],
+    'L': ["#....", "#....", "#....", "#....", "#....", "#....", "#####"],
+    'M': ["#...#", "##.##", "#.#.#", "#.#.#", "#...#", "#...#", "#...#"],
+    'N': ["#...#", "##..#", "#.#.#", "#..##", "#...#", "#...#", "#...#"],
+    'O': [".###.", "#...#", "#...#", "#...#", "#...#", "#...#", ".###."],
+    'P': ["####.", "#...#", "#...#", "####.", "#....", "#....", "#...."],
+    'Q': [".###.", "#...#", "#...#", "#...#", "#.#.#", "#..#.", ".##.#"],
+    'R': ["####.", "#...#", "#...#", "####.", "#.#..", "#..#.", "#...#"],
+    'S': [".####", "#....", "#....", ".###.", "....#", "....#", "####."],
+    'T': ["#####", "..#..", "..#..", "..#..", "..#..", "..#..", "..#.."],
+    'U': ["#...#", "#...#", "#...#", "#...#", "#...#", "#...#", ".###."],
+    'V': ["#...#", "#...#", "#...#", "#...#", "#...#", ".#.#.", "..#.."],
+    'W': ["#...#", "#...#", "#...#", "#.#.#", "#.#.#", "##.##", "#...#"],
+    'X': ["#...#", "#...#", ".#.#.", "..#..", ".#.#.", "#...#", "#...#"],
+    'Y': ["#...#", "#...#", ".#.#.", "..#..", "..#..", "..#..", "..#.."],
+    'Z': ["#####", "....#", "...#.", "..#..", ".#...", "#....", "#####"],
+    '[': ["##", "#.", "#.", "#.", "#.", "#.", "##"],
+    '\\': ["#....", "#....", ".#...", "..#..", "...#.", "....#", "....#"],
+    ']': ["##", ".#", ".#", ".#", ".#", ".#", "##"],
+    '^': ["..#..", ".#.#.", "#...#", ".....", ".....", ".....", "....."],
+    '_': [".....", ".....", ".....", ".....", ".....", ".....", "#####"],
+}
+
+# name, scale: each size the 1x glyphs blown up whole pixels at a time, its tracking a pixel of its own
+FONTS = [("F_S", 1), ("F_M", 2), ("F_L", 3)]
+FIRST, LAST = 32, 95
+
+
+def glyph_image(ch, k):
+    rows = GLYPHS[ch]
+    w, h = len(rows[0]), len(rows)
+    assert h == 7 and all(len(r) == w for r in rows), ch
+    im = Image.new("1", (w * k, h * k), 0)
+    for y, r in enumerate(rows):
+        for x, c in enumerate(r):
+            if c == "#":
+                for j in range(k):
+                    for i in range(k):
+                        im.putpixel((x * k + i, y * k + j), 1)
+    return im
 
 
 def logo_paths():
@@ -96,56 +175,6 @@ def logo_mask(width):
     return img
 
 
-def load(size, wght):
-    f = ImageFont.truetype(TTF, size)
-    try:
-        f.set_variation_by_axes([wght])
-    except Exception as e:
-        print("no variation axes:", e, file=sys.stderr)
-    return f
-
-
-def render_glyph(font, ch, h, top):
-    adv = round(font.getlength(ch))
-    w = max(1, adv)
-    im = Image.new("1", (w + 8, h + 8), 0)
-    d = ImageDraw.Draw(im)
-    d.fontmode = "1"
-    d.text((0, -top), ch, font=font, fill=1)
-    im = im.crop((0, 0, w, h))
-    return im, adv
-
-
-def straighten(im, ch, top, bot, size):
-    """every capital and digit between the same two rows: the line stays straight. Hinting at small sizes can
-    lift a round glyph a pixel; this sets its foot back on the baseline. Rounds keep their overshoot (centred)
-    only from 24 px up; below, they are cut to the cap height."""
-    if not (ch.isdigit() or "A" <= ch <= "Z") or ch in "QJ":
-        return im
-    px = im.load()
-    w, h = im.size
-    rows = [y for y in range(h) if any(px[x, y] for x in range(w))]
-    if not rows:
-        return im
-    t, b = rows[0], rows[-1] + 1
-    cap = bot - top
-    over = (b - t) - cap
-    if over <= 0 or size < 24:
-        dy = (bot - b) if over <= 0 else (top - t)
-        if over > 0:                                   # small sizes: no overshoot, cut to the cap rows
-            over = 0
-    else:
-        dy = (top - over // 2) - t
-    out = Image.new("1", im.size, 0)
-    out.paste(im, (0, dy))
-    if size < 24:
-        q = out.load()
-        for y in list(range(0, top)) + list(range(bot, h)):
-            for x in range(w):
-                q[x, y] = 0
-    return out
-
-
 def pack(im):
     w, h = im.size
     bpr = (w + 7) // 8
@@ -166,31 +195,20 @@ def main():
     sheet = None
     if "--sheet" in sys.argv:
         sheet = sys.argv[sys.argv.index("--sheet") + 1]
-    lines = ["/* generated by tools/gen_font.py from Inter Tight (SIL OFL 1.1): do not edit */\n",
+    lines = ["/* generated by tools/gen_font.py: MONO2K's pixel font at four sizes, and the logotype: do not edit */\n",
              "typedef struct { uint8_t h, base, first, last; int8_t track; const uint16_t *off; const uint8_t *w;"
              " const uint8_t *bits; } m2k_font_t;\n"]
     previews = []
-    for name, size, wght, first, last, track in FONTS:
-        font = load(size, wght)
-        asc, desc = font.getmetrics()
-        # the line box: from a row above the capitals to the descenders; the capitals of every glyph then sit
-        # between the same two rows (see straighten)
-        hb = font.getbbox("H")
-        cap_top, cap_bot = hb[1], hb[3]
-        desc = max(2, round(size * 0.18))
-        box_top = cap_top - max(1, round(size * 0.06))
-        box_bot = cap_bot + desc
-        h = box_bot - box_top
-        base = asc - box_top
+    for name, k in FONTS:
+        h = 7 * k
         offs, widths, bits = [], [], []
-        prev = Image.new("1", (16 * (size + 4), ((last - first) // 16 + 1) * (h + 4)), 0)
-        for i, c in enumerate(range(first, last + 1)):
-            im, adv = render_glyph(font, chr(c), h, box_top)
-            im = straighten(im, chr(c), cap_top - box_top, cap_bot - box_top, size)
+        prev = Image.new("1", (16 * (6 * k + 4), ((LAST - FIRST) // 16 + 1) * (h + 4)), 0)
+        for i, c in enumerate(range(FIRST, LAST + 1)):
+            im = glyph_image(chr(c), k)
             offs.append(len(bits))
-            widths.append(adv)
+            widths.append(im.size[0])
             bits.extend(pack(im))
-            prev.paste(im, ((i % 16) * (size + 4), (i // 16) * (h + 4)))
+            prev.paste(im, ((i % 16) * (6 * k + 4), (i // 16) * (h + 4)))
         previews.append(prev)
         lines.append("static const uint16_t %s_OFF[%d] = {%s};\n" % (name, len(offs), ",".join(map(str, offs))))
         lines.append("static const uint8_t %s_W[%d] = {%s};\n" % (name, len(widths), ",".join(map(str, widths))))
@@ -198,9 +216,10 @@ def main():
         for j in range(0, len(bits), 24):
             lines.append("    " + ",".join("0x%02x" % b for b in bits[j:j + 24]) + ",\n")
         lines.append("};\n")
+        # the line box is the capitals (h = base: their last row base - 1); a pixel of tracking a scale
         lines.append("static const m2k_font_t %s = {%d, %d, %d, %d, %d, %s_OFF, %s_W, %s_BITS};\n" %
-                     (name, h, base, first, last, track, name, name, name))
-        print("%s: %dpx w%d, line %d, %d bytes" % (name, size, wght, h, len(bits)))
+                     (name, h, h, FIRST, LAST, k, name, name, name))
+        print("%s: %dx, %d px, %d bytes" % (name, k, h, len(bits)))
 
     # the logotype: the brand's (web/panel.js, LOGO), 232 px wide, rasterized from its paths (each its own fill rule,
     # sampled 4 x 4 a pixel). LOGO_BITS its fill, LOGO_EDGE its outline (a fill pixel with an empty neighbour), as the
