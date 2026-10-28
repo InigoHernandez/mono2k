@@ -246,10 +246,11 @@ kbd { display: inline-block; min-width: 1.5em; padding: 0 4px; font: 700 11px / 
 .eng__init { font: var(--small); padding: var(--s1) 0; border-top: 1px dotted var(--ink); border-bottom: 1px dotted var(--ink); }
 .eng__screen { margin: 0; }
 .eng__screen canvas, .scr canvas { display: block; width: 100%; max-width: 288px; height: auto; aspect-ratio: 1; image-rendering: pixelated; image-rendering: crisp-edges; border: 1px solid var(--ink); }
-.eng__screen canvas { max-width: 480px; }   /* the machine's screen fills its column: 480 px, the FM-1's 240 at 2x (4x on a retina screen), whole pixels */
+.eng__screen canvas { max-width: 360px; }   /* the machine's screen: 360 px, the FM-1's 240 at 1.5x (3x on a retina screen) */
 .eng__screen figcaption, .scr figcaption { margin-top: var(--s1); max-width: 288px; font: var(--small); opacity: 0.75; }
-.eng__screen figcaption { max-width: 480px; }
-.eng__plate { grid-column: 5 / span 8; display: grid; gap: var(--s2); padding: var(--s2); border: 1px solid var(--ink); min-width: 0; }
+.eng__screen figcaption { max-width: 360px; }
+.eng__plate { grid-column: 5 / span 8; display: grid; gap: var(--s2); padding: var(--s2); border: 1px solid var(--ink); min-width: 0;
+  margin-top: calc(36px + var(--s1)); }     /* its top border on the name's rule (the title's 36 px line and its 8 px pad) */
 .eng__pick { display: flex; flex-wrap: wrap; gap: var(--s2) var(--s3); }
 .eng__grp { display: grid; gap: 6px; align-content: start; }
 .eng__grp:first-child { flex: 1 1 100%; }
@@ -437,7 +438,7 @@ kbd { display: inline-block; min-width: 1.5em; padding: 0 4px; font: 700 11px / 
   .eng__side { grid-column: 1 / -1; grid-template-columns: minmax(0, 1fr) 240px; column-gap: var(--gut); }
   .eng__head, .eng__desc, .eng__init { grid-column: 1; }
   .eng__screen { grid-column: 2; grid-row: 1 / span 4; }
-  .eng__plate { grid-column: 1 / -1; }
+  .eng__plate { grid-column: 1 / -1; margin-top: 0; }
   .strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   #ch-suite, #ch-dist { grid-column: 1 / -1; }
   .todo__list { grid-template-columns: repeat(2, minmax(0, 1fr)); }

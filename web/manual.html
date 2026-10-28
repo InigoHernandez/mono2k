@@ -11,7 +11,7 @@
 <meta name="description" content="The MONO2K manual: the panel, the machines, the sequencer with its trig types, locks and conditions, the track chain, the lofi bus, projects and MIDI.">
 <script>try { const t = localStorage.getItem("mono2k.theme"); if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t); } catch (e) {}</script>
 <link rel="icon" href="brand/mono2k-iso.svg" type="image/svg+xml">
-<link rel="stylesheet" href="style.css?v=56">
+<link rel="stylesheet" href="style.css?v=57">
 </head>
 <body class="noscript-all">
 <!-- the controls' glitch (style.css): rows slipped sideways, in hard bands -->
@@ -168,7 +168,7 @@
     <tbody>
       <tr><td>HOME</td><td>HOME</td><td>Pick patterns (below)</td></tr>
       <tr><td>EDIT</td><td>SYN, then its next pages</td><td>The track's sound (below)</td></tr>
-      <tr><td>ENV, SEL, ARP</td><td>AMP, FILT, ARP; pressed again, the next page</td><td>A second: its card</td></tr>
+      <tr><td>ENV, SEL, ARP</td><td>AMP, FILT, ARP; pressed again, the next page; ARP twice: the arp's HOLD</td><td>A second: its card</td></tr>
       <tr><td>FX</td><td>FX, then its next pages</td><td>PERFORM (below)</td></tr>
       <tr><td>LFO</td><td>LFO, then its next pages</td><td>The knobs come back when let go (below)</td></tr>
       <tr><td>GLO</td><td>GLO, then its next pages</td><td>FUNC: the combinations below</td></tr>
@@ -361,7 +361,7 @@
   <h2>Add a bar</h2>
   <ol class="steps">
     <li>Press SEQ for GRID. Hold the next page key (P2 is A#4) a moment: the pattern grows by a bar, a copy of the ones before. Or hold SEQ and press white 6: twice as long.</li>
-    <li>OCT+ shows the new bar; change it. The header shows the bars, the one in view solid.</li>
+    <li>OCT+ shows the new bar; change it. The footer shows the bars, the one in view solid.</li>
   </ol>
   <h2>Move a track's beat around</h2>
   <ol class="steps">
@@ -418,17 +418,17 @@
   </table>
   <h2>The screen</h2>
   <div class="figs">
-    <figure class="fig big"><canvas data-scr="01_home_stopped"></canvas><figcaption>HOME: tempo and track on top, the knobs, six tracks' steps, the bars, the breadcrumb.</figcaption></figure>
+    <figure class="fig big"><canvas data-scr="01_home_stopped"></canvas><figcaption>HOME: the pattern and tempo on top, the knobs, six tracks' steps, the bars and the breadcrumb under.</figcaption></figure>
   </div>
-  <p>One grid and one pixel font on every page: five bands, four knob cells, the stage. No text crosses a rule.</p>
+  <p>One grid and one typeface on every page: five bands, four knob cells, the stage. No text crosses a rule.</p>
   <table>
     <thead><tr><th>Band</th><th>Shows</th></tr></thead>
     <tbody>
-      <tr><td>Header</td><td>Transport, tempo, the bars; the track; GRID, PADS, REC, the pattern.</td></tr>
+      <tr><td>Header</td><td>The pattern and its name; GRID, PADS, HOLD, REC; tempo, transport.</td></tr>
       <tr><td>Knobs</td><td>A cell per knob: name, a dial, the value. Turned: name inverted. Locked: value inverted.</td></tr>
       <tr><td>Stage</td><td>Left: the value in big type, the machine's card or a held step. Right: the page's picture, live.</td></tr>
       <tr><td>Steps</td><td>The track's 16 steps: solid a trig, a checker its locks.</td></tr>
-      <tr><td>Footer</td><td>Track ▸ machine ▸ page; the button and page, ENV 1/2.</td></tr>
+      <tr><td>Footer</td><td>The bars; track ▸ machine ▸ page; the page, 1/2.</td></tr>
     </tbody>
   </table>
   <p>The screen can be light or dark: GLO &gt; SET, SCRN.</p>
@@ -527,7 +527,7 @@
   </table>
   <p>Hold several steps at once and the edit goes to all of them.</p>
   <h2>Bars: pages of 16 steps</h2>
-  <p>A pattern is one to four bars of 16 steps, the four pages. In GRID the lower keys are the steps of the page in view; on HOME the four boxes under the lanes are the bars, the one in view solid, the playhead running in it while it plays, and every page's header shows them small.</p>
+  <p>A pattern is one to four bars of 16 steps, the four pages. In GRID the lower keys are the steps of the page in view; on HOME the four boxes under the lanes are the bars, the one in view solid, the playhead running in it while it plays, and every page's footer shows them small.</p>
   <table>
     <thead><tr><th>To</th><th>In GRID</th></tr></thead>
     <tbody>
@@ -646,6 +646,7 @@
   <p>DPTH is squared around its middle, so the first steps away from 64 are fine (66 swings an eighth of a step, 72 two steps, 80 eight) and the ends sweep the whole range; the screen shows it as a share of full. The picture stacks all three LFOs: destination, rate, wave, a live cursor; the one you edit drawn heavy. Whatever an LFO moves glides between the knob's steps, with no zipper. A little DPTH on PTCH is a vibrato (66 is about 12 cents).</p>
   <h2>Arpeggiator</h2>
   <p>On ARP: MODE (OFF, UP, DOWN, U/D, RND, ORDR, the order you played them), SPD (1/32 to 1/4), RNG (one to four octaves) and GATE. Hold keys and it plays them in turn.</p>
+  <p>HOLD: tap ARP twice (or press a sustain pedal, CC 64) and the notes keep playing after you let go; a chord played after your hands leave the keys replaces them. ARP twice again stops it. Its LED pulses while it holds, and HOLD shows in the header and on the ARP page.</p>
 </article>
 
 <article id="bus" data-group="Sound">

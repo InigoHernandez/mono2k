@@ -548,6 +548,7 @@ static struct {
     uint8_t ntap;
     uint8_t octd, octd_used;           /* OCT- held: a knob turned meanwhile takes its lock away (or its value home) */
     uint8_t latch;                     /* a layer double-tapped open (its button + 1): GLO, SEQ, HOME, FX */
+    uint32_t arp_tap;                  /* ARP's last press: a second within 300 ms is the arp's HOLD */
     uint8_t dt_b, dt_page, dt_sub, dt_grid, dt_pads;   /* the last clean tap (+ 1) and what it changed */
     uint32_t dt_t;
     uint8_t card, card_used;           /* a button held alone (+ 1) for its help card; something else touched */
@@ -959,13 +960,14 @@ static void set_machine(int m)
 
 /* the keys let go of every note they hold: the keys' track changes, or the keys become steps or pads (a note left
  * in sq.held drones, and the sequence skips its track) */
-static void keys_off(void) { for (int i = 0; i < 8 && sq.nheld; i++) live_off(sq.held[0]); }
+static void keys_off(void) { for (int i = 0; i < 8 && sq.nkeys; i++) live_off(sq.keys[0]); }   /* (a HOLD keeps its) */
 
 /* the track in view (SELECT, a black key in GRID or PADS, the web's cells): the keys play it */
 static void track_to(int t)
 {
     if (t == ui.trk) return;
     keys_off();
+    sq.nheld = 0;                      /* (a held arp stays with its track: it stops, and HOLD waits for new keys) */
     ui.trk = (uint8_t)t;
     sq.ktrk = ui.trk;
     start_trans_dir(190, 1);
@@ -1137,7 +1139,7 @@ static void key_release(int k)
     ui.kact[k] = KA_NONE;
     switch (a) {
     case KA_NOTE:                                  /* (unless SELECT, GRID or PADS let go of it already) */
-        for (int i = 0; i < sq.nheld; i++) if (sq.held[i] == arg) { live_off(arg); break; }
+        for (int i = 0; i < sq.nkeys; i++) if (sq.keys[i] == arg) { live_off(arg); break; }
         break;
     case KA_SOLO: sq.solo &= (uint8_t)~(1u << arg); break;
     case KA_PERF: if (perf.on[arg]) bus_perform(arg, 0); break;   /* (FX let go first has stopped it) */
@@ -1960,7 +1962,16 @@ static void button_event(int b, int down)
         ui.pbank = (uint8_t)(cur_pat / 16);
         m_set(ui.pick, 0, sizeof ui.pick);
         break;
-    case B_ARP: go(PG_ARP); break;
+    case B_ARP:                        /* twice: the arp's HOLD, the notes outlast the keys */
+        if (ui.arp_tap && ui.now - ui.arp_tap < 300) {
+            ui.arp_tap = 0;
+            arp_hold_set(!sq.arp_hold);
+            toast(sq.arp_hold ? "ARP HOLD" : "ARP HOLD OFF", sq.arp_hold ? "ARP TWICE: LET GO" : 0);
+            break;
+        }
+        ui.arp_tap = ui.now | 1u;
+        go(PG_ARP);
+        break;
 
     case B_PLAY:
         if (!sq.playing && sq.rec && !ui.grid && !sq.ready && !clk_from()) {   /* Ready (Demake's): the first */
@@ -2126,13 +2137,14 @@ void m2k_encoder(int e, int d)
 
 /* ---------------------------------------------------------------------------------------------- drawing */
 
-/* the grid (docs/screen-grid.md), every text in MONO2K's pixel font (4 x 5 capitals at 2x, 10 px; 3x and 4x for the
- * stage's names and values). The header an ink bar (rows 0-15: the transport and tempo, the bars, the track, the
- * pattern); the knobs 16-60 (four cells of 60 under the FM-1's four knobs, solid rules at x 60, 120, 180, each its
- * label, a dotted rule, a dial and its value; a solid rule on 60); the stage 61-201 (the value's column [4, 101), the
- * picture [108, 237)); the steps 202-223 (a dotted rule, 16 boxes, a beat to a knob's cell); the footer an ink bar
- * (224-239: the breadcrumb, the page). A cell's content begins 4 px past its left edge and ends 3 clear before its
- * right one: the audit fails a text that leaves its cell or comes near a rule */
+/* the grid (docs/screen-grid.md), every text in MONO2K's Orbitron (F_S 12 px at 800 the labels, values and lines, 9
+ * rows of capitals; F_M and F_L the stage's big type; F_B, the first redesign's 11 px, the bars). The header an ink
+ * bar (rows 0-15: the pattern, the modes, REC, the tempo, the transport); the knobs 16-60 (four cells of 60 under the
+ * FM-1's four knobs, solid rules at x 60, 120, 180, each its label, a dotted rule, a dial and its value; a solid rule
+ * on 60); the stage 61-201 (the value's column [4, 101), the picture [108, 237)); the steps 202-223 (a dotted rule, 16
+ * boxes, a beat to a knob's cell); the footer an ink bar (224-239: the bars, the breadcrumb, the page). A cell's
+ * content begins 4 px past its left edge and ends 3 clear before its right one: the audit fails a text that leaves
+ * its cell or comes near a rule */
 #define HEAD_H 16                       /* the header's bar */
 #define KNOB_Y 16
 #define KNOB_R 60                       /* the knobs' rule */
@@ -2150,7 +2162,7 @@ void m2k_encoder(int e, int d)
 #define PIC_H 134
 #define CW 53                           /* a knob cell's content: [60 k + 4, 60 k + 57) */
 #define TY 1                            /* a tag's type below its box's top */
-/* the stage's lines of small type (their tops: the capitals are the 7 rows from there) */
+/* the stage's lines of small type (their tops: the capitals are the 9 rows from there) */
 #define L_TOP 64                        /* the label (a tag's box from 63) */
 #define BIG_TOP 80                      /* the big name or value's top */
 #define L_B0 188                        /* the stage's last line: a picture's names */
@@ -2232,13 +2244,13 @@ static void header(void)
     char t[8];
     s_int(t, (int)seq_bpm());
     xr -= text_r(&F_B, xr + 1, y, t, 0, 0) + 6;
-    if (sq.rec) { blit((ui.now >> 8) & 1 ? REC_ON : REC_OFF, 8, 8, xr - 7, y, 0); xr -= 8 + 6; }
+    if (sq.rec) { blit((ui.now >> 8) & 1 ? REC_ON : REC_OFF, 8, 8, xr - 7, y, 4); xr -= 8 + 6; }   /* (paper) */
     char a[8];
     s_pat(a, cur_pat);
     int pw = 2 + bar_tag(2, 0, a, 1);
-    static const char *const MODE[4] = {"GRID", "PADS", "READY", "FILL"};
-    const int on[4] = {ui.grid, ui.pads, sq.ready, sq.fill};
-    for (int i = 0; i < 4; i++) {
+    static const char *const MODE[5] = {"GRID", "PADS", "HOLD", "READY", "FILL"};   /* (HOLD: the arp's) */
+    const int on[5] = {ui.grid, ui.pads, sq.arp_hold, sq.ready, sq.fill};
+    for (int i = 0; i < 5; i++) {
         if (!on[i]) continue;
         int w = text_w(&F_B, MODE[i], 0) + 6;
         if (xr - w + 1 < pw + 6) continue;
@@ -2968,7 +2980,8 @@ static void picture(void)
             int on = (int)(sq.arp_i ? (sq.arp_i - 1) % (tot ? tot : 1) : -1) == i;
             if (on) rect(x, y, cw, 9, 1); else frame(x, y, cw, 9, 1);
         }
-        if (!n) { text_c(&F_S, X + W / 2, Y0 + 44, "HOLD", 1, 0); text_c(&F_S, X + W / 2, Y0 + 58, "SOME KEYS", 1, 0); }
+        if (sq.arp_hold) tag(X, Y0 - TY, "HOLD", 1);       /* the arp's HOLD: the notes outlast the keys */
+        if (!n) { text_c(&F_S, X + W / 2, Y0 + 44, sq.arp_hold ? "PLAY" : "HOLD", 1, 0); text_c(&F_S, X + W / 2, Y0 + 58, "SOME KEYS", 1, 0); }
         break;
     }
     case PG_GLO: {
@@ -3604,7 +3617,8 @@ static void card_draw(void)
                                         "OCT- +", "A KNOB TO DEFAULT", 0};
     static const char *const C_ENV[] = {"THE AMP", "TAP", "ITS PAGES IN TURN", "STEP +", "A KNOB LOCKS IT",
                                         "OCT- +", "A KNOB TO DEFAULT", 0};
-    static const char *const C_ARP[] = {"THE ARP", "TAP", "THE ARP PAGE", "GLO +", "PADS: KEYS T1-T6", 0};
+    static const char *const C_ARP[] = {"THE ARP", "TAP", "THE ARP PAGE", "TWICE", "HOLD: NOTES STAY", "GLO +",
+                                        "PADS: KEYS T1-T6", 0};
     static const char *const C_PLAY[] = {"AND PASTE", "TAP", "PLAY, STOP", "GLO +", "THE PATTERN",
                                          "HOME +", "ON THE PICKED", "EDIT +", "THE SOUND", "SEQ +", "THE STEPS",
                                          "STEP +", "ONTO IT", 0};
@@ -3843,7 +3857,7 @@ const uint8_t *m2k_leds(void)
     B[B_EDIT] = ui.page == PG_SYN ? 255 : 0;
     B[B_GLO] = ui.page == PG_GLO ? 255 : 0;
     B[B_HOME] = ui.page == PG_HOME ? 255 : 0;
-    B[B_ARP] = ui.page == PG_ARP ? 255 : 0;
+    B[B_ARP] = sq.arp_hold ? (blink ? 255 : 90) : ui.page == PG_ARP ? 255 : 0;   /* HOLD: it pulses */
     B[B_SAVE] = ui.save_t && ui.now - ui.save_t < 300 ? 255 : 0;
     B[B_SEQ] = ui.grid ? 255 : 0;
     B[B_PLAY] = sq.playing ? ((play_step() & 3) == 0 ? 255 : 70) : sq.ready && blink ? 255 : 0;   /* Ready: blinks */

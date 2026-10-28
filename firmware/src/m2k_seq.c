@@ -21,7 +21,9 @@ static struct {
     int32_t ctr;                       /* Q8 samples to the next step (under the clock in, as expected: for REC) */
     uint32_t lockmap[M2K_TRACKS][2];   /* steps with locks, for the screen */
     /* live play */
-    uint8_t held[8], nheld;            /* the keys held for the current track, in order */
+    uint8_t held[8], nheld;            /* the notes the keys play on the current track, in order (the arp's) */
+    uint8_t keys[8], nkeys;            /* the keys down now: with the arp's HOLD the notes outlast them */
+    uint8_t arp_hold;                  /* ARP twice, or a sustain pedal (CC 64): the arp keeps its notes */
     uint8_t ktrk;                      /* the track the keys play */
     int8_t rec_skip[M2K_TRACKS];       /* a step just recorded ahead: do not play it twice */
     /* trig conditions and ratchets */
@@ -451,7 +453,8 @@ static void seq_block(void)
     /* the arp, on its own clock */
     const uint8_t *k = PAT(cur_pat)->kit[sq.ktrk];
     int mode = (k[P_AMOD] * 6) >> 7;
-    if (mode && sq.nheld) {
+    if (!mode && sq.nheld > sq.nkeys) { m_cpy(sq.held, sq.keys, sq.nkeys); sq.nheld = sq.nkeys; }   /* (MODE off: */
+    if (mode && sq.nheld) {                                                  /* a held chord gives the track back) */
         static const uint8_t div[4] = {4, 8, 16, 32};    /* in 1/8 of a sixteenth (a step): 1/32 1/16 1/8 1/4, as shown */
         int32_t len = (int32_t)((sps_q8 * div[(k[P_ASPD] * 4) >> 7]) >> 3);
         sq.arp_ctr -= M2K_SUB << 8;
@@ -583,9 +586,13 @@ static void live_on(int note, int vel)
 {
     ready_go();
     int t = sq.ktrk;
+    int mode = (PAT(cur_pat)->kit[t][P_AMOD] * 6) >> 7, fresh = sq.nkeys == 0;
+    int down = 0;
+    for (int i = 0; i < sq.nkeys; i++) down |= sq.keys[i] == note;
+    if (!down && sq.nkeys < 8) sq.keys[sq.nkeys++] = (uint8_t)note;
+    if (mode && sq.arp_hold && fresh) sq.nheld = 0;   /* HOLD: a chord played after the hands left is the new one */
     for (int i = 0; i < sq.nheld; i++) if (sq.held[i] == note) return;
     if (sq.nheld < 8) sq.held[sq.nheld++] = (uint8_t)note;
-    int mode = (PAT(cur_pat)->kit[t][P_AMOD] * 6) >> 7;
     if (mode) {
         if (sq.nheld == 1) { sq.arp_ctr = 0; sq.arp_i = 0; }
         return;
@@ -621,15 +628,27 @@ static void pad_hit(int t, int note)
 static void live_off(int note)
 {
     int t = sq.ktrk, j = 0;
+    for (int i = 0; i < sq.nkeys; i++) if (sq.keys[i] != note) sq.keys[j++] = sq.keys[i];
+    sq.nkeys = (uint8_t)j;
+    int mode = (PAT(cur_pat)->kit[t][P_AMOD] * 6) >> 7;
+    if (mode && sq.arp_hold) return;               /* HOLD: the arp keeps the note */
+    j = 0;
     for (int i = 0; i < sq.nheld; i++) if (sq.held[i] != note) sq.held[j++] = sq.held[i];
     sq.nheld = (uint8_t)j;
-    int mode = (PAT(cur_pat)->kit[t][P_AMOD] * 6) >> 7;
     if (mode) return;
     if (j && trk[t].note == note) {
         voice_on(t, sq.held[j - 1], 100, 1);         /* back to the last key still held */
         return;
     }
     if (!j || trk[t].note == note) voice_off(t);
+}
+
+/* the arp's HOLD (ARP twice, a sustain pedal): on, the notes played outlast the keys, a new chord after the hands left
+ * replacing them; off, the arp keeps only the keys still down (none: it stops, its last note let ring out) */
+static void arp_hold_set(int on)
+{
+    sq.arp_hold = (uint8_t)(on != 0);
+    if (!on) { m_cpy(sq.held, sq.keys, sq.nkeys); sq.nheld = sq.nkeys; }
 }
 
 /* the Monomachine's CC map (its MIDI implementation, as the gearmulator emulator encodes it): a channel per track,
@@ -689,6 +708,7 @@ void m2k_midi_from(int src, int status, int d1, int d2)
     }
     if (!(notes_from() & from)) return;   /* notes, CCs and mutes only from NOTE IN's */
     if (cmd == 0xB0) {
+        if (d1 == 64) { if (t == sq.ktrk) arp_hold_set(d2 >= 64); return; }   /* a sustain pedal holds the arp */
         if (d1 == 3) {
             PAT(cur_pat)->mute = (uint8_t)((PAT(cur_pat)->mute & ~(1u << t)) | (d2 ? 1u << t : 0));
             return;

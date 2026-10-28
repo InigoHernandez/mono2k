@@ -54,11 +54,13 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   update also adds what it taught to `../FM1-FIRMWARE-HANDBOOK.md` (outside the repo: the owner's handbook of MONO2K's
   and Demake's lessons, for the next firmware), in its section and its Updates log. After a wasm build bump `m2k.wasm?v=` in
   `app.js`, `manual.js` and `editor.js` alike (and `worklet.js?v=` in `app.js` and `editor.js` with the worklet).
-- The screen's grid (m2k_ui.c, `docs/screen-grid.md`): MONO2K's own pixel font (`tools/gen_font.py`: 5 x 7 capitals
-  drawn a pixel at a time, F_S 1x, F_M 2x, F_L 3x); five bands: the header an ink bar 0-10 (transport, tempo, bars,
-  track, pattern), the knobs 11-37 (four cells of 60 on solid rules: label, dotted rule, dial and value), the stage
-  38-205 (the value's column [4, 101), the picture `PIC_W` x `PIC_H`, 129 x 161 from 108, 42), the steps 206-228, the
-  footer an ink bar 229-239 (breadcrumb, section and page); held windows (GLO, HOME, EDIT, SEQ) over the stage. The
+- The screen's grid (m2k_ui.c, `docs/screen-grid.md`): Orbitron, MONO2K's type (`tools/gen_font.py`: each glyph
+  cropped to its ink, the capitals on two rows; F_S 12 px at 800, 9 rows, the labels, values and lines; F_M 16 and
+  F_L 24 the stage's big type; F_B 11 px at 700 the bars); five bands: the header an ink bar 0-15 (the pattern's slot
+  a paper tag and its name, the modes, REC, tempo, transport: the first redesign's), the knobs 16-60 (four cells of
+  60 on solid rules: label, dotted rule, dial and value), the stage 61-201 (the value's column [4, 101), the picture
+  `PIC_W` x `PIC_H`, 129 x 134 from 108, 64), the steps 202-223, the footer an ink bar 224-239 (the bars, the
+  breadcrumb, the page); held windows (GLO, HOME, EDIT, SEQ) over the stage. The
   host's text audit (`M2K_TEXT_AUDIT`: every text's ink box; the cells and rules as drawn, `CELL`, `rule_h` /
   `rule_v`; a paper fill hides what it covers) fails the tour and `m2k_host --text-sweep` (every page, machine and
   knob value) on any two texts that touch, one cut, one past its cell or within 2 px of a rule: run it after any
@@ -198,5 +200,5 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
 ## Style
 
 C99, 4 spaces, unity build, static everything, short comments that say why. The screen's grid is the five bands above
-(header bar 0..10, knobs 11..37 under the physical knobs, stage 38..205, steps 206..228, footer bar 229..239),
+(header bar 0..15, knobs 16..60 under the physical knobs, stage 61..201, steps 202..223, footer bar 224..239),
 `docs/screen-grid.md`.
