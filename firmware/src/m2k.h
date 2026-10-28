@@ -60,9 +60,13 @@ enum {
     G_TAPE, G_ADPC, G_GLCH, G_GSIZ,          /* the lofi bus */
     G_VERB, G_DAMP, G_HISS, G_DRIV,
     G_SPD1,                                  /* + t: track t's speed, 1/8x .. 2x (the pattern format's 15th) */
-    G_COUNT = G_SPD1 + 6
+    G_GRX = G_SPD1 + 6, G_GRY, G_GRCH, G_GRES,   /* Grids (format 18, m2k_grids.c): the map's X, Y, CHAOS, its cycle */
+    G_GRBD, G_GRSD, G_GRHH,                  /* the kick's, the snare's, the hats' density */
+    G_LANE1,                                 /* + t: the lane track t follows: OFF BD SD HH, (v * 4) >> 7 */
+    G_COUNT = G_LANE1 + 6
 };
 #define G_COUNT_V14 G_SPD1                   /* the globals before the speeds */
+#define G_COUNT_V17 G_GRX                    /* and before Grids */
 #define SPD_1X 82                            /* a speed's value at 1x (the fifth of seven) */
 
 /* machines */
@@ -83,8 +87,11 @@ typedef struct {
 enum {
     C_ALWAYS, C_P75, C_P50, C_P33, C_P25, C_P12,
     C_1_2, C_2_2, C_1_3, C_2_3, C_3_3, C_1_4, C_2_4, C_3_4, C_4_4,
-    C_1ST, C_N1ST, C_PRE, C_NPRE, C_FILL, C_NFILL, C_COUNT
+    C_1ST, C_N1ST, C_PRE, C_NPRE, C_FILL, C_NFILL,
+    C_P90, C_P60, C_P40, C_P10,              /* format 18's: after the rest, so a saved condition keeps its number */
+    C_COUNT
 };
+#define C_COUNT_V17 C_P90                    /* the conditions before them */
 #define ST_TRIG 1u
 #define ST_ACC  2u
 #define ST_SLD  4u
@@ -113,8 +120,9 @@ typedef struct {
  * others on the ones after it; (v * 16) >> 7), S_SYNI where the clock in comes from (OFF USB TRS BOTH, m2k_seq.c's
  * syin_choice: an old OFF stays OFF, an old ON is BOTH), S_SYNO the clock out, S_NOTO the notes out (from 64 on).
  * GLO > IN: S_NTIN where notes and CCs come from (BOTH USB TRS OFF, (v * 4) >> 7: an old store's 0 is BOTH), S_THRU
- * the TRS jack's MIDI out over USB (from 64 on) */
-enum { S_SCREEN, S_MCH, S_SYNI, S_SYNO, S_NOTO, S_NTIN, S_THRU, S_COUNT = 16 };
+ * the TRS jack's MIDI out over USB (from 64 on). GLO > PLAY: S_MUTQ when a mute made while playing comes: at the next
+ * bar below 64 (the default, an old store's 0), at once from 64 */
+enum { S_SCREEN, S_MCH, S_SYNI, S_SYNO, S_NOTO, S_NTIN, S_THRU, S_MUTQ, S_COUNT = 16 };
 /* where a message came in (m2k_midi_from): the FM-1's USB or its TRS jack */
 enum { M2K_USB, M2K_TRS };
 

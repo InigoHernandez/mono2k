@@ -1227,7 +1227,7 @@ static int selftest(void)
         lk(&a, 0, 8, P_SYN + 1, 99);
         lk(&a, 0, 12, P_SYN, 65);
         int n = pat_pack(&a, bl);
-        CHECK(bl[1] == 17, "format: patterns are written as version 17");
+        CHECK(bl[1] == 18, "format: patterns are written as version 18");
         n = pat_pack_v(&a, bl, 4);
         CHECK(pat_unpack(&b, bl, n), "format: a version-4 pattern loads");
         CHECK(b.kit[0][P_DIST] == T_V5_DIST[34] && b.kit[0][P_DTIM] == 32 && b.kit[0][P_DSND] == 64 &&
@@ -2127,7 +2127,7 @@ static int selftest(void)
             m2k_init(15);
             m2k_pattern_t today = pat[2];
             for (int i = 0; i < 16; i++) { memset(pat[i].name, 0, 8); s_cpy(pat[i].name, OLD_DEMO[10][i]); }
-            int same = pat_unpack(&pat[2], lb, ln) && pat_pack(&pat[2], rb) == ln;   /* (format 16's layout: as long) */
+            int same = pat_unpack(&pat[2], lb, ln) && pat_pack(&pat[2], rb) == ln + G_COUNT - G_COUNT_V17;   /* (18: Grids') */
             if (k) pat[2].kit[3][P_VOL] ^= 1;         /* a knob turned a detent, the name kept */
             int vol = pat[2].kit[3][P_VOL], mine = 0;
             for (int s = 0; s < 64; s++) { pat[4].step[0][s].flags = ST_TRIG; pat[4].step[0][s].note = (uint8_t)(36 + s % 12); }
@@ -2145,7 +2145,7 @@ static int selftest(void)
                 CHECK(ok && same && !memcmp(&pat[2], &today, sizeof today) && len == pat_pack(&today, rb) && !memcmp(b, rb, (size_t)len),
                       "store: revision 10's A03 LATTICE as it shipped becomes today's, in the work and in P1");
             else
-                CHECK(ok && !strcmp(pat[2].name, "LATTICE") && pat[2].kit[3][P_VOL] == vol && len == ln,
+                CHECK(ok && !strcmp(pat[2].name, "LATTICE") && pat[2].kit[3][P_VOL] == vol && len == ln + G_COUNT - G_COUNT_V17,
                       "store: revision 10's LATTICE with a knob turned under its name is the owner's: kept");
             CHECK(ok && rest, "store: revision 10's A05 PROCESS with the owner's work and A06-A16 stay, none blanked");
         }
@@ -2311,7 +2311,7 @@ static int selftest(void)
         memcpy(src, pat, sizeof src);
         int unpacked = 0;
         for (int it = 0; it < 650; it++) {
-            int ver = 3 + it % 13, bn = pat_pack_v(&src[it % 16], bl, ver), k = 1 + (int)(fuzz_rnd() % 6);
+            int ver = 3 + it % 16, bn = pat_pack_v(&src[it % 16], bl, ver), k = 1 + (int)(fuzz_rnd() % 6);
             for (int j = 0; j < k; j++) bl[fuzz_rnd() % (uint32_t)bn] ^= (uint8_t)(1u << (fuzz_rnd() % 8));
             m2k_init(24);                                 /* (each as it would boot: no track's last machine left) */
             if (!pat_unpack(&pat[0], bl, bn)) continue;
@@ -4139,6 +4139,156 @@ static int selftest(void)
         fresh &= cur_pat == 16;                           /* (the queued one at the bar's end) */
         seq_play(0);
         CHECK(first && !after && !muted && fresh, "sequencer: a ratchet stops with STOP and muted; a start clears a step recorded ahead, a fill, a jump, PRE");
+    }
+    /* Grids (m2k_grids.c): the lanes' trigs and accents, a track's 32 steps, as the original's rules give them
+     * (tools/ref/grids_ref.py: ReadDrumMap, EvaluateDrums and U8Mix written apart from the port, on its nodes and
+     * MONO2K's random byte) for six maps, densities, chaos and both cycles; the nodes as transcribed (their sum) */
+    {
+        static const struct { uint8_t x, y, ch, d[3], cyc; uint32_t trig[3], acc[3]; } GC[] = {
+        {0, 0, 0, {64, 64, 64}, 16, {0x42414241u, 0x01740174u, 0x51155115u}, {0x02400240u, 0x01400140u, 0x01010101u}},
+        {64, 64, 0, {64, 64, 64}, 16, {0x05410541u, 0x74107410u, 0x54545454u}, {0x01010101u, 0x30103010u, 0x04440444u}},
+        {100, 30, 0, {100, 40, 127}, 16, {0x53295329u, 0x00440044u, 0xffffffffu}, {0x01010101u, 0x00440044u, 0x15001500u}},
+        {37, 90, 127, {80, 80, 80}, 16, {0xcdcdcdcdu, 0xda90de9eu, 0xf5d5f5ffu}, {0x0c0d0c05u, 0x10109090u, 0x00555555u}},
+        {127, 127, 60, {127, 127, 127}, 32, {0xffffffffu, 0xffffffffu, 0xffffffffu}, {0x01004101u, 0x01004101u, 0x10001010u}},
+        {20, 110, 100, {50, 90, 110}, 32, {0x10100011u, 0x55544d44u, 0xffffffffu}, {0x00100001u, 0x01004100u, 0x11111111u}},
+        };
+        m2k_init(60);
+        m2k_pattern_t *q = bare(16);
+        int same = 1, sum = 0;
+        for (int i = 0; i < 25; i++) for (int k = 0; k < 96; k++) sum += GR_NODE[i][k];
+        for (unsigned c = 0; c < sizeof GC / sizeof GC[0]; c++) {
+            q->glob[G_GRX] = GC[c].x; q->glob[G_GRY] = GC[c].y; q->glob[G_GRCH] = GC[c].ch;
+            q->glob[G_GRES] = GC[c].cyc == 32 ? 127 : 0;
+            for (int part = 0; part < 3; part++) {
+                q->glob[G_GRBD + part] = GC[c].d[part];
+                uint32_t tm = 0, am = 0;
+                for (int k = 0; k < 32; k++) {
+                    int h = grids_hit(q, part, (uint32_t)k, 0);
+                    tm |= (uint32_t)(h != 0) << k;
+                    am |= (uint32_t)(h == 2) << k;
+                }
+                if (tm != GC[c].trig[part] || am != GC[c].acc[part]) {
+                    same = 0;
+                    printf("     Grids case %u part %d: trigs %08x accents %08x\n", c, part, tm, am);
+                }
+            }
+        }
+        CHECK(same && sum == 115943, "Grids: the lanes' trigs and accents are the original's rules' (six maps, densities, chaos, both cycles)");
+        /* a track following a lane plays its trigs in place of its own steps, at its root (its own trigs' note), Grids'
+         * accents its accents; on its own clock (at 2x, Grids' steps twice as fast); muted, none; the same every PLAY */
+        int rep = 1, notes = 1, accs = 1, fast = 1;
+        uint32_t h2[2] = {0, 0}, h3 = 0;
+        for (int run = 0; run < 2; run++) {
+            m2k_init(61 + run);
+            q = bare(16);
+            q->glob[G_GRX] = GC[3].x; q->glob[G_GRY] = GC[3].y; q->glob[G_GRCH] = GC[3].ch; q->glob[G_GRES] = 0;
+            for (int part = 0; part < 3; part++) q->glob[G_GRBD + part] = GC[3].d[part];
+            q->glob[G_LANE1 + 1] = enc(1, 4);                 /* T2 on the kick's lane */
+            q->glob[G_LANE1 + 2] = enc(2, 4);                 /* T3 on the snare's, at 2x */
+            q->glob[G_SPD1 + 2] = enc(6, 7);
+            q->step[1][3] = (m2k_step_t){.note = 50, .flags = ST_TRIG};   /* (its own trig: not played; its root 50) */
+            seq_play(1);
+            sblk_sync();
+            while (sq.n1x <= 32) {
+                int m = sblk();
+                if ((m & 2) && sq.n1x >= 1 && sq.n1x <= 32) {
+                    int k = (int)sq.n1x - 1;
+                    h2[run] |= 1u << k;
+                    notes &= trk[1].note == 50;
+                    accs &= (trk[1].vel == 127) == (int)((GC[3].acc[0] >> k) & 1);
+                }
+                if ((m & 4) && sq.tk[2] >= 1 && sq.tk[2] <= 32) h3 |= 1u << (sq.tk[2] - 1);
+            }
+            seq_play(0);
+        }
+        rep = h2[0] == h2[1];
+        fast = h3 == GC[3].trig[1];
+        m2k_init(63);
+        q = bare(16);
+        q->glob[G_LANE1 + 0] = enc(3, 4);
+        q->glob[G_GRHH] = 127;
+        q->mute = 1;
+        seq_play(1);
+        sblk_sync();
+        int heard = 0;
+        for (int i = 0; i < 4000; i++) heard += sblk() & 1;
+        seq_play(0);
+        CHECK(h2[0] == GC[3].trig[0] && rep && notes && accs && fast && !heard,
+              "Grids: a lane's trigs play in place of the track's steps, at its root, its accents; at 2x on its own steps; muted none; alike every PLAY");
+    }
+    /* GRIDS + OCT+, stopped: the lanes into the following tracks' steps over the pattern's length (a PLAY's first
+     * cycles), at the track's note, accents as accents, their locks there cleared, their following off; over trigs
+     * asked first (OCT- no, OCT+ yes), into none at once; GLO + OCT- undoes it */
+    {
+        m2k_init(64);
+        m2k_pattern_t *q = bare(16);
+        q->glob[G_GRX] = 37; q->glob[G_GRY] = 90; q->glob[G_GRCH] = 127;
+        for (int part = 0; part < 3; part++) q->glob[G_GRBD + part] = 80;
+        q->glob[G_LEN] = 32;
+        q->glob[G_LANE1 + 1] = enc(1, 4);
+        q->glob[G_LANE1 + 3] = enc(3, 4);
+        q->step[1][3] = (m2k_step_t){.note = 50, .flags = ST_TRIG};
+        lk(q, 1, 5, P_DEC, 30);
+        lk(q, 1, 40, P_DEC, 31);                          /* (past the length: kept) */
+        lockmap_build();
+        ui.page = PG_ARP; ui.sub = 1;
+        uint32_t want[2] = {0, 0}, wacc = 0;
+        for (int k = 0; k < 32; k++) {
+            int h = grids_hit(q, 0, (uint32_t)k, 0);
+            want[0] |= (uint32_t)(h != 0) << k; wacc |= (uint32_t)(h == 2) << k;
+            want[1] |= (uint32_t)(grids_hit(q, 2, (uint32_t)k, 0) != 0) << k;
+        }
+        m2k_button(B_OCTU, 1); m2k_button(B_OCTU, 0);
+        int asked = ask.kind == ASK_GRIDS && lane_of(q, 1);
+        m2k_button(B_OCTD, 1); m2k_button(B_OCTD, 0);
+        int no = !ask.kind && lane_of(q, 1) && (q->step[1][3].flags & ST_TRIG);
+        m2k_button(B_OCTU, 1); m2k_button(B_OCTU, 0);
+        m2k_button(B_OCTU, 1); m2k_button(B_OCTU, 0);     /* (asked again: yes) */
+        uint32_t got[2] = {0, 0}, gacc = 0;
+        int nt = 1;
+        for (int st = 0; st < 32; st++) {
+            got[0] |= (uint32_t)((q->step[1][st].flags & ST_TRIG) != 0) << st;
+            gacc |= (uint32_t)((q->step[1][st].flags & ST_ACC) != 0) << st;
+            got[1] |= (uint32_t)((q->step[3][st].flags & ST_TRIG) != 0) << st;
+            nt &= q->step[1][st].note == 50 && q->step[3][st].note == mach_home(q->machine[3]);
+        }
+        int locks = lock_find(1, 5, P_DEC) < 0 && lock_find(1, 40, P_DEC) >= 0;
+        int off = !lane_of(q, 1) && !lane_of(q, 3);
+        m2k_button(B_GLO, 1); m2k_button(B_OCTD, 1); m2k_button(B_OCTD, 0); m2k_button(B_GLO, 0);
+        int undone = lane_of(PAT(cur_pat), 1) && (PAT(cur_pat)->step[1][3].flags & ST_TRIG) && PAT(cur_pat)->step[1][3].note == 50;
+        m2k_init(65);
+        q = bare(16);
+        q->glob[G_LANE1 + 2] = enc(2, 4);
+        ui.page = PG_ARP; ui.sub = 2;
+        m2k_button(B_OCTU, 1); m2k_button(B_OCTU, 0);
+        int now = !ask.kind && !lane_of(q, 2) && ux_trigs(2) > 0;
+        CHECK(asked && no && got[0] == want[0] && gacc == wacc && got[1] == want[1] && nt && locks && off && undone && now,
+              "GRIDS: OCT+ stopped writes the lanes into the following tracks' steps (asked over trigs), their locks and lanes off");
+    }
+    /* format 18: a version-17 pattern loads with Grids at its start (X and Y 64, no chaos, a bar's cycle, the densities
+     * 64, no lane) and a condition past 17's as ALWAYS, as 17 read it: A01 as 17 loads as today's; 18 keeps all */
+    {
+        static m2k_pattern_t w, w2;
+        static uint8_t wb[BLOB_MAX];
+        m2k_init(66);
+        w = pat[0];
+        w.glob[G_GRX] = 10; w.glob[G_GRY] = 120; w.glob[G_GRCH] = 77; w.glob[G_GRES] = 127;
+        w.glob[G_GRBD] = 1; w.glob[G_GRSD] = 2; w.glob[G_GRHH] = 3;
+        for (int t = 0; t < M2K_TRACKS; t++) w.glob[G_LANE1 + t] = (uint8_t)enc(t & 3, 4);
+        int s0 = -1;
+        for (int st = 0; st < M2K_STEPS && s0 < 0; st++) if (w.step[0][st].flags & ST_TRIG) s0 = st;
+        w.step[0][s0].cond = C_P60;
+        int wn = pat_pack_v(&w, wb, 17), ok = s0 >= 0 && pat_unpack(&w2, wb, wn);
+        const uint8_t *g = w2.glob;
+        int start = g[G_GRX] == 64 && g[G_GRY] == 64 && g[G_GRCH] == 0 && g[G_GRES] == 0 && g[G_GRBD] == 64 && g[G_GRSD] == 64 &&
+                    g[G_GRHH] == 64 && w2.step[0][s0].cond == C_ALWAYS;
+        for (int t = 0; t < M2K_TRACKS; t++) start &= g[G_LANE1 + t] == 0;
+        wn = pat_pack_v(&pat[0], wb, 17);
+        int a01 = wb[1] == 17 && pat_unpack(&w2, wb, wn) && !memcmp(&w2, &pat[0], sizeof w2);
+        wn = pat_pack(&w, wb);
+        int keeps = wb[1] == 18 && pat_unpack(&w2, wb, wn) && !memcmp(&w2, &w, sizeof w2) && w2.step[0][s0].cond == C_P60;
+        CHECK(ok && start && a01 && keeps,
+              "format: version 17 -> 18, Grids at its start (no lane followed) and 17's conditions as they read; A01 as 17 loads as today's; 18 keeps its lanes");
     }
     /* MIDI: the clock in's stop passed on with its start and pulses; the clock out six pulses to a step exactly, so a
      * step's note still goes out with its pulse after a minute (at a tempo whose step is no whole number of sixths) */

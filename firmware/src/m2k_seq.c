@@ -9,6 +9,8 @@ static struct {
     uint8_t full;                      /* a pattern queued could not open (the FM-1's patterns full): for the screen */
     uint8_t jump;                      /* the queued pattern now, at the next step (HOME + its key again) */
     uint8_t solo;                      /* the tracks soloed while GLO + white 9-14 are held (0 none) */
+    uint8_t mq_m, mq_v, sq_m, sq_v;    /* mutes and solos waiting for the next bar (GLO > PLAY): which, and as what */
+    uint8_t solo_rel;                  /* solo keys let go before their bar came: off at the bar after it */
     uint8_t fill_next, fill_auto;      /* a fill for the next loop (GLO + white 7), and that loop's own */
     /* the tracks off 1x: each on its own step and clock (Q8 samples), over the pattern's length, from its start */
     uint8_t ts[M2K_TRACKS];
@@ -224,10 +226,51 @@ static inline int32_t track_len(int t, int s) { int c = spd_of(t); return step_l
 
 /* the step track t plays (or last played): the pattern's, or its own off 1x */
 static int track_pos(int t);
+static int pat_root(const m2k_pattern_t *p, int t);   /* (m2k_proj.c) */
+static int mach_home(int m);
 
-static void fire_track(int t, int s, int32_t len)
+/* Grids (m2k_grids.c, GRIDS on ARP's pages): a track following a lane plays the lane's trigs in place of its own steps,
+ * on its own clock: its K-th step since the pattern's start is Grids' step K % 16 doubled (a cycle of a bar: Grids'
+ * clock at 4 ppqn, two of its steps a sixteenth) or K % 32 (two bars: every step, at 8 ppqn), its cycle K over that */
+static inline int lane_of(const m2k_pattern_t *p, int t) { return (p->glob[G_LANE1 + t] * 4) >> 7; }   /* 0, 1 BD .. 3 HH */
+static inline int grids_cyc(const m2k_pattern_t *p) { return (p->glob[G_GRES] * 2) >> 7 ? 32 : 16; }
+
+/* part's hit at the K-th step: 0 none, 1 a trig, 2 an accent; *lv its level */
+static int grids_hit(const m2k_pattern_t *p, int part, uint32_t k, int *lv)
+{
+    const uint8_t *g = p->glob;
+    const uint32_t cyc = (uint32_t)grids_cyc(p);
+    const int step = cyc == 16 ? (int)(k % 16u) * 2 : (int)(k % 32u);
+    int l = grids_level(step, part, gr8(g[G_GRX]), gr8(g[G_GRY]), grids_pert(k / cyc, part, gr8(g[G_GRCH])));
+    if (lv) *lv = l;
+    return l <= 255 - gr8(g[G_GRBD + part]) ? 0 : l > 192 ? 2 : 1;
+}
+
+/* the note a lane plays a track at: its trigs' root, else its machine's home */
+static int lane_note(const m2k_pattern_t *p, int t) { int r = pat_root(p, t); return r < 0 ? mach_home(p->machine[t]) : r; }
+
+/* a lane's trig: the kit's sound (no locks) at the track's note, Grids' accent its accent, a step's gate, one hit */
+static void lane_fire(int t, uint32_t k)
 {
     m2k_pattern_t *p = PAT(cur_pat);
+    int hit = grids_hit(p, lane_of(p, t) - 1, k, 0);
+    if (!hit) return;
+    int note = lane_note(p, t), vel = hit == 2 ? 127 : 100, c = spd_of(t);
+    m_cpy(trk[t].eff, p->kit[t], P_COUNT);
+    voice_trig(t, note, vel, 0, 0);
+    if (set_on(S_NOTO)) mx_note_on(t, note, vel);
+    trk[t].gate_left = c == 4 ? gate_blocks(t) : (gate_blocks(t) - 1) * SPD_NUM[c] / SPD_DEN[c] + 1;
+    sq.rt_left[t] = 0;
+}
+
+/* track t's step s, its K-th since the pattern's start, LEN Q8 samples long */
+static void fire_track(int t, int s, int32_t len, uint32_t k)
+{
+    m2k_pattern_t *p = PAT(cur_pat);
+    if (lane_of(p, t)) {
+        if (!(p->mute >> t & 1) && !(sq.solo && !(sq.solo >> t & 1)) && !(sq.nheld && t == sq.ktrk)) lane_fire(t, k);
+        return;
+    }
     {
         m2k_step_t st = p->step[t][s];
         if (!(st.flags & ST_TRIG) || (p->mute >> t & 1) || (sq.solo && !(sq.solo >> t & 1))) return;
@@ -256,7 +299,7 @@ static void fire_track(int t, int s, int32_t len)
 
 static void fire_step(int s)                         /* the pattern's step: the tracks at 1x */
 {
-    for (int t = 0; t < M2K_TRACKS; t++) if (spd_of(t) == 4) fire_track(t, s, step_len(s));
+    for (int t = 0; t < M2K_TRACKS; t++) if (spd_of(t) == 4) fire_track(t, s, step_len(s), sq.n1x);
     bus_step(s);
 }
 
@@ -347,7 +390,7 @@ static void tracks_off_1x(void)
             if (sq.ts[t] >= len) { sq.ts[t] = 0; sq.loops[t]++; }
             int st = sq.ts[t];
             int32_t l = track_len(t, st);
-            fire_track(t, st, l);
+            fire_track(t, st, l, sq.tk[t]);
             sq.tctr[t] += l;
             sq.ts[t] = (uint8_t)(st + 1);
             sq.tk[t]++;
@@ -394,11 +437,69 @@ static void step_wrap(void)
     }
 }
 
+/* GLO > PLAY's MUTE (S_MUTQ): with BAR, a mute, an unmute or a solo made while the pattern plays waits for the next
+ * bar's first step: the pattern's step 0, 16, 32 or 48 (the footer's four bars of 16; its start always begins one, so
+ * a loop shorter than a bar is a bar), whatever the tracks' speeds; NOW, or stopped, it is at once. What waits is a
+ * track's mute (or solo) as it will be: pressed again before the bar, nothing waits */
+static inline int mute_waits(void) { return sq.playing && !set_on(S_MUTQ); }
+static inline int mute_pending(void) { return (sq.mq_m | sq.sq_m | sq.solo_rel) != 0; }
+
+static int mute_will(int t)            /* track t muted, as it will be */
+{
+    const uint8_t b = (uint8_t)(1u << t);
+    return (((sq.mq_m & b) ? sq.mq_v : PAT(cur_pat)->mute) & b) != 0;
+}
+
+static void mute_to(int t, int on)
+{
+    m2k_pattern_t *p = PAT(cur_pat);
+    const uint8_t b = (uint8_t)(1u << t);
+    if (!mute_waits()) { p->mute = (uint8_t)((p->mute & ~b) | (on ? b : 0)); sq.mq_m &= (uint8_t)~b; return; }
+    sq.mq_v = (uint8_t)((sq.mq_v & ~b) | (on ? b : 0));
+    if (!(p->mute & b) == !on) sq.mq_m &= (uint8_t)~b; else sq.mq_m |= b;
+}
+
+/* a solo key down or let go. Let go before its solo came, the solo plays its bar and goes at the next */
+static void solo_key(int t, int down)
+{
+    const uint8_t b = (uint8_t)(1u << t);
+    if (!mute_waits()) {
+        sq.solo = (uint8_t)(down ? sq.solo | b : sq.solo & ~b);
+        sq.sq_m &= (uint8_t)~b; sq.solo_rel &= (uint8_t)~b;
+        return;
+    }
+    if (down) { sq.solo_rel &= (uint8_t)~b; sq.sq_v |= b; }
+    else if (sq.sq_m & sq.sq_v & b) { sq.solo_rel |= b; return; }
+    else sq.sq_v &= (uint8_t)~b;
+    if (!(sq.solo & b) == !(sq.sq_v & b)) sq.sq_m &= (uint8_t)~b; else sq.sq_m |= b;
+}
+
+static void mutes_all_on(void)         /* GLO + white 15: every track heard, none soloed */
+{
+    if (!mute_waits()) { PAT(cur_pat)->mute = 0; sq.solo = 0; sq.mq_m = sq.sq_m = sq.solo_rel = 0; return; }
+    sq.mq_m = PAT(cur_pat)->mute & 0x3F; sq.mq_v = 0;
+    sq.sq_m = sq.solo; sq.sq_v = 0; sq.solo_rel = 0;
+}
+
+static void mutes_due(void)            /* the bar: what waited, now; a solo let go early, off at the next */
+{
+    m2k_pattern_t *p = PAT(cur_pat);
+    p->mute = (uint8_t)((p->mute & ~sq.mq_m) | (sq.mq_v & sq.mq_m));
+    sq.solo = (uint8_t)((sq.solo & ~sq.sq_m) | (sq.sq_v & sq.sq_m));
+    sq.mq_m = 0;
+    sq.sq_m = sq.solo_rel;
+    sq.sq_v &= (uint8_t)~sq.solo_rel;
+    sq.solo_rel = 0;
+}
+
+static void mutes_now(void) { mutes_due(); mutes_due(); }   /* stopped, or NOW turned: all of it at once */
+
 /* the pattern's next step, its trig at PH on the tracks' clocks; returns it */
 static int step_fire(int32_t ph)
 {
     step_wrap();
     int s = sq.step;
+    if (!(s & 15) && mute_pending()) mutes_due();       /* a bar's first step: the mutes that waited for it */
     fire_step(s);
     tracks_lock(sq.n1x++, ph);
     sq.step = (uint8_t)(s + 1);
@@ -408,6 +509,7 @@ static int step_fire(int32_t ph)
 static void seq_block(void)
 {
     sq.tick++;
+    if (mute_pending() && !mute_waits()) mutes_now();
     mx.now += M2K_SUB;
     seq_tempo();
     if (sq.playing && mx.ext) {        /* the clock in's pulse armed the step; an odd step waits for its swing */
@@ -520,6 +622,7 @@ static void seq_play(int on)
         for (int t = 0; t < M2K_TRACKS; t++) voice_off(t);          /* (their notes out end with them) */
         m_set(sq.rt_left, 0, sizeof sq.rt_left);                     /* a ratchet's hits too */
         if (sq.playing && !mx.ext && set_on(S_SYNO)) mx_out(1, 0xFC, 0, 0);
+        if (mute_pending()) mutes_now();                             /* stopped: what waited, at once */
         mx.ext = 0;
         mx.arm = 0;
     }
@@ -709,10 +812,7 @@ void m2k_midi_from(int src, int status, int d1, int d2)
     if (!(notes_from() & from)) return;   /* notes, CCs and mutes only from NOTE IN's */
     if (cmd == 0xB0) {
         if (d1 == 64) { if (t == sq.ktrk) arp_hold_set(d2 >= 64); return; }   /* a sustain pedal holds the arp */
-        if (d1 == 3) {
-            PAT(cur_pat)->mute = (uint8_t)((PAT(cur_pat)->mute & ~(1u << t)) | (d2 ? 1u << t : 0));
-            return;
-        }
+        if (d1 == 3) { mute_to(t, d2 != 0); return; }   /* (with BAR, while playing: at the next bar) */
         int prm = mm_cc_param(d1);
         if (prm < 0) return;
         int v = d2 > 127 ? 127 : d2;
@@ -888,6 +988,8 @@ static void kit_init(m2k_pattern_t *p, int t, int m)
 
 static int mach_home(int m) { return MACH_INIT[m].home; }
 
+static void grids_v17(m2k_pattern_t *p);   /* (m2k_factory.c) */
+
 static void pat_init(m2k_pattern_t *p, const char *name)
 {
     m_set(p, 0, sizeof *p);
@@ -904,6 +1006,7 @@ static void pat_init(m2k_pattern_t *p, const char *name)
     p->glob[G_VERB] = 38;                    /* (format 17's 1 s, a little dark: the old 60 and 50 as they sounded) */
     p->glob[G_DAMP] = 92;
     for (int t = 0; t < M2K_TRACKS; t++) p->glob[G_SPD1 + t] = SPD_1X;
+    grids_v17(p);                            /* Grids' map as a pattern starts it, no lane followed */
 }
 
 #include "m2k_factory.c"

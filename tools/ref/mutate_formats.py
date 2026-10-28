@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
-# Mutation tests of the pattern format's conversions (fm_v9, sid_v10, gsin_v11, hold_v12, vox_v13, feel_v15, fx_v16): each mutant is one small change to a conversion;
+# Mutation tests of the pattern format's conversions (fm_v9, sid_v10, gsin_v11, hold_v12, vox_v13, feel_v15, fx_v16, grids_v17): each mutant is one small change to a conversion;
 # the self-test must fail on every one. A survivor is a conversion the self-test does not hold.
 #   .venv/bin/python tools/ref/mutate_formats.py [TREE]     (default: this checkout; it restores each file it touches)
 import subprocess, sys, os
@@ -107,6 +107,19 @@ M = [
  ("BUS17 DAMP left", F, "    g[G_DAMP] = (uint8_t)CLAMP((dm + 32768) >> 16, 0, 127);", "    (void)dm;"),
  ("BUS17 bank A not converted at build", F, "    for (int i = 0; i < 4; i++) fx_v16(PAT(i));", "    (void)0;"),
  ("BUS17 the old bank not converted at build", H, "    for (int i = 0; i < 16; i++) fx_v16(PAT(i));", "    (void)0;"),
+ ("GRIDS not converted", P, "    if (ver < 18) grids_v17(p);", "    if (ver < 1) grids_v17(p);"),
+ ("GRIDS converted on a version-18 pattern", P, "    if (ver < 18) grids_v17(p);", "    if (ver < 19) grids_v17(p);"),
+ ("GRIDS X not the middle", F, "    g[G_GRX] = 64; g[G_GRY] = 64; g[G_GRCH] = 0; g[G_GRES] = 0;", "    g[G_GRX] = 0; g[G_GRY] = 64; g[G_GRCH] = 0; g[G_GRES] = 0;"),
+ ("GRIDS chaos on", F, "    g[G_GRX] = 64; g[G_GRY] = 64; g[G_GRCH] = 0; g[G_GRES] = 0;", "    g[G_GRX] = 64; g[G_GRY] = 64; g[G_GRCH] = 1; g[G_GRES] = 0;"),
+ ("GRIDS two bars", F, "    g[G_GRX] = 64; g[G_GRY] = 64; g[G_GRCH] = 0; g[G_GRES] = 0;", "    g[G_GRX] = 64; g[G_GRY] = 64; g[G_GRCH] = 0; g[G_GRES] = 127;"),
+ ("GRIDS the hats' density", F, "    g[G_GRBD] = 64; g[G_GRSD] = 64; g[G_GRHH] = 64;", "    g[G_GRBD] = 64; g[G_GRSD] = 64; g[G_GRHH] = 0;"),
+ ("GRIDS a lane followed", F, "    for (int t = 0; t < M2K_TRACKS; t++) g[G_LANE1 + t] = 0;", "    for (int t = 0; t < M2K_TRACKS; t++) g[G_LANE1 + t] = (uint8_t)(t ? 0 : 127);"),
+ ("GRIDS 17's globals read as 18's", P, "    const int gl = ver >= 18 ? G_COUNT : ver >= 15 ? G_COUNT_V17 : G_COUNT_V14;",
+                                        "    const int gl = ver >= 17 ? G_COUNT : ver >= 15 ? G_COUNT_V17 : G_COUNT_V14;"),
+ ("GRIDS 17 written with 18's globals", P, "    int gl = ver >= 18 ? G_COUNT : ver >= 15 ? G_COUNT_V17 : G_COUNT_V14;",
+                                           "    int gl = ver >= 17 ? G_COUNT : ver >= 15 ? G_COUNT_V17 : G_COUNT_V14;"),
+ ("COND a condition past 17's kept", P, "    const int nc = ver >= 18 ? C_COUNT : C_COUNT_V17;", "    const int nc = C_COUNT;"),
+ ("COND 18's new chances refused", P, "    const int nc = ver >= 18 ? C_COUNT : C_COUNT_V17;", "    const int nc = C_COUNT_V17;"),
 ]
 def run():
     r = subprocess.run("cc -O2 -w -Ifirmware/src -Ifirmware/gen -o build/host/m2k_mut host/m2k_host.c -lm && build/host/m2k_mut --selftest",

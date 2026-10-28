@@ -517,6 +517,16 @@ static void feel_kit_v15(uint8_t *k)
 
 /* format 13: HOLD in beats, as the Monomachine's (v / 32 of a beat, measured at 60, 120 and 240 BPM), no longer 14.6 ms
  * a step: the kit's and its locks' HOLD to the step nearest the time they held, at the pattern's tempo (INF stays) */
+/* format 18: Grids (m2k_grids.c). An older pattern takes its map as a pattern starts it (the middle node, no chaos, a
+ * bar's cycle, each lane at half) and no track following a lane: it plays as it did */
+static void grids_v17(m2k_pattern_t *p)
+{
+    uint8_t *g = p->glob;
+    g[G_GRX] = 64; g[G_GRY] = 64; g[G_GRCH] = 0; g[G_GRES] = 0;
+    g[G_GRBD] = 64; g[G_GRSD] = 64; g[G_GRHH] = 64;
+    for (int t = 0; t < M2K_TRACKS; t++) g[G_LANE1 + t] = 0;
+}
+
 static uint8_t hold_to(int v, int bpm) { return v >= 127 ? 127 : (uint8_t)CLAMP((v * bpm * 146 + 9375) / 18750, 0, 126); }
 
 static void hold_v12(m2k_pattern_t *p)
