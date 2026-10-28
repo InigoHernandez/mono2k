@@ -16,7 +16,7 @@ descenders.
 
 | font | size, weight | capitals | tracking | for |
 |---|---|---|---|---|
-| **F_B** | 11 px, 700 | 8 rows | 1 | the header and the footer, paper on their bars (the first redesign's small type) |
+| **F_B** | 11 px, 700 | 8 rows | 2 (the name 3 where it fits) | the header and the footer, paper on their bars (the first redesign's small type) |
 | **F_S** | 12 px, 800 | 9 rows, strokes 2 px | 2 | every label, value, line, tag and window |
 | **F_M** | 16 px, 800 | 12 rows | 2 | the big type a size down (where F_L does not fit) |
 | **F_L** | 24 px, 800 | 18 rows | 3 | the stage's big name or value, the page's title |
