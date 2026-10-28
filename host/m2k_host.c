@@ -4265,6 +4265,45 @@ static int selftest(void)
         CHECK(asked && no && got[0] == want[0] && gacc == wacc && got[1] == want[1] && nt && locks && off && undone && now,
               "GRIDS: OCT+ stopped writes the lanes into the following tracks' steps (asked over trigs), their locks and lanes off");
     }
+    /* the chances: 90 60 40 10 % (format 18's, stored after the rest) play at their rates over many loops of the
+     * sequencer, as 75 and 50 % still do; every condition before them keeps its number; PRESETS on a held step turns
+     * through them by share (100 90 75 60 50 40 33 25 12 10, then the rest) */
+    {
+        m2k_init(67);
+        m2k_pattern_t *q = bare(16);
+        q->glob[G_TMPO] = 255;
+        static const uint8_t CC[6] = {C_P90, C_P60, C_P40, C_P10, C_P75, C_P50};
+        static const int WANT[6] = {230, 154, 102, 26, 192, 128};
+        for (int t = 0; t < M2K_TRACKS; t++)
+            for (int st = 0; st < 16; st++) q->step[t][st] = (m2k_step_t){.note = 60, .flags = ST_TRIG, .cond = CC[t]};
+        int hits[6] = {0, 0, 0, 0, 0, 0};
+        seq_play(1);
+        sblk_sync();
+        while (sq.n1x < 60 * 16) { int m = sblk(); for (int t = 0; t < M2K_TRACKS; t++) hits[t] += m >> t & 1; }
+        seq_play(0);
+        int rates = 1;
+        for (int t = 0; t < M2K_TRACKS; t++) {
+            int want = WANT[t] * 960 / 256;
+            rates &= abs(hits[t] - want) <= 48;
+            printf("     chance %s: %d of 960 (%d wanted)\n", COND_N[CC[t]], hits[t], want);
+        }
+        int kept = C_P75 == 1 && C_P12 == 5 && C_1_2 == 6 && C_4_4 == 14 && C_1ST == 15 && C_FILL == 19 && C_NFILL == 20 &&
+                   C_P90 == 21 && C_P10 == 24 && C_COUNT == 25 && !strcmp(COND_N[C_NFILL], "!FIL") && !strcmp(COND_N[C_P60], "60%");
+        ui.page = PG_HOME; ui.grid = 1; ui.trk = 0; ui.nheld = 1; ui.held[0] = 0;
+        q->step[0][0].cond = C_ALWAYS;
+        static const uint8_t ORDER[10] = {C_ALWAYS, C_P90, C_P75, C_P60, C_P50, C_P40, C_P33, C_P25, C_P12, C_P10};
+        int order = 1;
+        for (int i = 1; i < 10; i++) { m2k_encoder(E_PRESET, 1); order &= q->step[0][0].cond == ORDER[i]; }
+        m2k_encoder(E_PRESET, 1);
+        order &= q->step[0][0].cond == C_1_2;
+        for (int i = 0; i < 40; i++) m2k_encoder(E_PRESET, 1);
+        order &= q->step[0][0].cond == C_NFILL;
+        for (int i = 0; i < 15; i++) m2k_encoder(E_PRESET, -1);
+        order &= q->step[0][0].cond == C_P10;
+        ui.nheld = 0; ui.grid = 0;
+        if (!(rates && kept && order)) printf("     rates %d kept %d order %d cond %d\n", rates, kept, order, q->step[0][0].cond);
+        CHECK(rates && kept && order, "chances: 90 60 40 10 % at their rates over 60 loops; the old numbers kept; PRESETS turns by share");
+    }
     /* format 18: a version-17 pattern loads with Grids at its start (X and Y 64, no chaos, a bar's cycle, the densities
      * 64, no lane) and a condition past 17's as ALWAYS, as 17 read it: A01 as 17 loads as today's; 18 keeps all */
     {

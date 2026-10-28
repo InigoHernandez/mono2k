@@ -200,14 +200,15 @@ static int32_t gate_blocks(int t)
 /* --------------------------------------------------------------------------------------------- the clock */
 
 /* does a trig with this condition play? A:B and 1ST count the track's own loops; PRE remembers the last condition
- * tested on the track */
+ * tested on the track. A chance is a draw of 256 under its share (format 18's 90 60 40 10 % stored after the rest) */
 static int cond_pass(int t, int c)
 {
-    static const uint8_t CHANCE[6] = {255, 192, 128, 85, 64, 32};
+    static const uint8_t CHANCE[6] = {255, 192, 128, 85, 64, 32}, CHANCE18[4] = {230, 154, 102, 26};
     static const uint8_t AB[8][2] = {{1, 2}, {2, 2}, {1, 3}, {2, 3}, {3, 3}, {1, 4}, {2, 4}, {3, 4}};
     int r;
     if (c == C_ALWAYS) return 1;
     if (c <= C_P12) r = (int)(rnd32() & 255) < CHANCE[c];
+    else if (c >= C_P90) r = (int)(rnd32() & 255) < CHANCE18[(c - C_P90) & 3];
     else if (c <= C_4_4) { int i = c - C_1_2; int a = c == C_4_4 ? 4 : AB[i][0], b = c == C_4_4 ? 4 : AB[i][1]; r = sq.loops[t] % b == (unsigned)(a - 1); }
     else if (c == C_1ST) r = sq.loops[t] == 0;
     else if (c == C_N1ST) r = sq.loops[t] != 0;
