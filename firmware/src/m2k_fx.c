@@ -197,6 +197,7 @@ static struct {
     uint32_t g_grid[3];                /* the ring's place at the last sixteenth, eighth and beat */
     uint32_t grng;                     /* the glitch's own dice: the trigs' chances keep theirs */
     uint16_t g_fi, g_fo;               /* the event's fade in and out, Q10 a sample */
+    int32_t g_dip;                     /* a stop let go near rest: its dip before the landing, Q15 */
     /* FREEZE and the octaves: three Hann grains a third apart, g_gl long (g_wst the window's angle a sample); a
      * freeze's grains each start somewhere in its slice */
     uint32_t g_gl, g_g3, g_gph, g_wst, g_gp[3];
@@ -219,7 +220,7 @@ static struct {
     int32_t ad_mixq;                   /* the mix now, Q8 of the 0..127 one (around CRUSH it glides) */
     uint8_t ad_perf, ad_warm;          /* CRUSH held (until its mix is back); blocks of its coder running unheard */
     /* drive: PERFORM's, glided, its level held to the dry's */
-    int32_t dv, dv_e0, dv_e1, dv_g;    /* the gain now, Q8; the two levels; the hold, Q15 */
+    int32_t dv, dv_e0, dv_e1, dv_g, dv_gp;   /* the gain now, Q8; the two levels; the hold, Q15, and where it ramped to */
     /* hiss */
     uint32_t hs;
     int32_t hlp, crackle, hgain;       /* hgain: Q15, follows tape_rolling over ~0.3 s */
@@ -348,6 +349,8 @@ static void gl_perform(int k)
     if (k == PF_STOP) {                                   /* the live sound from here, slowing over a beat */
         gl_start(bus.gw - 2, GL_MAX, 0, GM_STOP, G_HELD, 32768, 0);
         bus.g_dec = G_UNITY / (six * 4 > 64 ? six * 4 : 64);
+        bus.g_fo = 2;                                     /* (its landing: 12 ms) */
+        bus.g_dip = 32767;
         bus.g_pk = (uint8_t)(k + 1);
         return;
     }
@@ -376,7 +379,9 @@ static int bus_perform(int k, int down)
         if (bus.g_next == k + 1) bus.g_next = 0;
         if (bus.g_on && bus.g_pk == k + 1) {
             bus.g_pk = 0;
-            if (bus.g_mode == GM_STOP) bus.g_spin = 1;
+            /* a stop spins up: from where it is while it still moves, else (under a quarter of the speed) it dips out
+             * and lands (gl_stop_land) */
+            if (bus.g_mode == GM_STOP) bus.g_spin = bus.g_rate < G_UNITY / 4 ? 2 : 1;
             else bus.g_left = 0;
         }
         return 1;
@@ -467,6 +472,19 @@ static void gl_grains(int32_t *pl, int32_t *pr)
     *pr = ar;
 }
 
+/* a stop let go near rest, dipped out: its read moved (unheard) to where an eighth's spin-up from rest (which reads
+ * half an eighth) ends a beat behind the write (half one, slower than 85 BPM), so it lands in time, on the beat as
+ * the sound plays it, and fades into it over 12 ms */
+static void gl_stop_land(void)
+{
+    uint32_t t = (sps_q8 >> 8) > 64 ? (sps_q8 >> 8) : 64, back = (sps_q8 >> 9) * 4;
+    while (back > GL_MAX - t) back >>= 1;
+    bus.g_start = bus.gw - (back - t / 2);
+    bus.g_pos = 0;
+    bus.g_rate = 0;
+    bus.g_spin = 1;
+}
+
 /* one half-rate sample of the event: the wet's next (gout), its read moved on */
 static void gl_tick(void)
 {
@@ -488,13 +506,18 @@ static void gl_tick(void)
         r = gl_buf[k & M][1] + (((gl_buf[(k + 1) & M][1] - gl_buf[k & M][1]) * fr) >> 12);
         /* a tape's head gives less as it slows: s (2 - s), nearly its square root, so the fall is heard to the end */
         int32_t sp = (int32_t)(bus.g_rate >> 9), a = (sp * (65536 - sp)) >> 15;        /* Q15 */
+        if (bus.g_spin == 2) {                            /* let go near rest: out over 1.5 ms, then the landing */
+            bus.g_dip = bus.g_dip > 1024 ? bus.g_dip - 1024 : 0;
+            a = (a * bus.g_dip) >> 15;
+            if (!bus.g_dip) { gl_stop_land(); bus.g_dip = 32767; }
+        }
         l = (l * a) >> 15;
         r = (r * a) >> 15;
-        if (bus.g_spin) {                                 /* let go: back up to speed over an eighth, then out */
+        if (bus.g_spin == 1) {                              /* let go: back up to speed over an eighth, then out */
             uint32_t up = G_UNITY / ((sps_q8 >> 8) > 64 ? (sps_q8 >> 8) : 64);
             bus.g_rate = bus.g_rate + up >= G_UNITY ? G_UNITY : bus.g_rate + up;
-            if (bus.g_rate == G_UNITY) { bus.g_spin = 0; bus.g_left = 0; }
-        } else bus.g_rate = bus.g_rate > bus.g_dec ? bus.g_rate - bus.g_dec : 0;   /* slowing in a straight line */
+            if (bus.g_rate == G_UNITY) { bus.g_spin = 3; bus.g_left = 0; }   /* (3: landed, at speed) */
+        } else if (!bus.g_spin) bus.g_rate = bus.g_rate > bus.g_dec ? bus.g_rate - bus.g_dec : 0;   /* slowing in a straight line */
     } else {
         int rev = mode == GM_REV;
         uint32_t k = rev ? bus.g_start + len - 1 - p : bus.g_start + p, k1 = rev ? k - 1 : k + 1;
@@ -540,7 +563,10 @@ static void gl_tick(void)
 static inline int gl_kept(uint32_t w)
 {
     if (bus.g_mode == GM_PSU || bus.g_mode == GM_PSD) return 0;   /* (a grain and a bit behind the write) */
-    if (bus.g_mode == GM_STOP) return ((w - (bus.g_start + (bus.g_pos >> 12) - 2)) & (GL_LEN - 1)) < 8192u;
+    /* a stop reads behind the write by at most half its beat while it slows, nothing at rest, and lands from fresh
+     * sound (gl_stop_land): it keeps nothing (it kept what was ahead of its read from the press, so it slowed down
+     * the sound of a ring's lap before, 0.74 s) */
+    if (bus.g_mode == GM_STOP) return 0;
     uint32_t d = w - (bus.g_start - GL_XF);
     return d >= GL_LEN && (d & (GL_LEN - 1)) < bus.g_len + 2 * GL_XF;
 }
@@ -815,11 +841,13 @@ static void bus_block(int32_t *L, int32_t *R, const int32_t *rsend, int16_t *out
      * two outputs measured (one-poles on both, ~23 ms), rising to it, and so back down; never louder, never at full
      * scale */
     int32_t drv0 = T_DRIV[g[G_DRIV]], drv_t = perf.on[PF_DRIV] ? T_DRIV[127] : drv0;
-    if (!bus.dv) bus.dv = drv0, bus.dv_g = 32767;          /* (from init: the control's, nothing held) */
-    { int32_t d = drv_t - bus.dv; bus.dv += d > 24 ? 24 : d < -24 ? -24 : d; }
-    int32_t drv = bus.dv, pdrv = drv != drv0 || bus.dv_g < 32767;
+    if (!bus.dv) bus.dv = drv0, bus.dv_g = bus.dv_gp = 32767;   /* (from init: the control's, nothing held) */
+    int32_t dvp = bus.dv;                                  /* (the gain and the hold ramp across the block: stepped */
+    { int32_t d = drv_t - bus.dv; bus.dv += d > 24 ? 24 : d < -24 ? -24 : d; }   /*  a block at a time: a +24 dB click) */
+    int32_t drv = bus.dv, pdrv = drv != drv0 || dvp != drv0 || bus.dv_g < 32767 || bus.dv_gp < 32767;
     if (!pdrv) bus.dv_e0 = bus.dv_e1 = 0;                 /* (both from 0: their ratio right from the start) */
-    int32_t dvg = bus.dv_g;
+    int32_t dvg = bus.dv_g, dgp = bus.dv_gp;
+    bus.dv_gp = dvg;
     int fl_run = bus_filters();
     int32_t mvol = T_MVOL[master_vol];
     uint32_t wow_inc = 54000, flut_inc = 620000;    /* 0.55 Hz, 6.3 Hz */
@@ -922,19 +950,26 @@ static void bus_block(int32_t *L, int32_t *R, const int32_t *rsend, int16_t *out
             int32_t l0 = lim_soft((int32_t)lr0) >> 4, r0 = lim_soft((int32_t)(lr0 >> 32)) >> 4;
             e0 += (uint32_t)(l0 * l0 + r0 * r0) >> 5;
         }
-        uint64_t lr = mul2_q15(mvol, (l * drv) >> 8, (r * drv) >> 8);
+        int32_t dri = pdrv ? dvp + (((drv - dvp) * (i + 1)) >> 4) : drv;
+        uint64_t lr = mul2_q15(mvol, (l * dri) >> 8, (r * dri) >> 8);
         l = lim_soft((int32_t)lr);
         r = lim_soft((int32_t)(lr >> 32));
         if (pdrv) {
+            int32_t dgi = dgp + (((dvg - dgp) * (i + 1)) >> 4);
             e1 += (uint32_t)((l >> 4) * (l >> 4) + (r >> 4) * (r >> 4)) >> 5;
-            l = (l * dvg) >> 15;
-            r = (r * dvg) >> 15;
+            l = (l * dgi) >> 15;
+            r = (r * dgi) >> 15;
         }
-        if (perf.kill != (perf.on[PF_KILL] ? 0 : 32767)) {   /* KILL: down and back in a straight line over 4 ms */
-            perf.kill += perf.on[PF_KILL] ? -186 : 186;
+        /* KILL: down and back over 6 ms on an S (a straight line's corners were a click's worth of top: +8 dB) */
+        if (perf.kill != (perf.on[PF_KILL] ? 0 : 32767)) {
+            perf.kill += perf.on[PF_KILL] ? -124 : 124;
             perf.kill = CLAMP(perf.kill, 0, 32767);
         }
-        if (perf.kill < 32767) { l = (l * perf.kill) >> 15; r = (r * perf.kill) >> 15; }
+        if (perf.kill < 32767) {
+            int32_t s = (perf.kill * perf.kill) >> 15, kg = (s * ((98304 - 2 * perf.kill) >> 1)) >> 14;   /* u^2 (3 - 2u) */
+            l = (l * kg) >> 15;
+            r = (r * kg) >> 15;
+        }
         out[2 * i] = (int16_t)l;
         out[2 * i + 1] = (int16_t)r;
         if ((i & 7) == 0) {

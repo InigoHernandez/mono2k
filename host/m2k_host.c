@@ -5303,14 +5303,19 @@ static int selftest(void)
 /* ------------------------------------------------------------------------------- PERFORM measured, rendered */
 
 /* DIR --perform [KEY ...]: each PERFORM effect (0-based, both banks) on bank A's four demos, written for listening
- * (DIR/NN_NAME.wav: A01..A04 one after the other, each a bar dry, the key a beat from bar 2's first beat + 40 ms,
+ * (DIR/NN_NAME.wav, A01: a bar dry, the key a beat from bar 2's first beat + 40 ms,
  * again two bars from bar 3's, then a bar on), and measured: on a held 440 Hz sine the largest sample step at the
  * entry and exit against the sound's own (as the self-test's), on every demo the high-frequency burst there (the mix
  * through a 6 kHz high-pass, its loudest 1.5 ms within -3 .. +30 ms of the press or the release, in dB over the
  * louder of the dry's there and the effect's own held), the level held and after (dB against the dry, the same
  * span), the peak and the samples at full scale */
+#ifdef PF_BANK
 #define PT_N PF_NAME
 #define PT_COUNT PF_COUNT
+#else                                    /* (the engine before bank B: the before renders) */
+static const char *const PT_N[] = {"RPT 1/4", "RPT 1/8", "RPT 1/16", "RPT 1/32", "REVERSE", "STOP", "STUTTER", "CRUSH", "WOW", "DRIVE", "KILL"};
+#define PT_COUNT 11
+#endif
 static int pt_on1, pt_off1, pt_on2, pt_off2, pt_len;
 static void pt_render(int p, int key, int16_t *o)
 {
@@ -5359,10 +5364,12 @@ static double pt_rms(const int16_t *x, int a, int b)
 }
 /* the burst at a transition t: the loudest window from -3 to +30 ms against the dry's there and the effect's own in
  * [o0, o1) */
+static double pt_floor;                 /* the dry's mean high band, -10 dB: under it no burst is heard */
 static double pt_burst(const double *ew, const double *ed, int t, int o0, int o1)
 {
     int a = t - 128, b = t + (int)(0.030 * M2K_SR);
     double w = pt_wmax(ew, a, b), r = pt_wmax(ed, a, b), own = o1 > o0 ? pt_wmax(ew, o0, o1) : 0;
+    if (r < pt_floor) r = pt_floor;
     return 10 * log10(w / (r > own ? r : own));
 }
 static int perform_tool(const char *out, int argc, char **argv)
@@ -5409,6 +5416,9 @@ static int perform_tool(const char *out, int argc, char **argv)
             pt_render(p, k, wet);
             int n = pt_len;
             pt_hf(dry, n, ed);
+            pt_floor = 0;
+            for (int i = 0; i < n / 64; i++) pt_floor += ed[i];
+            pt_floor = pt_floor / (n / 64) * 0.1;
             pt_hf(wet, n, ew);
             int lead = (int)(0.1 * M2K_SR);
             double b[4] = {pt_burst(ew, ed, pt_on1, pt_on1 + lead, pt_off1), pt_burst(ew, ed, pt_off1, pt_off1 - lead * 3, pt_off1 - 441),
@@ -5423,7 +5433,7 @@ static int perform_tool(const char *out, int argc, char **argv)
             double af = 10 * log10(pt_rms(wet, pt_off2 + M2K_SR / 4, pt_len) / pt_rms(dry, pt_off2 + M2K_SR / 4, pt_len));
             if (af > after) after = af;
             for (int i = 0; i < 2 * n; i++) { int a = abs(wet[i]); if (a > pk) pk = a; full += a >= 32767; }
-            if (cn + n <= 4 * nmax) { memcpy(cat + 2 * cn, wet, (size_t)n * 4); cn += n; }
+            if (!p) { memcpy(cat, wet, (size_t)n * 4); cn = n; }   /* (the WAV: A01) */
         }
         printf("%2d  %-9s | %4.2f %4.2f %4.2f %4.2f %4.2f | %+5.1f %+5.1f %+5.1f %+5.1f ; %+5.1f %+5.1f %+5.1f %+5.1f |"
                " %+5.1f %+5.1f %+5.1f %+5.1f | %+5.1f | %5.1f %d\n",
