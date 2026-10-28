@@ -333,8 +333,11 @@ DigiPro waves and BeatBox samples are the OS's data and are not copied: DIGI-WAV
 GPL-3.0-only. Built on the open FM-1 work: Felucca by Leo Kuroshita (Hügelton Instruments), CS-1, X0X, FoMni, zp12
 and the others. Orbitron by The League of Moveable Type: SIL OFL 1.1 (`assets/fonts/orbitron/OFL.txt`); the firmware
 carries 1-bit renderings of it. The FM-1's panel geometry as measured for
-CoralFlower's emulator. MONO2K is not affiliated with Elektron or M-VAVE; Monomachine and Machinedrum are Elektron's,
-FM-1 is M-VAVE's.
+CoralFlower's emulator. The machines were measured against a Monomachine running in Joe Landers' Monomachine
+emulator, [gearmulator-md-mm](https://github.com/joelanders/gearmulator-md-mm) (a fork of Gearmulator by The Usual
+Suspects), with the owner's own OS image: measurements only, none of the emulator's code or data is in MONO2K.
+Monomachine and Machinedrum are trademarks of Elektron; M-VAVE and FM-1 are trademarks of their owners. MONO2K is not
+affiliated with Elektron or M-VAVE.
 
 The DRM- drums' voice design is after the Erica Synths LXR drum voices (lxr-desktop-app, GPL-3.0-only; originally
 Julian Schmidt's Sonic Potions LXR): their laws (the sweep, its curve and time, the PM hats, the clap's repeats),

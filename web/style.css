@@ -249,6 +249,13 @@ kbd { display: inline-block; min-width: 1.5em; padding: 0 4px; font: 700 11px / 
 .eng__screen canvas { max-width: 360px; }   /* the machine's screen: 360 px, the FM-1's 240 at 1.5x (3x on a retina screen) */
 .eng__screen figcaption, .scr figcaption { margin-top: var(--s1); max-width: 288px; font: var(--small); opacity: 0.75; }
 .eng__screen figcaption { max-width: 360px; }
+/* on a wide screen the side runs the plate's height: the name's rule on the plate's top, the FM-1's screen at the
+ * foot, its bottom on the plate's bottom, its caption under both */
+@media (min-width: 1101px) {
+  .eng__side { align-self: stretch; display: flex; flex-direction: column; gap: var(--s2); }
+  .eng__screen { margin-top: auto; position: relative; }
+  .eng__screen figcaption { position: absolute; top: 100%; left: 0; right: 0; }
+}
 .eng__plate { grid-column: 5 / span 8; display: grid; gap: var(--s2); padding: var(--s2); border: 1px solid var(--ink); min-width: 0;
   margin-top: calc(36px + var(--s1)); }     /* its top border on the name's rule (the title's 36 px line and its 8 px pad) */
 .eng__pick { display: flex; flex-wrap: wrap; gap: var(--s2) var(--s3); }
