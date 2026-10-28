@@ -4199,6 +4199,49 @@ static int selftest(void)
         printf("     the arp at 1/32, 120 BPM: a note every %.1f samples (2756.25 a 1/32)\n", per);
         CHECK(fabs(per - 2756.25) < 2 && !twice, "arp: ASPD's rate as shown (1/32 at 120: 62.5 ms), and three notes in order past the 256th");
     }
+    /* the arp's HOLD: ARP once is its page, as before; twice holds the arp, so let go it plays on; a chord played after
+     * the hands left is the new one; twice again it stops; a sustain pedal (CC 64) on the track's channel does the same;
+     * another track takes the keys and the held arp stops */
+    {
+        ux_init(36);
+        m2k_pattern_t *q = PAT(cur_pat);
+        int t = ui.trk;
+        q->kit[t][P_AMOD] = enc(1, 6);                    /* UP */
+        q->kit[t][P_ASPD] = enc(0, 4);                    /* 1/32 */
+        m_cpy(trk[t].eff, q->kit[t], P_COUNT);
+        ux_tap(B_ARP);
+        int page = ui.page == PG_ARP && !sq.arp_hold;
+        ux_ms(400);
+        ux_tap(B_ARP); ux_tap(B_ARP);
+        int on = sq.arp_hold;
+        int k0 = ux_white(0), k1 = ux_white(2), k2 = ux_white(4);
+        m2k_key(k0, 1); m2k_key(k1, 1); ux_audio(4096); m2k_key(k0, 0); m2k_key(k1, 0);
+        int n0 = mon.trig[t];
+        ux_audio(M2K_SR / 2);
+        int plays = (uint8_t)(mon.trig[t] - n0) >= 6 && sq.nheld == 2 && sq.nkeys == 0;
+        m2k_key(k2, 1);
+        int fresh = sq.nheld == 1;
+        m2k_key(k2, 0);
+        int kept = sq.nheld == 1;
+        ux_ms(400);
+        ux_tap(B_ARP); ux_tap(B_ARP);
+        int off = !sq.arp_hold && sq.nheld == 0;
+        n0 = mon.trig[t];
+        ux_audio(M2K_SR / 4);
+        int stops = (uint8_t)(mon.trig[t] - n0) == 0;
+        int ch = (midi_ch() + t) & 15;
+        m2k_midi(0xB0 | ch, 64, 127);
+        m2k_key(k0, 1); m2k_key(k0, 0);
+        int pedal = sq.arp_hold && sq.nheld == 1;
+        m2k_midi(0xB0 | ch, 64, 0);
+        int pedal_up = !sq.arp_hold && sq.nheld == 0;
+        m2k_midi(0xB0 | ch, 64, 127);
+        m2k_key(k0, 1); m2k_key(k0, 0);
+        track_to((t + 1) % M2K_TRACKS);
+        int moved = sq.nheld == 0;
+        CHECK(page && on && plays && fresh && kept && off && stops && pedal && pedal_up && moved,
+              "arp: ARP twice holds it (let go, it plays on; a new chord replaces it; twice again, it stops); CC 64 alike; another track stops it");
+    }
     /* a speed turned while playing: the track goes on from where the pattern is (T2 turned from 1x to 2x on step 6:
      * its first step again on the pattern's 8, then with T1's 16) */
     {

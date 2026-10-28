@@ -54,7 +54,7 @@ window.M2K_HELP = (() => {
         case 5: return `${k}: tempo, bus, settings. Held: copy, paste, mutes.`;
         case 6: return `${k}: six lanes. Held: the keys pick patterns.`;
         case 7: return `${k}: keeps the pattern; held, the project.`;
-        case 8: return `${k}: the arpeggiator. GLO + ARP: PADS.`;
+        case 8: return `${k}: the arpeggiator. Twice: HOLD. GLO + ARP: PADS.`;
         case 9: return `${k}: ${c.grid ? "back to notes" : "GRID, the keys become steps"}. Held: step tools.`;
         case 10: return `${k}: ${c.playing ? "stops" : c.rec && !c.grid && !c.ready ? "Ready: the first note starts it" : "starts the pattern"}.`;
         case 11: return `${k}: ${c.rec ? "recording off" : c.playing ? "records live" : "step entry"}. Held: FILL.`;
@@ -103,7 +103,7 @@ window.M2K_HELP = (() => {
     { g: "Buttons", id: "b3", tag: "LFO", hi: ["b3"], short: "Three LFOs, two pages each.", screen: "b LFO; w 400",
       long: "Three LFOs a track, each moving any track's parameter. Held: what you turn comes back.", where: "L or F4" },
     { g: "Buttons", id: "b8", tag: "ARP", hi: ["b8"], short: "The track's arpeggiator.", screen: "b ARP; w 400",
-      long: "MODE, SPD, RNG, GATE: hold keys and it plays them in turn. GLO + ARP: PADS.", where: "K or F9" },
+      long: "Hold keys and it plays them in turn. Tap twice: HOLD, the notes keep going.", where: "K or F9" },
     { g: "Buttons", id: "b5", tag: "GLO", hi: ["b5"], short: "Tempo, the bus, the reverb, settings; held, FUNC.", screen: "b GLO; w 400",
       long: "TIME, GLITCH, VERB, SET, MIDI, IN. Held: copy, paste, clear, undo; the white keys mute, fill, tap, solo.", where: "G or F6" },
     { g: "Buttons", id: "b6", tag: "HOME", hi: ["b6"], short: "The pattern in six lanes; held, pick patterns.", screen: "b PLAY; w 1500",
