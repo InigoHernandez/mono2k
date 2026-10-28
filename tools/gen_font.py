@@ -15,7 +15,8 @@ OUT = os.path.join(ROOT, "firmware", "gen", "m2k_fonts.h")
 
 # name, pixel size, weight, tracking (the columns between two glyphs' ink)
 FONTS = [
-    ("F_B", 11, 700, 1),       # the header's and the footer's: the first redesign's small type, paper on their bars
+    ("F_B", 11, 700, 2),       # the header's and the footer's: the first redesign's small type (its advances and a
+                               # pixel: two columns between letters), paper on their bars
     ("F_S", 12, 800, 2),       # every label, value and line: strokes two pixels, capitals 9 rows, as Hortator's chunky
     ("F_M", 16, 800, 2),       # the big type a size down
     ("F_L", 24, 800, 3),       # the stage's names and big values

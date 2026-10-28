@@ -2258,7 +2258,8 @@ static void header(void)
         xr -= w + 4;
     }
     const char *nm = pat_name(cur_pat);
-    if (text_w(&F_B, nm, 0) <= xr - (pw + 6) + 1) text(&F_B, pw + 6, y, nm, 0, 0);
+    int room = xr - (pw + 6) + 1;                       /* (tracked a pixel more where it fits, as the first redesign) */
+    if (text_w(&F_B, nm, 0) <= room) text(&F_B, pw + 6, y, nm, 0, text_w(&F_B, nm, 1) <= room);
 }
 
 /* ---- the knobs, along the top as on the panel: each cell its label (inverted while turned), a dotted rule, its value; a dial
