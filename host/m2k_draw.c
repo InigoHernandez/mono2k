@@ -62,7 +62,7 @@ int main(int argc, char **argv)
             uint64_t c = instr() - a - base_cost;
             tot += c;
             if (c > mx) { mx = c; at = (int)ms; }
-            if (argc > 2 && !(n % 8)) printf("  %4u ms %8llu\n", (unsigned)ms, (unsigned long long)c);
+            if (argc > 2 && (!strcmp(argv[2], "-a") || !(n % 8))) printf("  %4u ms %8llu\n", (unsigned)ms, (unsigned long long)c);
         }
         printf("splash: %d frames, mean %llu, most %llu (at %d ms) instructions a frame\n", n,
                (unsigned long long)(tot / (uint64_t)n), (unsigned long long)mx, at);

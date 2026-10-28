@@ -3460,13 +3460,12 @@ static void param_page(void)
     foot();
 }
 
-/* ---- the splash (2.1 s, then the wipe into HOME, 0.4 s; a key, a button or a knob skips to the wipe). A slab of
- * MONO2K's own shapes in dithered 3D on ink, lit from the left, turning and morphing: the wordmark's letters extruded
- * over it, GND-SIN's dome, the wavefolds (DSTR's, folded more to the right), the wave bank as a waterfall (a wave a
- * row, rolling in);
- * then it folds into the wordmark: the waves die into the letters' relief as the camera rises over it, the slab
- * narrows to the logotype's band and the turn comes to rest; the relief resolves into the wordmark, and the type comes
- * in. Drawn front to back with a floating horizon (each pixel once), each strip lit by its slope, the light through the
+/* ---- the splash (2.1 s, then the wipe into HOME, 0.4 s; a key, a button or a knob skips to the wipe). One surface of
+ * MONO2K's own shapes in dithered 3D on ink, morphing the whole time, its height eased from each shape into the next
+ * (no front, no cut): the wordmark's letters extruded over it, GND-SIN's dome, the wavefolds (DSTR's, folded more to
+ * the right), the wave bank as a waterfall (a wave a row, rolling), and back to the letters' relief as the camera,
+ * swinging the while, rises over it and the slab narrows to the logotype's band; the light turns with it. The relief
+ * resolves into the wordmark, and the type comes in. Drawn front to back with a floating horizon (each pixel once), each strip lit by its slope, the light through the
  * Bayer matrix a byte at a time (T_BMASK). Integer only; about the heaviest page's cost a frame (host/m2k_draw.c) */
 static inline int logo_bit(const uint8_t *b, int x, int y) { return (b[y * ((LOGO_W + 7) >> 3) + (x >> 3)] >> (7 - (x & 7))) & 1; }
 
@@ -3479,9 +3478,9 @@ static int ease8(int t, int t0, int t1)
 
 /* the slab's shapes at (u, q) (Q8 px about its middle, q away from the viewer), Q8 px: 0 GND-SIN's dome (breathing),
  * 1 the wavefolds, 2 the wave bank, 3 the wordmark's relief, 4 the wordmark stretched three times over the slab's depth
- * (the opening). What the frame fixes (the breath, the travel) is in sp,
- * with the shape going (a), the one coming (b) and where their front is: the new one rolls in from the back */
-typedef struct { uint8_t a, b; int32_t front, breath; uint32_t fph; int32_t wrow; } slab_t;
+ * (the opening). What the frame fixes (the breath, the travel) is in sp, with the shape going (a), the one coming (b)
+ * and how far the surface has morphed from one to the other (w, 0..256, eased: everywhere at once) */
+typedef struct { uint8_t a, b; int32_t w, breath; uint32_t fph; int32_t wrow; } slab_t;
 
 static inline __attribute__((always_inline)) int32_t slab_shape(int k, int32_t u, int32_t q, const slab_t *sp)
 {
@@ -3512,16 +3511,14 @@ static inline __attribute__((always_inline)) int32_t slab_shape(int k, int32_t u
     }
 }
 
-/* the height there, and the wave bank's share of it (*ww, 0..256: its strips dark under lit lines). Across the front
- * a 16 px band blends the two; elsewhere one shape is worked out */
-static inline __attribute__((always_inline)) int32_t slab_h(int32_t u, int32_t q, const slab_t *sp, int *ww)
+/* the height there: the two shapes' heights blended by the morph (one worked out where it is all of it) */
+static inline __attribute__((always_inline)) int32_t slab_h(int32_t u, int32_t q, const slab_t *sp)
 {
-    int w = sp->a == sp->b ? 0 : CLAMP(128 + ((q - sp->front) >> 4), 0, 256);
-    int32_t h = 0;
-    if (w < 256) h += slab_shape(sp->a, u, q, sp) * (256 - w) >> 8;
-    if (w > 0) h += slab_shape(sp->b, u, q, sp) * w >> 8;
-    *ww = (sp->a == 2 ? 256 - w : 0) + (sp->b == 2 ? w : 0);
-    return h;
+    if (!sp->w) return slab_shape(sp->a, u, q, sp);
+    int32_t hb = slab_shape(sp->b, u, q, sp);
+    if (sp->w == 256) return hb;
+    int32_t ha = slab_shape(sp->a, u, q, sp);
+    return ha + (((hb - ha) * sp->w) >> 8);
 }
 
 /* rows y0..y1 of the column pair at x (even), lit l (0..64): paper where the Bayer matrix is under l, on the ink the
@@ -3557,31 +3554,43 @@ static void slab_span(int32_t a, int32_t d, int32_t lim, int *lo, int *hi)
     if (c1 < *hi) *hi = (int)c1;
 }
 
+#ifndef MORPH_CUT
+#define MORPH_CUT 64                    /* (of 256: the rows a morph's middle gives up) */
+#endif
 static void slab(int t, int fade)
 {
-    /* the turn, the camera's elevation (Q14 sine and cosine), the slab's half depth, the shapes' weights */
-    int fold = ease8(t, 1250, 1700);
-    int yaw = (30 * 256 - 46 * ease8(t, 0, 1250)) * (256 - fold) >> 8;          /* Q8 degrees */
-    int elev = 38 * 256 + 52 * fold;
+    /* the turn and the camera's elevation (Q14 sine and cosine): one swing, 30 degrees to -16 and home to 0 as it rises
+     * over the relief; the slab's half depth; the light's direction, turning with them */
+    int fold = ease8(t, 1150, 1700);
+    int yaw = (30 * 256 - 46 * ease8(t, 0, 1350)) * (256 - fold) >> 8;          /* Q8 degrees */
+    int elev = 38 * 256 + 6 * ease8(t, 0, 1150) + 46 * fold;
+    int la = ease8(t, 0, 1700);                                                 /* the light from the left, to the front */
+    const int LX = 20 - (8 * la >> 8), LZ = 8 + (10 * la >> 8);
     uint32_t ay = (uint32_t)((int32_t)yaw * 46603), ae = (uint32_t)((int32_t)elev * 46603);   /* (2^32 / 360 / 256) */
     int32_t sy = sinp(ay) >> 1, cy = sinp(ay + 0x40000000u) >> 1, se = sinp(ae) >> 1, ce = sinp(ae + 0x40000000u) >> 1;
     const int32_t PU = 116 << 8, PQ = (116 << 8) - (98 << 8) * fold / 256;
     slab_t sp;
-    /* the turns: the wordmark, the dome, the folds, the waves, the wordmark again; each rolls in over 180 ms (350 the
-     * last, as the slab folds) */
-    static const int16_t TS[5] = {0, 300, 620, 920, 1250};
-    static const uint8_t SHAPE[5] = {4, 0, 1, 2, 3};
+    /* the morphs: the wordmark, the waves, the dome, the folds, the wordmark again, each into the next from MS[k] to
+     * ME[k] ms (eased), a short hold between (the shapes keep moving: the waves' roll, the breath, the folds' travel) */
+    static const int16_t MS[4] = {120, 540, 920, 1300}, ME[4] = {440, 840, 1220, 1700};
+    static const uint8_t SHAPE[5] = {4, 2, 0, 1, 3};   /* (the waves and the folds never blended: the dearest pair) */
     int k = 0;
-    while (k < 4 && t >= TS[k + 1]) k++;
-    int t0 = TS[k], t1 = t0 + (k == 4 ? 350 : 180);
-    sp.a = k && t < t1 ? SHAPE[k - 1] : SHAPE[k];
-    sp.b = SHAPE[k];
-    sp.front = (124 << 8) - 248 * ease8(t, t0, t1);
+    while (k < 3 && t >= MS[k + 1]) k++;
+    sp.a = SHAPE[k];
+    sp.b = SHAPE[k + 1];
+    sp.w = ease8(t, MS[k], ME[k]);
+    if (sp.w < 12) sp.w = 0;                            /* (a morph's first and last 5 %: one shape, a sample cheaper) */
+    if (sp.w > 244) { sp.a = sp.b; sp.w = 0; }
+    const int ww = (sp.a == 2 ? 256 - sp.w : 0) + (sp.b == 2 && sp.a != 2 ? sp.w : 0);   /* the wave bank's share */
+    const int wv = ww > 128 ? (ww - 128) * 2 : 0;      /* its lines: only while it is most of the surface (they are dear
+                                                        * drawn down a tall dome) */
     sp.breath = 72 + (sinp((uint32_t)t * 2900000u) >> 11);
     sp.fph = 0u - (uint32_t)t * 7000000u;                               /* (unsigned: the phase wraps) */
     sp.wrow = t << 2;                                                    /* (16 waves a second) */
-    /* the rows, front first: fewer as the slab narrows into the logotype's band (a pixel apart at the end) */
-    const int NR = 24 + 14 * (PQ - (18 << 8)) / (98 << 8), T = 12 * ce >> 14, yc = 128 - 8 * fold / 256;
+    /* the rows, front first: fewer as the slab narrows into the logotype's band (a pixel apart at the end), and a
+     * quarter fewer while a morph works out two shapes a sample (the FM-1's budget), eased in over its first 6 % */
+    const int act = sp.w ? CLAMP(12 * (sp.w < 128 ? sp.w : 256 - sp.w), 0, 256) : 0, nr0 = 24 + 14 * (PQ - (18 << 8)) / (98 << 8);   /* (act 0..256) */
+    const int NR = nr0 - ((nr0 * act * MORPH_CUT) >> 16), T = 12 * ce >> 14, yc = 128 - 8 * fold / 256;
     uint8_t hz[M2K_W / 2];
     int16_t hp[M2K_W / 2];
     m_set(hz, 0xFF, sizeof hz);
@@ -3600,8 +3609,7 @@ static void slab(int t, int fade)
         int32_t hl = 0, u = u0 + lo * du, q = q0 + lo * dq;
         int in = 0, yl = 0x7FFF;
         for (int c = lo; c <= hi; c++, u += du, q += dq) {
-            int ww;
-            int32_t h = slab_h(u, q, &sp, &ww), hpc = hp[c], hlc = hl;
+            int32_t h = slab_h(u, q, &sp), hpc = hp[c], hlc = hl;
             int y = yc - (int)(((zs + ((h * ce) >> 14)) * k12) >> 20), x = c * 2, first = hz[c] == 0xFF, was = in;
             hl = h;
             in = 1;
@@ -3617,8 +3625,8 @@ static void slab(int t, int fade)
             /* the slope across (rising to the right faces the light, from the left) and away (facing the viewer),
              * through a soft knee (tanh: T_SAT); the waterfall's strips dark under their lit crests */
             int32_t gx = was ? ((h - hlc) * rx) >> 8 : 0, gz = ((h - hpc) * rz) >> 8;
-            int32_t lt = (T_SAT[CLAMP(((gz * 8 + gx * 20) >> 7) + 128, 0, 256)] * 42) >> 15;   /* 42 tanh(x / 4096) */
-            int l = ((14 + lt) * (256 - ww * 7 / 8) >> 8) * fade >> 8, wl = (ww * fade) >> 10;   /* (the lines: 64 at full) */
+            int32_t lt = (T_SAT[CLAMP(((gz * LZ + gx * LX) >> 7) + 128, 0, 256)] * 42) >> 15;   /* 42 tanh(x / 4096) */
+            int l = ((14 + lt) * (256 - ww * 7 / 8) >> 8) * fade >> 8, wl = (wv * fade) >> 10;   /* (the lines: 64 at full) */
             if (wl) {                                                   /* the waterfall's lines, joined where seen */
                 if (ly < y) slab_run(x, ly, y - 1, wl, 0, 0);
                 slab_run(x, y, hz[c] - 1, l, (ly > y ? ly - y : 0) + 1, wl);
@@ -3660,21 +3668,7 @@ static void splash(int t)
     m_set(fb, 0xFF, sizeof fb);                                         /* ink */
     int fade = ease8(t, 0, 320) * (256 - ease8(t, 1820, 1960)) >> 8;   /* (the relief fades as the wordmark comes) */
     if (t < 1960) slab(t, fade);
-    if (t >= 1640) wordmark(t, ease8(t, 1640, 1880) >> 2);
-    /* the fold's glitch: a few bands slip a byte, once as the slab lands */
-    if (t >= 1560 && t < 1680) {
-        uint32_t s = (uint32_t)(t / 40) * 2654435761u | 1u;
-        static uint8_t row[ROWB];
-        for (int k = 0; k < 4; k++) {
-            s ^= s << 13; s ^= s >> 17; s ^= s << 5;
-            int y0 = 96 + (int)(s % 48u), h = 2 + (int)((s >> 8) & 3u), sh = (s >> 12) & 1 ? 1 : -1;
-            for (int y = y0; y < y0 + h; y++) {
-                uint8_t *r = &fb[y * ROWB];
-                for (int i = 0; i < ROWB; i++) { int j = i - sh; row[i] = (j >= 0 && j < ROWB) ? r[j] : 0xFF; }
-                m_cpy(r, row, ROWB);
-            }
-        }
-    }
+    if (t >= 1640) wordmark(t, ease8(t, 1640, 1880) >> 2);    /* (the relief dissolves into it: no cut) */
     /* the type comes in */
     if (t >= 1760) {
         static const char sub[] = "SIX MONO MACHINES";

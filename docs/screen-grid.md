@@ -89,9 +89,16 @@ the SET page's disc. Checkers (not dither) for locks and the LFOs' fills. Dark m
 ## The splash
 
 2.1 s at power on, then a 0.4 s dithered wipe into HOME; any key, button or knob (not MASTER) skips it, the press and
-its release swallowed. A slab of MONO2K's own shapes in dithered 3D on ink (the wordmark's letters extruded, GND-SIN's
-dome, the wavefolds, the wave bank as a waterfall), each rolling in over the last, folding back into the wordmark;
-its type F_S. `m2k_host DIR --splash`, then `tools/splash.py DIR` for a GIF and a montage.
+its release swallowed. One surface in dithered 3D on ink, its height morphing the whole time from one of MONO2K's
+shapes into the next, eased, everywhere at once (no front, no cut): the wordmark's letters stretched over the slab
+(0-120 ms), into the wave bank as a waterfall (120-440), GND-SIN's dome (540-840), the wavefolds (920-1220) and the
+letters' relief (1300-1700), each holding ~100 ms between, still moving (the waves roll, the dome breathes, the folds
+travel). The camera swings once (30 degrees to -16, home to 0) and rises over the relief from 1150 ms as the slab
+narrows to the logotype's band; the light turns from the left to the front with it. The relief dissolves into the
+crisp wordmark (1640-1880), then the type. The FM-1 shows ~13 frames a second: every stage is 100 ms or longer. A
+frame works out two shapes a sample only mid-morph, with a quarter fewer rows (eased in), so the heaviest frame
+stays near 700 k instructions. `m2k_host DIR --splash`, then `tools/splash.py DIR` for a GIF and a montage;
+`m2k_draw --splash -a` every frame's cost.
 
 ## What the audit enforces
 
