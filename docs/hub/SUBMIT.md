@@ -37,7 +37,8 @@ after the tests below have passed and the v0.1 release is on GitHub: its Reposit
   superwaves, wavetables, a SID, a voice and four drum synths, one per track. A 64-step sequencer with parameter
   locks, trig conditions and ratchets, a lofi bus, four demo parts and a web patch editor.
 - **Picture:** `docs/hub/screen.png` (240 × 240) and `docs/hub/screen-4x.png` (960 × 960): the engine's own screen in
-  dark mode while A01 CIRCUIT plays. `docs/hub/screens-wide.png`: HOME and the chord machine's page.
+  dark mode while A01 CIRCUIT plays. `docs/hub/screens-wide.png`: HOME and the chord machine's page. All of them
+  and the animations come from `tools/hub_pics.c` and `tools/hub_pics.py`: re-run them after a screen change.
 - **Animation:** `docs/hub/mono2k.gif` (240 × 240) and `docs/hub/mono2k-2x.gif` (480 × 480): four bars on HOME, then the
   chord machine's page, 12.5 s, looping, every frame the engine's own.
 - **Play in the browser:** <https://inigohernandez.github.io/mono2k/>

@@ -101,7 +101,8 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   the GitHub release at the owner's word ("when you fix all of this upload the next version"), before an FM-1 had run
   it. 2026-10-28: 1.2 (the new screen, the arp's HOLD) on the installer and as the GitHub release at the owner's word
   ("when you finish upload everything to website, github and for firmware hub"), before an FM-1 had run it. 2026-10-28 later: 1.3 (Grids, mutes on
-  the bar, finer chances) likewise, at the owner's word ("Publish 1.3 now"). The installer page (`installer.html`, Felucca's `web/fm1/fm1ota.js`, `fm1pkg.js`, unchanged) installs
+  the bar, finer chances) likewise, at the owner's word ("Publish 1.3 now"); 1.3.1 (the splash's morph, the windows, FILT) at "looks good
+  when you finish publish everything please". The installer page (`installer.html`, Felucca's `web/fm1/fm1ota.js`, `fm1pkg.js`, unchanged) installs
   a package from a file meanwhile.
 - The FM-1's budget: Felucca's heaviest patch is ~1570 Mac instructions a sample (its tests/cpu_baseline.txt) and
   runs on one core; count MONO2K's the same way, built as the FM-1 builds it (`cc -O2 -fno-builtin -fno-vectorize

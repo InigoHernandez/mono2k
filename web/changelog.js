@@ -7,15 +7,18 @@ window.M2K_KINDS = {
 };
 window.M2K_CHANGES = [
   {
-    date: "2026-10-28", title: "MONO2K 1.2 and 1.3: a new screen, the arp's HOLD, Grids, mutes on the bar",
+    date: "2026-10-28", title: "MONO2K 1.2, 1.3 and 1.3.1: a new screen, the arp's HOLD, Grids, mutes on the bar",
     items: [
+      ["screen", "1.3.1: The splash is one surface morphing from the wordmark through the waves, GND-SIN's dome and the folds back into the letters, no cuts."],
+      ["screen", "1.3.1: Held windows and cards are laid out on one system: a title bar, aligned key and action columns, and GLO's white keys drawn with the mutes on them."],
+      ["fixes", "1.3.1: FILT's two pages draw the same band for the same knobs (the envelope dashed over it), and its plot stays clear of the screen's edge."],
       ["sequencer", "1.3: GRIDS, Mutable Instruments' drum map, behind ARP (press ARP again: GRIDS, then LANES). X and Y pick a place on its map of 25 drum patterns, CHAOS varies each cycle, BD SD HH set each lane's density; a track's LANE makes it play the lane with its own sound."],
       ["sequencer", "1.3: Stopped, OCT+ on GRIDS or LANES writes the lanes into those tracks' steps, to edit and lock (asked first over trigs; GLO + OCT\u2212 undoes)."],
       ["sequencer", "1.3: Mutes wait for the bar: while playing, a mute, unmute or solo (GLO + white keys, F#5, MIDI CC 3) comes on the next bar's first step; a tapped solo plays one bar. GLO > PLAY: MUTE BAR (default) or NOW."],
       ["sequencer", "1.3: Four more chances, 90 %, 60 %, 40 % and 10 %; PRESETS on a held step turns through the chances by size."],
       ["screen", "1.3: GRIDS shows the map with X and Y's dot; LANES each lane's levels and density; a mute waiting for the bar blinks its key, its track on HOME and MUTE in the header."],
       ["patterns", "1.3: Pattern format 18 keeps Grids and each track's lane; older patterns load as they played."],
-      ["web", "The installer offers MONO2K 1.3; it reaches The Firmware Hub with its GitHub release."],
+      ["web", "The installer offers MONO2K 1.3.1; it reaches The Firmware Hub with its GitHub release."],
       ["screen", "The screen on one grid: every page on the same bands and cells, crisp 1 px rules, no text crossing a line, long machine names never running into the picture."],
       ["screen", "The header and footer as black bars: the pattern and its name, the modes, REC, tempo and transport on top; the bars, track \u25b8 machine \u25b8 page and the page count below."],
       ["screen", "Bolder, larger type in MONO2K's own letters: two-pixel strokes, the stage's big name and value larger; each knob's value over a bar that shows where it sits."],
