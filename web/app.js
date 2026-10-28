@@ -785,7 +785,7 @@
       io.observe(el);
     });
     watch(".sec");
-    watch(".sec__n, .hero__sub > *, .sec__body .lede, .pts > li, .todo__list > li, .made__steps > li, .made__facts > li, .gaps dt", "rv-up");   /* not the foot: at the page's end it never scrolls far enough in */
+    watch(".sec__n, .hero__sub > *, .sec__body .lede, .lbls > span, .todo__list > li, .strip > li, .made__facts > li", "rv-up");   /* not the foot: at the page's end it never scrolls far enough in */
     watch(".sec__body .display", "wipe");
     watch(".wipe, .scan");                       /* blocks wipe in through the dither, screens scan in */
   }

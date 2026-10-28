@@ -10,7 +10,7 @@
 <meta name="description" content="MONO2K: six mono machines, a 64-step sequencer with parameter locks and trig conditions, and a lofi bus, for the M-VAVE FM-1. Running in your browser.">
 <script>try { const t = localStorage.getItem("mono2k.theme"); if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t); } catch (e) {}</script>
 <link rel="icon" href="brand/mono2k-iso.svg" type="image/svg+xml">
-<link rel="stylesheet" href="style.css?v=54">
+<link rel="stylesheet" href="style.css?v=55">
 </head>
 <body>
 <!-- the controls' glitch (style.css): rows slipped sideways, in hard bands -->
@@ -31,8 +31,8 @@
 <section class="hero">
   <canvas id="wordmark" aria-label="MONO2K"></canvas>
   <div class="hero__sub">
-    <p class="lede hero__line">Six mono machines, a 64-step sequencer and a lofi bus, for the M-VAVE FM-1.</p>
-    <p class="hero__acts"><a class="btn" href="#play">Play it</a><a class="btn ghost" href="#guide">How to play</a><a class="btn ghost" href="installer.html">Install</a></p>
+    <p class="lede hero__line">Six mono machines and a 64-step sequencer for the M-VAVE FM-1.</p>
+    <p class="hero__acts"><a class="btn" href="#play">Play</a><a class="btn ghost" href="#guide">Guide</a><a class="btn ghost" href="installer.html">Install</a></p>
   </div>
 </section>
 
@@ -41,16 +41,16 @@
     <div class="panel" id="panelwrap">
       <svg id="panel" viewBox="14 14 876 538" role="application" tabindex="0" aria-label="The FM-1 panel: click it, then play it from the computer's keys" aria-describedby="status"></svg>
       <canvas id="lcd" width="240" height="240" role="img" aria-label="The screen"></canvas>
-      <button id="start" class="start" type="button"><span>Start</span><small>Sound on, then play the keys</small></button>
+      <button id="start" class="start" type="button"><span>Start</span><small>Sound on</small></button>
     </div>
   </div>
   <div class="playbar">
-    <p class="status" id="status" role="status" aria-live="polite">Press Start, then point at a control: this line says what it does.</p>
+    <p class="status" id="status" role="status" aria-live="polite">Press Start, then point at a control.</p>
     <div class="playbar__acts">
       <button class="pbtn" id="snd" type="button" aria-pressed="false">Sound off</button>
       <button class="pbtn" id="midi-tog" type="button" aria-expanded="false" aria-controls="midi">MIDI</button>
       <button class="pbtn" id="keys-tog" type="button" aria-expanded="false" aria-controls="keymap">Keys</button>
-      <button class="pbtn" id="reset" type="button" aria-expanded="false" aria-controls="reset-ask">Reset to demos</button>
+      <button class="pbtn" id="reset" type="button" aria-expanded="false" aria-controls="reset-ask">Reset</button>
     </div>
   </div>
   <div class="drawer" id="midi" hidden>
@@ -106,7 +106,7 @@
   <p class="sec__n">01</p>
   <div class="sec__body">
     <h2 class="display">How to play</h2>
-    <p class="lede">Point at a control or a line: the FM-1's own screen shows it.</p>
+    <p class="lede">Point at a control: the screen shows it.</p>
   </div>
   <div class="guide">
     <div class="guide__stage">
@@ -116,30 +116,25 @@
       </div>
       <div class="guide__box" id="gbox" aria-live="polite">
         <p class="guide__tag" id="gbox-t">Point at a control</p>
-        <p id="gbox-p">On the drawing or in the list.</p>
+        <p id="gbox-p"></p>
         <p class="guide__where" id="gbox-w"></p>
       </div>
     </div>
     <div class="guide__list" id="glist"></div>
   </div>
-  <div class="todo">
-    <h3 class="title">Six things to do</h3>
-    <ol class="todo__list">
-      <li><h4>Hear the demos</h4><p>PLAY, then PRESETS for the next demo at the bar's end.</p><p class="where"><kbd>Space</kbd> <kbd>[</kbd> <kbd>]</kbd></p></li>
-      <li><h4>Make a beat</h4><p>GRID, tap white keys for trigs, then PLAY.</p><p class="where"><kbd>A</kbd> <kbd>Z</kbd>…<kbd>O</kbd> <kbd>Space</kbd></p></li>
-      <li><h4>Lock a step</h4><p>Hold a step and turn a knob: that step keeps the value.</p><p class="where"><kbd>A</kbd>, hold <kbd>Z</kbd> + <kbd>↑</kbd></p></li>
-      <li><h4>Shape a sound</h4><p>SYN, ALGORITHM for the machine, the knobs for its sound.</p><p class="where"><kbd>5</kbd> <kbd>,</kbd> <kbd>.</kbd> <kbd>↑</kbd></p></li>
-      <li><h4>Break the bus</h4><p>Hold FX while it plays; the black keys break the mix.</p><p class="where">Hold <kbd>P</kbd> + <kbd>S</kbd>…<kbd>9</kbd></p></li>
-      <li><h4>Record a take</h4><p>PLAY, then REC: what you play lands on the nearest step.</p><p class="where"><kbd>Space</kbd> <kbd>Enter</kbd></p></li>
-    </ol>
-  </div>
+  <ol class="todo__list" aria-label="Try">
+    <li><h4>Hear the demos</h4><p class="where"><kbd>Space</kbd> <kbd>]</kbd></p></li>
+    <li><h4>Make a beat</h4><p class="where"><kbd>A</kbd> <kbd>Z</kbd>…<kbd>O</kbd></p></li>
+    <li><h4>Lock a step</h4><p class="where"><kbd>Z</kbd>+<kbd>↑</kbd></p></li>
+    <li><h4>Break the bus</h4><p class="where"><kbd>P</kbd>+<kbd>S</kbd>…<kbd>9</kbd></p></li>
+  </ol>
 </section>
 
 <section class="sec inv" id="machines">
   <p class="sec__n">02</p>
   <div class="sec__body">
     <h2 class="display">Machines</h2>
-    <p class="lede">Pick one and hit it: the firmware's own core plays its INIT.</p>
+    <p class="lede">Pick one and hit it.</p>
   </div>
   <div class="eng" id="eng">
     <div class="eng__side">
@@ -147,30 +142,28 @@
         <h3 class="title" id="eng-name">GND-SIN</h3>
       </div>
       <p class="eng__desc" id="eng-desc"></p>
-      <p class="eng__init" id="eng-init"></p>
       <figure class="eng__screen scan">
-        <canvas id="eng-lcd" width="240" height="240" role="img" aria-label="The FM-1's screen for this machine"></canvas>
-        <figcaption>The FM-1's screen: EDIT, ALGORITHM.</figcaption>
+        <canvas id="eng-lcd" width="240" height="240" role="img" aria-label="The FM-1's screen for this machine: EDIT, then ALGORITHM"></canvas>
       </figure>
     </div>
     <div class="eng__plate wipe">
       <div class="eng__pick" id="eng-pick" role="group" aria-label="The machines"></div>
-      <div class="eng__scope">
+      <div class="eng__scope" id="eng-scope">
         <figure class="eng__plot">
           <canvas id="eng-wave" role="img" aria-label="The hit's waveform"></canvas>
-          <figcaption><span>Waveform</span><span id="eng-wave-r"></span></figcaption>
+          <figcaption><span>Wave</span><span id="eng-wave-r"></span></figcaption>
         </figure>
         <figure class="eng__plot">
           <canvas id="eng-spec" role="img" aria-label="The hit's spectrum"></canvas>
           <figcaption><span>Spectrum</span><span id="eng-spec-r"></span></figcaption>
         </figure>
       </div>
-      <p class="eng__nums" id="eng-nums">&nbsp;</p>
+      <p class="vh" id="eng-nums" aria-live="polite"></p>
       <div class="eng__ctl">
         <div class="eng__knobs" id="eng-knobs"></div>
         <div class="eng__acts">
-          <button class="hit" id="eng-hit" type="button"><canvas id="eng-mark" width="64" height="64" aria-hidden="true"></canvas><span>Hit</span><small id="eng-hit-n">C3</small></button>
-          <button class="pbtn" id="eng-reset" type="button">INIT knobs</button>
+          <button class="hit" id="eng-hit" type="button"><canvas id="eng-mark" width="64" height="64" aria-hidden="true"></canvas><span>Hit</span><small id="eng-hit-n">INIT · C3</small></button>
+          <button class="pbtn" id="eng-reset" type="button">INIT</button>
         </div>
       </div>
     </div>
@@ -185,15 +178,10 @@
   <p class="sec__n">03</p>
   <div class="sec__body">
     <h2 class="display">Sequencer</h2>
-    <p class="lede">Six tracks of up to 64 steps, the Monomachine's way.</p>
-    <ul class="pts">
-      <li><b>Locks</b> Hold a step, turn a knob: the step keeps it.</li>
-      <li><b>Trig types</b> A step restarts the amp, filter or LFOs alone.</li>
-      <li><b>Conditions</b> Chance, A:B, first loop, FILL; ratchets up to four.</li>
-    </ul>
+    <p class="lbls"><span>Parameter locks</span><span>Trig types</span><span>Conditions, ratchets</span></p>
     <div class="figs2">
-      <figure class="scr scan"><canvas width="240" height="240" data-screen="b PLAY; w 1600" role="img" aria-label="HOME while A01 plays"></canvas><figcaption>HOME, playing</figcaption></figure>
-      <figure class="scr scan"><canvas width="240" height="240" data-screen="b SEQ; w 2300; kd 4; w 700" role="img" aria-label="A step held in GRID"></canvas><figcaption>A step held</figcaption></figure>
+      <figure class="scr scan"><canvas width="240" height="240" data-screen="b PLAY; w 1600" role="img" aria-label="HOME while A01 plays"></canvas></figure>
+      <figure class="scr scan"><canvas width="240" height="240" data-screen="b SEQ; w 2300; kd 4; w 700" role="img" aria-label="A step held in GRID: its note, condition and ratchet"></canvas></figure>
     </div>
   </div>
 </section>
@@ -202,15 +190,10 @@
   <p class="sec__n">04</p>
   <div class="sec__body">
     <h2 class="display">Destroy</h2>
-    <p class="lede">Every track runs the Monomachine's chain; then the bus breaks it all.</p>
-    <ul class="pts">
-      <li><b>Per track</b> Filters, drive, EQ, rate, a mu-law delay, bits, fold, XOR.</li>
-      <li><b>The bus</b> A 0.3–24 s reverb, glitch, tape, ADPCM, hiss, drive.</li>
-      <li><b>PERFORM</b> Hold FX: eleven live effects on the black keys.</li>
-    </ul>
+    <p class="lbls"><span>Monomachine chain</span><span>Lofi bus</span><span>PERFORM live</span></p>
     <div class="figs2">
-      <figure class="scr scan"><canvas width="240" height="240" data-screen="b GLO; w 100; e 1 1; w 500" role="img" aria-label="GLO's GLITCH page"></canvas><figcaption>GLO, GLITCH</figcaption></figure>
-      <figure class="scr scan"><canvas width="240" height="240" data-screen="b PLAY; w 600; B FX; w 900" role="img" aria-label="PERFORM, FX held"></canvas><figcaption>FX held: PERFORM</figcaption></figure>
+      <figure class="scr scan"><canvas width="240" height="240" data-screen="b GLO; w 100; e 1 1; w 500" role="img" aria-label="GLO's GLITCH page: tape, ADPCM, glitch, repeat size"></canvas></figure>
+      <figure class="scr scan"><canvas width="240" height="240" data-screen="b PLAY; w 600; B FX; w 900" role="img" aria-label="FX held: PERFORM's eleven effects on the black keys"></canvas></figure>
     </div>
   </div>
 </section>
@@ -219,51 +202,29 @@
   <p class="sec__n">05</p>
   <div class="sec__body">
     <h2 class="display">How it was made</h2>
-    <p class="lede">Written from scratch, then measured against a Monomachine until the numbers agreed.</p>
+    <p class="lede">Written from scratch, measured against a Monomachine.</p>
   </div>
-  <ol class="made__steps">
-    <li><b>The reference</b><p>The owner's Monomachine OS, in an emulator; never in the repo.</p></li>
-    <li><b>The same specs</b><p>Every line played on both: the same notes and knobs.</p></li>
-    <li><b>Measured</b><p>Levels, spectra, times, stereo: 2,605 numbers kept.</p></li>
-    <li><b>Held</b><p><code>regress.py</code> reruns every case; a known gap may only narrow.</p></li>
+  <ol class="strip" aria-label="How">
+    <li tabindex="0"><i aria-hidden="true">01</i><b>Reference</b><span class="tip" role="tooltip">The owner's Monomachine OS in an emulator, never in the repo.</span></li>
+    <li tabindex="0"><i aria-hidden="true">02</i><b>Same specs</b><span class="tip" role="tooltip">Every line played on both: the same notes and knobs.</span></li>
+    <li tabindex="0"><i aria-hidden="true">03</i><b>Measured</b><span class="tip" role="tooltip">Levels, spectra, times, stereo: 2,605 numbers kept.</span></li>
+    <li tabindex="0"><i aria-hidden="true">04</i><b>Held</b><span class="tip" role="tooltip">regress.py reruns every case; a known gap may only narrow.</span></li>
   </ol>
-  <div class="made__suite">
-    <div class="made__tiles wipe" id="made-tiles"></div>
-    <figure class="chart wipe" id="ch-suite">
-      <figcaption><b>The suite, group by group</b><span>Today's run of <code>regress.py check</code> on MONO2K 1.1.</span></figcaption>
-      <div class="chart__legend" id="ch-suite-l"></div>
-      <div class="chart__plot" id="ch-suite-p"></div>
-      <details class="chart__table"><summary class="label">The numbers</summary><div id="ch-suite-t"></div></details>
-    </figure>
-    <div class="made__gaps">
-      <h3 class="title">The 90 known gaps</h3>
-      <dl class="gaps">
-        <dt>27 <span>chosen</span></dt><dd>The owner's own laws: the amp's DEC, the delay send, SWAV-PUL's sweep.</dd>
-        <dt>36 <span>the high-pass</span></dt><dd>The Monomachine's saturates in resonance; MONO2K's stays clean.</dd>
-        <dt>21 <span>oscillators</span></dt><dd>SID's mix and top, FM feedback, ENS's chorus, a kick's onset, FX-RING.</dd>
-        <dt>6 <span>corners</span></dt><dd>The EQ's top band, a rate spur, a filter envelope's start, a long ping-pong.</dd>
-      </dl>
-      <p class="small fails">4 fail today: the longest delay times land up to 2 % early.</p>
-    </div>
-  </div>
-  <div class="made__cases">
-    <article class="case">
-      <h3 class="title">Each machine clips at its own ceiling</h3>
-      <p>All once clipped at GND-SIN's: a driven SWAV-SAW bass came out 10.7 dB over the Monomachine's.</p>
-      <figure class="chart wipe" id="ch-dist">
-        <figcaption><b>Each machine's clip against GND-SIN's, dB</b></figcaption>
-        <div class="chart__plot" id="ch-dist-p"></div>
-        <details class="chart__table"><summary class="label">The numbers</summary><div id="ch-dist-t"></div></details>
-      </figure>
-    </article>
-  </div>
+  <div class="made__tiles wipe" id="made-tiles"></div>
+  <figure class="chart wipe" id="ch-suite">
+    <figcaption><b>944 cases by group</b></figcaption>
+    <div class="chart__legend" id="ch-suite-l"></div>
+    <div class="chart__plot" id="ch-suite-p"></div>
+    <p><button class="pbtn" id="ch-suite-all" type="button" aria-expanded="false" aria-controls="ch-suite-p">Show all 33</button></p>
+  </figure>
+  <figure class="chart wipe" id="ch-dist">
+    <figcaption><b>Each machine's own clip, dB against GND-SIN's</b></figcaption>
+    <div class="chart__plot" id="ch-dist-p"></div>
+  </figure>
   <ul class="made__facts">
-    <li><b>24 steps, every value</b><p>FM+'s ratio knobs decode as the Monomachine plays them: 80 of 80.</p></li>
-    <li><b>Four formants</b><p>VOX-6's F1 and F2 sit within 0.2 % of the Monomachine's.</p></li>
-    <li><b>The owner's 64 waves</b><p>DIGI-WAV's waves are MONO2K's and the owner's; no DigiPro copies.</p></li>
-    <li><b>Laws of its own</b><p>Reverb, glitch and sends rebuilt at the owner's word; old patterns converted.</p></li>
-    <li><b>Bit for bit</b><p>Integer DSP: the FM-1, this page and a computer render the same samples.</p></li>
-    <li><b>Clean-room</b><p>No Elektron code, waves or samples. Not affiliated with Elektron or M-VAVE.</p></li>
+    <li class="tile"><b>80/80</b><span>FM+ ratio steps matched</span></li>
+    <li class="tile"><b>64</b><span>of the owner's own waves</span></li>
+    <li class="tile"><b>Bit for bit</b><span>the FM-1 and this page</span></li>
   </ul>
 </section>
 
@@ -271,7 +232,7 @@
   <p class="sec__n">06</p>
   <div class="sec__body">
     <h2 class="display">Status</h2>
-    <p class="lede">MONO2K 1.1, from <a href="https://thefirmwarehub.com" target="_blank" rel="noopener">The Firmware Hub</a> or the <a href="installer.html">installer</a>; built on Felucca and the open FM-1 work.</p>
+    <p class="lede">MONO2K 1.1, from <a href="https://thefirmwarehub.com" target="_blank" rel="noopener">The Firmware Hub</a> or the <a href="installer.html">installer</a>; built on Felucca.</p>
   </div>
 </section>
 
@@ -285,15 +246,15 @@
 </nav>
 
 <footer class="bar foot">
-  <span class="label">MONO2K</span><span class="label">Six mono machines</span><a class="label kofi" href="https://ko-fi.com/sequencist" target="_blank" rel="noopener">Support on Ko-fi</a><span class="label r">2026</span>
+  <span class="label">MONO2K</span><span class="label">Not affiliated with Elektron or M-VAVE</span><a class="label kofi" href="https://ko-fi.com/sequencist" target="_blank" rel="noopener">Support on Ko-fi</a><span class="label r">2026</span>
 </footer>
 
 <script src="panel.js?v=2"></script>
-<script src="help.js?v=2"></script>
-<script src="app.js?v=99"></script>
-<script src="screens.js?v=2"></script>
-<script src="guide.js?v=2"></script>
-<script src="engines.js?v=2"></script>
-<script src="made.js?v=2"></script>
+<script src="help.js?v=3"></script>
+<script src="app.js?v=101"></script>
+<script src="screens.js?v=3"></script>
+<script src="guide.js?v=3"></script>
+<script src="engines.js?v=4"></script>
+<script src="made.js?v=3"></script>
 </body>
 </html>
