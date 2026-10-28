@@ -2773,7 +2773,7 @@ static int32_t filt_db(int q, int hp, int lp, int hq, int lq)
 }
 
 #define FDB_TOP (18 * 256)                           /* the picture's range: +18 dB .. -42 dB */
-#define FQ_MAX 1118                                  /* the axis: 20 Hz to an octave past 20 kHz (1016), so a
+#define FQ_MAX 1220                                  /* the axis: 20 Hz to two octaves past 20 kHz (1016), so a
                                                         high LP's slope shows falling, not cut at the edge */
 #define FDB_SPAN (60 * 256)
 
@@ -3070,20 +3070,20 @@ static void picture(void)
         break;
     }
     case PG_FILT: {
-        const int FW = W - 4;          /* (the curve and its handles clear of the screen's edge, which the bezel hides) */
+        const int FW = W - 9;          /* (the curve and its handles clear of the screen's edge, which the bezel hides) */
         int db = k[P_BOF] - 64, dw = k[P_WOF] - 64, ob = 7 * db * (db < 0 ? -db : db), ow = 7 * dw * (dw < 0 ? -dw : dw);
         int hp0 = filt_q3(ui.trk, k[P_BASE] << 8), lp0 = filt_q3(ui.trk, (k[P_BASE] + k[P_WDTH]) << 8);
         int hq = k[P_HPQ], lq = k[P_LPQ];
         if (ui.sub == 1) {
-            /* the filter envelope: the band at rest, dashed; where the envelope takes it, solid; the envelope's attack
-             * and decay under it */
+            /* the filter envelope: the band the knobs set, hatched, as page 1 draws it; where the envelope takes it,
+             * dashed; the envelope's attack and decay under it */
             int hp1 = filt_q3(ui.trk, (k[P_BASE] << 8) + ob);
             int lp1 = filt_q3(ui.trk, ((k[P_BASE] + k[P_WDTH]) << 8) + ob + ow);
             int top = Y0 + 10, yb2 = Y0 + 64, yh, yl, prev = yb2;
-            filt_curve(X, FW, top, yb2, hp1, lp1, hq, lq, fk >= 2 ? PT_VLINES : PT_HATCH, fk >= 2, &yh, &yl);
+            filt_curve(X, FW, top, yb2, hp0, lp0, hq, lq, fk >= 2 ? PT_VLINES : PT_HATCH, fk >= 2, &yh, &yl);
             for (int i = 0; i < FW; i++) {
-                int y = filt_row(filt_db(i * FQ_MAX / (FW - 1), hp0, lp0, hq, lq), top, yb2);
-                if (i && ((i >> 1) & 1)) line(X + i - 1, prev, X + i, y, 2);   /* the band at rest, dashed */
+                int y = filt_row(filt_db(i * FQ_MAX / (FW - 1), hp1, lp1, hq, lq), top, yb2);
+                if (i && ((i >> 1) & 1)) line(X + i - 1, prev, X + i, y, 2);   /* the envelope's reach, dashed */
                 prev = y;
             }
             /* how far the envelope takes the base: an arrow over the band */
@@ -3115,9 +3115,16 @@ static void picture(void)
         /* the band: the chain's response, its resonances as they peak; handles on each cutoff, the width a bracket
          * under the line; what is being turned is heavy. While the track sounds, its envelope moves it */
         int hp = hp0, lp = lp0, yh, yl;
-        if (t->sounding) { hp = mon.cut_hp[ui.trk]; lp = mon.cut_lp[ui.trk]; }
         int top = Y0 + 10, yb = Y0 + 100;
         filt_curve(X, FW, top, yb, hp, lp, hq, lq, fk >= 0 ? PT_VLINES : PT_HATCH, fk >= 0, &yh, &yl);
+        if (t->sounding && (mon.cut_hp[ui.trk] != hp || mon.cut_lp[ui.trk] != lp)) {   /* (the knobs' band stays as */
+            int prev = yb;                                                               /* their values say) */
+            for (int i = 0; i < FW; i++) {
+                int y = filt_row(filt_db(i * FQ_MAX / (FW - 1), mon.cut_hp[ui.trk], mon.cut_lp[ui.trk], hq, lq), top, yb);
+                if (i && ((i >> 1) & 1)) line(X + i - 1, prev, X + i, y, 2);   /* where the envelope has it now */
+                prev = y;
+            }
+        }
         int xh = X + hp * (FW - 1) / FQ_MAX, xl = X + lp * (FW - 1) / FQ_MAX;
         dots_v(xh, top - 6, yb - top + 6);
         dots_v(xl, top - 6, yb - top + 6);
