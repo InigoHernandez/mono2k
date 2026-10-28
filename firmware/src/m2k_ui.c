@@ -561,6 +561,7 @@ static struct {
     /* a section button held (HOME, EDIT): its keys and buttons (held_combo) */
     uint32_t hold_t0;                  /* HOME or EDIT pressed */
     uint8_t hold_used, pbank, pick[M2K_PATTERNS / 8], hclr;   /* the bank shown, the patterns picked, a first clear */
+    uint8_t pfb;                       /* PERFORM's bank on the black keys: 0 A, 1 B (FX held: OCT- A, OCT+ B) */
     uint32_t seq_t0;                   /* SEQ pressed: a tap is GRID, held it is the SEQ layer */
     uint8_t seq_used;
     uint32_t lay_t0[2];                /* FX, LFO pressed: a tap is the page, held the layer (PERFORM, momentary knobs) */
@@ -1228,8 +1229,9 @@ static void key_event(int k, int down)
         return;
     }
     if (perf_layer() && b >= 0) {      /* FX held: the black keys are PERFORM's effects, while held */
-        bus_perform(b, 1);
-        if (b < PF_COUNT) { ui.kact[k] = KA_PERF; ui.karg[k] = (uint8_t)b; }
+        int e = b + ui.pfb * PF_BANK;  /* the bank shown; its release lets go of this one, whichever is shown then */
+        if (b < PF_BANK && bus_perform(e, 1)) { ui.kact[k] = KA_PERF; ui.karg[k] = (uint8_t)e; }
+        else if (b < PF_BANK) toast(PF_NAME[e], "NO DELAY FREE");
         ui.lay_used[0] = 1;
         return;
     }
@@ -1940,6 +1942,11 @@ static void button_event(int b, int down)
             s_cpy(o + 2, " STEPS CLEARED");
             toast(o, "SOUND KEPT. AGAIN: UNDO");
         }
+        return;
+    }
+    if ((b == B_OCTU || b == B_OCTD) && perf_layer()) {   /* PERFORM's banks: OCT- A, OCT+ B (held effects go on) */
+        if (down) { ui.pfb = b == B_OCTU; ui.lay_used[0] = 1; }
+        if (b == B_OCTD) { ui.octd = 0; ui.octd_used = 1; }   /* (its release, FX let go first: nothing) */
         return;
     }
     if (b == B_OCTU && down && mom_layer()) { mom.keep = 1; ui.lay_used[1] = 1; toast("KEEP", "LET GO OF LFO"); return; }
@@ -3256,8 +3263,10 @@ static void picture(void)
                 prev = y;
             }
             dots_h(X, mid, W);
-            static const char *const GM_N[8] = {"REPEAT", "REVERSE", "GATED", "OCTAVE UP", "OCTAVE DOWN", "ROLL", "SLOWING", "STOP"};
-            tag(X, L_B0 - TY, GM_N[mon.gmode & 7], mon.glitch);
+            static const char *const GM_N[GM_COUNT] = {"REPEAT", "REVERSE", "GATED", "OCTAVE UP", "OCTAVE DOWN", "ROLL",
+                                                       "SLOWING", "STOP", "FREEZE", "OCTAVE UP", "OCTAVE DOWN", "SCATTER",
+                                                       "ROLL", "SPIN"};
+            tag(X, L_B0 - TY, GM_N[mon.gmode < GM_COUNT ? mon.gmode : 0], mon.glitch);
         } else if (ui.sub == 2) {      /* the decay: its level over time (0.1 .. 30 s on a log scale), 60 dB down the
                                         * height; the bottom's solid, the top's dotted (DAMP's share of it) */
             int v = p->glob[G_VERB];
@@ -3867,18 +3876,19 @@ static void lay_help(void)
         text(&F_S, x + 6, y + 35, "OCT+ KEEPS THEM.", 1, 0);
         return;
     }
-    if (ui.latch != B_FX + 1) text(&F_S, x + 4 + tw + 6, y + 4 + TY, "BLACK KEYS:", 1, 0);   /* (else LATCHED) */
+    /* the bank on the black keys: its tag filled, the other's plain beside it (OCT- A, OCT+ B) */
+    int bx = x + 4 + tw + 6;
+    bx += tag(bx, y + 4, "A", ui.pfb == 0) + 3;
+    tag(bx, y + 4, "B", ui.pfb == 1);
     latch_mark(x, y + 4, w, B_FX);
-    static const char *const PF_N[PF_COUNT] = {"RPT 1/4", "RPT 1/8", "RPT 1/16", "RPT 1/32", "REVERSE", "STOP",
-                                               "STUTTER", "CRUSH", "WOW", "DRIVE", "KILL"};
-    for (int k = 0; k < PF_COUNT; k++) {
-        int cx = x + 4 + (k / 6) * 112, cy = y + 21 + (k % 6) * 14;
-        char n[3] = {(char)(k < 9 ? '1' + k : '1'), (char)(k < 9 ? 0 : '0' + k - 9), 0};
+    for (int j = 0; j < PF_BANK; j++) {
+        int k = j + ui.pfb * PF_BANK, cx = x + 4 + (j / 6) * 112, cy = y + 21 + (j % 6) * 14;
+        char n[3] = {(char)(j < 9 ? '1' + j : '1'), (char)(j < 9 ? 0 : '0' + j - 9), 0};
         if (perf.on[k]) rect(cx, cy, 108, F_S.base + 2, 1);
         text(&F_S, cx + 2, cy + TY, n, !perf.on[k], 0);
-        text(&F_S, cx + 22, cy + TY, PF_N[k], !perf.on[k], 0);
+        text(&F_S, cx + 22, cy + TY, PF_NAME[k], !perf.on[k], 0);
     }
-    text(&F_S, x + 4 + 112 + 2, y + 21 + 5 * 14 + TY, "KNOBS: BUS", 1, 0);
+    text(&F_S, x + 4 + 112 + 2, y + 21 + 5 * 14 + TY, ui.pfb ? "OCT-: BANK A" : "OCT+: BANK B", 1, 0);
 }
 
 /* a button's card (card_up): its tap, then what it does with the others, a row each */
@@ -4082,7 +4092,7 @@ const uint8_t *m2k_leds(void)
                 v = ((sq.sq_m | sq.solo_rel) >> (w - 8)) & 1 ? (fast ? 255 : 0) : (sq.solo >> (w - 8)) & 1 ? 255 : 16;
             else if (w == 14) v = mute_pending() ? (fast ? 255 : 16) : p->mute || sq.solo ? 90 : 16;
         } else if (lay == 2) {
-            if (b >= 0 && b < PF_COUNT) v = perf.on[b] ? 255 : 24;
+            if (b >= 0 && b < PF_BANK) v = perf.on[b + ui.pfb * PF_BANK] ? 255 : ui.kact[k] == KA_PERF ? 90 : 24;   /* (90: the other bank's, held) */
             else if (w >= 0) { int note = 53 + k + 12 * ui.oct[ui.trk]; v = ui.keys[k] ? 255 : trk[ui.trk].sounding && trk[ui.trk].note == note ? 120 : 0; }
         } else if (lay == 3) {
             if (w >= 0 && w < 8) v = 200;
@@ -4135,8 +4145,8 @@ const uint8_t *m2k_leds(void)
     B[B_SEQ] = ui.grid ? 255 : 0;
     B[B_PLAY] = sq.playing ? ((play_step() & 3) == 0 ? 255 : 70) : sq.ready && blink ? 255 : 0;   /* Ready: blinks */
     B[B_REC] = sq.rec ? 255 : 0;
-    B[B_OCTD] = ui.oct[ui.trk] < 0 ? 200 : 0;
-    B[B_OCTU] = ui.oct[ui.trk] > 0 ? 200 : 0;
+    B[B_OCTD] = lay == 2 ? (ui.pfb ? 24 : 255) : ui.oct[ui.trk] < 0 ? 200 : 0;   /* PERFORM: the bank shown lit */
+    B[B_OCTU] = lay == 2 ? (ui.pfb ? 255 : 24) : ui.oct[ui.trk] > 0 ? 200 : 0;
     if (ui.latch) B[ui.latch - 1] = blink ? 255 : 0;   /* a latched layer's button blinks */
     return L;
 }

@@ -196,6 +196,17 @@ static struct {
     int32_t gacc_l, gacc_r, gout_l, gout_r, gprev_l, gprev_r;
     uint32_t g_grid[3];                /* the ring's place at the last sixteenth, eighth and beat */
     uint32_t grng;                     /* the glitch's own dice: the trigs' chances keep theirs */
+    uint16_t g_fi, g_fo;               /* the event's fade in and out, Q10 a sample */
+    /* FREEZE and the octaves: three Hann grains a third apart, g_gl long (g_wst the window's angle a sample); a
+     * freeze's grains each start somewhere in its slice */
+    uint32_t g_gl, g_g3, g_gph, g_wst, g_gp[3];
+    int32_t g_tgt, g_lev, g_agc, g_agt;   /* a freeze's level: wanted, followed; its gain (Q15) and the gain it glides to */
+    uint8_t g_nb;                      /* (blocks, for its gain) */
+    int32_t olev;                      /* the output's level, followed over ~0.4 s (every 8th sample's, Q4) */
+    /* LPF and HPF (PERFORM): each a ZDF two-pole a side, its place (Q8 of T_FG's 1/96 octaves) and its share */
+    zsvf_t fl[2][2];
+    int32_t fpos[2], fmix[2], fgain[2];
+    uint8_t fnew;                      /* the low-pass starting: its state set to the first sample (no step in) */
     /* tape */
     uint32_t tw, wow, flut;
     int32_t tlp_l, tlp_r;
@@ -236,7 +247,8 @@ static inline int32_t adpcm_step(int c, int32_t x)
  * fades in and out over GL_XF, and a slice's seam (its end into its start) crossfades over as much, so nothing cuts.
  * The modes: a slice repeated, reversed, gated, an octave up or down, halved each time round (a roll), slowing (a
  * tape stop on the slice); and PERFORM's stop, the live sound slowed to a halt as a tape */
-enum { GM_RPT, GM_REV, GM_GATE, GM_OCTU, GM_OCTD, GM_ROLL, GM_TSTOP, GM_STOP };
+enum { GM_RPT, GM_REV, GM_GATE, GM_OCTU, GM_OCTD, GM_ROLL, GM_TSTOP, GM_STOP,      /* (GLCH's dice pick 1..6) */
+       GM_FRZ, GM_PSU, GM_PSD, GM_SCAT, GM_PROLL, GM_SPIN, GM_COUNT };             /* PERFORM's bank B */
 #define GL_XF 64u                      /* 2.9 ms */
 #define GL_MAX (GL_LEN - 4 * GL_XF - 512)   /* the longest slice: a quarter from 85 BPM (slower, an eighth) */
 #define G_HELD 0x7FFFFFFFu
@@ -248,8 +260,21 @@ enum { GM_RPT, GM_REV, GM_GATE, GM_OCTU, GM_OCTD, GM_ROLL, GM_TSTOP, GM_STOP };
  * beat that ended there), played from where that puts it now, so the repeats fall on the beat however late the key;
  * the crush, the wow and the drive at their most, each gliding in and out, the drive's level held to the dry's; a
  * kill (the bus silent). Let go, each fades out (the stop spins back up first) */
-enum { PF_R4, PF_R8, PF_R16, PF_R32, PF_REV, PF_STOP, PF_STUT, PF_CRSH, PF_WOW, PF_DRIV, PF_KILL, PF_COUNT };
+/* Bank B (FX held, OCT+): a freeze (the last eighth held as a sustain, three Hann grains wandering in it), a scatter,
+ * a roll, the bus an octave down or up (three Hann grains through the ring), a low-pass and a high-pass swept over a
+ * bar while held (gliding open again let go), a gate, a dub throw, a shimmer and a vinyl spin-back */
+enum { PF_R4, PF_R8, PF_R16, PF_R32, PF_REV, PF_STOP, PF_STUT, PF_CRSH, PF_WOW, PF_DRIV, PF_KILL,
+       PF_FRZ, PF_SCAT, PF_ROLL, PF_OCTD, PF_OCTU, PF_LPF, PF_HPF, PF_GATE, PF_DUB, PF_SHIM, PF_SPIN, PF_COUNT };
+#define PF_BANK 11                     /* the black keys: bank A's 0..10, bank B's 11..21 */
+static const char *const PF_NAME[PF_COUNT] = {"RPT 1/4", "RPT 1/8", "RPT 1/16", "RPT 1/32", "REVERSE", "STOP", "STUTTER",
+                                              "CRUSH", "WOW", "DRIVE", "KILL", "FREEZE", "SCATTER", "ROLL", "OCT DN",
+                                              "OCT UP", "LPF", "HPF", "GATE", "DUB", "SHIMMER", "SPIN"};
 static struct { uint8_t on[PF_COUNT]; int32_t kill; } perf = {{0}, 32767};
+/* the effects that play from the glitch ring, one at a time */
+static int pf_ring(int k)
+{
+    return k <= PF_STUT || k == PF_FRZ || k == PF_SCAT || k == PF_ROLL || k == PF_OCTD || k == PF_OCTU || k == PF_SPIN;
+}
 
 static int seq_running(void);
 
@@ -266,12 +291,60 @@ static void gl_start(uint32_t start, uint32_t len, uint32_t pos, int mode, uint3
     bus.g_wet = wet;
     bus.g_dry = dry;
     bus.g_spin = 0;
+    bus.g_fi = bus.g_fo = 8;           /* 2.9 ms */
     bus.g_on = 1;
 }
 
+/* FREEZE and the octaves' grains, g long: their window's step and their thirds */
+static void gl_grains_init(uint32_t g)
+{
+    bus.g_gl = g;
+    bus.g_g3 = g / 3;
+    bus.g_gph = 0;
+    bus.g_wst = 0x80000000u / g;       /* (half a turn over a grain: sin^2 is the Hann window) */
+}
+
+#define FRZ_MIN 2048u                  /* FREEZE's slice, half-rate samples: an eighth, within 93 .. 279 ms */
+#define FRZ_MAX 6144u
+#define PS_UP 1536u                    /* the octaves' grains: up 70 ms (the read 70 ms back at most), down 93 ms (46) */
+#define PS_DN 2048u
+#define PS_DMIN 2u                     /* (the read a sample and its neighbour behind the write) */
 static void gl_perform(int k)
 {
     uint32_t six = sps_q8 >> 9;                           /* a sixteenth in half-rate samples */
+    if (k == PF_FRZ) {                                    /* the last eighth, its grains a half of it each */
+        uint32_t r = CLAMP(six * 2, FRZ_MIN, FRZ_MAX);
+        gl_start(bus.gw - r - 4, r, 0, GM_FRZ, G_HELD, 32768, 0);
+        gl_grains_init(r / 2);
+        /* held at the last beat's level, not the eighth's (a kick or a chord's attack held as long as the key would
+         * be the loudest of the bar): their mean magnitudes, x 1/4 .. 1.4 */
+        uint32_t bt = six * 4 > GL_MAX ? GL_MAX : six * 4, sb = 0, sr = 0;
+        for (uint32_t i = 0; i < bt; i++) {               /* (|x| < 2^15, bt < 2^14: the sums a word) */
+            const int16_t *x = gl_buf[(bus.gw - 4 - bt + i) & (GL_LEN - 1)];
+            uint32_t a = (uint32_t)(x[0] < 0 ? -x[0] : x[0]) + (uint32_t)(x[1] < 0 ? -x[1] : x[1]);
+            sb += a >> 1;
+            if (i >= bt - r) sr += a >> 1;
+        }
+        uint32_t mb = sb / bt, mr = sr / r + 1;
+        /* that, then held at the output to its level before (~0.4 s): the grains agree more or less as the sound
+         * is held or moves (a held bass up to 3 dB), and the drive's knee takes a sustain harder than a beat */
+        bus.g_agc = bus.g_agt = (int32_t)CLAMP((mb << 15) / mr, 8192u, 40000u);
+        bus.g_tgt = bus.olev;
+        bus.g_lev = bus.olev;
+        for (int i = 0; i < 3; i++) bus.g_gp[i] = bus.g_start + gl_rnd() % (r - bus.g_gl + 1);
+        bus.g_fi = 2;                                     /* in over 12 ms, out over 23 */
+        bus.g_fo = 1;
+        bus.g_pk = (uint8_t)(k + 1);
+        return;
+    }
+    if (k == PF_OCTU || k == PF_OCTD) {                   /* the live sound through the grains: no slice */
+        gl_start(bus.gw, 0, 0, k == PF_OCTU ? GM_PSU : GM_PSD, G_HELD, k == PF_OCTU ? 32768 : 29205, 0);   /* (down: its taps nearer, the bass 1 dB up) */
+        gl_grains_init(k == PF_OCTU ? PS_UP : PS_DN);
+        bus.g_fi = bus.g_fo = 4;
+        bus.g_pk = (uint8_t)(k + 1);
+        return;
+    }
+    if (k > PF_STUT) return;                              /* (the rest of bank B: their own) */
     if (k == PF_STOP) {                                   /* the live sound from here, slowing over a beat */
         gl_start(bus.gw - 2, GL_MAX, 0, GM_STOP, G_HELD, 32768, 0);
         bus.g_dec = G_UNITY / (six * 4 > 64 ? six * 4 : 64);
@@ -293,11 +366,12 @@ static void gl_perform(int k)
     bus.g_pk = (uint8_t)(k + 1);
 }
 
-static void bus_perform(int k, int down)
+/* a key's effect on (down) or off; 0 when it cannot play (the key then holds nothing) */
+static int bus_perform(int k, int down)
 {
-    if (k < 0 || k >= PF_COUNT) return;
+    if (k < 0 || k >= PF_COUNT) return 0;
     perf.on[k] = (uint8_t)down;
-    if (k > PF_STUT) return;
+    if (!pf_ring(k)) return 1;
     if (!down) {                                          /* let go: its own effect ends (a stop spins up first) */
         if (bus.g_next == k + 1) bus.g_next = 0;
         if (bus.g_on && bus.g_pk == k + 1) {
@@ -305,16 +379,17 @@ static void bus_perform(int k, int down)
             if (bus.g_mode == GM_STOP) bus.g_spin = 1;
             else bus.g_left = 0;
         }
-        return;
+        return 1;
     }
     if (bus.g_on) {                                       /* the one sounding fades out first, then this begins */
         bus.g_next = (uint8_t)(k + 1);
         bus.g_pk = 0;
         bus.g_spin = 0;
         bus.g_left = 0;
-        return;
+        return 1;
     }
     gl_perform(k);
+    return 1;
 }
 
 /* the sequencer calls this on each of the pattern's steps: the grid's places, then maybe a repeat. GLCH's laws
@@ -344,12 +419,69 @@ static void bus_step(int s)
     if (mode == GM_TSTOP) bus.g_dec = G_UNITY / dur;
 }
 
+/* FREEZE and the octaves, a half-rate sample: three Hann grains a third of one apart (their windows' squares sum to
+ * a constant, so the sum holds its level whether the grains agree or not). A freeze's grain reads its own place in
+ * the slice at pitch, a new place each time round; up, a grain reads at twice the speed from a grain and a bit back
+ * to just behind the write ([1 2 1] first, so the top folds back 6 dB down and more); down, at half from just behind
+ * to half a grain back */
+#define GR_GAIN 30894                  /* 1 / sqrt(9 / 8): the three windows' power */
+static void gl_grains(int32_t *pl, int32_t *pr)
+{
+    const uint32_t M = GL_LEN - 1, G = bus.g_gl, w = bus.gw - 1;     /* (w: the newest sample written) */
+    int mode = bus.g_mode;
+    int32_t al = 0, ar = 0;
+    for (uint32_t i = 0; i < 3; i++) {
+        uint32_t ph = bus.g_gph + i * bus.g_g3;
+        if (ph >= G) ph -= G;
+        int32_t s = sinp(ph * bus.g_wst), win = (s * s) >> 15;       /* (ph g_wst < 2^31; |s| < 2^15) */
+        int32_t xl, xr;
+        if (mode == GM_FRZ) {
+            if (!ph) bus.g_gp[i] = bus.g_start + gl_rnd() % (bus.g_len - G + 1);
+            uint32_t k = bus.g_gp[i] + ph;
+            xl = gl_buf[k & M][0];
+            xr = gl_buf[k & M][1];
+        } else if (mode == GM_PSU) {
+            uint32_t k = w - PS_DMIN - G + ph;
+            xl = (gl_buf[(k - 1) & M][0] + 2 * gl_buf[k & M][0] + gl_buf[(k + 1) & M][0]) >> 2;
+            xr = (gl_buf[(k - 1) & M][1] + 2 * gl_buf[k & M][1] + gl_buf[(k + 1) & M][1]) >> 2;
+        } else {
+            uint32_t k = w - PS_DMIN - ((ph + 1) >> 1);
+            xl = gl_buf[k & M][0];
+            xr = gl_buf[k & M][1];
+            if (ph & 1) { xl = (xl + gl_buf[(k + 1) & M][0]) >> 1; xr = (xr + gl_buf[(k + 1) & M][1]) >> 1; }
+        }
+        al += (xl * win) >> 15;
+        ar += (xr * win) >> 15;
+    }
+    bus.g_gph = bus.g_gph + 1 >= G ? 0 : bus.g_gph + 1;
+    al = (al * GR_GAIN) >> 15;                            /* (|al| < 1.5 x 2^15) */
+    ar = (ar * GR_GAIN) >> 15;
+    if (mode == GM_FRZ) {                                 /* (its gain: bus_block's, by the output's level, glided here) */
+        bus.g_agc += (bus.g_agt - bus.g_agc) >> 8;
+        al = (al * bus.g_agc) >> 15;                      /* (|al| < 2^16, the gain < 2^15.3) */
+        ar = (ar * bus.g_agc) >> 15;
+        al = CLAMP(al, -32767, 32767);
+        ar = CLAMP(ar, -32767, 32767);
+    }
+    *pl = al;
+    *pr = ar;
+}
+
 /* one half-rate sample of the event: the wet's next (gout), its read moved on */
 static void gl_tick(void)
 {
     const uint32_t M = GL_LEN - 1;
     uint32_t p = bus.g_pos >> 12, len = bus.g_len, mode = bus.g_mode;
     int32_t fr = (int32_t)(bus.g_pos & 4095), l, r;
+    if (mode == GM_FRZ || mode == GM_PSU || mode == GM_PSD) {
+        gl_grains(&l, &r);
+        bus.gprev_l = bus.gout_l;
+        bus.gprev_r = bus.gout_r;
+        bus.gout_l = l;
+        bus.gout_r = r;
+        if (bus.g_left != G_HELD && bus.g_left) bus.g_left--;
+        return;
+    }
     if (mode == GM_STOP) {
         uint32_t k = bus.g_start + p;
         l = gl_buf[k & M][0] + (((gl_buf[(k + 1) & M][0] - gl_buf[k & M][0]) * fr) >> 12);
@@ -407,6 +539,7 @@ static void gl_tick(void)
  * the live sound coming in), or what a stop will read spinning up */
 static inline int gl_kept(uint32_t w)
 {
+    if (bus.g_mode == GM_PSU || bus.g_mode == GM_PSD) return 0;   /* (a grain and a bit behind the write) */
     if (bus.g_mode == GM_STOP) return ((w - (bus.g_start + (bus.g_pos >> 12) - 2)) & (GL_LEN - 1)) < 8192u;
     uint32_t d = w - (bus.g_start - GL_XF);
     return d >= GL_LEN && (d & (GL_LEN - 1)) < bus.g_len + 2 * GL_XF;
@@ -589,6 +722,51 @@ static void reverb_block(int verb, int damp, const int32_t *rsend, int32_t *L, i
     if (bus.rquiet > RV_LEN[3] + 2u && verb) { rv_clear(); bus.rsleep = 1; }
 }
 
+/* LPF and HPF, a block: held, the cutoff moves from open to its far end over a bar (an octave in the same time
+ * all the way), the resonance rising with it (Q 0.71 to 2.2); let go, back open in 150 ms; mixed in and out over
+ * 5 ms at the open end (the two-poles start from rest unheard). Their bits in the return: the ones to run */
+#define FL_LP_OPEN (F_TOP << 8)        /* 18 kHz .. 200 Hz */
+#define FL_LP_FAR (443 << 8)
+#define FL_HP_OPEN (124 << 8)          /* 20 Hz .. 2 kHz */
+#define FL_HP_FAR (762 << 8)
+#define FL_K_OPEN 23726566             /* 1 / Q, Q24: 1.414 .. 0.45 */
+#define FL_K_FAR 7549747
+static int bus_filters(void)
+{
+    int run = 0;
+    for (int f = 0; f < 2; f++) {
+        int held = perf.on[f ? PF_HPF : PF_LPF];
+        if (!held && !bus.fmix[f]) continue;
+        int32_t open = f ? FL_HP_OPEN : FL_LP_OPEN, far = f ? FL_HP_FAR : FL_LP_FAR, span = far > open ? far - open : open - far;
+        if (held && !bus.fmix[f]) {                       /* from rest (the low-pass at its first sample's level) */
+            m_set(bus.fl[f], 0, sizeof bus.fl[f]);
+            bus.fpos[f] = open;
+            if (!f) bus.fnew = 1;
+        }
+        int32_t d = bus.fpos[f] > open ? bus.fpos[f] - open : open - bus.fpos[f];
+        if (held) {
+            int32_t bar = (int32_t)((sps_q8 >> 8) * 16u / M2K_SUB), st = span / (bar > 0 ? bar : 1) + 1;   /* blocks a bar */
+            d = d + st > span ? span : d + st;
+        } else {
+            int32_t st = span / 413 + 1;                  /* (150 ms of blocks) */
+            d = d > st ? d - st : 0;
+        }
+        bus.fpos[f] = far > open ? open + d : open - d;
+        if (held || d) bus.fmix[f] = bus.fmix[f] + 2400 > 32767 ? 32767 : bus.fmix[f] + 2400;
+        else bus.fmix[f] = bus.fmix[f] > 2400 ? bus.fmix[f] - 2400 : 0;
+        int32_t u = (d << 7) / (span >> 8);              /* the way there, Q15 (d << 7 < 2^25) */
+        int32_t k = FL_K_OPEN - (int32_t)mul_sh(FL_K_OPEN - FL_K_FAR, u, 15);
+        bus.fgain[f] = f ? 32767 : 32767 - ((u * 9830) >> 15);   /* the low-pass's peak paid back: -3 dB at its end */
+        zsvf_set(&bus.fl[f][0], fg_at(T_FG, bus.fpos[f]), (uint32_t)k);
+        bus.fl[f][1].a1 = bus.fl[f][0].a1;
+        bus.fl[f][1].a2 = bus.fl[f][0].a2;
+        bus.fl[f][1].a3 = bus.fl[f][0].a3;
+        bus.fl[f][1].k = bus.fl[f][0].k;
+        if (bus.fmix[f]) run |= 1 << f;
+    }
+    return run;
+}
+
 static void bus_block(int32_t *L, int32_t *R, const int32_t *rsend, int16_t *out)
 {
     const uint8_t *g = PAT(cur_pat)->glob;
@@ -642,11 +820,13 @@ static void bus_block(int32_t *L, int32_t *R, const int32_t *rsend, int16_t *out
     int32_t drv = bus.dv, pdrv = drv != drv0 || bus.dv_g < 32767;
     if (!pdrv) bus.dv_e0 = bus.dv_e1 = 0;                 /* (both from 0: their ratio right from the start) */
     int32_t dvg = bus.dv_g;
+    int fl_run = bus_filters();
     int32_t mvol = T_MVOL[master_vol];
     uint32_t wow_inc = 54000, flut_inc = 620000;    /* 0.55 Hz, 6.3 Hz */
     uint8_t g_phase = bus.g_phase;                  /* (a block's in locals: no byte stored a sample) */
     int32_t hgain = bus.hgain, htgt = tape_rolling ? 32767 : 0, hiss = g[G_HISS];
     uint32_t e0 = 0, e1 = 0;
+    int32_t olv = 0;
     for (int i = 0; i < M2K_SUB; i++) {
         int32_t l = L[i], r = R[i];
         /* glitch: the ring written at half rate (never under the event's read); the event mixed in over the dry */
@@ -662,8 +842,8 @@ static void bus_block(int32_t *L, int32_t *R, const int32_t *rsend, int16_t *out
             bus.gacc_r = r;
         }
         if (bus.g_on) {
-            if (bus.g_left) { if (bus.g_env < 1024) bus.g_env += 8; }
-            else if ((bus.g_env -= 8) <= 0) {             /* faded out: over, or the next key's begins */
+            if (bus.g_left) { if (bus.g_env < 1024) bus.g_env = bus.g_env + bus.g_fi > 1024 ? 1024 : bus.g_env + bus.g_fi; }
+            else if ((bus.g_env -= bus.g_fo) <= 0) {      /* faded out: over, or the next key's begins */
                 bus.g_env = 0;
                 bus.g_on = 0;
                 if (bus.g_next) { int k = bus.g_next - 1; bus.g_next = 0; gl_perform(k); }
@@ -697,6 +877,19 @@ static void bus_block(int32_t *L, int32_t *R, const int32_t *rsend, int16_t *out
             bus.tlp_r += ((tr - bus.tlp_r) * a) >> 15;
             if (tpm >= 32767) { l = bus.tlp_l; r = bus.tlp_r; }
             else { l += (int32_t)mul_sh(bus.tlp_l - l, tpm, 15); r += (int32_t)mul_sh(bus.tlp_r - r, tpm, 15); }
+        }
+        /* LPF and HPF: the two-poles at 16 x the level (their remainders the finer), mixed in by their shares */
+        for (int f = 0; fl_run >> f; f++) {
+            if (!((fl_run >> f) & 1)) continue;
+            int32_t yl, yr;
+            if (!f && bus.fnew) { bus.fnew = 0; bus.fl[0][0].s2 = l * 16; bus.fl[0][1].s2 = r * 16; }
+            zsvf_tick(&bus.fl[f][0], l * 16, f ? 0 : &yl, 0, f ? &yl : 0);
+            zsvf_tick(&bus.fl[f][1], r * 16, f ? 0 : &yr, 0, f ? &yr : 0);
+            yl >>= 4;
+            yr >>= 4;
+            if (bus.fgain[f] < 32767) { yl = (int32_t)mul_sh(yl, bus.fgain[f], 15); yr = (int32_t)mul_sh(yr, bus.fgain[f], 15); }
+            if (bus.fmix[f] >= 32767) { l = yl; r = yr; }
+            else { l += (int32_t)mul_sh(yl - l, bus.fmix[f], 15); r += (int32_t)mul_sh(yr - r, bus.fmix[f], 15); }
         }
         /* the 4-bit crunch, its rate falling to a third at the top */
         if (ad_run) {
@@ -744,7 +937,22 @@ static void bus_block(int32_t *L, int32_t *R, const int32_t *rsend, int16_t *out
         if (perf.kill < 32767) { l = (l * perf.kill) >> 15; r = (r * perf.kill) >> 15; }
         out[2 * i] = (int16_t)l;
         out[2 * i + 1] = (int16_t)r;
-        if ((i & 7) == 0) mon.scope[mon.scope_w++] = (int16_t)((l + r) >> 1);
+        if ((i & 7) == 0) {
+            int32_t m = (l + r) >> 1;
+            mon.scope[mon.scope_w++] = (int16_t)m;
+            olv += m < 0 ? -m : m;
+        }
+    }
+    /* the output's level (two samples a block, Q4): over ~0.4 s, and FREEZE's over ~90 ms, its gain toward the
+     * level before it every 16 blocks (a quarter of the way: no pumping on a sustain) */
+    bus.olev += (olv * 8 - bus.olev) >> 10;
+    if (bus.g_on && bus.g_mode == GM_FRZ && bus.g_env >= 1024) {
+        bus.g_lev += (olv * 8 - bus.g_lev) >> 8;
+        if (!(++bus.g_nb & 15)) {
+            uint32_t q = ((uint32_t)bus.g_tgt << 4) / ((uint32_t)bus.g_lev >> 8 | 1u);   /* Q12 (the levels < 2^19) */
+            int32_t want = (int32_t)CLAMP((bus.g_agc * (int32_t)(q > 16384u ? 16384u : q)) >> 12, 8192, 40000);
+            bus.g_agt += (want - bus.g_agt) >> 2;
+        }
     }
     if (pdrv) {                                           /* the level DRIVE may have: the control's, under 31/32 of full */
         bus.dv_e0 += ((int32_t)e0 - bus.dv_e0) >> 6;

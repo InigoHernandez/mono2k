@@ -5309,9 +5309,8 @@ static int selftest(void)
  * through a 6 kHz high-pass, its loudest 1.5 ms within -3 .. +30 ms of the press or the release, in dB over the
  * louder of the dry's there and the effect's own held), the level held and after (dB against the dry, the same
  * span), the peak and the samples at full scale */
-static const char *const PT_N[] = {"RPT 1/4", "RPT 1/8", "RPT 1/16", "RPT 1/32", "REVERSE", "STOP", "STUTTER", "CRUSH",
-                                   "WOW", "DRIVE", "KILL"};
-#define PT_COUNT (int)(sizeof PT_N / sizeof PT_N[0])
+#define PT_N PF_NAME
+#define PT_COUNT PF_COUNT
 static int pt_on1, pt_off1, pt_on2, pt_off2, pt_len;
 static void pt_render(int p, int key, int16_t *o)
 {
@@ -5372,14 +5371,14 @@ static int perform_tool(const char *out, int argc, char **argv)
     const int nmax = 30 * M2K_SR;
     int16_t *dry = malloc((size_t)nmax * 4), *wet = malloc((size_t)nmax * 4), *cat = malloc((size_t)nmax * 16);
     double *ed = malloc(sizeof(double) * (size_t)nmax / 64), *ew = malloc(sizeof(double) * (size_t)nmax / 64);
-    printf("key name      | sine step: in  out  in2 out2 | HF burst dB (A01; worst of A01-A04): in1 out1 in2 out2 |"
+    printf("key name      | sine step: in  out  in2 out2 held | HF burst dB (A01; worst of A01-A04): in1 out1 in2 out2 |"
            " held dB A01 A02 A03 A04 | after | peak  full\n");
     for (int k = 0; k < PT_COUNT; k++) {
         int want = argc <= 3;
         for (int i = 3; i < argc; i++) want |= atoi(argv[i]) == k;
         if (!want) continue;
         /* the sine: as the self-test's, pressed mid-beat for half a second, then for two */
-        double sr[4] = {0};
+        double sr[4] = {0}, sh = 0;
         {
             static int16_t sb[2 * 6 * M2K_SR];
             double ds = 0;
@@ -5400,6 +5399,7 @@ static int perform_tool(const char *out, int argc, char **argv)
                 double own = step_max(sb, at + M2K_SR / 10, off), ref = own > ds ? own : ds;
                 sr[2 * (pass - 1)] = step_max(sb, at - 441, at + 882) / ref;
                 sr[2 * (pass - 1) + 1] = step_max(sb, off - 441, off + 882) / ref;
+                if (pass == 2) sh = own / ds;
             }
         }
         double bw[4] = {-99, -99, -99, -99}, b1[4] = {0}, held[4] = {0}, after = -99, pk = 0;
@@ -5414,15 +5414,20 @@ static int perform_tool(const char *out, int argc, char **argv)
             double b[4] = {pt_burst(ew, ed, pt_on1, pt_on1 + lead, pt_off1), pt_burst(ew, ed, pt_off1, pt_off1 - lead * 3, pt_off1 - 441),
                            pt_burst(ew, ed, pt_on2, pt_on2 + lead, pt_off2), pt_burst(ew, ed, pt_off2, pt_off2 - lead * 5, pt_off2 - 441)};
             for (int j = 0; j < 4; j++) { if (b[j] > bw[j]) bw[j] = b[j]; if (!p) b1[j] = b[j]; }
+            if (getenv("PT_AT") && !p) {                  /* PT_AT=0..3: the windows about that transition, dB */
+                int ts[4] = {pt_on1, pt_off1, pt_on2, pt_off2}, t = ts[atoi(getenv("PT_AT")) & 3];
+                for (int i = (t - 640) / 64; i < (t + 1984) / 64; i++)
+                    printf("   %+6.1f ms  wet %5.1f  dry %5.1f\n", (i * 64 - t) * 1000.0 / M2K_SR, 10 * log10(ew[i] + 1), 10 * log10(ed[i] + 1));
+            }
             held[p] = 10 * log10(pt_rms(wet, pt_on2 + lead, pt_off2) / pt_rms(dry, pt_on2 + lead, pt_off2));
             double af = 10 * log10(pt_rms(wet, pt_off2 + M2K_SR / 4, pt_len) / pt_rms(dry, pt_off2 + M2K_SR / 4, pt_len));
             if (af > after) after = af;
             for (int i = 0; i < 2 * n; i++) { int a = abs(wet[i]); if (a > pk) pk = a; full += a >= 32767; }
             if (cn + n <= 4 * nmax) { memcpy(cat + 2 * cn, wet, (size_t)n * 4); cn += n; }
         }
-        printf("%2d  %-9s | %4.2f %4.2f %4.2f %4.2f | %+5.1f %+5.1f %+5.1f %+5.1f ; %+5.1f %+5.1f %+5.1f %+5.1f |"
+        printf("%2d  %-9s | %4.2f %4.2f %4.2f %4.2f %4.2f | %+5.1f %+5.1f %+5.1f %+5.1f ; %+5.1f %+5.1f %+5.1f %+5.1f |"
                " %+5.1f %+5.1f %+5.1f %+5.1f | %+5.1f | %5.1f %d\n",
-               k, PT_N[k], sr[0], sr[1], sr[2], sr[3], b1[0], b1[1], b1[2], b1[3], bw[0], bw[1], bw[2], bw[3],
+               k, PT_N[k], sr[0], sr[1], sr[2], sr[3], sh, b1[0], b1[1], b1[2], b1[3], bw[0], bw[1], bw[2], bw[3],
                held[0], held[1], held[2], held[3], after, 20 * log10(pk / 32767.0 + 1e-9), full);
         char name[32], *c = name;
         snprintf(name, sizeof name, "%s", PT_N[k]);
