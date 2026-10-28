@@ -207,6 +207,7 @@ static void ta_check(int ms)
  * each knob turned to its least, middle and most; a held step with every tag; the library's lists */
 static int text_sweep(void)
 {
+    const char *dump = getenv("M2K_SWEEP_DIR");
     m2k_init(2000);
     sq.rec = 1; sq.ready = 1; ui.pads = 1; sq.fill = 1;   /* the header at its fullest: REC, READY, PADS, FILL */
     uint32_t now = 4000;
@@ -220,7 +221,13 @@ static int text_sweep(void)
             for (int sub = 0; sub < nsub(pg); sub++) {
                 ui.page = (uint8_t)pg; ui.sub = (uint8_t)sub;
                 now += 3000; ui.trans_t = 0; ui.toast_t = 0; ui.card_t = 0; ui.focus_t = 0;
-                m2k_frame(now); ta_check((int)now);
+                const uint8_t *fbuf = m2k_frame(now);
+                ta_check((int)now);
+                if (dump) {                    /* M2K_SWEEP_DIR: every machine's every page, to look at */
+                    char path[512];
+                    snprintf(path, sizeof path, "%s/m%02d_p%d_%d.pbm", dump, m, pg, sub);
+                    pbm_write(path, fbuf);
+                }
                 for (int k = 0; k < 4; k++) {
                     int code = knob_param(pg, sub, k);
                     if (code == NONE) continue;
@@ -238,6 +245,23 @@ static int text_sweep(void)
                     if (set >= 0) store_.set[set] = kept;
                 }
             }
+    }
+    /* the layers' knobs (SEQ held: LEN SPD SWNG BPM; PERFORM: the bus), each at its least, middle and most */
+    static const uint8_t LAY[2] = {B_SEQ, B_FX};
+    for (int l = 0; l < 2; l++) {
+        ui.page = PG_AMP; ui.sub = 0; ui.btn[LAY[l]] = 1;          /* (held a moment: before its map shows) */
+        for (int k = 0; k < 4; k++) {
+            int code = knob_at(k);
+            static const int V[3] = {0, 64, 127};
+            for (int vi = 0; vi < 3; vi++) {
+                if (code >= 0x80 && code < 0xC0) PAT(cur_pat)->glob[code & 0x7F] = (uint8_t)V[vi];
+                ui.focus = (uint8_t)k; ui.focus_t = now; ui.roll_t = now - 2000;
+                now += 40; ui.trans_t = 0; ui.toast_t = 0;
+                ui.seq_t0 = ui.lay_t0[0] = (now - 100) | 1u;
+                m2k_frame(now); ta_check((int)now);
+            }
+        }
+        ui.btn[LAY[l]] = 0;
     }
     /* a held step in GRID with every tag: a condition, a ratchet, a trig type, accent and slide */
     m2k_init(2001);
