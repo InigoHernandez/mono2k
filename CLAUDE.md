@@ -100,8 +100,8 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   released after the owner had tried it on their FM-1. 2026-10-27: 1.1 (formats 16 and 17) on the installer and as
   the GitHub release at the owner's word ("when you fix all of this upload the next version"), before an FM-1 had run
   it. 2026-10-28: 1.2 (the new screen, the arp's HOLD) on the installer and as the GitHub release at the owner's word
-  ("when you finish upload everything to website, github and for firmware hub"), before an FM-1 had run it. The
-  installer page (`installer.html`, Felucca's `web/fm1/fm1ota.js`, `fm1pkg.js`, unchanged) installs
+  ("when you finish upload everything to website, github and for firmware hub"), before an FM-1 had run it. 2026-10-28 later: 1.3 (Grids, mutes on
+  the bar, finer chances) likewise, at the owner's word ("Publish 1.3 now"). The installer page (`installer.html`, Felucca's `web/fm1/fm1ota.js`, `fm1pkg.js`, unchanged) installs
   a package from a file meanwhile.
 - The FM-1's budget: Felucca's heaviest patch is ~1570 Mac instructions a sample (its tests/cpu_baseline.txt) and
   runs on one core; count MONO2K's the same way, built as the FM-1 builds it (`cc -O2 -fno-builtin -fno-vectorize
@@ -138,7 +138,9 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   dice, every event crossfaded), the reverb (an FDN, DCAY's RT60 0.3 .. 21 s, DAMP the top's time as a share of the
   bottom's) and the sends linear, the owner's departure from the Monomachine's square DSND (`fx_v16`: DCAY and DAMP
   through a 9 x 9 grid measured on the old engine, `T_V17_RV`, `tools/conv17.py`; the VERB send by its heard level,
-  DSND |d|^2 / 64, `T_V17_GLCH`; the store's version 5 converts the sounds through `fx_kit_v16`). Older ones are
+  DSND |d|^2 / 64, `T_V17_GLCH`; the store's version 5 converts the sounds through `fx_kit_v16`); 18 Grids (Mutable
+  Instruments' map, GPL-3.0, credited: `G_GRX`..`G_LANE1`+5 after the speeds, `grids_v17` the defaults, no lane) and
+  the chances 90 60 40 10 % after the conditions (indices 21-24, `COND_ORDER` the knob's order; FACTORY_REV 14). Older ones are
   converted on load. The
   Monomachine's tempo is set on its panel (TEMPO, the LEVEL knob a BPM a detent; `chain_hold46.panel`): the loop and
   spec modes leave it at 120.

@@ -135,6 +135,7 @@ static uint32_t prof_t;
 
 #include "m2k_dsp.c"
 #include "m2k_fx.c"
+#include "m2k_grids.c"
 #include "m2k_seq.c"
 #include "m2k_gfx.c"
 #include "m2k_ui.c"

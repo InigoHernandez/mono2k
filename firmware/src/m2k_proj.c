@@ -13,6 +13,8 @@
 #define M2K_IMG_DATA (160u * 1024u)        /* a project's packed patterns (the FM-1's first build: 28 KB, 16 of them) */
 #endif
 #define IMG_DATA M2K_IMG_DATA
+/* (its head, 2 + 8 + M2K_TRACKS + G_COUNT + 1, fills the 48 since format 18: the Patch Editor keeps this number) */
+typedef char blob_head_fits[2 + 8 + M2K_TRACKS + G_COUNT + 1 <= 48 ? 1 : -1];
 #define BLOB_MAX (48 + M2K_TRACKS * P_COUNT + M2K_TRACKS * M2K_STEPS / 8 + M2K_TRACKS * M2K_STEPS * 4 + 2 + M2K_LOCKS * 4)
 
 typedef struct {
@@ -29,7 +31,7 @@ static int cur_proj;
 
 /* -------------------------------------------------------------------------------------- one pattern, packed */
 
-/* a pattern in the layout of a version (17, today's; the self-test writes the older ones, 3..16; 3..7 kits 70 wide) */
+/* a pattern in the layout of a version (18, today's; the self-test writes the older ones, 3..17; 3..7 kits 70 wide) */
 static int pat_pack_v(const m2k_pattern_t *p, uint8_t *o, int ver)
 {
     int n = 0, stride = ver >= 8 ? P_COUNT : P_WBNK;
@@ -41,10 +43,11 @@ static int pat_pack_v(const m2k_pattern_t *p, uint8_t *o, int ver)
                                         * 12: GND-SIN's (TUNE on its eighth knob); 13: HOLD in beats; 14: VO-6's page;
                                         * 15: the tracks' speeds, after the globals; 16: the amp's ATK DEC REL and the
                                         * LFOs' SPD and DPTH on the owner's laws; 17: the bus's effects rebuilt (the
-                                        * reverb, its and the delay's sends, the glitch) */
+                                        * reverb, its and the delay's sends, the glitch); 18: Grids (its map, its
+                                        * lanes, after the speeds) and four more chances, after the conditions */
     m_cpy(o + n, p->name, 8); n += 8;
     m_cpy(o + n, p->machine, M2K_TRACKS); n += M2K_TRACKS;
-    int gl = ver >= 15 ? G_COUNT : G_COUNT_V14;
+    int gl = ver >= 18 ? G_COUNT : ver >= 15 ? G_COUNT_V17 : G_COUNT_V14;
     m_cpy(o + n, p->glob, (uint32_t)gl); n += gl;
     o[n++] = p->mute;
     for (int t = 0; t < M2K_TRACKS; t++) { m_cpy(o + n, p->kit[t], stride); n += stride; }
@@ -72,7 +75,7 @@ static int pat_pack_v(const m2k_pattern_t *p, uint8_t *o, int ver)
     return n;
 }
 
-static int pat_pack(const m2k_pattern_t *p, uint8_t *o) { return pat_pack_v(p, o, 17); }
+static int pat_pack(const m2k_pattern_t *p, uint8_t *o) { return pat_pack_v(p, o, 18); }
 
 static uint8_t tune_v5(int v)
 {
@@ -101,10 +104,11 @@ static void pat_clamp(m2k_pattern_t *p)
 static int pat_unpack(m2k_pattern_t *p, const uint8_t *o, int len)
 {
     int n = 0;
-    if (len < 2 || o[0] != 'P' || o[1] < 1 || o[1] > 17) return 0;
+    if (len < 2 || o[0] != 'P' || o[1] < 1 || o[1] > 18) return 0;
     int ver = o[1], stride = ver >= 8 ? P_COUNT : ver >= 3 ? P_WBNK : P_MODT;   /* before 3 a kit ended before the MOD
                                                                                * effect, before 8 before the bank */
-    const int gl = ver >= 15 ? G_COUNT : G_COUNT_V14;                       /* before 15 no speeds */
+    const int gl = ver >= 18 ? G_COUNT : ver >= 15 ? G_COUNT_V17 : G_COUNT_V14;   /* before 15 no speeds, 18 no Grids */
+    const int nc = ver >= 18 ? C_COUNT : C_COUNT_V17;                       /* (a condition past them was ALWAYS) */
     const int head = 2 + 8 + M2K_TRACKS + gl + 1 + M2K_TRACKS * stride + M2K_TRACKS * M2K_STEPS / 8 + 2;
     if (len < head) return 0;
     m_set(p, 0, sizeof *p);
@@ -129,7 +133,7 @@ static int pat_unpack(m2k_pattern_t *p, const uint8_t *o, int len)
             int b = t * M2K_STEPS + s;
             if (!((mask[b >> 3] >> (b & 7)) & 1)) continue;
             if (n + 4 > len) return 0;
-            st->note = o[n]; st->flags = o[n + 1]; st->cond = o[n + 2] < C_COUNT ? o[n + 2] : C_ALWAYS; st->rtrg = o[n + 3];
+            st->note = o[n]; st->flags = o[n + 1]; st->cond = o[n + 2] < nc ? o[n + 2] : C_ALWAYS; st->rtrg = o[n + 3];
             n += 4;
         }
     }
@@ -181,6 +185,7 @@ static int pat_unpack(m2k_pattern_t *p, const uint8_t *o, int len)
     if (ver < 14) vox_v13(p);         /* VOX-6 took VO-6's page */
     if (ver < 16) feel_v15(p);        /* the amp's and the LFOs' laws, the owner's */
     if (ver < 17) fx_v16(p);          /* the bus's effects rebuilt: the reverb, the sends, the glitch */
+    if (ver < 18) grids_v17(p);       /* Grids: its map as a pattern starts it, no track following a lane */
     pat_clamp(p);
     return 1;
 }
@@ -672,8 +677,9 @@ uint8_t *m2k_store_buf(int *max)
  * 7: A09 MAMMOTH (direction v5) for PYLONS; 8: the bank reordered by energy, MAMMOTH first; 9: CUTUP to A02,
  * RIVETS to A11; 10: a new bank, LO-BIT CLUB, whole; 11: four parts from the owner's sound sheets (CIRCUIT, TIDE,
  * SUSPEND, LANTERN), the rest of the bank blank (docs/bank-a.md); 12: the four on pattern format 16's amp and LFO laws,
- * as they sounded; 13: on format 17's bus (their reverbs, their sends and their delays' turned as an old pattern's) */
-#define FACTORY_REV 13
+ * as they sounded; 13: on format 17's bus (their reverbs, their sends and their delays' turned as an old pattern's);
+ * 14: packed as format 18 (Grids' globals at their start), as they sound */
+#define FACTORY_REV 14
 static const char *const OLD_DEMO[FACTORY_REV][16] = {
     {"LATEX", "PVC", "SPU RM", "ELECTRO", "GLITCH", "CHROME", "ACID", "2STEP", "GROOVE", "HYPRPOP", "DUB", "CHIP",
      "HARDGRV", "IDM", "DUBSTEP", "INIT"},
@@ -697,6 +703,8 @@ static const char *const OLD_DEMO[FACTORY_REV][16] = {
      "RIBBON", "MOTEL", "FOUNDRY", "SPLICE"},
     {"LUMEN", "PULSAR", "LATTICE", "SPUDUB", "PROCESS", "SQUELCH", "GROWL", "BREAKS", "SPRITES", "OPLL", "JUKE", "CHIPJNG",
      "VIOLET", "DUSKLIT", "FLUTE", "EMBERS"},
+    {"CIRCUIT", "TIDE", "SUSPEND", "LANTERN", "INIT", "INIT", "INIT", "INIT", "INIT", "INIT", "INIT", "INIT", "INIT", "INIT",
+     "INIT", "INIT"},
     {"CIRCUIT", "TIDE", "SUSPEND", "LANTERN", "INIT", "INIT", "INIT", "INIT", "INIT", "INIT", "INIT", "INIT", "INIT", "INIT",
      "INIT", "INIT"},
     {"CIRCUIT", "TIDE", "SUSPEND", "LANTERN", "INIT", "INIT", "INIT", "INIT", "INIT", "INIT", "INIT", "INIT", "INIT", "INIT",
@@ -725,6 +733,9 @@ static const struct { uint8_t rev; uint16_t len[16]; uint32_t fnv[16]; } OLD_PAC
       0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u}},
     {13, {1091, 935, 879, 911},
      {0x0b6423b9u, 0xbdf29132u, 0x59b9bcbau, 0xb84c63d1u, 0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u,
+      0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u}},
+    {14, {1104, 948, 892, 924},
+     {0x5e08bcdcu, 0x7671d05fu, 0x875724e1u, 0x495ffb00u, 0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u,
       0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u}},
 };
 

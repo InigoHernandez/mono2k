@@ -56,6 +56,7 @@
     <li><a href="#locks">Parameter locks</a></li>
     <li><a href="#trig-types">Trig types</a></li>
     <li><a href="#conditions">Conditions and ratchets</a></li>
+    <li><a href="#grids">Grids</a></li>
     <li><a href="#recording">Recording</a></li>
   </ol>
   <h4>Sound</h4>
@@ -168,7 +169,7 @@
     <tbody>
       <tr><td>HOME</td><td>HOME</td><td>Pick patterns (below)</td></tr>
       <tr><td>EDIT</td><td>SYN, then its next pages</td><td>The track's sound (below)</td></tr>
-      <tr><td>ENV, SEL, ARP</td><td>AMP, FILT, ARP; pressed again, the next page; ARP twice: the arp's HOLD</td><td>A second: its card</td></tr>
+      <tr><td>ENV, SEL, ARP</td><td>AMP, FILT, ARP; pressed again, the next page (ARP: GRIDS, LANES); ARP twice: the arp's HOLD</td><td>A second: its card</td></tr>
       <tr><td>FX</td><td>FX, then its next pages</td><td>PERFORM (below)</td></tr>
       <tr><td>LFO</td><td>LFO, then its next pages</td><td>The knobs come back when let go (below)</td></tr>
       <tr><td>GLO</td><td>GLO, then its next pages</td><td>FUNC: the combinations below</td></tr>
@@ -190,11 +191,11 @@
       <tr><td>EDIT</td><td>The sound library (SYN &gt; SND).</td></tr>
       <tr><td>HOME</td><td>The keys' mode, a tap each: KEYS, PADS, GRID, then KEYS again (below).</td></tr>
       <tr><td>ARP</td><td>PADS on or off.</td></tr>
-      <tr><td>White 1–6</td><td>Mute or unmute tracks 1–6.</td></tr>
+      <tr><td>White 1–6</td><td>Mute or unmute tracks 1–6. Playing: at the next bar (GLO &gt; PLAY).</td></tr>
       <tr><td>White 7</td><td>FILL for the pattern's next loop, and only it.</td></tr>
       <tr><td>White 8</td><td>Tap the tempo: two taps or more, on the beat.</td></tr>
-      <tr><td>White 9–14</td><td>Solo tracks 1–6 while held; several add up.</td></tr>
-      <tr><td>White 15</td><td>Unmute every track.</td></tr>
+      <tr><td>White 9–14</td><td>Solo tracks 1–6 while held; several add up. Playing: from the next bar; a tap solos one bar.</td></tr>
+      <tr><td>White 15</td><td>Unmute every track (playing: at the next bar).</td></tr>
       <tr><td>SELECT</td><td>The tempo.</td></tr>
     </tbody>
   </table>
@@ -460,6 +461,7 @@
     <figure class="fig"><canvas data-scr="13_fx_destroy"></canvas><figcaption>FX, DSTR: bits, wavefold, XOR and the reverb's send.</figcaption></figure>
     <figure class="fig"><canvas data-scr="14_lfo"></canvas><figcaption>LFO: all three stacked, live.</figcaption></figure>
     <figure class="fig"><canvas data-scr="20_arp"></canvas><figcaption>ARP: mode, speed, range and gate.</figcaption></figure>
+    <figure class="fig"><canvas data-scr="20c_grids"></canvas><figcaption>GRIDS: the map, X and Y's dot, the lanes.</figcaption></figure>
     <figure class="fig"><canvas data-scr="15_glo_time"></canvas><figcaption>GLO, TIME: tempo, swing, length, accent.</figcaption></figure>
   </div>
   <h2>The pages and their knobs</h2>
@@ -598,7 +600,7 @@
     <thead><tr><th>Condition</th><th>The step plays</th></tr></thead>
     <tbody>
       <tr><td>100%</td><td>Always (the default).</td></tr>
-      <tr><td>75% 50% 33% 25% 12%</td><td>By that chance, each time it comes round.</td></tr>
+      <tr><td>90% 75% 60% 50% 40% 33% 25% 12% 10%</td><td>By that chance, each time it comes round. PRESETS turns through them in this order.</td></tr>
       <tr><td>1:2 2:2 1:3 2:3 3:3 1:4 2:4 3:4 4:4</td><td>On loop A of every B: 1:2 the first of each two loops, 3:4 the third of each four.</td></tr>
       <tr><td>1ST !1ST</td><td>Only the first time round, or every time but the first.</td></tr>
       <tr><td>PRE !PRE</td><td>When the track's last condition played (or did not).</td></tr>
@@ -607,6 +609,30 @@
   </table>
   <h2>Ratchets</h2>
   <p>Hold a step and press OCT+ or OCT−: the step plays one to four hits, evenly through its length, each with the step's trig type. The strip marks the extra hits along the cell's foot.</p>
+</article>
+
+<article id="grids" data-group="Sequencer">
+  <h1>Grids</h1>
+  <p class="sub">Mutable Instruments' topographic drum sequencer, on any track.</p>
+  <p>Press ARP again for GRIDS, then LANES. A map of 25 drum patterns; X and Y pick a place on it.</p>
+  <table>
+    <thead><tr><th>Page</th><th>Knobs</th></tr></thead>
+    <tbody>
+      <tr><td>GRIDS</td><td>X, Y; CHAOS varies each cycle; RES 16: a bar, 32: two bars.</td></tr>
+      <tr><td>LANES</td><td>BD, SD, HH: each lane's density. LANE: the lane this track follows.</td></tr>
+    </tbody>
+  </table>
+  <ul>
+    <li>A track on a lane plays its trigs, not its steps: its own sound, at its root, Grids' accents.</li>
+    <li>It runs at the track's speed. CHAOS is the same at every PLAY.</li>
+    <li>Stopped, OCT+ on GRIDS or LANES writes the lanes into those tracks' steps and lets go of the lanes.</li>
+  </ul>
+  <div class="figs">
+    <figure class="fig"><canvas data-scr="20d_lanes"></canvas><figcaption>LANES: each lane's levels, its density dotted, the step playing.</figcaption></figure>
+    <figure class="fig"><canvas data-scr="29l_mute_pending"></canvas><figcaption>Lanes on HOME; a mute waiting for the bar: MUTE blinks.</figcaption></figure>
+  </div>
+  <h2>Mutes on the bar</h2>
+  <p>GLO &gt; PLAY's MUTE: BAR (the default) holds a mute made while playing to the next bar's first step (steps 1, 17, 33, 49); NOW mutes at once. Stopped, always at once. The key blinks while it waits.</p>
 </article>
 
 <article id="recording" data-group="Sequencer">
@@ -774,7 +800,7 @@
   <h1>Credits and licence</h1>
   <p class="sub">Free software, built on the open FM-1 work.</p>
   <p>MONO2K is by Sequencist, and free software under the GNU General Public License, version 3 only. Its source, the tools that measure it and this site are on <a href="https://github.com/InigoHernandez/mono2k" target="_blank" rel="noopener">GitHub</a>.</p>
-  <p>It is built on the open FM-1 work: Felucca by Leo Kuroshita (Hügelton Instruments), whose platform the FM-1 build adds and whose installer it follows; CS-1, X0X, FoMni and the others. The FM-1's panel geometry is the one measured for CoralFlower's emulator. Orbitron and Inter Tight are under the SIL Open Font License. The digital waves are the author's own. The DRM- drums' voice design is after the Erica Synths LXR drum voices (its desktop app's source, GPL-3.0-only; originally Julian Schmidt's Sonic Potions LXR): their laws, measured against a model of them, not their code or samples.</p>
+  <p>It is built on the open FM-1 work: Felucca by Leo Kuroshita (Hügelton Instruments), whose platform the FM-1 build adds and whose installer it follows; CS-1, X0X, FoMni and the others. The FM-1's panel geometry is the one measured for CoralFlower's emulator. Orbitron and Inter Tight are under the SIL Open Font License. The digital waves are the author's own. The DRM- drums' voice design is after the Erica Synths LXR drum voices (its desktop app's source, GPL-3.0-only; originally Julian Schmidt's Sonic Potions LXR): their laws, measured against a model of them, not their code or samples. GRIDS is Émilie Gillet's Grids (Mutable Instruments), its pattern map and its rules ported from its source (GPL-3.0).</p>
   <p>MONO2K's machines were measured against a Monomachine running in Joe Landers' Monomachine emulator (gearmulator-md-mm, a fork of Gearmulator by The Usual Suspects), with the owner's own OS image: measurements only, none of the emulator's code or data and none of Elektron's code, waves or samples are in MONO2K. Monomachine and Machinedrum are trademarks of Elektron; M-VAVE and FM-1 are trademarks of their owners. MONO2K is not affiliated with Elektron or M-VAVE. If MONO2K is useful to you, you can <a href="https://ko-fi.com/sequencist" target="_blank" rel="noopener">support it on Ko-fi</a>.</p>
 </article>
 
@@ -794,7 +820,7 @@
 </footer>
 <script src="site.js?v=3"></script>
 <script src="panel.js?v=2"></script>
-<script src="changelog.js?v=33"></script>
-<script src="manual.js?v=36"></script>
+<script src="changelog.js?v=34"></script>
+<script src="manual.js?v=37"></script>
 </body>
 </html>
