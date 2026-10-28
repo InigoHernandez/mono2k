@@ -97,7 +97,10 @@ static const ev_t MANUAL[] = {
     {15100, 'b', B_GLO, 1, 0}, {15120, 'b', B_GLO, 0, 0}, {15400, 'b', B_GLO, 1, 0}, {15420, 'b', B_GLO, 0, 0},
     {15600, 'e', E_K3, 1, 0}, {16200, 's', 0, 0, "29e_ask"}, {16300, 'b', B_OCTD, 1, 0}, {16320, 'b', B_OCTD, 0, 0},
     {16400, 'b', B_PLAY, 1, 0}, {16420, 'b', B_PLAY, 0, 0}, {17100, 'b', B_FX, 1, 0}, {17200, 'k', 5, 1, 0},
-    {17800, 's', 0, 0, "29f_perform"}, {17900, 'k', 5, 0, 0}, {17920, 'b', B_FX, 0, 0},
+    {17800, 's', 0, 0, "29f_perform"}, {17900, 'k', 5, 0, 0},
+    {17905, 'b', B_OCTU, 1, 0}, {17910, 'b', B_OCTU, 0, 0}, {17915, 'k', 1, 1, 0},   /* bank B, FREEZE held */
+    {17960, 's', 0, 0, "29f_perform_b"}, {17965, 'k', 1, 0, 0}, {17970, 'b', B_OCTD, 1, 0}, {17975, 'b', B_OCTD, 0, 0},
+    {17990, 'b', B_FX, 0, 0},
     {18000, 'b', B_LFO, 1, 0}, {18600, 's', 0, 0, "29g_lfo_held"}, {18700, 'b', B_LFO, 0, 0},
     {18800, 'b', B_GLO, 1, 0}, {19400, 's', 0, 0, "29h_glo_map"}, {19500, 'b', B_GLO, 0, 0},
     {19600, 'b', B_PLAY, 1, 0}, {19620, 'b', B_PLAY, 0, 0},
@@ -5170,6 +5173,128 @@ static int selftest(void)
         printf("     PERFORM DRIVE: %+.1f dB against the dry, %d samples at full scale\n", dd, full);
         CHECK(r4 && grid && round_ok && stop_ok && gated && fabs(dd) < 1.5 && !full,
               "PERFORM: repeats on the grid, the stop slows to rest in its beat and spins up, the stutter gated, DRIVE level");
+    }
+    {
+        /* PERFORM's banks: FX held, OCT+ shows bank B on the black keys and OCT- A (the OCT LEDs say which); a press
+         * plays the bank shown; an effect held goes on through a switch and its key's release ends it, whichever bank
+         * is shown by then; OCT- under FX is no octave */
+        m2k_init(81);
+        ui.now = 1000;
+        seq_play(1);
+        static int16_t pb[256];
+        for (int f = 0; f < M2K_SR / 2; f += 128) m2k_render(pb, 128);
+        int bk[11];
+        for (int k = 0; k < M2K_KEYS; k++) if (ui.kb[k] >= 0 && ui.kb[k] < 11) bk[ui.kb[k]] = k;
+        int oct = ui.oct[ui.trk];
+        m2k_button(B_FX, 1);
+        m2k_key(bk[1], 1);                            /* bank A's RPT 1/8, held */
+        int a_on = perf.on[PF_R8] && bus.g_pk == PF_R8 + 1;
+        m2k_button(B_OCTU, 1); m2k_button(B_OCTU, 0);
+        const uint8_t *L = m2k_leds();
+        int to_b = ui.pfb == 1 && L[M2K_KEYS + B_OCTU] >= 64 && L[M2K_KEYS + B_OCTD] < 64;
+        for (int f = 0; f < 4410; f += 128) m2k_render(pb, 128);
+        int kept = perf.on[PF_R8] && bus.g_on && bus.g_pk == PF_R8 + 1;
+        m2k_key(bk[5], 1);                            /* bank B's LPF with it */
+        int b_on = perf.on[PF_LPF] && !perf.on[5] && perf.on[PF_R8];
+        for (int f = 0; f < 4410; f += 128) m2k_render(pb, 128);
+        m2k_key(bk[1], 0);                            /* the A key let go under B: the repeat ends */
+        int a_off = !perf.on[PF_R8] && perf.on[PF_LPF];
+        m2k_button(B_OCTD, 1); m2k_button(B_OCTD, 0);
+        int to_a = ui.pfb == 0 && ui.oct[ui.trk] == oct;
+        m2k_key(bk[5], 0);                            /* the B key let go under A: the low-pass glides open */
+        int lpf_off = !perf.on[PF_LPF];
+        m2k_key(bk[0], 1);
+        int a_again = perf.on[PF_R4];
+        m2k_key(bk[0], 0);
+        m2k_button(B_FX, 0);
+        for (int f = 0; f < M2K_SR / 2; f += 128) m2k_render(pb, 128);
+        int rest = !bus.g_on && !bus.fmix[0];
+        printf("     PERFORM banks: A held %d, to B %d, held on %d, B with it %d, A let go %d, to A %d, B let go %d, A again %d, rest %d\n",
+               a_on, to_b, kept, b_on, a_off, to_a, lpf_off, a_again, rest);
+        CHECK(a_on && to_b && kept && b_on && a_off && to_a && lpf_off && a_again && rest,
+              "PERFORM banks: OCT+ B, OCT- A under FX (LEDs), a press the bank shown, a held effect on through a switch");
+    }
+    {
+        /* bank B on A01 (a bar dry, then two bars held from 40 ms past a beat, then two more): no sample at full scale,
+         * the level held against the dry's within each effect's own bounds; on a held sine each one's entry and exit
+         * (the loop above covers every key); FREEZE seamless: held two seconds on a sine, no step past twice the sine's
+         * own (its grains' agreement moves its level, a seam's jump would be tens of times); STOP slows the sound of
+         * the press (the ring written on after it, as the dry's: it kept a lap's old sound before); SHIMMER held ten
+         * seconds stays under full scale and is over four seconds after; DUB with no line free plays nothing */
+        static const int8_t LO[PF_BANK] = {-3, -6, -6, -3, -3, -4, -10, -5, -1, -1, -20};   /* FRZ SCAT ROLL OCTD OCTU LPF HPF GATE DUB SHIM SPIN */
+        static const int8_t HI[PF_BANK] = {3, 4, 3, 3, 3, 2, 0, 0, 4, 4, 0};
+        int16_t *dr = malloc((size_t)M2K_SR * 14 * 4), *wt = malloc((size_t)M2K_SR * 14 * 4);
+        int lv_ok = 1, full = 0;
+        for (int j = -1; j < PF_BANK; j++) {
+            int k = j < 0 ? -1 : PF_BANK + j;
+            m2k_init(2000);
+            cur_pat = 0; sq.queued = 0; lockmap_build();
+            for (int t = 0; t < M2K_TRACKS; t++) m_cpy(trk[t].eff, pat[0].kit[t], P_COUNT);
+            seq_play(1);
+            int six = (int)(sps_q8 >> 8), on = (16 * six + M2K_SR / 25) / 16 * 16, off = (48 * six + M2K_SR / 25) / 16 * 16;
+            int n = 80 * six / 16 * 16;
+            int16_t *o = j < 0 ? dr : wt;
+            for (int f = 0; f < n; f += 16) {
+                if (k >= 0 && f == on) bus_perform(k, 1);
+                if (k >= 0 && f == off) bus_perform(k, 0);
+                m2k_render(o + 2 * f, 16);
+            }
+            if (j < 0) continue;
+            double s0 = 0, s1 = 0;
+            for (int i = 2 * (on + M2K_SR / 10); i < 2 * off; i++) { s0 += (double)dr[i] * dr[i]; s1 += (double)wt[i] * wt[i]; }
+            for (int i = 0; i < 2 * n; i++) full += abs(wt[i]) >= 32767;
+            double db = 10 * log10((s1 + 1) / (s0 + 1));
+            int ok = db >= LO[j] && db <= HI[j];
+            lv_ok &= ok;
+            printf("     A01 %-8s held %+.1f dB%s\n", PF_NAME[k], db, ok ? "" : " OUT OF BOUNDS");
+        }
+        free(dr); free(wt);
+        /* FREEZE on a sine */
+        static int16_t sb[2 * 4 * M2K_SR];
+        m2k_pattern_t *q = eng_pat(82);
+        q->glob[G_VERB] = 0;
+        sine_track(q);
+        eng_go(q);
+        sine_on();
+        int n = 4 * M2K_SR / 16 * 16, at = M2K_SR / 16 * 16;
+        for (int f = 0; f < n; f += 16) { if (f == at) bus_perform(PF_FRZ, 1); m2k_render(sb + 2 * f, 16); }
+        double ds = step_max(sb, M2K_SR / 4, at - 64), fs = step_max(sb, at + M2K_SR / 10, n);
+        bus_perform(PF_FRZ, 0);
+        int seam = fs < 2 * ds;
+        /* STOP's read: the ring after the press as the dry wrote it */
+        static int16_t ring0[GL_LEN][2];
+        int fresh = 0;
+        for (int pass = 0; pass < 2; pass++) {
+            m2k_init(2000);
+            cur_pat = 0; sq.queued = 0; lockmap_build();
+            for (int t = 0; t < M2K_TRACKS; t++) m_cpy(trk[t].eff, pat[0].kit[t], P_COUNT);
+            seq_play(1);
+            eng_run(2.0);
+            uint32_t w0 = bus.gw;
+            if (pass) bus_perform(PF_STOP, 1);
+            eng_run(0.1);
+            if (!pass) memcpy(ring0, gl_buf, sizeof ring0);
+            else for (uint32_t i = w0; i < w0 + 2000; i++) fresh += !memcmp(ring0[i & (GL_LEN - 1)], gl_buf[i & (GL_LEN - 1)], 4);
+        }
+        /* SHIMMER ten seconds on A02 */
+        m2k_init(2000);
+        cur_pat = 1; sq.queued = 1; lockmap_build();
+        for (int t = 0; t < M2K_TRACKS; t++) m_cpy(trk[t].eff, pat[1].kit[t], P_COUNT);
+        seq_play(1);
+        bus_perform(PF_SHIM, 1);
+        int shfull = 0;
+        for (int f = 0; f < 10 * M2K_SR; f += 16) { m2k_render(eng_out, 16); for (int i = 0; i < 32; i++) shfull += abs(eng_out[i]) >= 32767; }
+        bus_perform(PF_SHIM, 0);
+        eng_run(4.1);
+        int sh_over = !bus.sh_on;
+        /* DUB: every track's delay sending, no line free */
+        m2k_init(2000);
+        for (int t = 0; t < M2K_TRACKS; t++) pat[0].kit[t][P_DSND] = 90;
+        int nodub = !bus_perform(PF_DUB, 1) && !perf.on[PF_DUB];
+        printf("     FREEZE on a sine: its largest step %.2f x the sine's; STOP's ring after the press %d of 2000 the dry's;"
+               " SHIMMER 10 s: %d at full scale, over after 4 s %d; DUB with no line %d\n", fs / ds, fresh, shfull, sh_over, nodub);
+        CHECK(lv_ok && !full && seam && fresh == 2000 && !shfull && sh_over && nodub,
+              "PERFORM bank B: levels in bounds on A01, none at full scale, FREEZE seamless, STOP live, SHIMMER bounded, DUB needs a line");
     }
     {
         /* DSND's LFO across 64 leaves the lines' layout (it followed the modulated value: a 16 KB line wiped at every

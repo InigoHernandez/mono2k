@@ -3434,13 +3434,6 @@ static int window(int x, int y, int w, int h, const char *title, const char *mar
 
 static const char *latch_title(int b) { return ui.latch == b + 1 ? "LATCHED" : 0; }   /* (a title bar's mark) */
 
-/* a latched layer's map says so, at its top right (PERFORM's, until it takes the system's title bar) */
-static void latch_mark(int x, int y, int w, int b)
-{
-    if (ui.latch != b + 1) return;
-    tag(x + w - 4 - tag_w("LATCHED"), y, "LATCHED", 0);
-}
-
 /* a table of n key -> action pairs (kv: key, action, ...) in cols columns, filled row by row, from (x, y), w wide:
  * the keys' tags one width (the widest's and 2 each side), their type centred, the actions 4 after and aligned; a
  * column's gutter 7. Its rows */
@@ -3778,10 +3771,7 @@ static void wipe(int p)
     }
 }
 
-/* ---- the windows over the stage: a 1 px frame and a 2 px shadow, their title a tag, their type 4 px in, rows of
- * keys (a key a tag) 15 apart, lines 13 */
-#define WX 4
-#define WW 229
+/* ---- the windows over the stage (window(), pairs() above): from y 64 */
 #define WY 64
 
 /* GLO's white keys drawn, 15 of 12 x 14 a 14 px pitch from x (208 px), y the labels' first row: FILL and ALL over their
@@ -3897,29 +3887,41 @@ static void lay_help(void)
 {
     int i = perf_layer() ? 0 : mom_layer() ? 1 : -1;
     if (i < 0 || ((i || ui.latch != B_FX + 1) && (!ui.lay_t0[i] || (!ui.lay_used[i] && ui.now - (ui.lay_t0[i] & ~1u) < 350)))) return;
-    const int x = WX, y = WY, w = WW, h = i ? 52 : 108;
-    win(x, y, w, h);
-    int tw = tag(x + 4, y + 4, i ? "LFO" : "PERFORM", 1);
-    if (i) {                                           /* (drawn again on the windows' system) */
+    const int y = WY;
+    if (i) {
         static const char *const P[2] = {"OCT+", "KEEPS THEM"};
         int r = window(W_X, y, W_W, W_H(2), "LFO HELD", 0);
         text(&F_S, W_X + W_IN, r + TY, "THE KNOBS SNAP BACK", 1, 0);
         pairs(W_X + W_IN, r + W_ROW, W_W - 2 * W_IN, P, 1, 1);
         return;
     }
-    /* the bank on the black keys: its tag filled, the other's plain beside it (OCT- A, OCT+ B) */
-    int bx = x + 4 + tw + 6;
-    bx += tag(bx, y + 4, "A", ui.pfb == 0) + 3;
-    tag(bx, y + 4, "B", ui.pfb == 1);
-    latch_mark(x, y + 4, w, B_FX);
+    /* the bank shown, its eleven black keys a table (1-6 down the left, 7-11 the right), an effect on in inverse;
+     * under it both banks on OCT- and OCT+, the one shown in inverse */
+    const int x = W_X + W_IN, w = W_W - 2 * W_IN, cw = (w - 7) / 2;
+    int r = window(W_X, y, W_W, W_H(7), ui.pfb ? "PERFORM: BANK B" : "PERFORM: BANK A", latch_title(B_FX));
+    static const char N[PF_BANK][3] = {"1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11"};
+    const char *kv[2 * PF_BANK];                       /* (filled row by row: item j is key j / 2 or 7 + j / 2) */
+    int kt = 0;
     for (int j = 0; j < PF_BANK; j++) {
-        int k = j + ui.pfb * PF_BANK, cx = x + 4 + (j / 6) * 112, cy = y + 21 + (j % 6) * 14;
-        char n[3] = {(char)(j < 9 ? '1' + j : '1'), (char)(j < 9 ? 0 : '0' + j - 9), 0};
-        if (perf.on[k]) rect(cx, cy, 108, F_S.base + 2, 1);
-        text(&F_S, cx + 2, cy + TY, n, !perf.on[k], 0);
-        text(&F_S, cx + 22, cy + TY, PF_NAME[k], !perf.on[k], 0);
+        int s = (j & 1) ? 6 + (j >> 1) : j >> 1, k = s + ui.pfb * PF_BANK;
+        kv[2 * j] = N[s];
+        kv[2 * j + 1] = perf.on[k] ? "" : PF_NAME[k];
+        if (text_w(&F_S, N[s], 0) + 4 > kt) kt = text_w(&F_S, N[s], 0) + 4;   /* (the table's tag width) */
     }
-    text(&F_S, x + 4 + 112 + 2, y + 21 + 5 * 14 + TY, ui.pfb ? "OCT-: BANK A" : "OCT+: BANK B", 1, 0);
+    pairs(x, r, w, kv, PF_BANK, 2);
+    for (int j = 0; j < PF_BANK; j++) {                /* the effects on: their names in inverse */
+        int s = (j & 1) ? 6 + (j >> 1) : j >> 1, k = s + ui.pfb * PF_BANK;
+        if (!perf.on[k]) continue;
+        int ax = x + (j & 1) * (cw + 7) + kt + 4, cy = r + (j >> 1) * W_ROW;
+        rect(ax - 2, cy, text_w(&F_S, PF_NAME[k], 0) + 4, F_S.base + 2, 1);
+        text(&F_S, ax, cy + TY, PF_NAME[k], 0, 0);
+    }
+    static const char *const B[4] = {"OCT-", "BANK A", "OCT+", "BANK B"};
+    int by = r + 6 * W_ROW, bt = text_w(&F_S, "OCT-", 0) > text_w(&F_S, "OCT+", 0) ? text_w(&F_S, "OCT-", 0) + 4 : text_w(&F_S, "OCT+", 0) + 4;
+    pairs(x, by, w, B, 2, 2);
+    int ax = x + ui.pfb * (cw + 7) + bt + 4;
+    rect(ax - 2, by, text_w(&F_S, B[2 * ui.pfb + 1], 0) + 4, F_S.base + 2, 1);
+    text(&F_S, ax, by + TY, B[2 * ui.pfb + 1], 0, 0);
 }
 
 /* a button's card (card_up): its tap, then what it does with the others, a row each */
