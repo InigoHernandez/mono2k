@@ -2252,7 +2252,7 @@ static void header(void)
     (void)x;
 }
 
-/* ---- the knobs, along the top as on the panel: each cell its label (inverted while turned) and its value; a dial
+/* ---- the knobs, along the top as on the panel: each cell its label (inverted while turned), a dotted rule, its value; a dial
  * left of the value for a range (its pointer easing to the value, the dial solid a moment as it turns), a choice
  * or an action alone in the middle; a locked value inverted */
 static int bipolar(int kind) { return kind == K_BI || kind == K_PAN || kind == K_SEMI || kind == K_FINE || kind == K_TUN2 || kind == K_SEMI24; }
@@ -2292,14 +2292,15 @@ static void knobs(void)
         int x = k * 60, cx = x + 4, code = knob_at(k);
         CELL(x, KNOB_Y, x + 60, KNOB_R, cx, KNOB_Y + 1, cx + CW, KNOB_R - 1);
         if (k) rule_v(x, KNOB_Y, KNOB_R - KNOB_Y, 0);
+        rule_h(x + 2, KNOB_Y + 11, 57, 1);                 /* under the label, dotted */
         if (code == NONE) continue;
         const pi_t *pi = pinfo(ui.trk, code);
-        if (pi->s4[0] == '-') { text_c(&F_S, x + 30, KNOB_Y + 3, "-", 1, 0); continue; }
+        if (pi->s4[0] == '-') { text_c(&F_S, x + 30, KNOB_Y + 2, "-", 1, 0); continue; }
         int v = knob_value(code), lk = knob_locked(code);
         int focus = ui.focus_t && ui.focus == k && ui.now - ui.focus_t < 2500;
-        if (focus) rect(x + 2, KNOB_Y + 1, 57, 11, 1);
+        if (focus) rect(x + 2, KNOB_Y + 1, 57, 9, 1);
         int ltr = text_w(&F_S, pi->s4, 1) <= CW, lw = text_w(&F_S, pi->s4, ltr);
-        text(&F_S, x + 30 - lw / 2, KNOB_Y + 3, pi->s4, !focus, ltr);
+        text(&F_S, x + 30 - lw / 2, KNOB_Y + 2, pi->s4, !focus, ltr);
         char o[16];
         const char *u;
         fmt(pi, ui.trk, v, o, &u);
@@ -2316,7 +2317,7 @@ static void knobs(void)
         if (!ranged) continue;
         int target = CLAMP(((v - mn) * 256) / (mx - mn ? mx - mn : 1), 0, 256);
         ui.ease[k] += (target * 256 - ui.ease[k]) / 3;
-        dial(cx + 6, KNOB_Y + 18, ui.ease[k] >> 8, focus && ui.now - ui.focus_t < 200);
+        dial(cx + 6, KNOB_Y + 18, ui.ease[k] >> 8, focus && ui.now - ui.focus_t < 200);   /* (rows 24..34) */
     }
     rule_h(0, KNOB_R, 240, 0);
 }
