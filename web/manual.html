@@ -243,19 +243,29 @@
     </tbody>
   </table>
   <h2>Hold FX: PERFORM</h2>
-  <p>The black keys are the bus's effects while you hold them; the white keys go on playing the track. The knobs are the bus's GLCH, TAPE, ADPC and DRIV, and what you turn stays. Every effect fades in and out in a few milliseconds, so nothing clicks, and the repeats keep to the beat: press late and they still land on it.</p>
+  <p>The black keys play the bus's effects while held. The white keys still play the track.</p>
+  <p>Two banks: OCT− is bank A, OCT+ bank B. The window and the OCT lights show which. A held effect keeps going when you switch.</p>
+  <p>The knobs are GLCH, TAPE, ADPC and DRIV. Nothing clicks, and the repeats land on the beat even if you press late.</p>
+  <div class="figs">
+    <figure class="fig"><canvas data-scr="29f_perform_b"></canvas><figcaption>FX, then OCT+: bank B, FREEZE held.</figcaption></figure>
+  </div>
   <table>
-    <thead><tr><th>Black key</th><th>Effect</th></tr></thead>
+    <thead><tr><th>Key</th><th>Bank A</th><th>Bank B</th></tr></thead>
     <tbody>
-      <tr><td>1–4</td><td>REPEAT a quarter, an eighth, a sixteenth or a thirty-second note, caught from the last beat (or eighth, or sixteenth) as the grid starts it: the first time round is what is playing, then it comes round on the grid, its join crossfaded. Below 85 BPM a quarter is too long for the memory and repeats an eighth.</td></tr>
-      <tr><td>5</td><td>REVERSE: the last beat backwards, on the beat.</td></tr>
-      <tr><td>6</td><td>STOP: a tape stop. The sound slows in a straight line to a halt over a beat, its pitch and level falling as a tape's; let go and it spins back up over an eighth, then gives way to the live sound.</td></tr>
-      <tr><td>7</td><td>STUTTER: thirty-second hits of the sixteenth that started on the grid, gated, half of each one silent.</td></tr>
-      <tr><td>8 / 9</td><td>CRUSH, the 4-bit ADPCM crunch at its most, gliding in and out; WOW, the tape's wow and flutter at their most, the depth swelling in and easing back out.</td></tr>
-      <tr><td>10</td><td>DRIVE: the bus driven hard into its soft clip, held to the level it had, so it gets denser and dirtier but not louder, and never clips.</td></tr>
-      <tr><td>11</td><td>KILL: silence, down in 4 ms and back as clean.</td></tr>
+      <tr><td>1</td><td>RPT 1/4: repeat the last beat</td><td>FREEZE: the last eighth held as a sustain</td></tr>
+      <tr><td>2</td><td>RPT 1/8</td><td>SCATTER: the last beat's sixteenths shuffled</td></tr>
+      <tr><td>3</td><td>RPT 1/16</td><td>ROLL: a repeat that halves every beat, to 1/32</td></tr>
+      <tr><td>4</td><td>RPT 1/32</td><td>OCT DN: the bus an octave down</td></tr>
+      <tr><td>5</td><td>REVERSE: the last beat backwards</td><td>OCT UP: the bus an octave up</td></tr>
+      <tr><td>6</td><td>STOP: a tape stop over a beat; let go, it spins up</td><td>LPF: a resonant low-pass closing over a bar</td></tr>
+      <tr><td>7</td><td>STUTTER: gated 1/32 hits</td><td>HPF: a resonant high-pass opening over a bar</td></tr>
+      <tr><td>8</td><td>CRUSH: the 4-bit crunch</td><td>GATE: a 1/16 trance gate</td></tr>
+      <tr><td>9</td><td>WOW: the tape's wow and flutter</td><td>DUB: a dotted-eighth echo that rings on</td></tr>
+      <tr><td>10</td><td>DRIVE: harder, never louder</td><td>SHIMMER: a long wash, octaves rising</td></tr>
+      <tr><td>11</td><td>KILL: silence</td><td>SPIN: a vinyl spin-back</td></tr>
     </tbody>
   </table>
+  <p>Below 85 BPM a quarter is too long for the memory: RPT 1/4 repeats an eighth. DUB borrows a track's delay that is off; if every delay is in use it says so.</p>
   <h2>Hold LFO</h2>
   <p>What the knobs move while LFO is held comes back when it is let go: a sweep for a bar, a filter opened for a fill. OCT+ while it is held keeps the change.</p>
   <h2>A step held in GRID</h2>
@@ -276,7 +286,7 @@
     <figure class="fig"><canvas data-scr="29i_seq_latched"></canvas><figcaption>SEQ double-tapped: its tools and knobs stay; its button blinks.</figcaption></figure>
     <figure class="fig"><canvas data-scr="29j_play_card"></canvas><figcaption>PLAY held a second alone: its card.</figcaption></figure>
   </div>
-  <p>Tap GLO, SEQ, HOME or FX twice, quickly: the second tap undoes the first (the page, GRID) and the layer stays as if you held it. Its button blinks and its map says LATCHED. The keys and the knobs are the layer's; the button combinations (copy, paste, clear) still want the button held, so PLAY, REC, SAVE and the octaves do their own job meanwhile. Tap the button again to let go; any other page button lets go too. Tapping a page button slowly steps through its pages as before.</p>
+  <p>Tap GLO, SEQ, HOME or FX twice, quickly: the second tap undoes the first (the page, GRID) and the layer stays as if you held it. Its button blinks and its map says LATCHED. The keys and the knobs are the layer's; the button combinations (copy, paste, clear) still want the button held, so PLAY, REC, SAVE and the octaves do their own job meanwhile (under FX the octaves pick PERFORM's bank). Tap the button again to let go; any other page button lets go too. Tapping a page button slowly steps through its pages as before.</p>
   <ul>
     <li>GLO latched: mutes, solos, the fill and the tap tempo under one hand.</li>
     <li>HOME latched: patterns picked and queued as you play.</li>
@@ -349,7 +359,7 @@
   <h2>Play live with one hand</h2>
   <ol class="steps">
     <li>Double-tap GLO. White 1–6 mute, 9–14 solo while held, 7 fills the next loop, 8 taps the tempo; the keys light for the tracks heard.</li>
-    <li>Hold FX for PERFORM: a black key repeats, reverses, stops or kills the bus while held. Double-tap FX to keep it under both hands.</li>
+    <li>Hold FX for PERFORM: a black key repeats, reverses, stops or kills the bus while held. OCT+ for bank B: freeze, filters, octaves. Double-tap FX to keep it under both hands.</li>
     <li>Hold LFO and sweep a knob: it comes back when you let go.</li>
     <li>Tap the latched button again to let go.</li>
   </ol>

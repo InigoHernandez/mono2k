@@ -97,7 +97,10 @@ static const ev_t MANUAL[] = {
     {15100, 'b', B_GLO, 1, 0}, {15120, 'b', B_GLO, 0, 0}, {15400, 'b', B_GLO, 1, 0}, {15420, 'b', B_GLO, 0, 0},
     {15600, 'e', E_K3, 1, 0}, {16200, 's', 0, 0, "29e_ask"}, {16300, 'b', B_OCTD, 1, 0}, {16320, 'b', B_OCTD, 0, 0},
     {16400, 'b', B_PLAY, 1, 0}, {16420, 'b', B_PLAY, 0, 0}, {17100, 'b', B_FX, 1, 0}, {17200, 'k', 5, 1, 0},
-    {17800, 's', 0, 0, "29f_perform"}, {17900, 'k', 5, 0, 0}, {17920, 'b', B_FX, 0, 0},
+    {17800, 's', 0, 0, "29f_perform"}, {17900, 'k', 5, 0, 0},
+    {17905, 'b', B_OCTU, 1, 0}, {17910, 'b', B_OCTU, 0, 0}, {17915, 'k', 1, 1, 0},   /* bank B, FREEZE held */
+    {17960, 's', 0, 0, "29f_perform_b"}, {17965, 'k', 1, 0, 0}, {17970, 'b', B_OCTD, 1, 0}, {17975, 'b', B_OCTD, 0, 0},
+    {17990, 'b', B_FX, 0, 0},
     {18000, 'b', B_LFO, 1, 0}, {18600, 's', 0, 0, "29g_lfo_held"}, {18700, 'b', B_LFO, 0, 0},
     {18800, 'b', B_GLO, 1, 0}, {19400, 's', 0, 0, "29h_glo_map"}, {19500, 'b', B_GLO, 0, 0},
     {19600, 'b', B_PLAY, 1, 0}, {19620, 'b', B_PLAY, 0, 0},
@@ -5172,6 +5175,128 @@ static int selftest(void)
               "PERFORM: repeats on the grid, the stop slows to rest in its beat and spins up, the stutter gated, DRIVE level");
     }
     {
+        /* PERFORM's banks: FX held, OCT+ shows bank B on the black keys and OCT- A (the OCT LEDs say which); a press
+         * plays the bank shown; an effect held goes on through a switch and its key's release ends it, whichever bank
+         * is shown by then; OCT- under FX is no octave */
+        m2k_init(81);
+        ui.now = 1000;
+        seq_play(1);
+        static int16_t pb[256];
+        for (int f = 0; f < M2K_SR / 2; f += 128) m2k_render(pb, 128);
+        int bk[11];
+        for (int k = 0; k < M2K_KEYS; k++) if (ui.kb[k] >= 0 && ui.kb[k] < 11) bk[ui.kb[k]] = k;
+        int oct = ui.oct[ui.trk];
+        m2k_button(B_FX, 1);
+        m2k_key(bk[1], 1);                            /* bank A's RPT 1/8, held */
+        int a_on = perf.on[PF_R8] && bus.g_pk == PF_R8 + 1;
+        m2k_button(B_OCTU, 1); m2k_button(B_OCTU, 0);
+        const uint8_t *L = m2k_leds();
+        int to_b = ui.pfb == 1 && L[M2K_KEYS + B_OCTU] >= 64 && L[M2K_KEYS + B_OCTD] < 64;
+        for (int f = 0; f < 4410; f += 128) m2k_render(pb, 128);
+        int kept = perf.on[PF_R8] && bus.g_on && bus.g_pk == PF_R8 + 1;
+        m2k_key(bk[5], 1);                            /* bank B's LPF with it */
+        int b_on = perf.on[PF_LPF] && !perf.on[5] && perf.on[PF_R8];
+        for (int f = 0; f < 4410; f += 128) m2k_render(pb, 128);
+        m2k_key(bk[1], 0);                            /* the A key let go under B: the repeat ends */
+        int a_off = !perf.on[PF_R8] && perf.on[PF_LPF];
+        m2k_button(B_OCTD, 1); m2k_button(B_OCTD, 0);
+        int to_a = ui.pfb == 0 && ui.oct[ui.trk] == oct;
+        m2k_key(bk[5], 0);                            /* the B key let go under A: the low-pass glides open */
+        int lpf_off = !perf.on[PF_LPF];
+        m2k_key(bk[0], 1);
+        int a_again = perf.on[PF_R4];
+        m2k_key(bk[0], 0);
+        m2k_button(B_FX, 0);
+        for (int f = 0; f < M2K_SR / 2; f += 128) m2k_render(pb, 128);
+        int rest = !bus.g_on && !bus.fmix[0];
+        printf("     PERFORM banks: A held %d, to B %d, held on %d, B with it %d, A let go %d, to A %d, B let go %d, A again %d, rest %d\n",
+               a_on, to_b, kept, b_on, a_off, to_a, lpf_off, a_again, rest);
+        CHECK(a_on && to_b && kept && b_on && a_off && to_a && lpf_off && a_again && rest,
+              "PERFORM banks: OCT+ B, OCT- A under FX (LEDs), a press the bank shown, a held effect on through a switch");
+    }
+    {
+        /* bank B on A01 (a bar dry, then two bars held from 40 ms past a beat, then two more): no sample at full scale,
+         * the level held against the dry's within each effect's own bounds; on a held sine each one's entry and exit
+         * (the loop above covers every key); FREEZE seamless: held two seconds on a sine, no step past twice the sine's
+         * own (its grains' agreement moves its level, a seam's jump would be tens of times); STOP slows the sound of
+         * the press (the ring written on after it, as the dry's: it kept a lap's old sound before); SHIMMER held ten
+         * seconds stays under full scale and is over four seconds after; DUB with no line free plays nothing */
+        static const int8_t LO[PF_BANK] = {-3, -6, -6, -3, -3, -4, -10, -5, -1, -1, -20};   /* FRZ SCAT ROLL OCTD OCTU LPF HPF GATE DUB SHIM SPIN */
+        static const int8_t HI[PF_BANK] = {3, 4, 3, 3, 3, 2, 0, 0, 4, 4, 0};
+        int16_t *dr = malloc((size_t)M2K_SR * 14 * 4), *wt = malloc((size_t)M2K_SR * 14 * 4);
+        int lv_ok = 1, full = 0;
+        for (int j = -1; j < PF_BANK; j++) {
+            int k = j < 0 ? -1 : PF_BANK + j;
+            m2k_init(2000);
+            cur_pat = 0; sq.queued = 0; lockmap_build();
+            for (int t = 0; t < M2K_TRACKS; t++) m_cpy(trk[t].eff, pat[0].kit[t], P_COUNT);
+            seq_play(1);
+            int six = (int)(sps_q8 >> 8), on = (16 * six + M2K_SR / 25) / 16 * 16, off = (48 * six + M2K_SR / 25) / 16 * 16;
+            int n = 80 * six / 16 * 16;
+            int16_t *o = j < 0 ? dr : wt;
+            for (int f = 0; f < n; f += 16) {
+                if (k >= 0 && f == on) bus_perform(k, 1);
+                if (k >= 0 && f == off) bus_perform(k, 0);
+                m2k_render(o + 2 * f, 16);
+            }
+            if (j < 0) continue;
+            double s0 = 0, s1 = 0;
+            for (int i = 2 * (on + M2K_SR / 10); i < 2 * off; i++) { s0 += (double)dr[i] * dr[i]; s1 += (double)wt[i] * wt[i]; }
+            for (int i = 0; i < 2 * n; i++) full += abs(wt[i]) >= 32767;
+            double db = 10 * log10((s1 + 1) / (s0 + 1));
+            int ok = db >= LO[j] && db <= HI[j];
+            lv_ok &= ok;
+            printf("     A01 %-8s held %+.1f dB%s\n", PF_NAME[k], db, ok ? "" : " OUT OF BOUNDS");
+        }
+        free(dr); free(wt);
+        /* FREEZE on a sine */
+        static int16_t sb[2 * 4 * M2K_SR];
+        m2k_pattern_t *q = eng_pat(82);
+        q->glob[G_VERB] = 0;
+        sine_track(q);
+        eng_go(q);
+        sine_on();
+        int n = 4 * M2K_SR / 16 * 16, at = M2K_SR / 16 * 16;
+        for (int f = 0; f < n; f += 16) { if (f == at) bus_perform(PF_FRZ, 1); m2k_render(sb + 2 * f, 16); }
+        double ds = step_max(sb, M2K_SR / 4, at - 64), fs = step_max(sb, at + M2K_SR / 10, n);
+        bus_perform(PF_FRZ, 0);
+        int seam = fs < 2 * ds;
+        /* STOP's read: the ring after the press as the dry wrote it */
+        static int16_t ring0[GL_LEN][2];
+        int fresh = 0;
+        for (int pass = 0; pass < 2; pass++) {
+            m2k_init(2000);
+            cur_pat = 0; sq.queued = 0; lockmap_build();
+            for (int t = 0; t < M2K_TRACKS; t++) m_cpy(trk[t].eff, pat[0].kit[t], P_COUNT);
+            seq_play(1);
+            eng_run(2.0);
+            uint32_t w0 = bus.gw;
+            if (pass) bus_perform(PF_STOP, 1);
+            eng_run(0.1);
+            if (!pass) memcpy(ring0, gl_buf, sizeof ring0);
+            else for (uint32_t i = w0; i < w0 + 2000; i++) fresh += !memcmp(ring0[i & (GL_LEN - 1)], gl_buf[i & (GL_LEN - 1)], 4);
+        }
+        /* SHIMMER ten seconds on A02 */
+        m2k_init(2000);
+        cur_pat = 1; sq.queued = 1; lockmap_build();
+        for (int t = 0; t < M2K_TRACKS; t++) m_cpy(trk[t].eff, pat[1].kit[t], P_COUNT);
+        seq_play(1);
+        bus_perform(PF_SHIM, 1);
+        int shfull = 0;
+        for (int f = 0; f < 10 * M2K_SR; f += 16) { m2k_render(eng_out, 16); for (int i = 0; i < 32; i++) shfull += abs(eng_out[i]) >= 32767; }
+        bus_perform(PF_SHIM, 0);
+        eng_run(4.1);
+        int sh_over = !bus.sh_on;
+        /* DUB: every track's delay sending, no line free */
+        m2k_init(2000);
+        for (int t = 0; t < M2K_TRACKS; t++) pat[0].kit[t][P_DSND] = 90;
+        int nodub = !bus_perform(PF_DUB, 1) && !perf.on[PF_DUB];
+        printf("     FREEZE on a sine: its largest step %.2f x the sine's; STOP's ring after the press %d of 2000 the dry's;"
+               " SHIMMER 10 s: %d at full scale, over after 4 s %d; DUB with no line %d\n", fs / ds, fresh, shfull, sh_over, nodub);
+        CHECK(lv_ok && !full && seam && fresh == 2000 && !shfull && sh_over && nodub,
+              "PERFORM bank B: levels in bounds on A01, none at full scale, FREEZE seamless, STOP live, SHIMMER bounded, DUB needs a line");
+    }
+    {
         /* DSND's LFO across 64 leaves the lines' layout (it followed the modulated value: a 16 KB line wiped at every
          * crossing): a ping-pong kit swept from 0 to 127 by a fast square */
         m2k_pattern_t *q = eng_pat(71);
@@ -5301,6 +5426,155 @@ static int selftest(void)
 }
 #undef m2k_init
 
+/* ------------------------------------------------------------------------------- PERFORM measured, rendered */
+
+/* DIR --perform [KEY ...]: each PERFORM effect (0-based, both banks) on bank A's four demos, written for listening
+ * (DIR/NN_NAME.wav, A01: a bar dry, the key a beat from bar 2's first beat + 40 ms,
+ * again two bars from bar 3's, then a bar on), and measured: on a held 440 Hz sine the largest sample step at the
+ * entry and exit against the sound's own (as the self-test's), on every demo the high-frequency burst there (the mix
+ * through a 6 kHz high-pass, its loudest 1.5 ms within -3 .. +30 ms of the press or the release, in dB over the
+ * louder of the dry's there and the effect's own held), the level held and after (dB against the dry, the same
+ * span), the peak and the samples at full scale */
+#ifdef PF_BANK
+#define PT_N PF_NAME
+#define PT_COUNT PF_COUNT
+#else                                    /* (the engine before bank B: the before renders) */
+static const char *const PT_N[] = {"RPT 1/4", "RPT 1/8", "RPT 1/16", "RPT 1/32", "REVERSE", "STOP", "STUTTER", "CRUSH", "WOW", "DRIVE", "KILL"};
+#define PT_COUNT 11
+#endif
+static int pt_on1, pt_off1, pt_on2, pt_off2, pt_len;
+static void pt_render(int p, int key, int16_t *o)
+{
+    m2k_init(2000);
+    cur_pat = p;
+    sq.queued = (uint8_t)p;
+    lockmap_build();
+    for (int t = 0; t < M2K_TRACKS; t++) m_cpy(trk[t].eff, pat[p].kit[t], P_COUNT);
+    seq_play(1);
+    double six = sps_q8 / 256.0;
+    pt_on1 = (int)(16 * six + 0.040 * M2K_SR) / 16 * 16;
+    pt_off1 = (int)(20 * six + 0.040 * M2K_SR) / 16 * 16;
+    pt_on2 = (int)(32 * six + 0.040 * M2K_SR) / 16 * 16;
+    pt_off2 = (int)(64 * six + 0.040 * M2K_SR) / 16 * 16;
+    pt_len = (int)(80 * six) / 16 * 16;
+    for (int f = 0; f < pt_len; f += 16) {
+        if (key >= 0 && (f == pt_on1 || f == pt_on2)) bus_perform(key, 1);
+        if (key >= 0 && (f == pt_off1 || f == pt_off2)) bus_perform(key, 0);
+        if (o) m2k_render(o + 2 * f, 16);
+    }
+}
+/* the mix's high-passed energy in 64-frame windows (a 6 kHz Butterworth two-pole) */
+static void pt_hf(const int16_t *x, int n, double *e)
+{
+    double w0 = tan(M_PI * 6000.0 / M2K_SR), k = 1 / sqrt(2.0), nrm = 1 / (1 + w0 / k + w0 * w0);
+    double b0 = nrm, b1 = -2 * nrm, a1 = 2 * (w0 * w0 - 1) * nrm, a2 = (1 - w0 / k + w0 * w0) * nrm;
+    double x1 = 0, x2 = 0, y1 = 0, y2 = 0;
+    for (int i = 0; i < n / 64; i++) e[i] = 0;
+    for (int i = 0; i < n; i++) {
+        double v = (x[2 * i] + x[2 * i + 1]) * 0.5, y = b0 * v + b1 * x1 + b0 * x2 - a1 * y1 - a2 * y2;
+        x2 = x1; x1 = v; y2 = y1; y1 = y;
+        if (i / 64 < n / 64) e[i / 64] += y * y;
+    }
+}
+static double pt_wmax(const double *e, int a, int b)
+{
+    double m = 1e-3;
+    for (int i = a / 64; i < b / 64; i++) if (e[i] > m) m = e[i];
+    return m;
+}
+static double pt_rms(const int16_t *x, int a, int b)
+{
+    double s = 0;
+    for (int i = 2 * a; i < 2 * b; i++) s += (double)x[i] * x[i];
+    return s / (2.0 * (b - a)) + 1e-3;
+}
+/* the burst at a transition t: the loudest window from -3 to +30 ms against the dry's there and the effect's own in
+ * [o0, o1) */
+static double pt_floor;                 /* the dry's mean high band, -10 dB: under it no burst is heard */
+static double pt_burst(const double *ew, const double *ed, int t, int o0, int o1)
+{
+    int a = t - 128, b = t + (int)(0.030 * M2K_SR);
+    double w = pt_wmax(ew, a, b), r = pt_wmax(ed, a, b), own = o1 > o0 ? pt_wmax(ew, o0, o1) : 0;
+    if (r < pt_floor) r = pt_floor;
+    return 10 * log10(w / (r > own ? r : own));
+}
+static int perform_tool(const char *out, int argc, char **argv)
+{
+    char path[512];
+    const int nmax = 30 * M2K_SR;
+    int16_t *dry = malloc((size_t)nmax * 4), *wet = malloc((size_t)nmax * 4), *cat = malloc((size_t)nmax * 16);
+    double *ed = malloc(sizeof(double) * (size_t)nmax / 64), *ew = malloc(sizeof(double) * (size_t)nmax / 64);
+    printf("key name      | sine step: in  out  in2 out2 held | HF burst dB (A01; worst of A01-A04): in1 out1 in2 out2 |"
+           " held dB A01 A02 A03 A04 | after | peak  full\n");
+    for (int k = 0; k < PT_COUNT; k++) {
+        int want = argc <= 3;
+        for (int i = 3; i < argc; i++) want |= atoi(argv[i]) == k;
+        if (!want) continue;
+        /* the sine: as the self-test's, pressed mid-beat for half a second, then for two */
+        double sr[4] = {0}, sh = 0;
+        {
+            static int16_t sb[2 * 6 * M2K_SR];
+            double ds = 0;
+            for (int pass = 0; pass < 3; pass++) {
+                m2k_pattern_t *q = eng_pat(77);
+                q->glob[G_VERB] = 0;
+                sine_track(q);
+                eng_go(q);
+                sine_on();
+                int n = 5 * M2K_SR / 16 * 16, at = (int)(1.1 * M2K_SR) / 16 * 16,
+                    off = at + (pass == 2 ? 2 * M2K_SR : M2K_SR / 2) / 16 * 16;
+                for (int f = 0; f < n; f += 16) {
+                    if (pass && f == at) bus_perform(k, 1);
+                    if (pass && f == off) bus_perform(k, 0);
+                    m2k_render(sb + 2 * f, 16);
+                }
+                if (!pass) { ds = step_max(sb, M2K_SR, n); continue; }
+                double own = step_max(sb, at + M2K_SR / 10, off), ref = own > ds ? own : ds;
+                sr[2 * (pass - 1)] = step_max(sb, at - 441, at + 882) / ref;
+                sr[2 * (pass - 1) + 1] = step_max(sb, off - 441, off + 882) / ref;
+                if (pass == 2) sh = own / ds;
+            }
+        }
+        double bw[4] = {-99, -99, -99, -99}, b1[4] = {0}, held[4] = {0}, after = -99, pk = 0;
+        int full = 0, cn = 0;
+        for (int p = 0; p < 4; p++) {
+            pt_render(p, -1, dry);
+            pt_render(p, k, wet);
+            int n = pt_len;
+            pt_hf(dry, n, ed);
+            pt_floor = 0;
+            for (int i = 0; i < n / 64; i++) pt_floor += ed[i];
+            pt_floor = pt_floor / (n / 64) * 0.1;
+            pt_hf(wet, n, ew);
+            int lead = (int)(0.1 * M2K_SR);
+            double b[4] = {pt_burst(ew, ed, pt_on1, pt_on1 + lead, pt_off1), pt_burst(ew, ed, pt_off1, pt_off1 - lead * 3, pt_off1 - 441),
+                           pt_burst(ew, ed, pt_on2, pt_on2 + lead, pt_off2), pt_burst(ew, ed, pt_off2, pt_off2 - lead * 5, pt_off2 - 441)};
+            for (int j = 0; j < 4; j++) { if (b[j] > bw[j]) bw[j] = b[j]; if (!p) b1[j] = b[j]; }
+            if (getenv("PT_AT") && !p) {                  /* PT_AT=0..3: the windows about that transition, dB */
+                int ts[4] = {pt_on1, pt_off1, pt_on2, pt_off2}, t = ts[atoi(getenv("PT_AT")) & 3];
+                for (int i = (t - 640) / 64; i < (t + 1984) / 64; i++)
+                    printf("   %+6.1f ms  wet %5.1f  dry %5.1f\n", (i * 64 - t) * 1000.0 / M2K_SR, 10 * log10(ew[i] + 1), 10 * log10(ed[i] + 1));
+            }
+            held[p] = 10 * log10(pt_rms(wet, pt_on2 + lead, pt_off2) / pt_rms(dry, pt_on2 + lead, pt_off2));
+            double af = 10 * log10(pt_rms(wet, pt_off2 + M2K_SR / 4, pt_len) / pt_rms(dry, pt_off2 + M2K_SR / 4, pt_len));
+            if (af > after) after = af;
+            for (int i = 0; i < 2 * n; i++) { int a = abs(wet[i]); if (a > pk) pk = a; full += a >= 32767; }
+            if (!p) { memcpy(cat, wet, (size_t)n * 4); cn = n; }   /* (the WAV: A01) */
+        }
+        printf("%2d  %-9s | %4.2f %4.2f %4.2f %4.2f %4.2f | %+5.1f %+5.1f %+5.1f %+5.1f ; %+5.1f %+5.1f %+5.1f %+5.1f |"
+               " %+5.1f %+5.1f %+5.1f %+5.1f | %+5.1f | %5.1f %d\n",
+               k, PT_N[k], sr[0], sr[1], sr[2], sr[3], sh, b1[0], b1[1], b1[2], b1[3], bw[0], bw[1], bw[2], bw[3],
+               held[0], held[1], held[2], held[3], after, 20 * log10(pk / 32767.0 + 1e-9), full);
+        char name[32], *c = name;
+        snprintf(name, sizeof name, "%s", PT_N[k]);
+        for (; *c; c++) if (*c == ' ' || *c == '/') *c = '_';
+        snprintf(path, sizeof path, "%s/%02d_%s.wav", out, k + 1, name);
+        wav_write(path, cat, cn);
+    }
+    free(dry); free(wet); free(cat); free(ed); free(ew);
+    return 0;
+}
+
 /* the browser and the FM-1's stores, through the Patch Editor's link (host/m2k_link_test.c): --web-store PATH writes
  * a store as the browser sends it to the FM-1 (64 patterns, one project; A01 named WEB16, sound 6 WEBSND);
  * --fm1-store PATH reads one the FM-1 sent (the link test's: A01 LINKA, sound 6 SNDA) as the browser does. Sound 6's
@@ -5374,6 +5648,7 @@ int main(int argc, char **argv)
         return 0;
     }
     if (argc > 2 && !strcmp(argv[2], "--bus")) return bus_measure(out);
+    if (argc > 2 && !strcmp(argv[2], "--perform")) return perform_tool(out, argc, argv);   /* [KEY ...] */
     if (argc > 2 && !strcmp(argv[2], "--demo")) return demo_render(out, argc, argv);     /* [SECONDS] [SLOT ...] */
     if (argc > 2 && !strcmp(argv[2], "--demo-dry")) { demo_dry = 1; return demo_render(out, argc, argv); }
     /* 1: the three factory patterns, 12 s each */

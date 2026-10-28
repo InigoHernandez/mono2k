@@ -4,7 +4,8 @@
  * products out of line, and read from the kernel (proc_pid_rusage ri_instructions, a Mac's). The FM-1 draws at most 30
  * frames a second (a splash frame changes every strip: about 13 a second over its SPI).
  *   cc -O2 -fno-builtin -fno-vectorize -fno-slp-vectorize -DM2K_MUL_OUT -Ifirmware/src -Ifirmware/gen \
- *      -o build/host/m2k_draw host/m2k_draw.c && build/host/m2k_draw [--splash] */
+ *      -o build/host/m2k_draw host/m2k_draw.c && build/host/m2k_draw [--splash | --perform]
+ * (--perform: the sound's cost with each PERFORM effect held, perform_cpu) */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -48,9 +49,45 @@ static void row(const char *name, uint64_t c)
     if (c > worst) { worst = c; snprintf(worst_n, sizeof worst_n, "%s", name); }
 }
 
+/* --perform: each PERFORM effect's cost on the sound, on one core (the whole render, as m2k_render runs here), in
+ * instructions a sample: bank A's demo p played 2 s, then 2 s with the key held, against the same 2 s without it */
+static uint64_t perform_run(int p, int key)
+{
+    static int16_t b[256];
+    m2k_init(2000);
+    cur_pat = p; sq.queued = (uint8_t)p; lockmap_build();
+    for (int t = 0; t < M2K_TRACKS; t++) m_cpy(trk[t].eff, pat[p].kit[t], P_COUNT);
+    seq_play(1);
+    for (int f = 0; f < 2 * 44100; f += 128) m2k_render(b, 128);
+    if (key >= 0) bus_perform(key, 1);
+    uint64_t a = instr();
+    for (int f = 0; f < 2 * 44100; f += 128) m2k_render(b, 128);
+    return (instr() - a) / (2 * 44100 / 128 * 128);
+}
+static int perform_cpu(void)
+{
+    uint64_t dry[4], worst = 0;
+    printf("instructions a sample, one core: the render with the key held, and its cost over the dry render\n");
+    printf("  %-9s", "dry");
+    for (int p = 0; p < 4; p++) { dry[p] = perform_run(p, -1); printf(" %5llu      ", (unsigned long long)dry[p]); }
+    printf("\n");
+    for (int k = 0; k < PF_COUNT; k++) {
+        printf("  %-9s", PF_NAME[k]);
+        for (int p = 0; p < 4; p++) {
+            uint64_t c = perform_run(p, k);
+            if (c > worst) worst = c;
+            printf(" %5llu %+4lld", (unsigned long long)c, (long long)c - (long long)dry[p]);
+        }
+        printf("\n");
+    }
+    printf("  the most: %llu\n", (unsigned long long)worst);
+    return 0;
+}
+
 int main(int argc, char **argv)
 {
     for (int r = 0; r < 20; r++) { uint64_t a = instr(); uint64_t b = instr() - a; if (!base_cost || b < base_cost) base_cost = b; }
+    if (argc > 1 && !strcmp(argv[1], "--perform")) return perform_cpu();
     if (argc > 1 && !strcmp(argv[1], "--splash")) {
         /* every splash frame at 60 a second, as the host draws them */
         m2k_init(2000);
