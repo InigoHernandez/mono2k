@@ -5037,6 +5037,140 @@ static int selftest(void)
 }
 #undef m2k_init
 
+/* ------------------------------------------------------------------------------- PERFORM measured, rendered */
+
+/* DIR --perform [KEY ...]: each PERFORM effect (0-based, both banks) on bank A's four demos, written for listening
+ * (DIR/NN_NAME.wav: A01..A04 one after the other, each a bar dry, the key a beat from bar 2's first beat + 40 ms,
+ * again two bars from bar 3's, then a bar on), and measured: on a held 440 Hz sine the largest sample step at the
+ * entry and exit against the sound's own (as the self-test's), on every demo the high-frequency burst there (the mix
+ * through a 6 kHz high-pass, its loudest 1.5 ms within -3 .. +30 ms of the press or the release, in dB over the
+ * louder of the dry's there and the effect's own held), the level held and after (dB against the dry, the same
+ * span), the peak and the samples at full scale */
+static const char *const PT_N[] = {"RPT 1/4", "RPT 1/8", "RPT 1/16", "RPT 1/32", "REVERSE", "STOP", "STUTTER", "CRUSH",
+                                   "WOW", "DRIVE", "KILL"};
+#define PT_COUNT (int)(sizeof PT_N / sizeof PT_N[0])
+static int pt_on1, pt_off1, pt_on2, pt_off2, pt_len;
+static void pt_render(int p, int key, int16_t *o)
+{
+    m2k_init(2000);
+    cur_pat = p;
+    sq.queued = (uint8_t)p;
+    lockmap_build();
+    for (int t = 0; t < M2K_TRACKS; t++) m_cpy(trk[t].eff, pat[p].kit[t], P_COUNT);
+    seq_play(1);
+    double six = sps_q8 / 256.0;
+    pt_on1 = (int)(16 * six + 0.040 * M2K_SR) / 16 * 16;
+    pt_off1 = (int)(20 * six + 0.040 * M2K_SR) / 16 * 16;
+    pt_on2 = (int)(32 * six + 0.040 * M2K_SR) / 16 * 16;
+    pt_off2 = (int)(64 * six + 0.040 * M2K_SR) / 16 * 16;
+    pt_len = (int)(80 * six) / 16 * 16;
+    for (int f = 0; f < pt_len; f += 16) {
+        if (key >= 0 && (f == pt_on1 || f == pt_on2)) bus_perform(key, 1);
+        if (key >= 0 && (f == pt_off1 || f == pt_off2)) bus_perform(key, 0);
+        if (o) m2k_render(o + 2 * f, 16);
+    }
+}
+/* the mix's high-passed energy in 64-frame windows (a 6 kHz Butterworth two-pole) */
+static void pt_hf(const int16_t *x, int n, double *e)
+{
+    double w0 = tan(M_PI * 6000.0 / M2K_SR), k = 1 / sqrt(2.0), nrm = 1 / (1 + w0 / k + w0 * w0);
+    double b0 = nrm, b1 = -2 * nrm, a1 = 2 * (w0 * w0 - 1) * nrm, a2 = (1 - w0 / k + w0 * w0) * nrm;
+    double x1 = 0, x2 = 0, y1 = 0, y2 = 0;
+    for (int i = 0; i < n / 64; i++) e[i] = 0;
+    for (int i = 0; i < n; i++) {
+        double v = (x[2 * i] + x[2 * i + 1]) * 0.5, y = b0 * v + b1 * x1 + b0 * x2 - a1 * y1 - a2 * y2;
+        x2 = x1; x1 = v; y2 = y1; y1 = y;
+        if (i / 64 < n / 64) e[i / 64] += y * y;
+    }
+}
+static double pt_wmax(const double *e, int a, int b)
+{
+    double m = 1e-3;
+    for (int i = a / 64; i < b / 64; i++) if (e[i] > m) m = e[i];
+    return m;
+}
+static double pt_rms(const int16_t *x, int a, int b)
+{
+    double s = 0;
+    for (int i = 2 * a; i < 2 * b; i++) s += (double)x[i] * x[i];
+    return s / (2.0 * (b - a)) + 1e-3;
+}
+/* the burst at a transition t: the loudest window from -3 to +30 ms against the dry's there and the effect's own in
+ * [o0, o1) */
+static double pt_burst(const double *ew, const double *ed, int t, int o0, int o1)
+{
+    int a = t - 128, b = t + (int)(0.030 * M2K_SR);
+    double w = pt_wmax(ew, a, b), r = pt_wmax(ed, a, b), own = o1 > o0 ? pt_wmax(ew, o0, o1) : 0;
+    return 10 * log10(w / (r > own ? r : own));
+}
+static int perform_tool(const char *out, int argc, char **argv)
+{
+    char path[512];
+    const int nmax = 30 * M2K_SR;
+    int16_t *dry = malloc((size_t)nmax * 4), *wet = malloc((size_t)nmax * 4), *cat = malloc((size_t)nmax * 16);
+    double *ed = malloc(sizeof(double) * (size_t)nmax / 64), *ew = malloc(sizeof(double) * (size_t)nmax / 64);
+    printf("key name      | sine step: in  out  in2 out2 | HF burst dB (A01; worst of A01-A04): in1 out1 in2 out2 |"
+           " held dB A01 A02 A03 A04 | after | peak  full\n");
+    for (int k = 0; k < PT_COUNT; k++) {
+        int want = argc <= 3;
+        for (int i = 3; i < argc; i++) want |= atoi(argv[i]) == k;
+        if (!want) continue;
+        /* the sine: as the self-test's, pressed mid-beat for half a second, then for two */
+        double sr[4] = {0};
+        {
+            static int16_t sb[2 * 6 * M2K_SR];
+            double ds = 0;
+            for (int pass = 0; pass < 3; pass++) {
+                m2k_pattern_t *q = eng_pat(77);
+                q->glob[G_VERB] = 0;
+                sine_track(q);
+                eng_go(q);
+                sine_on();
+                int n = 5 * M2K_SR / 16 * 16, at = (int)(1.1 * M2K_SR) / 16 * 16,
+                    off = at + (pass == 2 ? 2 * M2K_SR : M2K_SR / 2) / 16 * 16;
+                for (int f = 0; f < n; f += 16) {
+                    if (pass && f == at) bus_perform(k, 1);
+                    if (pass && f == off) bus_perform(k, 0);
+                    m2k_render(sb + 2 * f, 16);
+                }
+                if (!pass) { ds = step_max(sb, M2K_SR, n); continue; }
+                double own = step_max(sb, at + M2K_SR / 10, off), ref = own > ds ? own : ds;
+                sr[2 * (pass - 1)] = step_max(sb, at - 441, at + 882) / ref;
+                sr[2 * (pass - 1) + 1] = step_max(sb, off - 441, off + 882) / ref;
+            }
+        }
+        double bw[4] = {-99, -99, -99, -99}, b1[4] = {0}, held[4] = {0}, after = -99, pk = 0;
+        int full = 0, cn = 0;
+        for (int p = 0; p < 4; p++) {
+            pt_render(p, -1, dry);
+            pt_render(p, k, wet);
+            int n = pt_len;
+            pt_hf(dry, n, ed);
+            pt_hf(wet, n, ew);
+            int lead = (int)(0.1 * M2K_SR);
+            double b[4] = {pt_burst(ew, ed, pt_on1, pt_on1 + lead, pt_off1), pt_burst(ew, ed, pt_off1, pt_off1 - lead * 3, pt_off1 - 441),
+                           pt_burst(ew, ed, pt_on2, pt_on2 + lead, pt_off2), pt_burst(ew, ed, pt_off2, pt_off2 - lead * 5, pt_off2 - 441)};
+            for (int j = 0; j < 4; j++) { if (b[j] > bw[j]) bw[j] = b[j]; if (!p) b1[j] = b[j]; }
+            held[p] = 10 * log10(pt_rms(wet, pt_on2 + lead, pt_off2) / pt_rms(dry, pt_on2 + lead, pt_off2));
+            double af = 10 * log10(pt_rms(wet, pt_off2 + M2K_SR / 4, pt_len) / pt_rms(dry, pt_off2 + M2K_SR / 4, pt_len));
+            if (af > after) after = af;
+            for (int i = 0; i < 2 * n; i++) { int a = abs(wet[i]); if (a > pk) pk = a; full += a >= 32767; }
+            if (cn + n <= 4 * nmax) { memcpy(cat + 2 * cn, wet, (size_t)n * 4); cn += n; }
+        }
+        printf("%2d  %-9s | %4.2f %4.2f %4.2f %4.2f | %+5.1f %+5.1f %+5.1f %+5.1f ; %+5.1f %+5.1f %+5.1f %+5.1f |"
+               " %+5.1f %+5.1f %+5.1f %+5.1f | %+5.1f | %5.1f %d\n",
+               k, PT_N[k], sr[0], sr[1], sr[2], sr[3], b1[0], b1[1], b1[2], b1[3], bw[0], bw[1], bw[2], bw[3],
+               held[0], held[1], held[2], held[3], after, 20 * log10(pk / 32767.0 + 1e-9), full);
+        char name[32], *c = name;
+        snprintf(name, sizeof name, "%s", PT_N[k]);
+        for (; *c; c++) if (*c == ' ' || *c == '/') *c = '_';
+        snprintf(path, sizeof path, "%s/%02d_%s.wav", out, k + 1, name);
+        wav_write(path, cat, cn);
+    }
+    free(dry); free(wet); free(cat); free(ed); free(ew);
+    return 0;
+}
+
 /* the browser and the FM-1's stores, through the Patch Editor's link (host/m2k_link_test.c): --web-store PATH writes
  * a store as the browser sends it to the FM-1 (64 patterns, one project; A01 named WEB16, sound 6 WEBSND);
  * --fm1-store PATH reads one the FM-1 sent (the link test's: A01 LINKA, sound 6 SNDA) as the browser does. Sound 6's
@@ -5110,6 +5244,7 @@ int main(int argc, char **argv)
         return 0;
     }
     if (argc > 2 && !strcmp(argv[2], "--bus")) return bus_measure(out);
+    if (argc > 2 && !strcmp(argv[2], "--perform")) return perform_tool(out, argc, argv);   /* [KEY ...] */
     if (argc > 2 && !strcmp(argv[2], "--demo")) return demo_render(out, argc, argv);     /* [SECONDS] [SLOT ...] */
     if (argc > 2 && !strcmp(argv[2], "--demo-dry")) { demo_dry = 1; return demo_render(out, argc, argv); }
     /* 1: the three factory patterns, 12 s each */
