@@ -217,6 +217,7 @@ static int text_sweep(void)
 {
     const char *dump = getenv("M2K_SWEEP_DIR");
     m2k_init(2000);
+    ui.splash_end = 0; ui.splashed = 1;                  /* (past the splash and its wipe: the first page is audited too) */
     sq.rec = 1; sq.ready = 1; ui.pads = 1; sq.fill = 1; sq.arp_hold = 1;   /* the header at its fullest: REC and the modes */
     uint32_t now = 4000;
     static int16_t b[256];
