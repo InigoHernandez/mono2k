@@ -2341,13 +2341,14 @@ static void header(void)
     char a[8];
     s_pat(a, cur_pat);
     int pw = 2 + bar_tag(2, 0, a, 1);
-    static const char *const MODE[5] = {"GRID", "PADS", "HOLD", "READY", "FILL"};   /* (HOLD: the arp's) */
-    const int on[5] = {ui.grid, ui.pads, sq.arp_hold, sq.ready, sq.fill};
-    for (int i = 0; i < 5; i++) {
+    /* (HOLD: the arp's; MUTE: a mute waiting for the bar, its box blinking) */
+    static const char *const MODE[6] = {"GRID", "PADS", "HOLD", "MUTE", "READY", "FILL"};
+    const int on[6] = {ui.grid, ui.pads, sq.arp_hold, mute_pending(), sq.ready, sq.fill};
+    for (int i = 0; i < 6; i++) {
         if (!on[i]) continue;
         int w = text_w(&F_B, MODE[i], 0) + 6;
         if (xr - w + 1 < pw + 6) continue;
-        bar_tag(xr - w + 1, 0, MODE[i], i >= 2);
+        bar_tag(xr - w + 1, 0, MODE[i], i == 3 ? (int)((ui.now >> 7) & 1) : i >= 2);
         xr -= w + 4;
     }
     const char *nm = pat_name(cur_pat);
@@ -3299,10 +3300,11 @@ static void home(void)
         CELL(0, STAGE_Y, 240, STEPS_R, 4, STAGE_Y + 2, 237, STEPS_R - 1);
         for (int t = 0; t < M2K_TRACKS; t++) {
             int y = PY0 + t * 22;
-            int flash = ui.now - ui.flash_t[t] < 90;
+            int flash = ui.now - ui.flash_t[t] < 90, inv = t == ui.trk || flash;
+            if ((((sq.mq_m | sq.sq_m | sq.solo_rel) >> t) & 1) && ((ui.now >> 7) & 1)) inv = !inv;   /* waits for the bar */
             char n[2] = {(char)('1' + t), 0};
-            if (t == ui.trk || flash) rect(0, y, 14, 16, 1);
-            text_c(&F_S, 8, y + 3, n, !(t == ui.trk || flash), 0);
+            if (inv) rect(0, y, 14, 16, 1);
+            text_c(&F_S, 8, y + 3, n, !inv, 0);
             int muted = (p->mute >> t) & 1;
             for (int i = 0; i < 16; i++) {
                 int s = ui.spage * 16 + i, x = 18 + (i >> 2) * 56 + (i & 3) * 13;
@@ -3611,6 +3613,25 @@ static void latch_mark(int x, int y, int w, int b)
     tag(x + w - 4 - tag_w("LATCHED"), y, "LATCHED", 0);
 }
 
+/* the six tracks' mutes, a box each: heard solid, muted framed, soloed away a dot in it; one waiting for the bar blinks
+ * between what it is and what it will be */
+static void mute_map(int x, int y)
+{
+    const m2k_pattern_t *p = PAT(cur_pat);
+    const int fast = (ui.now >> 7) & 1;
+    for (int t = 0; t < M2K_TRACKS; t++) {
+        const int b = 1 << t;
+        int muted = p->mute & b, solo = sq.solo;
+        if (fast && (sq.mq_m & b)) muted = sq.mq_v & b;
+        if (fast && (sq.sq_m & b)) solo = (solo & ~b) | (sq.sq_v & b);
+        if (fast && (sq.solo_rel & b)) solo |= b;
+        int heard = !muted && (!solo || (solo & b)), bx = x + t * 12;
+        if (heard) rect(bx, y, 9, 9, 1);
+        else frame(bx, y, 9, 9, 1);
+        if (!muted && !heard) px(bx + 4, y + 4, 1);
+    }
+}
+
 /* GLO held a moment alone: what it does with each, in a window over the page */
 static void glo_help(void)
 {
@@ -3631,6 +3652,7 @@ static void glo_help(void)
         }
         text(&F_S, x + 6, y + 70, "HOLD GLO FOR ITS COMBOS,", 1, 0);
         text(&F_S, x + 6, y + 83, "TAP IT TO LET GO", 1, 0);
+        mute_map(x + 6, y + 101);
         return;
     }
     static const char *const L[16] = {"REC", "COPY", "PLAY", "PASTE", "SEQ", "CLEAR", "SAVE", "RELOAD",
@@ -3642,6 +3664,7 @@ static void glo_help(void)
         tag(cx, cy, L[2 * i], 1);
         text(&F_S, cx + kw[i & 1] + 4, cy + TY, L[2 * i + 1], 1, 0);
     }
+    mute_map(x + w - 6 - 69, y + 6);
     text(&F_S, x + 6, y + 84, ui.grid ? "THE TRACK. WHITE:" : "THE PATTERN. WHITE:", 1, 0);
     text(&F_S, x + 6, y + 97, "1-6 MUTE 9-14 SOLO", 1, 0);
     text(&F_S, x + 6, y + 110, "7 FILL 8 TAP 15 ALL ON", 1, 0);
@@ -3939,13 +3962,14 @@ const uint8_t *m2k_leds(void)
     for (int k = 0; lay && k < M2K_KEYS; k++) {
         int w = ui.kw[k], b = ui.kb[k], v = 0;
         if (lay == 1 && w >= 0) {
-            if (w < M2K_TRACKS) {
+            if (w < M2K_TRACKS) {          /* (a mute waiting for the bar: blinking) */
                 int on = !((p->mute >> w) & 1), heard = on && (!sq.solo || ((sq.solo >> w) & 1));
-                v = !on ? 0 : !heard ? 40 : ui.now - ui.flash_t[w] < 80 ? 255 : 200;
+                v = (sq.mq_m >> w) & 1 ? (fast ? 255 : 0) : !on ? 0 : !heard ? 40 : ui.now - ui.flash_t[w] < 80 ? 255 : 200;
             } else if (w == 6) v = sq.fill_next ? (fast ? 255 : 40) : 16;
             else if (w == 7) v = ps >= 0 ? ((ps & 3) == 0 ? 255 : 16) : 16;
-            else if (w >= 8 && w < 8 + M2K_TRACKS) v = (sq.solo >> (w - 8)) & 1 ? 255 : 16;
-            else if (w == 14) v = p->mute || sq.solo ? 90 : 16;
+            else if (w >= 8 && w < 8 + M2K_TRACKS)
+                v = ((sq.sq_m | sq.solo_rel) >> (w - 8)) & 1 ? (fast ? 255 : 0) : (sq.solo >> (w - 8)) & 1 ? 255 : 16;
+            else if (w == 14) v = mute_pending() ? (fast ? 255 : 16) : p->mute || sq.solo ? 90 : 16;
         } else if (lay == 2) {
             if (b >= 0 && b < PF_COUNT) v = perf.on[b] ? 255 : 24;
             else if (w >= 0) { int note = 53 + k + 12 * ui.oct[ui.trk]; v = ui.keys[k] ? 255 : trk[ui.trk].sounding && trk[ui.trk].note == note ? 120 : 0; }
@@ -3978,7 +4002,7 @@ const uint8_t *m2k_leds(void)
             } else if (b < 10) {
                 v = b - 6 == ui.spage ? 255 : (tp >= 0 && tp / 16 == b - 6) ? 90 : 16;
             } else {
-                v = (p->mute >> ui.trk) & 1 ? 255 : 16;
+                v = (sq.mq_m >> ui.trk) & 1 ? (((ui.now >> 7) & 1) ? 255 : 16) : (p->mute >> ui.trk) & 1 ? 255 : 16;
             }
         } else {
             int note = 53 + k + 12 * ui.oct[ui.trk];

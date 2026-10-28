@@ -4265,6 +4265,56 @@ static int selftest(void)
         CHECK(asked && no && got[0] == want[0] && gacc == wacc && got[1] == want[1] && nt && locks && off && undone && now,
               "GRIDS: OCT+ stopped writes the lanes into the following tracks' steps (asked over trigs), their locks and lanes off");
     }
+    /* GLO > PLAY's MUTE, BAR (the default): a mute made while playing waits for the next bar's first step (16 of the
+     * pattern's steps), its key blinking meanwhile; a solo tapped plays the bar after it, then goes; MIDI CC 3 waits
+     * alike; stopped, at once; NOW, at once while playing */
+    {
+        m2k_init(68);
+        m2k_pattern_t *q = bare(16);
+        q->glob[G_LEN] = 64;
+        static const int TR[3] = {0, 2, 4};
+        for (int i = 0; i < 3; i++)
+            for (int st = 0; st < 64; st++) q->step[TR[i]][st] = (m2k_step_t){.note = 60, .flags = ST_TRIG};
+        static uint8_t hit[M2K_TRACKS][80];
+        memset(hit, 0, sizeof hit);
+        int wk3 = ux_white(2), wk5 = ux_white(4), wk9 = ux_white(8), blinks = 0, pend16 = 0;
+        seq_play(1);
+        sblk_sync();
+        while (sq.n1x < 72) {
+            if (sq.n1x == 5 && !(sq.mq_m & 4) && !(q->mute & 4)) {        /* step 4 played: T3 muted, at the bar */
+                m2k_button(B_GLO, 1); m2k_key(wk3, 1); m2k_key(wk3, 0);
+                ui.now = 128; int on = m2k_leds()[wk3]; ui.now = 256; int off = m2k_leds()[wk3];
+                blinks = on == 255 && off == 0 && !(q->mute & 4) && (sq.mq_m & 4);
+                m2k_button(B_GLO, 0);
+            }
+            if (sq.n1x == 16) pend16 = !(q->mute & 4) && (sq.mq_m & 4);  /* (step 15 played: not yet) */
+            if (sq.n1x == 20 && !(sq.sq_m & 1) && !sq.solo) {             /* a solo tapped: the next bar's */
+                m2k_button(B_GLO, 1); m2k_key(wk9, 1); m2k_key(wk9, 0); m2k_button(B_GLO, 0);
+            }
+            if (sq.n1x == 50 && (q->mute & 4) && !(sq.mq_m & 4)) m2k_midi(0xB2, 3, 0);   /* T3 back, by CC 3 */
+            int m = sblk();
+            for (int t = 0; t < M2K_TRACKS; t++) if ((m >> t & 1) && sq.n1x >= 1 && sq.n1x <= 80) hit[t][sq.n1x - 1] = 1;
+        }
+        seq_play(0);
+        int bar = blinks && pend16;
+        for (int k = 0; k < 72; k++) {
+            bar &= hit[0][k];                                      /* T1 throughout */
+            bar &= hit[2][k] == (k < 16 || k >= 64);               /* T3 muted at 16, back at the loop's start (64) */
+            bar &= hit[4][k] == (k < 32 || k >= 48);               /* T5 away while T1's solo plays its bar, 32-47 */
+        }
+        m2k_button(B_GLO, 1); m2k_key(wk5, 1); m2k_key(wk5, 0); m2k_button(B_GLO, 0);
+        int stopped = (q->mute & 16) && !mute_pending();
+        q->mute = 0;
+        m2k_setting(S_MUTQ, 127);
+        seq_play(1);
+        sblk_sync();
+        while (sq.n1x < 3) sblk();
+        m2k_button(B_GLO, 1); m2k_key(wk5, 1); m2k_key(wk5, 0); m2k_button(B_GLO, 0);
+        int now = (q->mute & 16) && !mute_pending();
+        seq_play(0);
+        CHECK(bar && stopped && now,
+              "MUTE: BAR holds a mute, a solo tapped and CC 3 to the next bar's first step, the key blinking; stopped and NOW at once");
+    }
     /* the chances: 90 60 40 10 % (format 18's, stored after the rest) play at their rates over many loops of the
      * sequencer, as 75 and 50 % still do; every condition before them keeps its number; PRESETS on a held step turns
      * through them by share (100 90 75 60 50 40 33 25 12 10, then the rest) */
