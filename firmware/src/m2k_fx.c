@@ -21,6 +21,19 @@ static uint8_t mulaw_enc(int32_t x)
 static uint32_t sps_q8 = 1411200;      /* samples per sixteenth, Q8; the sequencer sets it */
 static uint8_t tape_rolling;           /* the sequencer runs or a voice sounds: the hiss and dust follow it */
 
+/* DUB (PERFORM): the bus thrown into a borrowed track's delay (m2k_fx.c's dub_line), as a delay's own values: a
+ * dotted eighth (3/16, the line's clock slowing past its length, darker), feedback 0.75, the band 24 .. 84, ping-pong
+ * from the left, at LEVL 110; the send a block late, the echoes out apart (they must not feed the send back) */
+#define DUB_TIM 48
+#define DUB_FB 48
+#define DUB_BAS 24
+#define DUB_WID 60
+#define DUB_PAN 16
+#define DUB_LEV 110
+static int32_t (*dub_io(int ti))[M2K_SUB];   /* track ti's DUB send, echoes left and right if the line is DUB's */
+static int dub_on(void);
+static void dub_end(void);
+
 /* one line's sample at a fractional position, Q8 of a line sample (unsigned: it wraps, after minutes) */
 static inline int32_t dl_read(const uint8_t *b, uint32_t mask, uint32_t pos)
 {
@@ -51,10 +64,22 @@ static void delay_block(int ti, const int32_t *restrict in, int32_t *restrict L,
     trk_t *t = &trk[ti];
     int sent = t->dsent;
     t->dsent = 0;
-    if (t->dsleep && !sent) return;    /* quiet last block and nothing sent since: it would be again, as it stands */
+    /* DUB's line: the bus's send with the track's own, DUB's values, its echoes apart (its own sum) */
+    int32_t (*dio)[M2K_SUB] = dub_io(ti), din[M2K_SUB];
+    if (dio) {
+        for (int i = 0; i < M2K_SUB; i++) din[i] = in[i] + dio[0][i];
+        in = din;
+        sent |= dub_on();
+        L = dio[1];
+        R = dio[2];
+    }
+    if (t->dsleep && !sent) {          /* quiet last block and nothing sent since: it would be again, as it stands */
+        if (dio && !dub_on()) dub_end();              /* (DUB's echoes over: the line the track's again) */
+        return;
+    }
     /* the layout from the kit's DSND, not its locks' or LFOs' (each crossing of 64 wiped the lines), and only past 64
      * by a step (a kit turned to 64 keeps the echoes it has) */
-    int kd = PAT(cur_pat)->kit[ti][P_DSND], dual = t->dmode ? kd >= 64 : kd > 64;
+    int kd = PAT(cur_pat)->kit[ti][P_DSND], dual = dio ? 1 : t->dmode ? kd >= 64 : kd > 64;
     if (dual != t->dmode) {            /* the lines change their layout: start them empty */
         m_set(t->dl, 0x7F, DL_LEN);
         t->dmode = (uint8_t)dual;
@@ -78,26 +103,28 @@ static void delay_block(int ti, const int32_t *restrict in, int32_t *restrict L,
             t->dhp[0] = t->dhp[1] = t->dlp[0] = t->dlp[1] = t->dprev[0] = t->dprev[1] = t->dacc[0] = t->dacc[1] = 0;
             t->dhr[0] = t->dhr[1] = t->dlr[0] = t->dlr[1] = 0;
             mon.dly[ti] = 0;
+            if (dio && !dub_on()) dub_end();
             t->dsleep = 1;
             return;
         }
     }
     t->dsleep = 0;
     /* the time, half-rate samples Q8: whole samples once it settles (a read between two samples dulls the top) */
-    int32_t target = ((int32_t)((uint32_t)P7(t, P_DTIM) * (sps_q8 >> 5)) + (167 << 8) + 128) & ~255;
+    int32_t target = dio ? (int32_t)(((uint32_t)DUB_TIM * (sps_q8 >> 5) + 128) & ~255u)
+                         : ((int32_t)((uint32_t)P7(t, P_DTIM) * (sps_q8 >> 5)) + (167 << 8) + 128) & ~255;
     int32_t dd = target - t->dt_q8;
     t->dt_q8 = dd > -64 && dd < 64 ? target : t->dt_q8 + (dd >> 5);
     uint32_t th = (uint32_t)t->dt_q8 >> 8, room = n - 4;
     uint32_t rate = th <= room ? 65536u : (room << 16) / th;                  /* the line's clock, Q16 */
     int32_t back = th <= room ? t->dt_q8 : (int32_t)(room << 8);               /* the delay in line samples, Q8 */
-    int dfb = P7(t, P_DFB);
+    int dfb = dio ? DUB_FB : P7(t, P_DFB);
     /* mulaw_line's gate: the dead band of mu-law's first segment is 256 / (64 - DFB), the next ones' to 4 x that (DFB 62
      * and 63, a band wide open, can still hold an echo a little over it) */
     int32_t fb = dfb * 512, gate = dfb < 64 ? 1024 / (64 - dfb) : 0;
-    int dbas = P7(t, P_DBAS);
-    int32_t ahp = T_DLY_HP[dbas], alp = T_DLY_LP[CLAMP(dbas + P7(t, P_DWID), 0, 127)];
-    int pan = P7(t, P_PAN);
-    int32_t gl = T_PAN[pan], gr = T_PAN[127 - pan], lev = T_VOL[P7(t, P_LEVL)];
+    int dbas = dio ? DUB_BAS : P7(t, P_DBAS);
+    int32_t ahp = T_DLY_HP[dbas], alp = T_DLY_LP[CLAMP(dbas + (dio ? DUB_WID : P7(t, P_DWID)), 0, 127)];
+    int pan = dio ? DUB_PAN : P7(t, P_PAN);
+    int32_t gl = T_PAN[pan], gr = T_PAN[127 - pan], lev = T_VOL[dio ? DUB_LEV : P7(t, P_LEVL)];
     uint8_t *b = t->dl;
     int32_t pk = 0;
     for (int i = 0; i < M2K_SUB; i += 2) {
@@ -154,7 +181,7 @@ static void delay_block(int ti, const int32_t *restrict in, int32_t *restrict L,
         int32_t a = (l < 0 ? -l : l) + (r < 0 ? -r : r);
         if (a > pk) pk = a;
     }
-    mon.dly[ti] = pk;
+    if (!dio) mon.dly[ti] = pk;
 }
 
 /* ------------------------------------------------------------------------------------------------ the bus */
@@ -178,6 +205,17 @@ static struct {
     int32_t rlp[4], rlr[4];            /* the lines' damping and its remainders */
     int32_t rq[4], rdq[2], rrq[2];     /* the lines', the diffusers' and the swing's remainders */
     int32_t rbw, rbr;                  /* the input's top, and its remainder */
+    int32_t rgo;                       /* its level out, Q12: T_RV_GO's, glided */
+    /* DUB: the track whose line it has + 1 (0 none), its send now (Q15), the mix it sends for the next block and its
+     * echoes this one */
+    uint8_t dub_t;
+    int32_t dub_snd, dub_io[3][M2K_SUB];
+    /* SHIMMER: the wash on (held, then until it is quiet), the bus's send into it (Q15), its octave's grain phase,
+     * the blocks it has been quiet */
+    uint8_t sh_on;
+    int32_t sh_snd;
+    uint32_t sh_ph, sh_q;
+    int32_t sh_hp;                     /* its high-pass's low part */
     int32_t rv_l, rv_r;                /* the last output, for the half-rate's in-between */
     uint32_t rsz;                      /* the room's size now, Q12 (it glides to DCAY's) */
     uint32_t rmph;                     /* the swing's phase */
@@ -390,10 +428,42 @@ static void gl_perform(int k)
     bus.g_pk = (uint8_t)((mk == GM_SCAT ? PF_SCAT : mk == GM_PROLL ? PF_ROLL : k) + 1);
 }
 
+static int32_t (*dub_io(int ti))[M2K_SUB] { return bus.dub_t == ti + 1 ? bus.dub_io : 0; }
+static int dub_on(void) { return perf.on[PF_DUB] || bus.dub_snd > 0; }
+static void dub_end(void) { bus.dub_t = 0; }
+
+/* DUB borrows a track's delay line, one the pattern leaves free: its kit's send 0 (DSND 64), no lock on it, no LFO
+ * on it, the line asleep. The track number + 1, 0 when none is */
+static int dub_line(void)
+{
+    if (bus.dub_t) return bus.dub_t;                      /* (still ringing: the same line) */
+    const m2k_pattern_t *p = PAT(cur_pat);
+    for (int t = M2K_TRACKS - 1; t >= 0; t--) {
+        int ok = p->kit[t][P_DSND] == 64 && trk[t].dsleep;
+        for (int i = 0; ok && i < M2K_LOCKS; i++) ok = !(p->lock[i].param == P_DSND && p->lock[i].trk == t);
+        for (int u = 0; ok && u < M2K_TRACKS; u++)
+            for (int l = 0; l < 3; l++) {
+                const uint8_t *b = &p->kit[u][P_LFO + 8 * l];
+                if (b[L_DEST] == P_DSND + 1 && ((b[L_TRCK] * M2K_TRACKS) >> 7) == t) ok = 0;
+            }
+        if (ok) return t + 1;
+    }
+    return 0;
+}
+
 /* a key's effect on (down) or off; 0 when it cannot play (the key then holds nothing) */
 static int bus_perform(int k, int down)
 {
     if (k < 0 || k >= PF_COUNT) return 0;
+    if (k == PF_DUB && down) {
+        int t = dub_line();
+        if (!t) return 0;
+        if (!bus.dub_t) {                                 /* the line's from rest: at DUB's time at once */
+            trk_t *d = &trk[t - 1];
+            d->dt_q8 = (int32_t)(((uint32_t)DUB_TIM * (sps_q8 >> 5) + 128) & ~255u);
+        }
+        bus.dub_t = (uint8_t)t;
+    }
     perf.on[k] = (uint8_t)down;
     if (!pf_ring(k)) return 1;
     if (!down) {                                          /* let go: its own effect ends (a stop spins up first) */
@@ -710,8 +780,16 @@ static void rv_clear(void)
 /* a block of the reverb in three passes (each with few enough values live to stay in registers): the input through
  * its top and the diffusers; the lines; out into the mix. Specialised for a room settled (each line's read whole
  * samples behind its write: a read between two dulls the top every pass) or gliding (between them) */
+/* SHIMMER (PERFORM): the bus thrown into the reverb at DCAY 92 (7 s) and DAMP 24 (its top a little sooner), the
+ * longest line read back an octave up (three Hann grains of 44 ms at twice the speed, its last 1033 samples) into
+ * every line's input: each pass round an octave more, as it dies */
+#define SH_G 960u
+#define SH_V 92
+#define SH_D 24
+#define SH_FB 3277                     /* the octave's share back in, Q15 (0.1: 0.35 ran away, the loop over unity) */
 static inline __attribute__((always_inline)) void rv_run(const int32_t *rsend, int32_t *L, int32_t *R, int v,
-                                                         int damp, int32_t fade, int32_t rs_, int32_t rc_, int glide)
+                                                         int damp, int32_t fade, int32_t rs_, int32_t rc_, int glide,
+                                                         int32_t shim)
 {
     int32_t xin[M2K_SUB / 2], ol[M2K_SUB / 2], orr[M2K_SUB / 2];
     int16_t *b = rv_buf;
@@ -753,6 +831,8 @@ static inline __attribute__((always_inline)) void rv_run(const int32_t *rsend, i
         int32_t lp0 = bus.rlp[0], lp1 = bus.rlp[1], lp2 = bus.rlp[2], lp3 = bus.rlp[3];
         int32_t lr0 = bus.rlr[0], lr1 = bus.rlr[1], lr2 = bus.rlr[2], lr3 = bus.rlr[3];
         int32_t q0 = bus.rq[0], q1 = bus.rq[1], q2 = bus.rq[2], q3 = bus.rq[3], rr0 = bus.rrq[0], rr1 = bus.rrq[1];
+        uint32_t sph = bus.sh_ph;
+        int32_t shp = bus.sh_hp;
         uint32_t w = w0;
 #define RV_RD(c) (glide ? b[(rd[c] + w) & M] + (((b[(rd[c] + w - 1) & M] - b[(rd[c] + w) & M]) * fr[c] + 128) >> 8) \
                         : b[(rd[c] + w) & M])
@@ -773,6 +853,20 @@ static inline __attribute__((always_inline)) void rv_run(const int32_t *rsend, i
             int32_t f0 = (s01 + s23) * h + q0, f1 = (d01 + d23) * h + q1, f2 = (s01 - s23) * h + q2, f3 = (d01 - d23) * h + q3;
             q0 = f0 & 32767; q1 = f1 & 32767; q2 = f2 & 32767; q3 = f3 & 32767;
             int32_t x = xin[k];
+            if (shim) {                                   /* SHIMMER: the longest line an octave up, back in */
+                int32_t s = 0;
+                for (uint32_t t = 0; t < 3; t++) {
+                    uint32_t ph = sph + t * (SH_G / 3), j = RV_AT[3] + w - 1 - 3 - SH_G + ph;
+                    if (ph >= SH_G) ph -= SH_G, j -= SH_G;
+                    int32_t sn = sinp(ph * (0x80000000u / SH_G)), wn = (sn * sn) >> 15;
+                    s += (((b[(j - 1) & M] + 2 * b[j & M] + b[(j + 1) & M]) >> 2) * wn) >> 15;   /* ([1 2 1]: no fold) */
+                }
+                sph = sph + 1 >= SH_G ? 0 : sph + 1;
+                /* a high-pass at 240 Hz first: an octave of the bass's, the taps agreeing, would feed the lines back
+                 * more than they lose a pass (DC's stays DC) and grow without end */
+                shp += ((s - shp) * 2190) >> 15;
+                x += ((s - shp) * shim) >> 15;            /* (|s| < 1.5 x 2^15) */
+            }
             b[(RV_AT[0] + w) & M] = (int16_t)sat16(x + (f0 >> 15));
             b[(RV_AT[1] + w) & M] = (int16_t)sat16((f1 >> 15) - x);
             b[(RV_AT[2] + w) & M] = (int16_t)sat16(x + (f2 >> 15));
@@ -788,9 +882,11 @@ static inline __attribute__((always_inline)) void rv_run(const int32_t *rsend, i
         bus.rlr[0] = lr0; bus.rlr[1] = lr1; bus.rlr[2] = lr2; bus.rlr[3] = lr3;
         bus.rq[0] = q0; bus.rq[1] = q1; bus.rq[2] = q2; bus.rq[3] = q3;
         bus.rrq[0] = rr0; bus.rrq[1] = rr1;
+        bus.sh_ph = sph;
+        bus.sh_hp = shp;
     }
     {
-        int32_t go = T_RV_GO[v], pl = bus.rv_l, pr = bus.rv_r;
+        int32_t go = bus.rgo, pl = bus.rv_l, pr = bus.rv_r;     /* (T_RV_GO[v], glided) */
         if (fade < 32767) go = (go * fade) >> 15;         /* (go < 2^15) */
         for (int k = 0; k < M2K_SUB / 2; k++) {
             int32_t l = (ol[k] * go) >> 12, r = (orr[k] * go) >> 12;           /* (|ol| < 2^16) */
@@ -807,7 +903,7 @@ static inline __attribute__((always_inline)) void rv_run(const int32_t *rsend, i
  * two of them turned into each other by a swaying angle. Every recursive product carries its remainder (a tail
  * decays at its rate to the last step, not faster, and holds no DC); once the input and the lines stay within a step
  * for a whole pass it empties and sleeps. Turned to 0 its tail fades in 6 ms */
-static void reverb_block(int verb, int damp, const int32_t *rsend, int32_t *L, int32_t *R)
+static void reverb_block(int verb, int damp, const int32_t *rsend, int32_t *L, int32_t *R, int32_t shim)
 {
     int v = verb ? verb : bus.rv_v;
     if (!v) return;
@@ -816,9 +912,15 @@ static void reverb_block(int verb, int damp, const int32_t *rsend, int32_t *L, i
     if (bus.rsleep && !in && verb == bus.rv_v) return;
     bus.rsleep = 0;
     uint32_t tgt = (uint32_t)T_RV_SZ[v] << 4;            /* the room, Q12: it glides a 4096th a block (0.3 .. 1 in 1 s) */
-    if (!bus.rv_v) bus.rsz = tgt;
+    int from_off = !bus.rv_v;
+    if (from_off) bus.rsz = tgt;
     else if (verb && bus.rsz != tgt) bus.rsz += bus.rsz < tgt ? 1 : (uint32_t)-1;
     if (v != bus.rv_v || damp != bus.rv_d || bus.rsz != bus.rv_s) rv_coef(v, damp);
+    /* its level out glides an eighth of the way a block to DCAY's (SHIMMER's DCAY and back: no jump in a tail) */
+    {
+        int32_t got = T_RV_GO[v], d = got - bus.rgo;
+        bus.rgo = from_off || (d > -16 && d < 16) ? got : bus.rgo + d / 8;
+    }
     int32_t fade = verb ? 32767 : bus.rfade;
     if (!verb) {
         bus.rfade -= 2048;
@@ -828,8 +930,9 @@ static void reverb_block(int verb, int damp, const int32_t *rsend, int32_t *L, i
      * gain moves: a long tail's modes smeared instead of ringing) */
     bus.rmph += 1090862u;
     uint32_t ang = (uint32_t)(sinp(bus.rmph) * (int32_t)T_RV_MD[v]);
-    if (bus.rsz == tgt) rv_run(rsend, L, R, v, damp, fade, sinp(ang), sinp(ang + 0x40000000u), 0);
-    else rv_run(rsend, L, R, v, damp, fade, sinp(ang), sinp(ang + 0x40000000u), 1);
+    if (shim) rv_run(rsend, L, R, v, damp, fade, sinp(ang), sinp(ang + 0x40000000u), 1, shim);   /* (gliding: whole reads too) */
+    else if (bus.rsz == tgt) rv_run(rsend, L, R, v, damp, fade, sinp(ang), sinp(ang + 0x40000000u), 0, 0);
+    else rv_run(rsend, L, R, v, damp, fade, sinp(ang), sinp(ang + 0x40000000u), 1, 0);
     int32_t big = 0;
     for (int c = 0; c < 4; c++) big |= bus.rlp[c] > 1 || bus.rlp[c] < -1;
     /* quiet: nothing in, the lines within a step, a whole pass of the longest */
@@ -885,7 +988,40 @@ static int bus_filters(void)
 static void bus_block(int32_t *L, int32_t *R, const int32_t *rsend, int16_t *out)
 {
     const uint8_t *g = PAT(cur_pat)->glob;
-    reverb_block(g[G_VERB], g[G_DAMP], rsend, L, R);
+    /* DUB: its echoes into the mix; the mix, the send gliding in and out over 12 ms, to its line next block */
+    if (bus.dub_t) {
+        int32_t s0 = bus.dub_snd;
+        bus.dub_snd = perf.on[PF_DUB] ? (s0 + 1024 > 32767 ? 32767 : s0 + 1024) : (s0 > 1024 ? s0 - 1024 : 0);
+        for (int i = 0; i < M2K_SUB; i++) {               /* ((L + R) / 4 under 2^16, x s / 2) */
+            int32_t s = s0 + (((bus.dub_snd - s0) * (i + 1)) >> 4);
+            bus.dub_io[0][i] = (((L[i] + R[i]) >> 2) * (s >> 1)) >> 13;
+            L[i] += bus.dub_io[1][i];
+            R[i] += bus.dub_io[2][i];
+            bus.dub_io[1][i] = bus.dub_io[2][i] = 0;
+        }
+    }
+    /* SHIMMER: held, the bus into the reverb (gliding in and out over 12 ms) at its decay and colour; let go, the
+     * wash rings on 4 s, the octaves still climbing, then the pattern's reverb again (its lines are the pattern's too:
+     * no level tells the wash from them) */
+    int verb = g[G_VERB], damp = g[G_DAMP];
+    int32_t shim = 0, rs2[M2K_SUB];
+    const int32_t *rs = rsend;
+    if (perf.on[PF_SHIM]) bus.sh_on = 1;
+    if (bus.sh_on) {
+        int32_t s0 = bus.sh_snd;
+        bus.sh_snd = perf.on[PF_SHIM] ? (s0 + 1024 > 32767 ? 32767 : s0 + 1024) : (s0 > 1024 ? s0 - 1024 : 0);
+        for (int i = 0; i < M2K_SUB; i++) {               /* (a quarter of the mix: (L + R) / 4 under 2^16, x s / 2) */
+            int32_t s = s0 + (((bus.sh_snd - s0) * (i + 1)) >> 4);
+            rs2[i] = rsend[i] + ((((L[i] + R[i]) >> 2) * (s >> 1)) >> 15);
+        }
+        rs = rs2;
+        if (verb < SH_V) verb = SH_V;
+        damp = SH_D;
+        shim = SH_FB;
+    }
+    reverb_block(verb, damp, rs, L, R, shim);
+    if (bus.sh_on && perf.on[PF_SHIM]) bus.sh_q = 0;
+    else if (bus.sh_on && !bus.sh_snd && ++bus.sh_q > 4u * M2K_SR / M2K_SUB) bus.sh_on = 0, bus.sh_q = 0;   /* (4 s on) */
     /* the controls on their laws (tools/gen_tables.py, the bus's controls). The tape's depth glides to its control's
      * or WOW's (no jump in the line's read); TAPE up, the tape is all there is, as it was; WOW from TAPE 0 fills the
      * line, then fades the tape in, and out again once its depth is back down */
