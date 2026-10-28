@@ -254,8 +254,10 @@
     let pk = 0, tail = h.n;
     for (let i = 0; i < h.n; i++) pk = Math.max(pk, Math.abs(h.L[i]), Math.abs(h.R[i]));
     while (tail > 1 && Math.abs(h.L[tail - 1]) < 1e-3 && Math.abs(h.R[tail - 1]) < 1e-3) tail--;
-    $("eng-nums").textContent = `Peak ${fmtDb(db(pk))} dBFS · ${(tail / SR).toFixed(2)} s · centroid ${fmtHz(sp.centroid)}`;
-    $("eng-nums").title = `Strongest partial ${fmtHz(sp.peakHz)} (${noteOf(sp.peakHz)}); length above −60 dBFS`;
+    /* the numbers on hover (the scope's tooltip) and for a screen reader; the page shows the pictures */
+    const nums = `Peak ${fmtDb(db(pk))} dBFS · ${(tail / SR).toFixed(2)} s · centroid ${fmtHz(sp.centroid)} · strongest ${fmtHz(sp.peakHz)} (${noteOf(sp.peakHz)})`;
+    $("eng-nums").textContent = `${names[m]}: ${nums}`;
+    $("eng-scope").title = nums;
     const me = src, live = S.motion();
     /* while it plays: the screen's frames, the waveform drawn to the playhead, the spectrum under it, the Hit's level */
     const anim = () => {
@@ -289,8 +291,8 @@
     $("eng-name").textContent = name;
     const [d, ini] = TEXT[name] || ["", ""];
     $("eng-desc").textContent = d;
-    $("eng-init").textContent = `INIT: ${ini}, home ${H.note(x.w_home_note(m))}.`;
-    $("eng-hit-n").textContent = H.note(x.w_home_note(m));
+    $("eng-hit-n").textContent = `INIT · ${H.note(x.w_home_note(m))}`;   /* its INIT, at its home note */
+    hitBtn.title = `${names[m]}'s INIT: ${ini}, at ${H.note(x.w_home_note(m))}`;
     document.querySelectorAll("#eng-pick button").forEach((b) => b.setAttribute("aria-pressed", String(+b.dataset.m === m)));
     /* the knobs: the machine's A-H at its INIT */
     prepare(0);
@@ -304,7 +306,7 @@
     hitBtn.style.setProperty("--lv", "0");
     drawWave(null); drawSpec(null);
     $("eng-wave-r").textContent = ""; $("eng-spec-r").textContent = "";
-    $("eng-nums").textContent = " "; $("eng-nums").title = "";
+    $("eng-nums").textContent = ""; $("eng-scope").title = "";
     if (sound) play();
   }
   function knobs() {

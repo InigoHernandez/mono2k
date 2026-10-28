@@ -86,9 +86,10 @@
   }
   const isCtl = (id) => /^[ebk]/.test(id) || id === "lcd";
   const whereOf = (it) => (it.where ? (isCtl(it.id) ? "Computer: " : "On the panel: ") + it.where : "");
+  /* the list is the names alone, grouped; what each does comes up in the box under the drawing (its short line the
+   * name's tooltip) */
   list.innerHTML = groups.map((gr) => `<section class="gl"><h3 class="label">${esc(gr.name)}</h3><ul>${gr.items.map((it) =>
-    `<li data-g="${it.id}"><button type="button" class="gl__item" aria-pressed="false" aria-controls="gbox"><span class="gl__tag">${esc(it.tag)}</span><span class="gl__short">${esc(it.short)}</span></button>` +
-    `<div class="gl__more"><p>${esc(it.long)}</p>${it.where ? `<p class="guide__where">${esc(whereOf(it))}</p>` : ""}</div></li>`).join("")}</ul></section>`).join("");
+    `<li data-g="${it.id}"><button type="button" class="gl__item" aria-pressed="false" aria-controls="gbox" title="${esc(it.short)}">${esc(it.tag)}</button></li>`).join("")}</ul></section>`).join("");
   const items = {};
   list.querySelectorAll("li[data-g]").forEach((li) => { items[li.dataset.g] = li; });
 

@@ -143,10 +143,10 @@ header.bar > .acts { grid-column: span 6; display: flex; justify-content: flex-e
 .start.gone { display: none; }
 .playbar { display: flex; align-items: center; gap: var(--s2); margin-top: var(--s2); padding: var(--s1) 0; border-top: 3px solid var(--ink); border-bottom: 1px solid var(--ink); }
 .status { flex: 1 1 auto; min-width: 0; min-height: 40px; display: flex; align-items: center; font: var(--small); }
-.pts { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; max-width: 44em; }
-.pts li { display: grid; grid-template-columns: 8.5em minmax(0, 1fr); gap: var(--s2); padding: var(--s1) 0; border-bottom: 1px dotted var(--ink); font: var(--small); }
-.pts b { font: var(--label); text-transform: uppercase; letter-spacing: 0.1em; padding-top: 2px; }
-.fails { padding-top: var(--s1); border-top: 3px solid var(--ink); }
+.lbls { display: flex; flex-wrap: wrap; gap: 4px; }
+.lbls span { padding: 2px var(--s1); font: var(--label); text-transform: uppercase; letter-spacing: 0.1em; border: 1px solid var(--ink); }
+.lbls span:first-child { background: var(--ink); color: var(--paper); }
+.vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .playbar__acts { flex: 0 0 auto; display: flex; gap: 4px; }
 .pbtn {                                                                  /* the bar's and the plates' small buttons */
   display: inline-flex; align-items: center; justify-content: center; height: var(--s4); padding: 0 var(--s1); white-space: nowrap; cursor: pointer;
@@ -225,23 +225,15 @@ kbd { display: inline-block; min-width: 1.5em; padding: 0 4px; font: 700 11px / 
 .guide__where:empty { display: none; }
 .guide__list { grid-column: 8 / span 5; }
 .gl:first-child h3 { margin-top: 0; }
-.gl h3 { margin: var(--s4) 0 0; padding-bottom: var(--s1); border-bottom: 3px solid var(--ink); }
-.gl ul { list-style: none; margin: 0; padding: 0; }
-.gl li { border-bottom: 1px dotted var(--ink); }
-.gl__item { display: grid; grid-template-columns: 8.5em minmax(0, 1fr); gap: var(--s1); align-items: start; width: 100%; padding: var(--s1) 4px; text-align: left; color: var(--ink); background: none; border: 0; cursor: pointer; font: var(--small); }
-.gl__tag { justify-self: start; padding: 1px 6px; font: var(--label); text-transform: uppercase; letter-spacing: 0.08em; border: 1px solid var(--ink); white-space: nowrap; }
-.gl__item:hover { background-image: var(--d-sparse); image-rendering: pixelated; }
-.gl li.on .gl__tag { background: var(--ink); color: var(--paper); }
-.gl li.on .gl__item { background-image: var(--d-dots); background-size: 2px 2px; image-rendering: pixelated; }
-.gl li.on .gl__short { background: var(--paper); box-decoration-break: clone; -webkit-box-decoration-break: clone; }
-.gl__more { display: none; }
-/* eight things to do */
-.todo { grid-column: 1 / -1; display: grid; gap: var(--s3); margin-top: var(--s8); }
-.todo__list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--gut); counter-reset: td; }
+.gl h3 { margin: var(--s3) 0 var(--s1); padding-bottom: 4px; border-bottom: 3px solid var(--ink); }
+.gl ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px; }
+.gl__item { height: 28px; padding: 0 var(--s1); font: var(--label); text-transform: uppercase; letter-spacing: 0.08em; white-space: nowrap; color: var(--ink); background: var(--paper); border: 1px solid var(--ink); cursor: pointer; }
+.gl li.on .gl__item { background: var(--ink); color: var(--paper); }
+/* things to try: four tiles, a name and its keys */
+.todo__list { grid-column: 1 / -1; list-style: none; margin: var(--s6) 0 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--gut); counter-reset: td; }
 .todo__list li { counter-increment: td; position: relative; display: grid; gap: var(--s1); align-content: start; padding: var(--s2); border: 1px solid var(--ink); }
 .todo__list li::before { content: counter(td, decimal-leading-zero); font: 400 20px / 24px var(--head); }
 .todo__list h4 { margin: 0; font: 700 16px / 20px var(--head); text-transform: uppercase; }
-.todo__list p { font: var(--small); }
 .todo__list .where { font: var(--label); text-transform: uppercase; letter-spacing: 0.06em; padding-top: var(--s1); border-top: 1px dotted var(--ink); }
 
 /* the machines: the one chosen (its text and the FM-1's screen) on 4 columns, the plate on 8: the nineteen in their
@@ -306,29 +298,34 @@ kbd { display: inline-block; min-width: 1.5em; padding: 0 4px; font: 700 11px / 
 .scr { margin: 0; flex: 1 1 140px; max-width: 288px; min-width: 0; }
 
 /* how it was made: the four steps, the suite (its tiles, its chart, the gaps), two cases with their charts, the facts */
-.made__steps { grid-column: 1 / -1; list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--gut); counter-reset: ms; }
-.made__steps li { counter-increment: ms; display: grid; gap: var(--s1); align-content: start; padding-top: var(--s1); border-top: 3px solid var(--ink); }
-.made__steps li::before { content: counter(ms, decimal-leading-zero); font: 400 32px / 32px var(--head); }
-.made__steps b, .made__facts b { font: 700 16px / 20px var(--head); text-transform: uppercase; }
-.made__steps p, .made__facts p { font: var(--small); }
-.made__suite { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: var(--gut); row-gap: var(--s4); margin-top: var(--s4); }
+.strip { grid-column: 1 / -1; list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--gut); }
+.strip li { position: relative; display: flex; align-items: center; gap: var(--s1); padding: var(--s1) 0; border-top: 3px solid var(--ink); cursor: default; outline: none; }
+.strip i { display: grid; place-items: center; width: 40px; height: 40px; font: 400 18px / 1 var(--head); font-style: normal; color: var(--paper); background: var(--ink); }
+.strip li:nth-child(2) i { background: var(--d-check) 0 0 / 2px 2px; color: var(--ink); image-rendering: pixelated; }
+.strip li:nth-child(3) i { background: var(--d-dots) 0 0 / 2px 2px; color: var(--ink); image-rendering: pixelated; }
+.strip li:nth-child(4) i { background: var(--d-sparse) 0 0 / 4px 4px; color: var(--ink); image-rendering: pixelated; box-shadow: inset 0 0 0 1px var(--ink); }
+.strip li:not(:first-child) i { text-shadow: 1px 0 var(--paper), -1px 0 var(--paper), 0 1px var(--paper), 0 -1px var(--paper), 1px 1px var(--paper), -1px -1px var(--paper); }
+.strip b { font: 700 16px / 20px var(--head); text-transform: uppercase; }
+.strip li:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 .made__tiles { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--gut); }
-.tile { display: grid; gap: var(--s1); padding: var(--s2); border: 1px solid var(--ink); }
+.tile { position: relative; display: grid; gap: var(--s1); align-content: start; padding: var(--s2); border: 1px solid var(--ink); }
 .tile b { font: 400 clamp(40px, 5vw, 64px) / 1 var(--head); letter-spacing: -0.02em; }
 .made__tiles .tile:first-child { background: var(--ink); color: var(--paper); }
+.tile.has-tip { cursor: help; outline: none; }
+.tile.has-tip .label::after { content: " +"; }
+.tile.has-tip:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+/* a tile's or a step's detail, on hover, focus or a tap: the page's tooltip, wiped in */
+.strip .tip, .tile .tip { top: calc(100% + 6px); left: 0; white-space: normal; width: max-content; max-width: min(320px, 80vw); display: block; line-height: 20px;
+  opacity: 0; clip-path: inset(0 100% 0 0); transition: clip-path 160ms steps(4), opacity 0s 160ms; }
+.made__tiles .tile:last-child .tip { left: auto; right: 0; }
+.strip li:is(:hover, :focus) .tip, .tile.has-tip:is(:hover, :focus) .tip { opacity: 1; clip-path: inset(0); transition: clip-path 160ms steps(4), opacity 0s; }
+.tile .tip b { font: 700 14px / 20px var(--head); }
 #ch-suite { grid-column: 1 / span 7; }
-.made__gaps { grid-column: 8 / span 5; display: grid; gap: var(--s2); align-content: start; }
-.made__gaps > p { font: var(--small); }
-.gaps { display: grid; gap: 0; }
-.gaps dt { display: flex; align-items: baseline; gap: var(--s1); padding-top: var(--s1); border-top: 1px solid var(--ink); font: 400 28px / 32px var(--head); }
-.gaps dt span { font: var(--label); text-transform: uppercase; letter-spacing: 0.1em; }
-.gaps dd { padding-bottom: var(--s2); font: var(--small); }
-.made__cases { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s4) var(--gut); margin-top: var(--s6); }
-.case { display: grid; gap: var(--s2); align-content: start; padding-top: var(--s2); border-top: 3px solid var(--ink); }
-.case h3 { margin: 0; }
-.case > p { font: var(--small); max-width: 46em; }
-.made__facts { grid-column: 1 / -1; list-style: none; margin: var(--s6) 0 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--s3) var(--gut); }
-.made__facts li { display: grid; gap: var(--s1); align-content: start; padding-top: var(--s1); border-top: 1px solid var(--ink); }
+#ch-dist { grid-column: 8 / span 5; }
+#ch-suite > p { margin-top: var(--s1); }
+.made__facts { grid-column: 1 / -1; list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--gut); }
+.made__facts .tile b { font: 400 clamp(32px, 4vw, 56px) / 1 var(--head); text-transform: uppercase; }
+.made__facts .tile span { font: var(--label); text-transform: uppercase; letter-spacing: 0.1em; }
 /* a chart in one bit: the title and its line, a legend, the plot, a tooltip, the table it was drawn from */
 .chart { margin: 0; display: grid; gap: var(--s1); min-width: 0; }
 .chart figcaption { display: grid; gap: 4px; }
@@ -405,7 +402,7 @@ kbd { display: inline-block; min-width: 1.5em; padding: 0 4px; font: 700 11px / 
 :is(.btn, .pbtn, .eng__btns button, .gl__item):hover::after, :is(.btn, .pbtn, .eng__btns button, .gl__item):focus-visible::after { clip-path: inset(0); }
 :is(.btn, .pbtn, .eng__btns button):hover, .gl__item:hover { background-image: none; }
 :is(.btn, .pbtn, .eng__btns button):active { transform: translateY(1px); }
-:is(.todo__list li, .made__facts li, .made__steps li, .tile, .case) { position: relative; }
+:is(.todo__list li, .tile) { position: relative; }
 :is(.todo__list li, .tile)::after {
   content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 0; pointer-events: none; opacity: 0.3; background: currentColor;
   -webkit-mask: var(--g-up) 0 100% / 4px 100% repeat-x; mask: var(--g-up) 0 100% / 4px 100% repeat-x; transition: height 280ms steps(7);
@@ -439,12 +436,11 @@ kbd { display: inline-block; min-width: 1.5em; padding: 0 4px; font: 700 11px / 
   .eng__head, .eng__desc, .eng__init { grid-column: 1; }
   .eng__screen { grid-column: 2; grid-row: 1 / span 4; }
   .eng__plate { grid-column: 1 / -1; }
-  .made__steps { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: var(--s3); }
-  #ch-suite, .made__gaps { grid-column: 1 / -1; }
-  .made__facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #ch-suite, #ch-dist { grid-column: 1 / -1; }
+  .todo__list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 860px) {
-  .made__cases { grid-template-columns: 1fr; }
   .made__tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .eng__ctl { grid-template-columns: 1fr; }
   .eng__acts { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); min-width: 0; }
@@ -470,11 +466,15 @@ kbd { display: inline-block; min-width: 1.5em; padding: 0 4px; font: 700 11px / 
   .pblk li { letter-spacing: 0.02em; }                       /* PORTAMENTO whole in a quarter of a phone */
   /* the guide stacked: the drawing stays at the top while the list scrolls under it, each line opening its text */
   .guide__stage { grid-column: 1 / -1; top: 0; padding: var(--s1) 0; background: var(--paper); border-bottom: 1px solid var(--ink); }
-  .guide__box { display: none; }
+  .guide__box { margin-top: var(--s1); padding: var(--s1); min-height: 84px; }   /* on a phone too: the names have no text of their own */
   .guide__list { grid-column: 1 / -1; margin-top: var(--s2); }
-  .gl li.on .gl__more { display: grid; gap: var(--s1); padding: 0 4px var(--s2); font: var(--small); }
-  .gl li { scroll-margin-top: calc((100vw - 32px) * 538 / 876 + 32px); }   /* a line focused stays clear of the drawing */
-  .todo__list { grid-template-columns: 1fr; }
+  .gl li { scroll-margin-top: calc((100vw - 32px) * 538 / 876 + 140px); }   /* a name focused stays clear of the drawing */
+  /* the tips on a phone: under their tile or step, in the flow, while it is tapped */
+  .strip .tip, .tile .tip { position: static; display: none; width: auto; max-width: none; margin-top: var(--s1); clip-path: none; opacity: 1; }
+  .strip li:is(:hover, :focus) .tip, .tile.has-tip:is(:hover, :focus) .tip { display: block; }
+  .strip li { flex-wrap: wrap; }
+  .strip b { font-size: 13px; letter-spacing: 0; }
+  .todo__list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   /* the machines on a phone, in the order they are used: pick, read, hit, see, then turn */
   .eng { display: flex; flex-direction: column; align-items: stretch; gap: var(--s2); }
   .eng__side, .eng__plate, .eng__ctl { display: contents; }
@@ -489,7 +489,7 @@ kbd { display: inline-block; min-width: 1.5em; padding: 0 4px; font: 700 11px / 
   .eng__knobs { order: 9; padding-top: var(--s2); border-top: 1px dotted var(--ink); }
   .eng__plot canvas { height: 132px; }
   .eng__knobs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .made__steps, .made__facts { grid-template-columns: 1fr; }
+  .made__facts { grid-template-columns: 1fr; }
   .made__tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .made__tiles .tile:first-child { grid-column: 1 / -1; }
 }

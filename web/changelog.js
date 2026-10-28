@@ -7,6 +7,12 @@ window.M2K_KINDS = {
 };
 window.M2K_CHANGES = [
   {
+    date: "2026-10-28", title: "The front page at a glance",
+    items: [
+      ["web", "The front page is cut to the essentials: How it was made as tiles, a strip and two charts with the detail on hover, the guide's list down to the controls' names, the machines' INIT on their Hit."],
+    ],
+  },
+  {
     date: "2026-10-27", title: "MONO2K 1.1: the envelope and the LFOs by ear, the glitch, the reverb and PERFORM reworked, MIDI in by source",
     items: [
       ["sound", "The amp envelope on new laws: ATCK, DEC and REL spend their knobs where the times are (ATCK 20 ms at 16, 67 ms at 32, 0.4 s at 64, 2 s at 96, 10 s at 127; DEC and REL 0.8 s at 64, 4 s at 96, 20 s at 127) and show the time you hear: ATCK to full, DEC and REL to -60 dB."],
