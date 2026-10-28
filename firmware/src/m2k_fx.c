@@ -1295,12 +1295,24 @@ static void par_job(void)
 #define C_DLY 92                       /* a delay that rings: one line, ping-pong */
 #define C_DLY2 116
 #define C_PAR 10                       /* the second core's sums */
+#define C_PF_RING 75                   /* PERFORM: a repeat, reverse, stop, stutter, scatter, roll, spin */
+#define C_PF_GR 140                    /* FREEZE or an octave: three grains */
+#define C_PF_FLT 155                   /* LPF or HPF */
+#define C_PF_SHIM 110                  /* SHIMMER's octave and send (the reverb's own C_VERB) */
+#define C_PF_GATE 37
 static int par_split(void)
 {
     const m2k_pattern_t *pp = PAT(cur_pat);
     const uint8_t *mc = pp->machine, *g = pp->glob;
-    int32_t c[M2K_TRACKS], a = C_CORE1 + modpn * C_LFO + (g[G_VERB] ? C_VERB : 0) + (g[G_TAPE] || perf.on[PF_WOW] ? C_TAPE : 0)
+    int32_t c[M2K_TRACKS], a = C_CORE1 + modpn * C_LFO + (g[G_VERB] || bus.sh_on ? C_VERB : 0) + (g[G_TAPE] || perf.on[PF_WOW] ? C_TAPE : 0)
                                   + (g[G_ADPC] || perf.on[PF_CRSH] ? C_ADPC : 0) + (g[G_HISS] ? C_HISS : 0), b = C_PAR;
+    /* PERFORM's on the first core (measured as T_MCOST, a demo with the key held against without: DUB's delay is its
+     * track's above) */
+    if (bus.g_on) a += bus.g_mode == GM_FRZ || bus.g_mode == GM_PSU || bus.g_mode == GM_PSD ? C_PF_GR : C_PF_RING;
+    if (bus.fmix[0]) a += C_PF_FLT;
+    if (bus.fmix[1]) a += C_PF_FLT;
+    if (bus.sh_on) a += C_PF_SHIM;
+    if (bus.gtd) a += C_PF_GATE;
     for (int t = 0; t < M2K_TRACKS; t++) {
         c[t] = (trk[t].sounding ? trk[t].ccost : C_IDLE) + (trk[t].dsleep ? 0 : trk[t].dmode ? C_DLY2 : C_DLY);
         b += c[t];
