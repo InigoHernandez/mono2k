@@ -478,10 +478,10 @@ static void fmt(const pi_t *pi, int t, int v, char *out, const char **unit)
     }
     case K_THRU: s_cpy(out, c ? "ON" : "OFF"); *unit = "TRS TO USB"; break;
     case K_PCT: s_int(out, (v * 100 + 63) / 127); *unit = "%"; break;
-    case K_GRES: s_cpy(out, c ? "32" : "16"); *unit = c ? "STEPS, 2 BARS" : "STEPS, A BAR"; break;   /* Grids' cycle */
+    case K_GRES: s_cpy(out, c ? "32" : "16"); *unit = c ? "TWO BARS" : "A BAR"; break;   /* Grids' cycle */
     case K_LANE: { static const char *const N[4] = {"OFF", "BD", "SD", "HH"}, *const U[4] = {"", "KICK", "SNARE", "HATS"};
                    s_cpy(out, N[c]); *unit = U[c]; break; }
-    case K_MUTQ: s_cpy(out, c ? "NOW" : "BAR"); *unit = c ? "AT ONCE" : "AT THE NEXT BAR"; break;
+    case K_MUTQ: s_cpy(out, c ? "NOW" : "BAR"); *unit = c ? "AT ONCE" : "NEXT BAR"; break;
     case K_SSEL: { int i = snd_sel_get(); out[0] = 'S'; s_num3(out + 1, i + 1);
                    *unit = snd[i].name[0] ? snd[i].name : "INIT"; break; }
     case K_SLOAD: s_cpy(out, "TURN"); *unit = "TO LOAD"; break;
@@ -2814,6 +2814,105 @@ static int env_level(int seg, int q, int dec_inf, int atk0)
  * (7 x 7 solid while turned), a tag inverted for what turns */
 static void lfo_scopes(const uint8_t *k);
 
+/* GRIDS' pictures. A lane's K playing now: the track in view's when it follows the lane, else the first that does, else
+ * the pattern's (-1 stopped: a PLAY's first cycle is shown) */
+static int lane_now(const m2k_pattern_t *p, int part)
+{
+    if (!sq.playing) return -1;
+    int t = lane_of(p, ui.trk) == part + 1 ? ui.trk : -1;
+    for (int i = 0; t < 0 && i < M2K_TRACKS; i++) if (lane_of(p, i) == part + 1) t = i;
+    uint32_t n = t < 0 || spd_of(t) == 4 ? sq.n1x : sq.tk[t];
+    return n ? (int)(n - 1) : -1;
+}
+
+/* a lane's cycle as it plays: a bar a step (16 or 32), as tall as its level (CHAOS's raise in it), solid where it trigs,
+ * framed under its density (the dotted line), an accent a notch at its top; the step playing marked under it */
+static void grids_lane(int x, int y, int h, int part)
+{
+    const m2k_pattern_t *p = PAT(cur_pat);
+    const int cyc = grids_cyc(p), kn = lane_now(p, part), base = kn < 0 ? 0 : kn - kn % cyc, bw = PIC_W / cyc;
+    const int th = 255 - gr8(p->glob[G_GRBD + part]);
+    for (int i = 0; i < cyc; i++) {
+        int lv, hit = grids_hit(p, part, (uint32_t)(base + i), &lv), bh = (lv * h + 254) / 255, bx = x + i * bw;
+        if (hit) rect(bx, y + h - bh, bw - 1, bh, 1);
+        else if (bh > 1) frame(bx, y + h - bh, bw - 1, bh, 1);
+        else if (bh) hline(bx, y + h - 1, bw - 1, 1);
+        if (hit == 2 && bw > 4) rect(bx + 1, y + h - bh + 1, bw - 3, 2, 0);
+        else if (hit == 2) px(bx + 1, y + h - bh + 1, 0);
+        if (base + i == kn) rect(bx, y + h + 2, bw - 1, 2, 1);
+    }
+    dots_h(x, y + h - (th * h + 127) / 255, cyc * bw - 1);
+}
+
+/* GRIDS: the map's 25 nodes (dotted between), the four X and Y read solid, the place X and Y read a dot on its
+ * cross; the three lanes under it. LANES: the three lanes, each its name (inverted for the track in view's) and the
+ * tracks that follow it */
+static void grids_picture(void)
+{
+    const m2k_pattern_t *p = PAT(cur_pat);
+    const int X = PX0, Y0 = PY0;
+    if (ui.sub == 2) {
+        static const char *const N[3] = {"BD", "SD", "HH"};
+        for (int l = 0; l < 3; l++) {
+            int y = Y0 + l * 44, m = 0;
+            for (int t = 0; t < M2K_TRACKS; t++) if (lane_of(p, t) == l + 1) m |= 1 << t;
+            int tw = tag(X, y - TY, N[l], lane_of(p, ui.trk) == l + 1);
+            char o[24];
+            if (m) { s_tracks(o, m); text(&F_S, X + tw + 6, y, o + 1, 1, 0); }
+            grids_lane(X, y + 14, 23, l);
+        }
+        return;
+    }
+    const int x8 = gr8(p->glob[G_GRX]), y8 = gr8(p->glob[G_GRY]), i0 = x8 >> 6, j0 = y8 >> 6;
+    for (int j = 0; j < 5; j++) dots_h(X + 4, Y0 + 4 + 21 * j, 121);
+    for (int i = 0; i < 5; i++) dots_v(X + 4 + 30 * i, Y0 + 4, 85);
+    const int px0 = X + 4 + x8 * 30 / 64, py0 = Y0 + 4 + y8 * 21 / 64;
+    hline(X + 4, py0, 121, 1);
+    vline(px0, Y0 + 4, 85, 1);
+    for (int j = 0; j < 5; j++)
+        for (int i = 0; i < 5; i++) {
+            int cx = X + 4 + 30 * i, cy = Y0 + 4 + 21 * j;
+            if ((i == i0 || i == i0 + 1) && (j == j0 || j == j0 + 1)) rect(cx - 2, cy - 2, 5, 5, 1);
+            else { rect(cx - 2, cy - 2, 5, 5, 0); frame(cx - 2, cy - 2, 5, 5, 1); }
+        }
+    rect(px0 - 4, py0 - 4, 9, 9, 0);
+    rect(px0 - 3, py0 - 3, 7, 7, 1);
+    for (int l = 0; l < 3; l++) grids_lane(X, Y0 + 98 + 12 * l, 7, l);
+}
+
+/* GLO > PLAY: the six tracks heard (solid) or muted (framed), one waiting for the bar blinking to what it will be; the
+ * bar in play, its steps gone solid; when a mute comes */
+static void play_picture(void)
+{
+    const m2k_pattern_t *p = PAT(cur_pat);
+    const int X = PX0, Y0 = PY0, fast = (ui.now >> 7) & 1;
+    for (int i = 0; i < M2K_TRACKS; i++) {
+        int x = X + (i % 3) * 44, y = Y0 + (i / 3) * 30, w = 41, b = 1 << i;
+        int muted = p->mute & b, solo = sq.solo;
+        if (fast && (sq.mq_m & b)) muted = sq.mq_v & b;
+        if (fast && (sq.sq_m & b)) solo = (solo & ~b) | (sq.sq_v & b);
+        if (fast && (sq.solo_rel & b)) solo |= b;
+        int heard = !muted && (!solo || (solo & b));
+        if (heard) rect(x, y, w, 26, 1); else if (muted) frame(x, y, w, 26, 1); else dots_frame(x, y, w, 26);
+        text(&F_S, x + 3, y + 3, (const char[]){'T', (char)('1' + i), 0}, !heard, 0);
+    }
+    const int len = seq_len(), ps = sq.playing ? play_step() : -1, bar = ps < 0 ? 0 : ps / 16, bl = CLAMP(len - bar * 16, 1, 16);
+    for (int i = 0; i < 16; i++) {
+        int x = X + i * 8, y = Y0 + 64;
+        if (i >= bl) px(x + 3, y + 5, 1);
+        else if (ps >= 0 && i <= ps % 16) rect(x, y, 7, 11, 1);
+        else frame(x, y, 7, 11, 1);
+    }
+    if (mute_pending() && sq.playing) {
+        int nx = sq.step >= len ? 0 : sq.step, left = !(nx & 15) ? 0 : CLAMP(16 - (nx & 15), 0, len - nx);
+        char o[20];
+        if (left) s_cpy(s_int(s_cpy(o, "IN "), left), left == 1 ? " STEP" : " STEPS"); else s_cpy(o, "AT THE NEXT STEP");
+        tag(X, Y0 + 84 - TY, "WAITS", fast);
+        text(&F_S, X, Y0 + 99, o, 1, 0);
+    }
+    text(&F_S, X, L_B0, set_on(S_MUTQ) ? "AT ONCE" : "AT THE BAR", 1, 0);
+}
+
 static void picture(void)
 {
     const int X = PX0, W = PIC_W, Y0 = PY0;
@@ -3113,6 +3212,7 @@ static void picture(void)
     }
     case PG_LFO: lfo_scopes(k); break;
     case PG_ARP: {
+        if (ui.sub) { grids_picture(); break; }
         int n = sq.nheld, rng = 1 + ((k[P_ARNG] * 4) >> 7), tot = n * rng, cw = (W - 7 * 3) / 8;
         for (int i = 0; i < tot && i < 24; i++) {
             int x = X + (i % 8) * (cw + 3), y = Y0 + 98 - (i / 8) * 30 - (i % 8) * 2;
@@ -3195,6 +3295,8 @@ static void picture(void)
             char o[12];
             s_int(o, (int)seq_bpm());
             text_c(&F_M, X + W / 2, Y0 + 110, o, 1, 0);
+        } else if (ui.sub == 6) {      /* PLAY: the mutes and when they come */
+            play_picture();
         } else if (ui.sub == 5) {      /* IN: what each port feeds, its square lit while it brings something */
             const int clk = clk_from(), nts = notes_from();
             for (int s = 0; s < 2; s++) {
@@ -3779,7 +3881,7 @@ static void card_draw(void)
     static const char *const C_ENV[] = {"THE AMP", "TAP", "ITS PAGES IN TURN", "STEP +", "A KNOB LOCKS IT",
                                         "OCT- +", "A KNOB TO DEFAULT", 0};
     static const char *const C_ARP[] = {"AND GRIDS", "TAP", "ARP, GRIDS, LANES", "TWICE", "HOLD: NOTES STAY", "GLO +",
-                                        "PADS: KEYS T1-T6", "OCT+", "GRIDS: LANES TO STEPS", 0};
+                                        "PADS: KEYS T1-T6", "OCT+", "LANES TO STEPS", 0};
     static const char *const C_PLAY[] = {"AND PASTE", "TAP", "PLAY, STOP", "GLO +", "THE PATTERN",
                                          "HOME +", "ON THE PICKED", "EDIT +", "THE SOUND", "SEQ +", "THE STEPS",
                                          "STEP +", "ONTO IT", 0};

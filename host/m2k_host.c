@@ -138,6 +138,30 @@ static const ev_t MANUAL[] = {
     {33700, 'x', 0, 0, 0},
 };
 
+/* GRIDS on A05 (INIT: T2 a kick, T3 a snare, T4 hats), playing: ARP, a moment later GRIDS (X, Y, CHAOS turned), LANES
+ * (the kick denser, T2 on BD, T3 on SD, T4 on HH) (20d), back to GRIDS, the lanes playing (20c); on HOME, GLO + white 3
+ * just after a bar's first step: T3's mute waits for the next (GLO's map, 29k; the header's MUTE and the lane, 29l;
+ * GLO > PLAY, 29m) */
+static const ev_t GRIDS_TOUR[] = {
+    {2600, 'b', B_PLAY, 1, 0}, {2620, 'b', B_PLAY, 0, 0},
+    {2700, 'b', B_ARP, 1, 0}, {2720, 'b', B_ARP, 0, 0},
+    {3200, 'b', B_ARP, 1, 0}, {3220, 'b', B_ARP, 0, 0},
+    {3400, 'e', E_K1, 14, 0}, {3450, 'e', E_K2, -22, 0}, {3500, 'e', E_K3, 40, 0},
+    {3800, 'b', B_ARP, 1, 0}, {3820, 'b', B_ARP, 0, 0},
+    {3900, 'e', E_SELECT, 1, 0}, {4000, 'e', E_K4, 1, 0}, {4050, 'e', E_K1, 16, 0},
+    {4100, 'e', E_SELECT, 1, 0}, {4200, 'e', E_K4, 2, 0},
+    {4300, 'e', E_SELECT, 1, 0}, {4400, 'e', E_K4, 3, 0}, {4450, 'e', E_K3, 20, 0},
+    {4500, 'e', E_SELECT, -2, 0}, {6200, 's', 0, 0, "20d_lanes"},
+    {6300, 'e', E_ALGO, -1, 0}, {7400, 's', 0, 0, "20c_grids"},
+    {7500, 'b', B_HOME, 1, 0}, {7520, 'b', B_HOME, 0, 0},
+    {8700, 'b', B_GLO, 1, 0}, {8720, 'k', 4, 1, 0}, {8740, 'k', 4, 0, 0}, {8900, 's', 0, 0, "29k_mute_map"},
+    {9000, 'b', B_GLO, 0, 0}, {9100, 's', 0, 0, "29l_mute_pending"},
+    {9200, 'b', B_GLO, 1, 0}, {9220, 'b', B_GLO, 0, 0}, {9300, 'e', E_ALGO, 1, 0}, {9350, 'e', E_ALGO, 1, 0},
+    {9400, 'e', E_ALGO, 1, 0}, {9450, 'e', E_ALGO, 1, 0}, {9500, 'e', E_ALGO, 1, 0}, {9550, 'e', E_ALGO, 1, 0},
+    {10100, 's', 0, 0, "29m_glo_play"},
+    {10300, 'x', 0, 0, 0},
+};
+
 static void manual_scene(void)
 {
     m2k_init(2000);
@@ -5379,6 +5403,9 @@ int main(int argc, char **argv)
     run_events(TOUR, out);
     manual_scene();
     run_events(MANUAL, out);
+    m2k_init(2000);
+    select_pattern(4);
+    run_events(GRIDS_TOUR, out);
     printf("tour done%s\n", ta_found ? ": TEXT TOUCHES OR IS CUT (above)" : ", every text clear");
     return ta_found != 0;
 }
