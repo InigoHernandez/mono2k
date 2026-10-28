@@ -2,7 +2,7 @@
 
 MONO2K's 240 x 240 1-bit screen: one grid on every page and window, whole-pixel type in MONO2K's own Orbitron,
 crisp 1 px strokes, dithering only where it means something. Hortator's screens set the discipline (inverted bars
-top and bottom, chunky type, dial cells, a big name, square steps); the letterforms, the wordmark, the marks, the
+top and bottom, chunky type, a big name, square steps); the letterforms, the wordmark, the marks, the
 splash and the bars' layout (the first redesign's) are MONO2K's. Code: the constants at the top of `m2k_ui.c`'s
 drawing section; `m2k_gfx.c` (rules, cells, tags, windows, handles); `tools/gen_font.py` (the fonts). The host's
 text audit enforces the rules below. Every number here is a whole pixel.
@@ -21,14 +21,15 @@ descenders.
 | **F_M** | 16 px, 800 | 12 rows | 2 | the big type a size down (where F_L does not fit) |
 | **F_L** | 24 px, 800 | 18 rows | 3 | the stage's big name or value, the page's title |
 
-`build/fonts.png` (`gen_font.py --sheet`) shows them. A cell holds ~5 F_S capitals in 53 px (a capital 8-10 px, a W
-12, digits 8, 1 and I 3-4, each 2 apart): plan cells by characters and give long values short forms.
+`build/fonts.png` (`gen_font.py --sheet`) shows them. A knob's 51 px hold ~5 F_S capitals (a capital 8-10 px, a W
+12, digits 8, 1 and I 3-4, each 2 apart) or ~4 of F_M (11-13 px, digits 11): plan cells by characters and give long
+values short forms.
 
 ## Bands and columns
 
 ```
 y 0-15    header  ink bar: [A01] CIRCUIT            (GRID) [HOLD] o 126 >
-y 16-60   knobs   four cells of 60, solid rules at x 60 120 180; label / dotted rule / dial + value; solid rule 60
+y 16-60   knobs   four cells of 60, solid rules at x 60 120 180; label / value / bar, 5 px in; solid rule 60
 y 61-201  stage   value column [4, 101)  |  picture [108, 237) x [64, 198)
 y 202-223 steps   dotted rule 202; 16 boxes 11 x 11 at rows 205-215; a beat mark under each group's first, 219-220
 y 224-239 footer  ink bar: [bars] T2 > DRM-SNAR > AMP                 1/2
@@ -39,12 +40,14 @@ y 224-239 footer  ink bar: [bars] T2 > DRM-SNAR > AMP                 1/2
   triangle or an 8 x 8 square, x 229-236), the tempo 6 before it, REC (an 8 x 8 disc, blinking) 6 before that, then
   the modes as tags: GRID and PADS a paper frame round paper type, the arp's HOLD, READY and FILL paper boxes with ink
   type, 4 apart, dropped from the last when they would reach the name's room.
-- **Knobs** (rows 16-60): cell k is `[60k, 60k + 60)`, its content `[60k + 4, 60k + 57)`. The label centred on
-  `60k + 30`, rows 20-28 (inverted while turned: rows 19-29); a dotted rule on row 33; a ranged value right-aligned
-  to `60k + 56`, rows 43-51, a dial left of it (13 x 13 about `(60k + 9, 47)`, 2 px clear of the cell's rule and 3 of
-  the value: a ring open at its foot, -135 to +135 degrees, a needle from the centre easing to the value, the dial
-  solid for 0.2 s as it turns); a value too wide for the dial (over 38 px), a choice or an action centred, no dial;
-  a locked value inverted (rows 42-52). Solid rule on row 60.
+- **Knobs** (rows 16-60): cell k is `[60k, 60k + 60)`, its content `[60k + 5, 60k + 56)`: 4 blank columns each side
+  of it before the rules. All left-aligned on `60k + 5`: the label, rows 21-29 (inverted while turned: rows 20-30,
+  x `60k + 3` to `60k + 57`); the value, its last row 47 (F_M, rows 36-47, where every value of all four knobs fits
+  the 51 px, else F_S, rows 39-47, the whole row alike so turning never changes the size; a locked value inverted, a
+  pixel round it); the bar, rows 52-54, 51 px: a dotted track on its last row and the part up to the value solid,
+  easing to it, from the middle for a two-sided value (a tick there, rows 50-54); for a few choices (8 or fewer) a
+  segment each, the chosen solid, the others a line; nothing for an action. Turning, the solid part's end (or the
+  chosen segment) stands up 3 rows for 0.2 s. Solid rule on row 60.
 - **Stage** (rows 61-201): the value's column `[4, 101)` and the picture `[108, 237)` x rows 64-197 (129 x 134); no
   rule between them. Lines: a tag or label on y 64 (a tag's box rows 63-73), the big name or value from y 80 (F_L,
   rows 80-97), then lines of the small type 8 under it, 13 to 15 apart; a picture's names on y 188.
@@ -61,7 +64,7 @@ y 224-239 footer  ink bar: [bars] T2 > DRM-SNAR > AMP                 1/2
 
 - **Tag**: F_S on a solid box, 1 px of ink above and below its capitals and 2 each side (11 rows). Off, the same type
   plain in the same place. On a bar (`bar_tag`): F_B in a paper box, or paper type in a paper frame, 12 rows.
-- **Dial**: as above; the knobs' only level indicator (a picture's amount, MOD's mix, keeps a 3-row bar).
+- **Bar**: the knobs' level, as above; a picture's amount (MOD's mix) the same 3 rows.
 - **Step box**: empty an outline; a trig solid; with locks a checker in its outline; on a condition its outline
   and an inset block; on some trig tracks a third filled for each (AMP FILTER LFO), NONE a dot; accent a notch, slide
   a dotted edge, ratchets dots along the foot; past the end a centre dot; the playing step framed 2 px out; a toggled

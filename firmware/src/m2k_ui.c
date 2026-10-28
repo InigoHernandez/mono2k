@@ -2140,11 +2140,11 @@ void m2k_encoder(int e, int d)
 /* the grid (docs/screen-grid.md), every text in MONO2K's Orbitron (F_S 12 px at 800 the labels, values and lines, 9
  * rows of capitals; F_M and F_L the stage's big type; F_B, the first redesign's 11 px, the bars). The header an ink
  * bar (rows 0-15: the pattern, the modes, REC, the tempo, the transport); the knobs 16-60 (four cells of 60 under the
- * FM-1's four knobs, solid rules at x 60, 120, 180, each its label, a dotted rule, a dial and its value; a solid rule
+ * FM-1's four knobs, solid rules at x 60, 120, 180, each its label, its value and a bar, 5 px in; a solid rule
  * on 60); the stage 61-201 (the value's column [4, 101), the picture [108, 237)); the steps 202-223 (a dotted rule, 16
  * boxes, a beat to a knob's cell); the footer an ink bar (224-239: the bars, the breadcrumb, the page). A cell's
- * content begins 4 px past its left edge and ends 3 clear before its right one: the audit fails a text that leaves
- * its cell or comes near a rule */
+ * content begins 4 px past its left edge and ends 3 clear before its right one (a knob's 5 and 4): the audit fails a
+ * text that leaves its cell or comes near a rule */
 #define HEAD_H 16                       /* the header's bar */
 #define KNOB_Y 16
 #define KNOB_R 60                       /* the knobs' rule */
@@ -2160,7 +2160,6 @@ void m2k_encoder(int e, int d)
 #define PIC_W 129
 #define PY0 64
 #define PIC_H 134
-#define CW 53                           /* a knob cell's content: [60 k + 4, 60 k + 57) */
 #define TY 1                            /* a tag's type below its box's top */
 /* the stage's lines of small type (their tops: the capitals are the 9 rows from there) */
 #define L_TOP 64                        /* the label (a tag's box from 63) */
@@ -2262,26 +2261,12 @@ static void header(void)
     if (text_w(&F_B, nm, 0) <= room) text(&F_B, pw + 6, y, nm, 0, text_w(&F_B, nm, 1) <= room);
 }
 
-/* ---- the knobs, along the top as on the panel: each cell its label (inverted while turned), a dotted rule, its value; a dial
- * left of the value for a range (its pointer easing to the value, the dial solid a moment as it turns), a choice
- * or an action alone in the middle; a locked value inverted */
+/* ---- the knobs, along the top as on the panel: each cell its label (inverted while turned), its value under it (in
+ * F_M where the row's every value fits, else F_S; locked: inverted), and a bar under that, easing to where
+ * the value sits in its range: a dotted track and a solid part (from the middle for a two-sided one), segments for a
+ * few choices, nothing for an action. Everything 5 px in from the cell's rules */
 static int bipolar(int kind) { return kind == K_BI || kind == K_PAN || kind == K_SEMI || kind == K_FINE || kind == K_TUN2 || kind == K_SEMI24; }
 static int action(int kind) { return kind == K_LOAD || kind == K_SLOAD || kind == K_SSAVE || kind == K_WIPE || kind == K_DEMO; }
-
-/* a dial, 13 x 13 about (cx, cy): a ring open at its foot (the travel, -135 .. +135 degrees from the top), a needle
- * from its middle to q (0..256 along it); hot: the dial solid, the needle paper */
-static const uint16_t DIAL_RING[13] = {0x1F0, 0x60C, 0x802, 0x802, 0x1001, 0x1001, 0x1001, 0x1001, 0x1001, 0x802, 0x802,
-                                       0x404, 0x000};
-static void dial(int cx, int cy, int q, int hot)
-{
-    for (int j = 0; j < 13; j++)
-        for (int i = 0; i < 13; i++)
-            if ((DIAL_RING[j] >> (12 - i)) & 1) px(cx - 6 + i, cy - 6 + j, 1);
-    if (hot) disc(cx, cy, 5, 1);
-    uint32_t a = (uint32_t)((-135 * 256 + 270 * CLAMP(q, 0, 256)) * 46603);   /* Q8 degrees to a phase (2^32 / 360 / 256) */
-    int ex = cx + (int)((sinp(a) * 5 + 16384) >> 15), ey = cy - (int)((sinp(a + 0x40000000u) * 5 + 16384) >> 15);
-    line(cx, cy, ex, ey, hot ? 0 : 1);
-}
 
 /* a level (a picture's amount): a bar to w8 (Q8 of w) on a dotted track, from the middle when two-sided; 3 rows */
 static void level(int x, int y, int w, int n, int c, int w8, int bip)
@@ -2297,39 +2282,97 @@ static void level(int x, int y, int w, int n, int c, int w8, int bip)
     } else rect(x, y, f, 3, 1);
 }
 
+#define KX 5                            /* a knob cell's content: [60 k + KX, 60 k + KX + KW) */
+#define KW 51
+#define K_LBL (KNOB_Y + 5)              /* the label's capitals: rows 21..29 */
+#define K_BASE (KNOB_Y + 31)            /* the value's last row, 47, whatever its size */
+#define KB_H 3                          /* the bar's rows: 2 read thin under the bold values */
+#define K_BAR (KNOB_Y + 36)             /* the bar: rows 52..54 */
+
+/* a knob's bar, KB_H rows from y, w wide: n choices (n <= 8) a segment each, the chosen solid and the rest a line on
+ * the last row; else a dotted track on the last row and the part up to q (0..256) solid, from the middle when
+ * two-sided (a tick there). pop: turning, the chosen segment or the solid part's end stands up 3 rows */
+static void knob_bar(int x, int y, int w, int n, int c, int q, int bip, int pop)
+{
+    const int h = KB_H;
+    if (n) {
+        for (int i = 0; i < n; i++) {
+            int x0 = x + i * (w + 2) / n, x1 = x + (i + 1) * (w + 2) / n - 2;
+            if (i == c) rect(x0, y - (pop ? 3 : 0), x1 - x0, h + (pop ? 3 : 0), 1);
+            else hline(x0, y + h - 1, x1 - x0, 1);
+        }
+        return;
+    }
+    int f = (CLAMP(q, 0, 256) * w + 128) >> 8;          /* (Q8 of the width, to the nearest pixel) */
+    dots_h(x, y + h - 1, w);
+    int e;                                              /* the solid part's moving end */
+    if (bip) {
+        int mid = x + w / 2;
+        vline(mid, y - 2, h + 2, 1);
+        if (x + f > mid) rect(mid, y, x + f - mid, h, 1); else rect(x + f, y, mid - x - f, h, 1);
+        e = x + f > mid ? x + f - 2 : x + f;
+    } else { rect(x, y, f, h, 1); e = x + f - 2; }
+    if (pop) rect(CLAMP(e, x, x + w - 2), y - 3, 2, h + 3, 1);
+}
+
+/* the value's size a knob's parameter allows: F_M if its every value fits the cell, else F_S. Kept per knob while its
+ * parameter stays */
+static const m2k_font_t *knob_font(int k, const pi_t *pi, int code)
+{
+    static int key[4] = {-1, -1, -1, -1};
+    static const m2k_font_t *f[4];
+    int id = code | ui.trk << 8 | PAT(cur_pat)->machine[ui.trk] << 12;
+    if (id == key[k]) return f[k];
+    key[k] = id;
+    int n = kind_choices(pi->kind), mn = kind_min(pi->kind), mx = kind_max(pi->kind), cnt = n ? n : mx - mn + 1, w = 0;
+    for (int i = 0; i < cnt && i < 128 && w <= KW; i++) {   /* (every value: a page turned costs ~0.1 M once) */
+        char o[16];
+        const char *u;
+        fmt(pi, ui.trk, n ? enc(i, n) : mn + i, o, &u);
+        int ow = text_w(&F_M, o, 0);
+        w = ow > w ? ow : w;
+    }
+    f[k] = w <= KW ? &F_M : &F_S;
+    return f[k];
+}
+
 static void knobs(void)
 {
+    /* the row's values in one size: F_M where all four allow it, else F_S (turning one never changes it) */
+    const m2k_font_t *rf = &F_M;
     for (int k = 0; k < 4; k++) {
-        int x = k * 60, cx = x + 4, code = knob_at(k);
-        CELL(x, KNOB_Y, x + 60, KNOB_R, cx, KNOB_Y + 1, cx + CW, KNOB_R - 1);
-        if (k) rule_v(x, KNOB_Y, KNOB_R - KNOB_Y, 0);
-        rule_h(x + 2, KNOB_Y + 17, 57, 1);                 /* under the label, dotted */
+        int code = knob_at(k);
         if (code == NONE) continue;
         const pi_t *pi = pinfo(ui.trk, code);
-        if (pi->s4[0] == '-') { text_c(&F_S, x + 30, KNOB_Y + 4, "-", 1, 0); continue; }
+        if (pi->s4[0] != '-' && knob_font(k, pi, code) != &F_M) rf = &F_S;
+    }
+    for (int k = 0; k < 4; k++) {
+        int x = k * 60, cx = x + KX, code = knob_at(k);
+        CELL(x, KNOB_Y, x + 60, KNOB_R, cx, KNOB_Y + 1, cx + KW, KNOB_R - 1);
+        if (k) rule_v(x, KNOB_Y, KNOB_R - KNOB_Y, 0);
+        if (code == NONE) continue;
+        const pi_t *pi = pinfo(ui.trk, code);
+        if (pi->s4[0] == '-') { text(&F_S, cx, K_LBL, "-", 1, 0); continue; }
         int v = knob_value(code), lk = knob_locked(code);
         int focus = ui.focus_t && ui.focus == k && ui.now - ui.focus_t < 2500;
-        if (focus) rect(x + 2, KNOB_Y + 3, 57, F_S.base + 2, 1);
-        int lw = text_w(&F_S, pi->s4, 0);
-        text(&F_S, x + 30 - lw / 2, KNOB_Y + 4, pi->s4, !focus, 0);
+        if (focus) rect(x + 3, K_LBL - 1, 55, F_S.base + 2, 1);   /* (2 px clear of the rules) */
+        text(&F_S, cx, K_LBL, pi->s4, !focus, 0);
         char o[16];
         const char *u;
         fmt(pi, ui.trk, v, o, &u);
-        int n = kind_choices(pi->kind), mx = kind_max(pi->kind), mn = kind_min(pi->kind);
-        int ranged = !action(pi->kind) && !(n && n <= 8);
-        const int vy = KNOB_Y + 27;                         /* the value: rows 43..51, about the dial's middle */
-        int room = ranged ? CW - 15 : CW, tr = 0;
+        int tr;
         const char *c = o;
-        const m2k_font_t *vf = fit_font(&F_S, &c, 0, room, &tr);
-        if (!vf && ranged) { ranged = 0; room = CW; c = o; vf = fit_font(&F_S, &c, 0, room, &tr); }   /* (no room: no dial) */
-        int w = vf ? text_w(&F_S, c, tr) : room, vx = ranged ? cx + CW - w : x + 30 - w / 2;
-        if (lk) rect(vx - 2, vy - 1, w + 4, F_S.base + 2, 1);
-        if (vf) text(&F_S, vx, vy, c, !lk, tr);
-        else text_fit(cx + CW - room, vy, o, 0, room, !lk);   /* (too wide: cut, the audit says so) */
-        if (!ranged) continue;
+        const m2k_font_t *vf = fit_font(rf, &c, 0, KW, &tr), *g = vf ? vf : &F_S;   /* (a size down where one is wider) */
+        int vy = K_BASE - (g->base - 1);
+        if (lk) rect(x + 3, vy - 1, (vf ? text_w(g, c, tr) : KW) + 4, g->base + 2, 1);
+        if (vf) text(vf, cx, vy, c, !lk, tr);
+        else text_fit(cx, vy, o, 0, KW, !lk);           /* (too wide even small: cut, the audit says so) */
+        if (action(pi->kind)) continue;
+        int n = kind_choices(pi->kind), mx = kind_max(pi->kind), mn = kind_min(pi->kind);
         int target = CLAMP(((v - mn) * 256) / (mx - mn ? mx - mn : 1), 0, 256);
-        ui.ease[k] += (target * 256 - ui.ease[k]) / 3;
-        dial(cx + 5, KNOB_Y + 31, ui.ease[k] >> 8, focus && ui.now - ui.focus_t < 200);   /* (rows 41..53, x + 3 .. x + 15) */
+        ui.ease[k] += (target * 256 - ui.ease[k]) / 3;      /* (Q8: the bar eases to the value) */
+        knob_bar(cx, K_BAR, KW, n && n <= 8 ? n : 0, choice_of(pi->kind, v), ui.ease[k] >> 8, bipolar(pi->kind),
+                 focus && ui.now - ui.focus_t < 200);
     }
     rule_h(0, KNOB_R, 240, 0);
 }

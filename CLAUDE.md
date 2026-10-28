@@ -58,9 +58,9 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   cropped to its ink, the capitals on two rows; F_S 12 px at 800, 9 rows, the labels, values and lines; F_M 16 and
   F_L 24 the stage's big type; F_B 11 px at 700 the bars); five bands: the header an ink bar 0-15 (the pattern's slot
   a paper tag and its name, the modes, REC, tempo, transport: the first redesign's), the knobs 16-60 (four cells of
-  60 on solid rules: label, dotted rule, dial and value), the stage 61-201 (the value's column [4, 101), the picture
-  `PIC_W` x `PIC_H`, 129 x 134 from 108, 64), the steps 202-223, the footer an ink bar 224-239 (the bars, the
-  breadcrumb, the page); held windows (GLO, HOME, EDIT, SEQ) over the stage. The
+  60 on solid rules, 5 px in: label, value, a bar for where it sits), the stage 61-201 (the value's column [4, 101),
+  the picture `PIC_W` x `PIC_H`, 129 x 134 from 108, 64), the steps 202-223, the footer an ink bar 224-239 (the bars,
+  the breadcrumb, the page); held windows (GLO, HOME, EDIT, SEQ) over the stage. The
   host's text audit (`M2K_TEXT_AUDIT`: every text's ink box; the cells and rules as drawn, `CELL`, `rule_h` /
   `rule_v`; a paper fill hides what it covers) fails the tour and `m2k_host --text-sweep` (every page, machine and
   knob value) on any two texts that touch, one cut, one past its cell or within 2 px of a rule: run it after any
