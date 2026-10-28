@@ -7,8 +7,13 @@ window.M2K_KINDS = {
 };
 window.M2K_CHANGES = [
   {
-    date: "2026-10-28", title: "MONO2K 1.2, 1.3 and 1.3.1: a new screen, the arp's HOLD, Grids, mutes on the bar",
+    date: "2026-10-28", title: "MONO2K 1.2 to 1.4: a new screen, the arp's HOLD, Grids, mutes on the bar, PERFORM's second bank",
     items: [
+      ["workflow", "1.4: PERFORM has two banks: hold FX, OCT+ for bank B, OCT\u2212 for bank A. A held effect keeps going when you switch."],
+      ["sound", "1.4: Bank B: FREEZE (the last eighth held), SCATTER (the last beat's sixteenths shuffled), ROLL (a repeat halving every beat), OCT DN and OCT UP, LPF and HPF sweeps over a bar, GATE (a 1/16 gate), DUB (an echo throw that rings on), SHIMMER (an octave-up reverb wash), SPIN (a vinyl spin-back)."],
+      ["sound", "1.4: STOP slows the sound you press it on (it slowed the sound from 0.7 s before), and lands back on the beat when you let go."],
+      ["fixes", "1.4: KILL and DRIVE no longer click going in."],
+      ["screen", "1.4: The PERFORM window in the new window style, with its bank and both banks on OCT\u2212 / OCT+."],
       ["screen", "1.3.1: The splash is one surface morphing from the wordmark through the waves, GND-SIN's dome and the folds back into the letters, no cuts."],
       ["screen", "1.3.1: Held windows and cards are laid out on one system: a title bar, aligned key and action columns, and GLO's white keys drawn with the mutes on them."],
       ["fixes", "1.3.1: FILT's two pages draw the same band for the same knobs (the envelope dashed over it), and its plot stays clear of the screen's edge."],
@@ -18,7 +23,7 @@ window.M2K_CHANGES = [
       ["sequencer", "1.3: Four more chances, 90 %, 60 %, 40 % and 10 %; PRESETS on a held step turns through the chances by size."],
       ["screen", "1.3: GRIDS shows the map with X and Y's dot; LANES each lane's levels and density; a mute waiting for the bar blinks its key, its track on HOME and MUTE in the header."],
       ["patterns", "1.3: Pattern format 18 keeps Grids and each track's lane; older patterns load as they played."],
-      ["web", "The installer offers MONO2K 1.3.1; it reaches The Firmware Hub with its GitHub release."],
+      ["web", "The installer offers MONO2K 1.4; it reaches The Firmware Hub with its GitHub release."],
       ["screen", "The screen on one grid: every page on the same bands and cells, crisp 1 px rules, no text crossing a line, long machine names never running into the picture."],
       ["screen", "The header and footer as black bars: the pattern and its name, the modes, REC, tempo and transport on top; the bars, track \u25b8 machine \u25b8 page and the page count below."],
       ["screen", "Bolder, larger type in MONO2K's own letters: two-pixel strokes, the stage's big name and value larger; each knob's value over a bar that shows where it sits."],
