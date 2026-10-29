@@ -165,6 +165,30 @@ static const ev_t GRIDS_TOUR[] = {
     {10300, 'x', 0, 0, 0},
 };
 
+/* tracks of their own length on B01 (INIT), playing on HOME: T1 the pattern's 16, T2 12, T3 7, T4 5, T5 10, T6 3, each
+ * lane dotted past its end, its playhead its own (33) */
+static const ev_t LENGTHS_TOUR[] = {
+    {2600, 'b', B_PLAY, 1, 0}, {2620, 'b', B_PLAY, 0, 0},
+    {9300, 's', 0, 0, "33_home_lengths"},
+    {9400, 'x', 0, 0, 0},
+};
+
+static void lengths_scene(void)
+{
+    static const uint8_t TL[M2K_TRACKS] = {0, 12, 7, 5, 10, 3};
+    static const uint16_t ON[M2K_TRACKS] = {0x1111, 0x0249, 0x0015, 0x0009, 0x0021, 0x0003};   /* each track's trigs */
+    m2k_init(2000);
+    m2k_pattern_t *q = &pat[16];
+    for (int t = 0; t < M2K_TRACKS; t++) {
+        q->glob[G_TLEN1 + t] = TL[t];
+        for (int s = 0; s < 16; s++) if (ON[t] >> s & 1) q->step[t][s] = (m2k_step_t){.note = 60, .flags = ST_TRIG};
+    }
+    cur_pat = 16;
+    sq.queued = 16;
+    lockmap_build();
+    for (int t = 0; t < M2K_TRACKS; t++) m_cpy(trk[t].eff, pat[16].kit[t], P_COUNT);
+}
+
 static void manual_scene(void)
 {
     m2k_init(2000);
@@ -283,7 +307,7 @@ static int text_sweep(void)
                 }
             }
     }
-    /* the layers' knobs (SEQ held: LEN SPD SWNG BPM; PERFORM: the bus), each at its least, middle and most */
+    /* the layers' knobs (SEQ held: LEN TLEN SPD SWNG; PERFORM: the bus), each at its least, middle and most */
     static const uint8_t LAY[2] = {B_SEQ, B_FX};
     for (int l = 0; l < 2; l++) {
         ui.page = PG_AMP; ui.sub = 0; ui.btn[LAY[l]] = 1;          /* (held a moment: before its map shows) */
@@ -1001,6 +1025,31 @@ static int sblk_ext(void)
     return sblk();
 }
 static int sblk_by(int ext) { return ext ? sblk_ext() : sblk(); }
+/* the tracks of their own length: the open pattern played from its start until STEPS of its steps have, T6 a trig on
+ * every one (the pattern's clock): each of T1-T5's trigs as the pattern's step it came with (-1: between two). Returns
+ * T6's steps off the block the arithmetic says (step k due in block ceil(k L / 4096) - 1, L its Q8 samples, no swing) */
+static int poly_on[M2K_TRACKS][160], poly_n[M2K_TRACKS];
+static int poly_run(uint32_t steps)
+{
+    int bad = 0, k = -1;
+    int64_t L = 0;
+    m_set(poly_n, 0, sizeof poly_n);
+    seq_play(1);
+    sblk_sync();
+    for (int b = 0; sq.n1x < steps; b++) {
+        int m = sblk();
+        if (!b) L = (int64_t)sps_q8;
+        if (m & 32) { k++; if (b != (k ? (int)((k * L + 4095) / 4096) - 1 : 0)) bad++; }
+        for (int t = 0; t < 5; t++) if ((m >> t & 1) && poly_n[t] < 160) poly_on[t][poly_n[t]++] = m & 32 ? k : -1;
+    }
+    return bad;
+}
+static int poly_is(int t, int per, int n)            /* track t's trigs on the pattern's steps 0, PER, 2 PER .. N of them */
+{
+    if (poly_n[t] != n) return 0;
+    for (int i = 0; i < n; i++) if (poly_on[t][i] != i * per) return 0;
+    return 1;
+}
 /* the notes out, each note's balance on its channel (on +1, off -1) */
 static int mo_bal[16][128];
 static void mo_drain(void)
@@ -2155,7 +2204,7 @@ static int selftest(void)
             m2k_init(15);
             m2k_pattern_t today = pat[2];
             for (int i = 0; i < 16; i++) { memset(pat[i].name, 0, 8); s_cpy(pat[i].name, OLD_DEMO[10][i]); }
-            int same = pat_unpack(&pat[2], lb, ln) && pat_pack(&pat[2], rb) == ln + G_COUNT - G_COUNT_V17;   /* (18: Grids') */
+            int same = pat_unpack(&pat[2], lb, ln) && pat_pack(&pat[2], rb) == ln + G_COUNT_V18 - G_COUNT_V17;   /* (18: Grids') */
             if (k) pat[2].kit[3][P_VOL] ^= 1;         /* a knob turned a detent, the name kept */
             int vol = pat[2].kit[3][P_VOL], mine = 0;
             for (int s = 0; s < 64; s++) { pat[4].step[0][s].flags = ST_TRIG; pat[4].step[0][s].note = (uint8_t)(36 + s % 12); }
@@ -2173,7 +2222,7 @@ static int selftest(void)
                 CHECK(ok && same && !memcmp(&pat[2], &today, sizeof today) && len == pat_pack(&today, rb) && !memcmp(b, rb, (size_t)len),
                       "store: revision 10's A03 LATTICE as it shipped becomes today's, in the work and in P1");
             else
-                CHECK(ok && !strcmp(pat[2].name, "LATTICE") && pat[2].kit[3][P_VOL] == vol && len == ln + G_COUNT - G_COUNT_V17,
+                CHECK(ok && !strcmp(pat[2].name, "LATTICE") && pat[2].kit[3][P_VOL] == vol && len == ln + G_COUNT_V18 - G_COUNT_V17,
                       "store: revision 10's LATTICE with a knob turned under its name is the owner's: kept");
             CHECK(ok && rest, "store: revision 10's A05 PROCESS with the owner's work and A06-A16 stay, none blanked");
         }
@@ -3419,7 +3468,7 @@ static int selftest(void)
               "DRM- drums: the kick's sweep on the LXR's law and its steps, the clap's hits, open hats longer than closed, the swell; none silent or past full scale");
     }
     /* speeds: a track at 2x plays its steps twice as often as one at 1x, at 1/2x half as often, at 3/4x three quarters;
-     * a new pattern sets them going from its first step; SEQ held, KNOB 2 is the track's speed */
+     * a new pattern sets them going from its first step; SEQ held, KNOB 3 is the track's speed (KNOB 2 its length) */
     {
         m2k_init(45);
         m2k_pattern_t *q = &pat[0];
@@ -3445,10 +3494,10 @@ static int selftest(void)
         printf("     trigs in four loops: 1x %d, 2x %d, 1/2x %d, 3/4x %d\n", n1, n2, nh, n34);
         ui.trk = 1;
         m2k_button(B_SEQ, 1);
-        int k2 = knob_at(1) == GL(G_SPD1 + 1);
+        int k2 = knob_at(2) == GL(G_SPD1 + 1) && knob_at(1) == GL(G_TLEN1 + 1) && knob_at(0) == GL(G_LEN) && knob_at(3) == GL(G_SWNG);
         m2k_button(B_SEQ, 0);
         CHECK(n1 == 64 && n2 == 128 && nh == 32 && n34 == 48 && k2,
-              "speeds: 2x twice the trigs of 1x, 1/2x half, 3/4x three quarters; SEQ held, KNOB 2 the track's speed");
+              "speeds: 2x twice the trigs of 1x, 1/2x half, 3/4x three quarters; SEQ held: LEN, the track's TLEN and SPD, SWNG");
     }
     /* a step held in GRID: the black keys 1-5 its trig type, 6-11 its condition; OCT- held and a knob turned takes
      * that knob's lock away (with no step held, the value back to its start), and OCT- alone still turns the octave */
@@ -4088,6 +4137,267 @@ static int selftest(void)
         printf("     2:2 in 32 loops: 1x %d, 1/2x %d, 2x %d, 1/4x %d; B's 1ST %s, 1:2 %s\n", n[0], n[1], n[2], n[3], s1, s2);
         CHECK(n[0] == 16 && n[1] == 8 && n[2] == 32 && n[3] == 4 && even && !strcmp(s1, "X.......") && !strcmp(s2, "X.X.X.X."),
               "sequencer: A:B and 1ST on each track's own loops (1x, 1/2x, 2x, 1/4x), counted again when a pattern comes in");
+    }
+    /* tracks of their own length (format 19): T1 the pattern's 16, T2 12, T3 7, T4 16 set as its own (the pattern's:
+     * with it), each a trig on its first step, 100 steps at 1x: each on the pattern's step its length says and in the
+     * block the arithmetic does, T2's every 12 across the pattern's 16 (free), T3's every 7; their places and loops
+     * their own */
+    {
+        m2k_init(31);
+        m2k_pattern_t *q = bare(16);
+        for (int t = 0; t < 4; t++) q->step[t][0].flags = ST_TRIG;
+        for (int s = 0; s < 16; s++) q->step[5][s].flags = ST_TRIG;
+        q->glob[G_TLEN1 + 1] = 12; q->glob[G_TLEN1 + 2] = 7; q->glob[G_TLEN1 + 3] = 16;
+        int bad = poly_run(100);
+        int pos = track_pos(0) == 99 % 16 && track_pos(1) == 99 % 12 && track_pos(2) == 99 % 7 && track_pos(3) == 99 % 16;
+        int loops = sq.loops[0] == 6 && sq.loops[1] == 8 && sq.loops[2] == 14 && sq.loops[3] == 6;
+        seq_play(0);
+        printf("     own lengths, 100 steps: 16 %d trigs, 12 %d, 7 %d; loops %d %d %d\n", poly_n[0], poly_n[1], poly_n[2],
+               sq.loops[0], sq.loops[1], sq.loops[2]);
+        CHECK(!bad && poly_is(0, 16, 7) && poly_is(1, 12, 9) && poly_is(2, 7, 15) && poly_is(3, 16, 7) && pos && loops,
+              "lengths: 16, 12 and 7 at 1x each round its own, free of the pattern's (12's first on 0 12 24 ...), each on its step's block");
+    }
+    /* a pattern coming in starts every track over on its first step, together: B queued at A's step 20 comes in at 32
+     * (T3 then, not at A's 35), A jumped to at B's 6; a start again, all together */
+    {
+        m2k_init(32);
+        for (int pn = 17; pn >= 16; pn--) {
+            m2k_pattern_t *q = bare(pn);
+            for (int t = 0; t < 3; t++) q->step[t][0].flags = ST_TRIG;
+            for (int s = 0; s < 16; s++) q->step[5][s].flags = ST_TRIG;
+            q->glob[G_TLEN1 + 1] = 12; q->glob[G_TLEN1 + 2] = 7;
+        }
+        seq_play(1);
+        sblk_sync();
+        int on[3][16], no[3] = {0}, k = -1, kin = -1, kj = -1;
+        while (k < 69) {
+            int m = sblk();
+            if (m & 32) k++;
+            if ((m & 32) && cur_pat == 17 && kin < 0) kin = k;
+            if (k == 19 && kin < 0) sq.queued = 17;
+            if (kin >= 0 && k == kin + 5 && kj < 0) { sq.queued = 16; sq.jump = 1; kj = k + 1; }
+            for (int t = 0; t < 3; t++) if ((m >> t & 1) && no[t] < 16) on[t][no[t]++] = m & 32 ? k : -1;
+        }
+        static const int W1[] = {0, 16, 32, 38, 54}, W2[] = {0, 12, 24, 32, 38, 50, 62}, W3[] = {0, 7, 14, 21, 28, 32, 38, 45, 52, 59, 66};
+        int ok = kin == 32 && kj == 38 && no[0] == 5 && no[1] == 7 && no[2] == 11;
+        for (int i = 0; ok && i < 5; i++) ok &= on[0][i] == W1[i];
+        for (int i = 0; ok && i < 7; i++) ok &= on[1][i] == W2[i];
+        for (int i = 0; ok && i < 11; i++) ok &= on[2][i] == W3[i];
+        seq_play(0);
+        seq_play(1);
+        sblk_sync();
+        int again = (sblk() & 0x27) == 0x27;
+        seq_play(0);
+        CHECK(ok && again, "lengths: a pattern queued or jumped to starts every track on its first step together, as PLAY does");
+    }
+    /* off 1x on their own lengths: T2 at 3/4x on 6 (a loop eight of the pattern's steps), T3 at 1/2x on 5 (ten), T4 at 2x
+     * on 3 (a step and a half), T1 at 1x on 5: each loop's first on the pattern's step it falls on, T4's between every
+     * other */
+    {
+        m2k_init(33);
+        m2k_pattern_t *q = bare(16);
+        for (int t = 0; t < 4; t++) q->step[t][0].flags = ST_TRIG;
+        for (int s = 0; s < 16; s++) q->step[5][s].flags = ST_TRIG;
+        q->glob[G_TLEN1] = 5; q->glob[G_TLEN1 + 1] = 6; q->glob[G_TLEN1 + 2] = 5; q->glob[G_TLEN1 + 3] = 3;
+        q->glob[G_SPD1 + 1] = enc(3, 7); q->glob[G_SPD1 + 2] = enc(2, 7); q->glob[G_SPD1 + 3] = enc(6, 7);
+        int bad = poly_run(96), x2 = poly_n[3] == 64;
+        seq_play(0);
+        for (int i = 0; i < poly_n[3]; i++) x2 &= poly_on[3][i] == ((i & 1) ? -1 : i / 2 * 3);
+        printf("     own lengths off 1x, 96 steps: 1x on 5 %d trigs, 3/4x on 6 %d, 1/2x on 5 %d, 2x on 3 %d\n", poly_n[0],
+               poly_n[1], poly_n[2], poly_n[3]);
+        CHECK(!bad && poly_is(0, 5, 20) && poly_is(1, 8, 12) && poly_is(2, 10, 10) && x2,
+              "lengths: off 1x (3/4x on 6, 1/2x on 5, 2x on 3) and 1x on 5, each loop's first where its speed and length put it");
+    }
+    /* with swing, a track off 1x on a length of its own swings on its own steps (T2 at 1/2x on 5: a loop three long steps
+     * and two short), met by the pattern's only where both have run as long: each loop's first in the block its own
+     * steps add up to */
+    {
+        m2k_init(41);
+        m2k_pattern_t *q = bare(16);
+        q->glob[G_SWNG] = 100;
+        q->step[1][0].flags = ST_TRIG;
+        q->glob[G_TLEN1 + 1] = 5; q->glob[G_SPD1 + 1] = enc(2, 7);
+        seq_play(1);
+        sblk_sync();
+        int64_t E = 0, O = 0;
+        int n = 0, bad = 0;
+        for (int b = 0; n < 10; b++) {
+            int m = sblk();
+            if (!b) { E = step_len(0) * 2; O = step_len(1) * 2; }
+            if (m & 2) { int64_t T = n * (3 * E + 2 * O); bad += b != (n ? (int)((T + 4095) / 4096) - 1 : 0); n++; }
+        }
+        seq_play(0);
+        CHECK(!bad && E != O, "lengths: with swing, a track off 1x on its own length swings on its own steps (1/2x on 5), each loop on time");
+    }
+    /* 1:2 on a track's own loops: T1 the pattern's (every 32), T2 on 4 (every 8), T3 at 1/2x on 3 (every 12) */
+    {
+        m2k_init(34);
+        m2k_pattern_t *q = bare(16);
+        for (int t = 0; t < 3; t++) q->step[t][0] = (m2k_step_t){.note = 60, .flags = ST_TRIG, .cond = C_1_2};
+        for (int s = 0; s < 16; s++) q->step[5][s].flags = ST_TRIG;
+        q->glob[G_TLEN1 + 1] = 4; q->glob[G_TLEN1 + 2] = 3; q->glob[G_SPD1 + 2] = enc(2, 7);
+        int bad = poly_run(64);
+        seq_play(0);
+        CHECK(!bad && poly_is(0, 32, 2) && poly_is(1, 8, 8) && poly_is(2, 12, 6), "lengths: 1:2 counts each track's own loops (16, 4, 3 at 1/2x)");
+    }
+    /* REC into a track of its own length (T2 on 5, at 1x): on the pattern's step 14 a note goes to T2's step 4 (14 % 5)
+     * and a knob locks it there; late in the pattern's 15 (T2's 0), to its next (1, the pattern's 16), not played again */
+    {
+        m2k_init(35);
+        m2k_pattern_t *q = bare(16);
+        q->glob[G_TLEN1 + 1] = 5;
+        ui.trk = 1; sq.ktrk = 1; ui.page = PG_AMP; ui.sub = 0; ui.grid = 0;
+        sq.rec = 1;
+        seq_play(1);
+        while (sq.n1x < 15) sblk();
+        int tp = track_pos(1);
+        live_on(67, 100);
+        edit(0, 3);
+        live_off(67);
+        int at4 = (q->step[1][4].flags & ST_TRIG) && q->step[1][4].note == 67 && !(q->step[1][14].flags & ST_TRIG) &&
+                  lock_find(1, 4, P_ATK) >= 0;
+        while (sq.n1x < 16) sblk();
+        while (sq.ctr > (int32_t)(sps_q8 / 4)) sblk();
+        live_on(69, 100);
+        int nx = (q->step[1][1].flags & ST_TRIG) && q->step[1][1].note == 69 && sq.rec_skip[1] == 1;
+        live_off(69);
+        while (sq.n1x < 17) sblk();
+        int once = sq.rec_skip[1] == -1;
+        seq_play(0);
+        sq.rec = 0;
+        CHECK(tp == 4 && at4 && nx && once, "REC: into a track of its own length its own step (the pattern's 14 is its 4, locked there); late, its next, played once");
+    }
+    /* a length turned while playing takes the track on from where the pattern is, as a speed turned does: T2 at 1/2x from
+     * 16 to 4 on the pattern's step 12 is at its 2 there (its 6th, round 4), its first on the pattern's 16 and 24 */
+    {
+        m2k_init(40);
+        m2k_pattern_t *q = bare(16);
+        q->step[1][0].flags = ST_TRIG;
+        for (int s = 0; s < 16; s++) q->step[5][s].flags = ST_TRIG;
+        q->glob[G_SPD1 + 1] = enc(2, 7);
+        seq_play(1);
+        sblk_sync();
+        int k = -1, on[4], no = 0;
+        while (k < 12) if (sblk() & 32) k++;
+        q->glob[G_TLEN1 + 1] = 4;
+        int m = sblk(), tp = track_pos(1);
+        while (k < 25) {
+            m = sblk();
+            if (m & 32) k++;
+            if ((m & 2) && no < 4) on[no++] = m & 32 ? k : -1;
+        }
+        seq_play(0);
+        CHECK(tp == 2 && no == 2 && on[0] == 16 && on[1] == 24, "lengths: a length turned while playing goes on from where the pattern is (1/2x, 16 to 4)");
+    }
+    /* SYNC IN's continue from a song position: each track takes its place there on its own length (21: T1 the pattern's
+     * 5, T2 on 12 its 9, T3 on 7 its 0, all with the first step; T4 at 1/2x on 5 mid its 0, its 1 with the next) */
+    {
+        m2k_init(36);
+        for (int i = 0; i < 10; i++) sblk();
+        m2k_setting(S_SYNI, 127);
+        m2k_midi(0xF8, 0, 0);
+        m2k_pattern_t *q = bare(16);
+        q->step[0][5].flags = ST_TRIG; q->step[1][9].flags = ST_TRIG; q->step[2][0].flags = ST_TRIG; q->step[3][1].flags = ST_TRIG;
+        for (int s = 0; s < 16; s++) q->step[5][s].flags = ST_TRIG;
+        q->glob[G_TLEN1 + 1] = 12; q->glob[G_TLEN1 + 2] = 7; q->glob[G_TLEN1 + 3] = 5; q->glob[G_SPD1 + 3] = enc(2, 7);
+        sblk_per = 44100.0 * 60 / (120 * 24);
+        sblk_next = m2k_samples();
+        for (int i = 0; i < 3000; i++) sblk_ext();       /* the clock's tempo, stopped */
+        m2k_midi(0xF2, 21, 0);
+        m2k_midi(0xFB, 0, 0);
+        sblk_sync();
+        int m1 = 0, m2 = 0, n6 = 0, other = 0;
+        for (int i = 0; i < 44100 / M2K_SUB && n6 < 2; i++) {
+            int m = sblk_ext();
+            if (m & 32) { if (n6) m2 = m; else m1 = m; n6++; }
+            else if (m) other++;
+        }
+        m2k_midi(0xFC, 0, 0);
+        m2k_setting(S_SYNI, 0);
+        CHECK(m1 == (1 | 2 | 4 | 32) && m2 == (8 | 32) && !other, "SYNC IN: a continue from a song position puts each track on its own length's step there (1x, 1/2x)");
+    }
+    /* SEQ held, KNOB 2: the track in view's own length (PAT at 0, the pattern's). GRID on a track of 5: a step past it
+     * takes no trig and stays dark; REVERSE and SHIFT > round its 5; LEN X2 the pattern's, that track's steps kept. A
+     * track of 32 on a pattern of 16: GRID follows it to its second page, and OCT+ reaches that page */
+    {
+        ux_init(7);
+        m2k_pattern(16); ux_ms(40);
+        m2k_pattern_t *q = PAT(16);
+        m2k_track(1);
+        m2k_button(B_SEQ, 1); ux_ms(40);
+        m2k_encoder(E_K2, 5);
+        char o[16];
+        const char *u;
+        int knob = q->glob[G_TLEN1 + 1] == 5 && knob_at(1) == GL(G_TLEN1 + 1);
+        m2k_button(B_SEQ, 0); ux_ms(40);
+        fmt(pinfo(1, GL(G_TLEN1 + 1)), 1, 5, o, &u); knob &= !strcmp(o, "5") && !strcmp(u, "STEPS");
+        fmt(pinfo(1, GL(G_TLEN1 + 1)), 1, 0, o, &u); knob &= !strcmp(o, "PAT") && !strcmp(u, "16 STEPS");
+        ux_tap(B_SEQ); ux_ms(300);                    /* (GRID; a second SEQ soon after would latch it) */
+        m2k_key(ux_white(7), 1); m2k_key(ux_white(7), 0);
+        m2k_key(ux_white(1), 1); m2k_key(ux_white(1), 0);
+        const uint8_t *L = m2k_leds();
+        int grid = ui.grid && !(q->step[1][7].flags & ST_TRIG) && (q->step[1][1].flags & ST_TRIG) && L[ux_white(1)] == 110 && L[ux_white(7)] == 0;
+        q->step[1][0].flags = ST_TRIG; q->step[1][10].flags = ST_TRIG; q->step[0][0].flags = ST_TRIG;
+        m2k_button(B_SEQ, 1); ux_ms(40); m2k_key(ux_white(1), 1); m2k_key(ux_white(1), 0); m2k_button(B_SEQ, 0); ux_ms(40);   /* REVERSE */
+        int rev = (q->step[1][3].flags & ST_TRIG) && (q->step[1][4].flags & ST_TRIG) && !(q->step[1][0].flags & ST_TRIG) &&
+                  !(q->step[1][1].flags & ST_TRIG) && (q->step[1][10].flags & ST_TRIG);
+        m2k_button(B_SEQ, 1); ux_ms(40); m2k_key(ux_white(3), 1); m2k_key(ux_white(3), 0); m2k_button(B_SEQ, 0); ux_ms(40);   /* SHIFT > */
+        int shift = (q->step[1][4].flags & ST_TRIG) && (q->step[1][0].flags & ST_TRIG) && !(q->step[1][3].flags & ST_TRIG);
+        m2k_button(B_SEQ, 1); ux_ms(40); m2k_key(ux_white(5), 1); m2k_key(ux_white(5), 0); m2k_button(B_SEQ, 0); ux_ms(40);   /* LEN X2 */
+        int x2 = q->glob[G_LEN] == 32 && q->glob[G_TLEN1 + 1] == 5 && !(q->step[1][16].flags & ST_TRIG) && (q->step[0][16].flags & ST_TRIG);
+        q->glob[G_LEN] = 16; q->glob[G_TLEN1] = 32;
+        m2k_track(0);
+        m2k_pattern(16);                               /* (opened again: the view follows the play, LEN X2 turned it off) */
+        seq_play(1);
+        while (sq.n1x < 20) ux_audio(16);
+        m2k_frame(ux_now += 20);
+        L = m2k_leds();
+        int follow = track_pos(0) == 19 && play_step() == 3 && ui.spage == 1 && L[ux_white(3)] == 255;
+        seq_play(0);
+        ux_tap(B_OCTD); ux_tap(B_OCTU); ux_tap(B_OCTU);
+        int pages = ui.spage == 1;
+        printf("     SEQ's TLEN %d, GRID %d, REVERSE %d, SHIFT %d, LEN X2 %d, follow %d, pages %d\n", knob, grid, rev, shift, x2, follow, pages);
+        CHECK(knob && grid && rev && shift && x2 && follow && pages,
+              "lengths: SEQ + KNOB 2 the track's (PAT the pattern's); GRID, its tools within it, LEN X2 the pattern's; GRID follows a longer track");
+    }
+    /* format 19: a pattern with no track of its own length packs as 18, byte for byte (bank A's bytes kept); one with, as
+     * 19, six bytes more, read back the same; a version-18 pattern loads with every track on the pattern's length (0); a
+     * length past 64 reads 64; version 20 is refused; a store keeps the lengths. Every length set to the pattern's own
+     * plays as none set (A01, two seconds) */
+    {
+        static m2k_pattern_t w, w2;
+        static uint8_t b18[BLOB_MAX], b19[BLOB_MAX], bx[BLOB_MAX];
+        m2k_init(37);
+        m_cpy(&w, &pat[0], sizeof w);
+        int n18 = pat_pack(&w, b18), ok18 = b18[1] == 18 && n18 == pat_pack_v(&w, bx, 18) && !memcmp(b18, bx, (size_t)n18);
+        static const uint8_t TL[M2K_TRACKS] = {0, 12, 7, 0, 5, 64};
+        for (int t = 0; t < M2K_TRACKS; t++) w.glob[G_TLEN1 + t] = TL[t];
+        int n19 = pat_pack(&w, b19);
+        int ok19 = b19[1] == 19 && n19 == n18 + 6 && pat_unpack(&w2, b19, n19) && !memcmp(w2.glob, w.glob, G_COUNT) &&
+                   pat_pack(&w2, bx) == n19 && !memcmp(bx, b19, (size_t)n19);
+        int nv = pat_pack_v(&w, bx, 18), old = pat_unpack(&w2, bx, nv) && !memcmp(w2.glob, w.glob, G_COUNT_V18);
+        for (int t = 0; t < M2K_TRACKS; t++) old &= w2.glob[G_TLEN1 + t] == 0;
+        m_cpy(bx, b19, (size_t)n19);
+        bx[2 + 8 + M2K_TRACKS + G_TLEN1 + 1] = 200;
+        int clamp = pat_unpack(&w2, bx, n19) && w2.glob[G_TLEN1 + 1] == 64;
+        bx[1] = 20;
+        int refused = !pat_unpack(&w2, bx, n19);
+        pat[5].glob[G_TLEN1 + 2] = 7;
+        int sn = m2k_store_pack();
+        m2k_init(38);
+        int kept = sn > 0 && m2k_store_unpack(sn) == 1 && pat[5].glob[G_TLEN1 + 2] == 7 && pat[5].glob[G_TLEN1 + 1] == 0;
+        static int16_t ra[2 * 88200], rb[2 * 88200];
+        for (int k = 0; k < 2; k++) {
+            m2k_init(39);
+            if (k) for (int t = 0; t < M2K_TRACKS; t++) pat[0].glob[G_TLEN1 + t] = pat[0].glob[G_LEN];
+            m2k_pattern(0);
+            seq_play(1);
+            int16_t *o = k ? rb : ra;
+            for (int f = 0; f < 88200; f += 128) m2k_render(o + 2 * f, 128 < 88200 - f ? 128 : (88200 - f) & ~15);
+        }
+        int same = !memcmp(ra, rb, sizeof ra);
+        CHECK(ok18 && ok19 && old && clamp && refused && kept && same,
+              "format: 19 the tracks' lengths (none: packed as 18, byte for byte), 18 loads with none, past 64 is 64; lengths set to the pattern's play as none");
     }
     /* SYNC IN: the tracks off 1x keep to the pattern's steps on the clock's tempo, through a tempo change (a step of
      * theirs that starts with one of the pattern's plays with it); a start sets them going again, a continue from a
@@ -5727,6 +6037,8 @@ int main(int argc, char **argv)
     m2k_init(2000);
     select_pattern(4);
     run_events(GRIDS_TOUR, out);
+    lengths_scene();
+    run_events(LENGTHS_TOUR, out);
     printf("tour done%s\n", ta_found ? ": TEXT TOUCHES OR IS CUT (above)" : ", every text clear");
     return ta_found != 0;
 }

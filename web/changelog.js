@@ -7,6 +7,17 @@ window.M2K_KINDS = {
 };
 window.M2K_CHANGES = [
   {
+    date: "2026-10-29", title: "MONO2K 1.5: tracks of their own length",
+    items: [
+      ["sequencer", "1.5: Each track can loop over its own length: hold SEQ and turn KNOB 2 (TLEN), 1 to 64 steps, or PAT for the pattern's. 16 against 12 against 7 drift apart, then start together again at PLAY and at the next pattern."],
+      ["sequencer", "1.5: The pattern's LEN still decides when the next pattern comes in, the bars, mutes on the bar and fills. Conditions like 1:2 count each track's own loops; recording lands on the track's own step."],
+      ["sequencer", "1.5: Holding SEQ, the knobs are now LEN, TLEN, SPEED and SWING; the tempo stays on HOME and GLO > TIME."],
+      ["sequencer", "1.5: The SEQ tools (clear, reverse, shift, random, cook) work within the track's length; LEN \u00d72 and HALF stay the pattern's."],
+      ["screen", "1.5: HOME's lanes and GRID show each track's own length (dots past its end) and its own playhead; GRID's pages reach a track longer than the pattern."],
+      ["patterns", "1.5: Pattern format 19 keeps the tracks' lengths; older patterns, and any pattern without them, load and play exactly as before."],
+    ],
+  },
+  {
     date: "2026-10-29", title: "MONO2K 1.4.1 and 1.4.2: a calm screen, a cleaner stage, the two cores shared evenly",
     items: [
       ["screen", "1.4.2: The screen is calm by default: pages and values change at once, nothing flashes on an action. MOTN GLTCH brings the glitches back (GLO > SET on the FM-1, GLO > PLAY in the browser)."],

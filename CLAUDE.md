@@ -147,7 +147,12 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   through a 9 x 9 grid measured on the old engine, `T_V17_RV`, `tools/conv17.py`; the VERB send by its heard level,
   DSND |d|^2 / 64, `T_V17_GLCH`; the store's version 5 converts the sounds through `fx_kit_v16`); 18 Grids (Mutable
   Instruments' map, GPL-3.0, credited: `G_GRX`..`G_LANE1`+5 after the speeds, `grids_v17` the defaults, no lane) and
-  the chances 90 60 40 10 % after the conditions (indices 21-24, `COND_ORDER` the knob's order; FACTORY_REV 14). Older ones are
+  the chances 90 60 40 10 % after the conditions (indices 21-24, `COND_ORDER` the knob's order; FACTORY_REV 14); 19 the
+  tracks' own lengths (`G_TLEN1`+t after the lanes, 1..64, 0 the pattern's LEN; SEQ held, KNOB 2 TLEN: the layer's
+  knobs LEN TLEN SPD SWNG, the tempo on HOME and GLO > TIME): a pattern with none packs as 18, byte for byte (`pat_pack`),
+  so bank A's bytes, the blanks, OLD_PACKED and 1.4's reads stay, and no FACTORY_REV. A track runs free on its length
+  (`tlen_of`: at 1x its step the pattern's count `n1x` round it, off 1x `k % tlen`; its loops at its own wrap), all
+  start together at PLAY and a pattern coming in; a track on a Grids lane keeps Grids' cycle. Older ones are
   converted on load. The
   Monomachine's tempo is set on its panel (TEMPO, the LEVEL knob a BPM a detent; `chain_hold46.panel`): the loop and
   spec modes leave it at 120.

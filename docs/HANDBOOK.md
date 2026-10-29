@@ -196,7 +196,8 @@ package shows the real load on the FM-1's screen.
 - Trig types after the Monomachine: each trig restarts the amp, the filter envelope and the LFOs on their own
   (ALL ... NONE; NONE is a trigless lock).
 - Conditions after modern Elektron: chances, A:B, 1ST, PRE, FILL and their opposites; ratchets 1..4.
-- Swing, accent amount, per-track speed (1/8x .. 2x, triplet speeds included; pattern format 15), patterns queued at
+- Swing, accent amount, per-track speed (1/8x .. 2x, triplet speeds included; pattern format 15) and length (1..64
+  steps, each track looping its own, free of the pattern's, all restarting together; format 19), patterns queued at
   the bar's end, "jump now", fill held, fill on the next loop.
 - Live recording (to the nearest step), step entry (stopped: keys write, EDIT a rest, PRESETS the cursor).
 - MIDI clock in and out, notes out a channel per track, the Monomachine's CC map. `m2k_midi_out(msg, played)` hands
