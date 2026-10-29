@@ -54,21 +54,33 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   update also adds what it taught to `../FM1-FIRMWARE-HANDBOOK.md` (outside the repo: the owner's handbook of MONO2K's
   and Demake's lessons, for the next firmware), in its section and its Updates log. After a wasm build bump `m2k.wasm?v=` in
   `app.js`, `manual.js` and `editor.js` alike (and `worklet.js?v=` in `app.js` and `editor.js` with the worklet).
-- The screen's grid (m2k_ui.c, `docs/screen-grid.md`): Orbitron, MONO2K's type (`tools/gen_font.py`: each glyph
-  cropped to its ink, the capitals on two rows; F_S 12 px at 800, 9 rows, the labels, values and lines; F_M 16 and
-  F_L 24 the stage's big type; F_B 11 px at 700 the bars); five bands: the header an ink bar 0-15 (the pattern's slot
-  a paper tag and its name, the modes, REC, tempo, transport: the first redesign's), the knobs 16-60 (four cells of
-  60 on solid rules, 5 px in: label, value, a bar for where it sits), the stage 61-201 (the value's column [4, 101), a solid rule on 104,
-  the picture `PIC_W` x `PIC_H`, 129 x 134 from 108, 64), the steps 202-223, the footer an ink bar 224-239 (the bars,
-  the breadcrumb, the page); held windows (GLO, HOME, EDIT, SEQ) over the stage. The
-  host's text audit (`M2K_TEXT_AUDIT`: every text's ink box; the cells and rules as drawn, `CELL`, `rule_h` /
-  `rule_v`; a paper fill hides what it covers) fails the tour and `m2k_host --text-sweep` (every page, machine and
-  knob value) on any two texts that touch, one cut, one past its cell or within 2 px of a rule: run it after any
-  change to the screen, and fit text with `text_fit` / `fit_font` rather than guessing widths. The screen's motion is calm by default (S_MOTN, SET > MOTN on the FM-1, GLO > PLAY with projects: below 64 no
-  transitions, no glitch on an action, no slip of a changing value; GLTCH brings them back), after a player found the
+- The screen's grid (m2k_ui.c, `docs/screen-grid.md`; the 2026-10 restyle after the sound library page, Torso's S4,
+  Hortator and the MNM-1's menu, the owner's): a 4 px grid for every position, size and text baseline (`tx_b` draws on
+  a baseline); Orbitron, MONO2K's type (`tools/gen_font.py`: each glyph cropped to its ink), F_B 11 px at 700 the light
+  face (labels, units, hints, names; the bars' type), F_S 12 px at 800 the primary lines, F_M 16 the knobs' values,
+  F_L 24 a page's one big word. Bands: the header an ink bar 0-15 (the pattern's slot a paper tag and its name, the
+  modes, REC, tempo, transport), the knobs 16-55 frameless in columns of 60 (label, value, a thin bar, 4 px in; a
+  dotted rule on 56), the stage 60-199 (the page's picture across [4, 236) x [64, 184), its info line on baseline 196:
+  what turns and its value, a held step, else the picture's names), the steps 204-223 (16 cells 8 x 8, 12 apart, a
+  beat's four under each knob), the footer an ink bar 224-239 (the bars, the breadcrumb, the page). One picture
+  language: areas in bars (`bar_col`, `bar_bi`: two columns on, one off; the other state one in three) from dotted
+  floors and zero lines, handles, markers, cells. Panels only over the layers (`panel`: one frame, its title on its
+  top line, the keys' hints at its foot). The host's text audit (`M2K_TEXT_AUDIT`: every text's ink box; the cells and
+  rules as drawn, `CELL`, `rule_h` / `rule_v`, a card's or panel's edges; a paper fill hides what it covers) fails the
+  tour and `m2k_host --text-sweep` (every page, machine and knob value) on any two texts that touch, one cut, one past
+  its cell or within 2 px of a rule: run it after any change to the screen, and fit text with `text_fit` / `lite_fit`
+  / `fit_font` rather than guessing widths. The screen's motion is calm by default (S_MOTN, SET > MOTN on the FM-1,
+  GLO > PLAY with projects: below 64 no transitions, no glitch on an action, no slip of a changing value; GLTCH brings
+  them back), after a player found the
   glitches tiring (the owner's pick). The splash (2.1 s,
   then a 0.4 s wipe; a press skips it and is swallowed; `w_skip_splash` for the site's scripted cores):
   `m2k_host DIR --splash`, `tools/splash.py DIR`; a frame's instructions, `host/m2k_draw.c` (built as the FM-1 builds).
+- The controls (the 2026-10 workflow, the owner's, after Demake and Hortator): SELECT turns every section's pages round
+  (`page_turn`; GLO + SELECT the tempo, a held step's note); ALGORITHM the track (on SYN the machine, as the owner chose;
+  GRID's black keys too); EDIT held alone 400 ms opens the sound catalogue (`cat_*` in m2k_ui.c): SLOT puts each sound
+  landed on on the track and plays it (a step's note at its note), CAT filters, OCT+ keeps it (undoable), OCT- / EDIT /
+  a page / SELECT / PRESET put the track's own sound back byte for byte, ALGO moves the preview to the next track; the
+  EDIT + SEQ REC PLAY SAVE combos act on the track's own sound. The self-test holds all of it.
 - Checks: `sh tools/check.sh` (~6 min): clang (and GCC, when installed) -Wall -Wextra with no warnings; the core built
   for armv7m soft float calls no float helper and no 64-bit division (flash / RAM printed); the self-test, every
   screen, bank A and every reference spec under ASan + UBSan, clean; the format's conversions mutated
@@ -235,6 +247,6 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
 
 ## Style
 
-C99, 4 spaces, unity build, static everything, short comments that say why. The screen's grid is the five bands above
-(header bar 0..15, knobs 16..60 under the physical knobs, stage 61..201, steps 202..223, footer bar 224..239),
-`docs/screen-grid.md`.
+C99, 4 spaces, unity build, static everything, short comments that say why. The screen's grid is the 4 px grid and the
+bands above (header bar 0..15, knobs 16..55 under the physical knobs, stage 60..199, steps 204..223, footer bar
+224..239), `docs/screen-grid.md`.

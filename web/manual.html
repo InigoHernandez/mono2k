@@ -134,8 +134,8 @@
       <tr><td>P 0 8 L 5 G 1 \ K A</td><td>The same buttons as letters: FX, SEL, ENV, LFO, EDIT, GLO, HOME, SAVE, ARP, SEQ.</td></tr>
       <tr><td>Space, Enter</td><td>PLAY, REC (held: FILL).</td></tr>
       <tr><td>- =</td><td>OCT− and OCT+; in GRID, the page; a held step's ratchet.</td></tr>
-      <tr><td>; '</td><td>SELECT: the track; a held step's note.</td></tr>
-      <tr><td>, .</td><td>ALGORITHM: on EDIT, the machine; on the other pages, their pages; a held step's accent and slide.</td></tr>
+      <tr><td>; '</td><td>SELECT: the pages, round; a held step's note.</td></tr>
+      <tr><td>, .</td><td>ALGORITHM: the track (on EDIT, the machine); a held step's accent and slide.</td></tr>
       <tr><td>[ ]</td><td>PRESETS: the pattern; a held step's condition.</td></tr>
       <tr><td>/</td><td>A held step's trig type (MASTER on the FM-1).</td></tr>
       <tr><td>Tab, ↑ ↓</td><td>Picks KNOB 1–4, and turns it; Shift turns it faster.</td></tr>
@@ -221,7 +221,7 @@
       <tr><td>White 6</td><td>LEN ×2: the pattern twice as long, the new bars a copy.</td></tr>
       <tr><td>White 7</td><td>COOK: a few of its notes moved a tone, a third, a fourth or a fifth.</td></tr>
       <tr><td>White 8</td><td>HALF: the pattern half as long (the steps after it kept).</td></tr>
-      <tr><td>REC / PLAY</td><td>Copy the track's steps / paste them onto the track in view (pick another with SELECT first).</td></tr>
+      <tr><td>REC / PLAY</td><td>Copy the track's steps / paste them onto the track in view (pick another with ALGORITHM first).</td></tr>
       <tr><td>KNOB 1–4</td><td>LEN, the pattern's; TLEN, the track's own length (PAT: the pattern's, 1–64 steps); SPEED, the track's own (1/8×, 1/4×, 1/2×, 3/4×, 1×, 3/2×, 2×); SWING. Tempo is on HOME and GLO &gt; TIME.</td></tr>
       <tr><td>ALGORITHM</td><td>The accent's amount.</td></tr>
     </tbody>
@@ -230,6 +230,7 @@
   <table>
     <thead><tr><th>With EDIT</th><th>Does</th></tr></thead>
     <tbody>
+      <tr><td>nothing, a moment</td><td>The sound catalogue: KNOB 1 puts each sound on the track and plays it, KNOB 2 the category; OCT+ keeps it, OCT− gives the track its own back.</td></tr>
       <tr><td>SEQ</td><td>INIT the track's sound: its machine as it starts. Again: undone.</td></tr>
       <tr><td>SAVE</td><td>Keep the track's sound in the library's first INIT slot.</td></tr>
       <tr><td>REC / PLAY</td><td>Copy / paste the track's sound.</td></tr>
@@ -324,7 +325,7 @@
   <h2>A new pattern from nothing</h2>
   <ol class="steps">
     <li>Hold HOME, press black 2 (G#3) for bank B, and tap a white key: an INIT pattern opens.</li>
-    <li>Press EDIT and turn ALGORITHM to choose each track's machine, or load sounds from the library (GLO + EDIT).</li>
+    <li>Press EDIT and turn ALGORITHM to choose each track's machine, or hold EDIT for the sound catalogue: KNOB 1 plays each sound, OCT+ keeps it.</li>
     <li>Press SEQ, place trigs with the white keys, PLAY. SAVE keeps it.</li>
   </ol>
   <h2>A new pattern on the same sounds</h2>
@@ -348,7 +349,7 @@
   <ol class="steps">
     <li>On the track: hold EDIT and press SAVE. It goes to the first INIT slot, in the category it sounds like.</li>
     <li>To file it under a category yourself: GLO + EDIT, turn CAT to one, pick an INIT slot with SLOT, turn SAVE.</li>
-    <li>To load: GLO + EDIT, CAT to the kind you want, SLOT through them, turn LOAD.</li>
+    <li>To load: hold EDIT a moment. KNOB 1 puts each sound on the track and plays it as you land on it, KNOB 2 picks the kind; OCT+ keeps it, OCT− gives the track its own back. (GLO + EDIT, SLOT and LOAD do it too.)</li>
     <li>To start a track afresh: hold EDIT, press SEQ.</li>
   </ol>
   <h2>Put a knob back</h2>
@@ -377,7 +378,7 @@
   <h2>Move a track's beat around</h2>
   <ol class="steps">
     <li>Hold SEQ: white 3 and 4 shift the track's steps a step earlier or later, white 2 plays them backwards, white 5 throws in a random quarter of the steps, white 7 moves a few notes.</li>
-    <li>To give another track the same steps: hold SEQ, press REC (copy); turn SELECT to the other track; hold SEQ, press PLAY (paste).</li>
+    <li>To give another track the same steps: hold SEQ, press REC (copy); turn ALGORITHM to the other track; hold SEQ, press PLAY (paste).</li>
     <li>To run one track slower or faster than the rest: hold SEQ and turn KNOB 3 (3/4× against 1× for a lilt, 1/2× for a long line).</li>
     <li>For a polyrhythm: hold SEQ and turn KNOB 2, the track's own length (12 or 7 against 16).</li>
   </ol>
@@ -421,8 +422,8 @@
   <table>
     <thead><tr><th>Knob</th><th>Turned</th><th>A step held in GRID</th></tr></thead>
     <tbody>
-      <tr><td>SELECT</td><td>The track, 1–6.</td><td>The step's note.</td></tr>
-      <tr><td>ALGORITHM</td><td>On EDIT (SYN), the track's machine; on the other pages, their pages (LFO 1A to 3B, FX, GLO's TIME to IN).</td><td>Accent and slide.</td></tr>
+      <tr><td>SELECT</td><td>The pages, every section's, round.</td><td>The step's note.</td></tr>
+      <tr><td>ALGORITHM</td><td>The track, 1–6; on EDIT (SYN), the track's machine.</td><td>Accent and slide.</td></tr>
       <tr><td>PRESETS</td><td>The pattern (queued to the end of the bar while playing).</td><td>The step's condition.</td></tr>
       <tr><td>KNOB 1–4</td><td>The four parameters on the page in view.</td><td>A lock on the step.</td></tr>
       <tr><td>MASTER</td><td>The volume.</td><td>The step's trig type.</td></tr>
@@ -485,13 +486,13 @@
   <h1>Tracks and machines</h1>
   <p class="sub">Six tracks, each one mono machine with its own sound, chain and steps.</p>
   <h2>Choosing a track and its machine</h2>
-  <p>SELECT picks the track; in GRID, the upper keys T1–T6 do. On EDIT, ALGORITHM changes the track's machine and its card comes up. A track still at its machine's INIT takes the new machine's whole INIT; a sound you have shaped keeps its chain, its LFOs and its steps, and only the eight knobs start from the new machine's INIT.</p>
+  <p>ALGORITHM picks the track; in GRID, the upper keys T1–T6 do. On EDIT (SYN), ALGORITHM changes the track's machine instead and its card comes up. A track still at its machine's INIT takes the new machine's whole INIT; a sound you have shaped keeps its chain, its LFOs and its steps, and only the eight knobs start from the new machine's INIT.</p>
   <p>The machines come in this order: the ten that play notes first (GND-SIN, SWAV-SAW, SWAV-PUL, SWAV-ENS, FM+STAT, FM+PAR, FM+DYN, VOX-6, DIGI-WAV, SID-6581), then the drums (DRM-KICK, DRM-SNAR, DRM-HATS, DRM-CYMB), GND-PERC and GND-NOIS, and the three FX last. One step back from GND-SIN is FX-RING.</p>
   <h2>INIT: each machine's own sound</h2>
   <p>Every machine starts as a sound for what it is for, not a bare oscillator: GND-SIN a round sine bass, SWAV-SAW a wide supersaw pad, SWAV-PUL a hollow reed lead, SWAV-ENS a minor-7 pad on one key, FM+STAT an e-piano, FM+PAR a gong-like bell, FM+DYN an FM bass, VOX-6 an "aah", DIGI-WAV a pluck that scans as it falls, SID-6581 a sync lead, DRM-KICK a kick, DRM-SNAR a snare, DRM-HATS a closed hat, DRM-CYMB a crash, GND-PERC a metal hit, GND-NOIS a wind you play, and the FX the track before made wide (FX-CHORUS), punched and held (FX-DYNAMIX) or turned to metal (FX-RING). Each is levelled to sit with the others. That INIT is what ALGORITHM gives a track at its INIT, what an INIT slot of the library, EDIT + SEQ and a held clear start a track with, and where OCT− and a knob take that knob back. A new pattern is INIT too: a sine bass, a kick, a snare, a hat, the FM keys and the ENS pad.</p>
   <h2>Notes and octaves</h2>
   <p>Each track plays at home. A machine chosen or INITed puts the track's new trigs, its pad and its keys on the note its INIT was made at: DRM-KICK at C2, GND-SIN, FM+DYN and the FX at C3, the rest at C4. A pattern opened puts each track on its root, the note its trigs sit on most, or its machine's home when it has none. The keyboard's octave is each track's own, set from its home note, which sits near the bottom of the keys (a C on their first C): a kick at C2 plays as a kick, not as a high zap. OCT− and OCT+ change the track in view's, and their lights show it.</p>
-  <p>On every other page, ALGORITHM turns through the page's own pages instead of tapping its button: LFO 1A to 3B, FX's four, AMP's and FILT's two, GLO's TIME, GLITCH, VERB, SET, MIDI and IN. It stops at the first and the last.</p>
+  <p>SELECT turns through every page and its pages in the panel's order, round: HOME, SYN, AMP, FILT, FX, LFO, ARP, GLO and back to HOME.</p>
   <h2>Level, pitch and mute</h2>
   <p>On HOME, KNOB 1 and 2 are the track's level and pitch. In GRID the MUTE key mutes the track in view; GLO held with one of the six lower keys mutes that track from anywhere.</p>
   <h2>FX machines</h2>
@@ -519,7 +520,7 @@
   <p>SEQ turns the keys into steps. The sixteen lower keys are the steps of the page in view; OCT− and OCT+ turn the page (four pages, 64 steps). A key on an empty step puts a trig there with the last note you played; a quick tap on a trig takes it away, with its locks.</p>
   <ol class="steps">
     <li>Press SEQ: GRID shows in the header.</li>
-    <li>Pick the track with SELECT, or with the upper keys T1–T6.</li>
+    <li>Pick the track with ALGORITHM, or with the upper keys T1–T6.</li>
     <li>Tap the lower keys to place trigs. Hold one to edit it.</li>
     <li>Press PLAY.</li>
   </ol>
@@ -736,6 +737,7 @@
   <h2>The sound library</h2>
   <div class="figs">
     <figure class="fig"><canvas data-scr="25_syn_snd"></canvas><figcaption>SYN &gt; SND: the library's slots, each with its machine; SLOT picks one.</figcaption></figure>
+    <figure class="fig"><canvas data-scr="29b_catalogue"></canvas><figcaption>EDIT held: the catalogue, each sound played on the track as KNOB 1 lands on it.</figcaption></figure>
   </div>
   <p>128 sounds, S001 to S128, kept apart from the patterns: a sound saved there can go onto any track of any pattern. A sound is a track's machine and every setting (the machine's knobs, the amp, the filter, the FX, the LFOs), a category (KICK, SNARE, HATS, PERC, BASS, LEAD, PAD or FX) and the note it was made at: the track's root when it was saved, the note its trigs sit on most. Loaded, it is ready to sound as it did: the track's keys, pad and new trigs go to that note and its octave (a kick saved at C2 plays at C2). Its LFOs move the track it is loaded on. The library starts with 96 sounds of its own, twelve in each category (S001–S012 the kicks, then the snares, hats, percussion, basses, leads, pads and FX), each a different character at its note, then 32 INIT slots; it is saved with the rest. A library saved by an older MONO2K keeps every sound you saved or changed; only the factory's old sounds become the new ones (where yours stands, its new sound goes to S097 on). (Sounds kept before their notes were: a kick at C2, a bass at C3, the rest at C4.)</p>
   <p>Press EDIT until the footer says SND (the page after SYN, and after BANK on DIGI-WAV), or GLO + EDIT from anywhere.</p>
@@ -834,7 +836,7 @@
 </footer>
 <script src="site.js?v=3"></script>
 <script src="panel.js?v=2"></script>
-<script src="changelog.js?v=41"></script>
-<script src="manual.js?v=45"></script>
+<script src="changelog.js?v=42"></script>
+<script src="manual.js?v=46"></script>
 </body>
 </html>

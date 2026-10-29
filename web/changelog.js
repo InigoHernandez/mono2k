@@ -22,6 +22,13 @@ window.M2K_CHANGES = [
       ["patterns", "1.5: A library saved by an older MONO2K keeps every sound you saved or changed; only the factory's old sounds are replaced (where yours stands, its new sound goes to S097 on)."],
       ["fixes", "1.5: A sound loaded onto another track than the one it was saved from: its LFOs now move the track it is on."],
       ["screen", "1.5: On the FM-1 the screen goes out four times faster and only where it changed; frames come as the processor has room, and the knob bars and meters glide by the time, so the motion is even."],
+      ["screen", "1.5: A new screen, after the sound library page, Torso's S4 and Hortator: everything on a 4-pixel grid, no boxes, each page's picture across the whole screen, the knobs frameless with a thin bar, one light face for labels and one bold for what matters."],
+      ["screen", "1.5: The line under the picture says what you turn (its name, value and unit, LOCK or REC) or the step you hold; at rest, the picture's own names. HOME's knob popup is gone: that line says it."],
+      ["screen", "1.5: HOME shows the six tracks as lanes: a short line a rest, a block a trig (an accent taller, a condition shorter, locks dotted), the playing step underlined, each track's level live at the right."],
+      ["screen", "1.5: One picture language on every page: areas in bars from a dotted floor, points you move as handles, what moves live as a marker. LFO shows its three side by side; GRIDS its map as dots."],
+      ["screen", "1.5: The sound library and the held layers read like a menu: a row a sound, the one picked a solid bar, the keys to press at the foot ([OCT+] LOAD, [OCT−] BACK)."],
+      ["workflow", "1.5: Hold EDIT a moment: the sound catalogue. KNOB 1 puts each sound on the track and plays it as you land on it, KNOB 2 picks the category, OCT+ keeps it (GLO + OCT− undoes), OCT− gives the track its own sound back exactly. EDIT + SEQ, SAVE, REC, PLAY as before."],
+      ["workflow", "1.5: SELECT turns through every page, round (HOME, SYN, AMP, FILT, FX, LFO, ARP, GLO): any page a few clicks away. ALGORITHM picks the track now (on SYN it is still the machine); in GRID the upper keys T1–T6 too."],
     ],
   },
   {
