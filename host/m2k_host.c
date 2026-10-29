@@ -3832,7 +3832,7 @@ static int selftest(void)
         m2k_button(B_GLO, 1); m2k_button(B_OCTD, 1); m2k_button(B_GLO, 0); m2k_button(B_OCTD, 0);
         CHECK(ui.oct[ui.trk] == o0, "GLO + OCT-, GLO let go first: the octave stays");
     }
-    /* the drawing's byte-wise fills and type (rect, frame, a glyph a byte at a time) as a pixel at a time draws them:
+    /* the drawing's byte-wise fills and type (rect, frame, the dotted lines, a glyph a word a row) as a pixel at a time draws them:
      * random boxes and texts, in ink, paper and inverted, in each size, cut by random clips and the screen's edges */
     {
         uint32_t r = 12345u;
@@ -3846,7 +3846,11 @@ static int selftest(void)
             clip(cx, cy, cw, ch);
             int x = RN(280) - 20, y = RN(280) - 20;
             int c = RN(3);
-            if (i & 1) {
+            if (i % 5 == 4) {                                  /* (a dotted line, a row or a column, on the checker) */
+                int w = RN(250) - 4;
+                if (i & 2) { dots_h(x, y, w); for (int k = x; k < x + w; k++) if (!((k + y) & 1)) ux_px(k, y, 1); }
+                else { dots_v(x, y, w); for (int k = y; k < y + w; k++) if (!((x + k) & 1)) ux_px(x, k, 1); }
+            } else if (i & 1) {
                 int w = RN(90) - 4, h = RN(70) - 4;
                 if (i & 2) {                                   /* (a frame: its four sides as frame() puts them) */
                     frame(x, y, w, h, c);
@@ -3869,7 +3873,7 @@ static int selftest(void)
         }
         #undef RN
         noclip();
-        CHECK(same, "drawing: rects, frames and type a byte at a time are what a pixel at a time draws, clipped alike");
+        CHECK(same, "drawing: rects, frames, dotted lines and type a byte at a time are what a pixel at a time draws, clipped alike");
     }
     /* the drawing's cost: GLO's map held over the AMP page, and HOME's 96 cells, set few pixels one at a time (a
      * window's fill, the type and the empty cells were each a pixel at a time: 1.5 M instructions a GLO frame) */

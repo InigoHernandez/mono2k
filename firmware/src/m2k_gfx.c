@@ -70,11 +70,11 @@ static ta_box_t ta_box[32];
 static int ta_nbox;
 /* the rules (the bands' and the cells'): no text's ink within 2 px of one */
 typedef struct { int16_t x0, y0, x1, y1; } ta_rule_t;
-static ta_rule_t ta_rule[48];
+static ta_rule_t ta_rule[96];                  /* (a card is four: the knobs' four, the stage's, a window's) */
 static int ta_nrule;
 static void ta_rule_add(int x0, int y0, int x1, int y1)
 {
-    if (ta_nrule < 48 && x0 <= x1 && y0 <= y1) ta_rule[ta_nrule++] = (ta_rule_t){(int16_t)x0, (int16_t)y0, (int16_t)x1, (int16_t)y1};
+    if (ta_nrule < 96 && x0 <= x1 && y0 <= y1) ta_rule[ta_nrule++] = (ta_rule_t){(int16_t)x0, (int16_t)y0, (int16_t)x1, (int16_t)y1};
 }
 static void ta_cover(int x, int y, int w, int h)
 {
@@ -135,7 +135,15 @@ static void rect(int x, int y, int w, int h, int c)
     if (x0 >= x1 || y0 >= y1) return;
     int b0 = x0 >> 3, b1 = (x1 - 1) >> 3;
     uint8_t m0 = (uint8_t)(0xFFu >> (x0 & 7)), m1 = (uint8_t)(0xFF00u >> (((x1 - 1) & 7) + 1));
-    if (b0 == b1) m0 = m1 = (uint8_t)(m0 & m1);
+    if (b0 == b1) {                                  /* within one byte (a vertical line, a cell's side, a bar):
+                                                        a byte a row, half the work */
+        const uint8_t m = (uint8_t)(m0 & m1);
+        const int i0 = y0 * ROWB + b0, n = y1 * ROWB;
+        if (c == 1) for (int i = i0; i < n; i += ROWB) fb[i] |= m;
+        else if (c == 0) for (int i = i0; i < n; i += ROWB) fb[i] &= (uint8_t)~m;
+        else for (int i = i0; i < n; i += ROWB) fb[i] ^= m;
+        return;
+    }
     for (uint8_t *r = &fb[y0 * ROWB], *e = &fb[y1 * ROWB]; r < e; r += ROWB) {
         uint8_t *a = r + b0, *b = r + b1;
         if (c == 1) { *a |= m0; *b |= m1; while (++a < b) *a = 0xFF; }
@@ -184,9 +192,34 @@ static void frame(int x, int y, int w, int h, int c)
     vline(x, y + 1, h - 2, c); vline(x + w - 1, y + 1, h - 2, c);
 }
 
-/* dots on the screen's checker ((x + y) even), so every dotted line, outline and rule meets the others in step */
-static void dots_h(int x, int y, int w) { for (int i = x + ((x + y) & 1); i < x + w; i += 2) px(i, y, 1); }
-static void dots_v(int x, int y, int h) { for (int j = y + ((x + y) & 1); j < y + h; j += 2) px(x, j, 1); }
+/* dots on the screen's checker ((x + y) even), so every dotted line, outline and rule meets the others in step: a
+ * row's a byte at a time (the checker's byte, 0xAA on an even row), a column's a byte a dot, clipped as px() clips */
+static void dots_h(int x, int y, int w)
+{
+    int x0 = x > clip_x0 ? x : clip_x0, x1 = x + w < clip_x1 ? x + w : clip_x1;
+    if (x0 < 0) x0 = 0;
+    if (x1 > M2K_W) x1 = M2K_W;
+    if (y < clip_y0 || y >= clip_y1 || y < 0 || y >= M2K_H || x0 >= x1) return;
+    const uint8_t ck = (y & 1) ? 0x55 : 0xAA;
+    uint8_t *r = &fb[y * ROWB];
+    int b0 = x0 >> 3, b1 = (x1 - 1) >> 3;
+    uint8_t m0 = (uint8_t)(0xFFu >> (x0 & 7)), m1 = (uint8_t)(0xFF00u >> (((x1 - 1) & 7) + 1));
+    if (b0 == b1) { r[b0] |= (uint8_t)(ck & m0 & m1); return; }
+    r[b0] |= (uint8_t)(ck & m0);
+    r[b1] |= (uint8_t)(ck & m1);
+    for (int b = b0 + 1; b < b1; b++) r[b] |= ck;
+}
+static void dots_v(int x, int y, int h)
+{
+    int y0 = y + ((x + y) & 1), y1 = y + h;
+    if (x < clip_x0 || x >= clip_x1 || x < 0 || x >= M2K_W) return;
+    if (y0 < clip_y0) y0 += (clip_y0 - y0 + 1) & ~1;
+    if (y0 < 0) y0 += (-y0 + 1) & ~1;
+    if (y1 > clip_y1) y1 = clip_y1;
+    if (y1 > M2K_H) y1 = M2K_H;
+    const uint8_t m = (uint8_t)(0x80u >> (x & 7));
+    for (int i = y0 * ROWB + (x >> 3), n = y1 * ROWB; i < n; i += 2 * ROWB) fb[i] |= m;
+}
 static void dots_frame(int x, int y, int w, int h)
 {
     dots_h(x, y, w); dots_h(x, y + h - 1, w);
@@ -209,13 +242,32 @@ static void rule_v(int x, int y, int h, int dotted)
 #endif
 }
 
-/* a window over the stage: paper, a 1 px frame, a 2 px shadow down and right */
+/* a card, the library's: a 1 px frame, its edges rules to the audit (no text within 2 px); dotted: a card with nothing
+ * in it (a knob a page leaves free) */
+static void card(int x, int y, int w, int h, int dotted)
+{
+    if (dotted) dots_frame(x, y, w, h); else frame(x, y, w, h, 1);
+#ifdef M2K_TEXT_AUDIT
+    ta_rule_add(x, y, x + w - 1, y); ta_rule_add(x, y + h - 1, x + w - 1, y + h - 1);
+    ta_rule_add(x, y, x, y + h - 1); ta_rule_add(x + w - 1, y, x + w - 1, y + h - 1);
+#endif
+}
+
+/* a window over the stage: a card on paper, 2 px of paper round it so what it covers stays clear of its frame (no
+ * shadow: the library's cards have none) */
 static void win(int x, int y, int w, int h)
 {
-    rect(x, y, w, h, 0);
-    frame(x, y, w, h, 1);
-    rect(x + w, y + 2, 2, h, 1);
-    rect(x + 2, y + h, w, 2, 1);
+    rect(x - 2, y - 2, w + 4, h + 4, 0);
+    card(x, y, w, h, 0);
+}
+
+/* the bars a picture's area is drawn in (the library's waveform): column x from row y down to y1 (not included:
+ * nothing at y1, where its dotted floor shows), two columns on and one off on the picture's own grid (x0, so
+ * neighbouring parts mesh), the light state one on and two off */
+static void bar_col(int x, int x0, int y, int y1, int light)
+{
+    int k = (x - x0 + 3 * 256) % 3;
+    if (y < y1 && (light ? k == 0 : k != 2)) rect(x, y, 1, y1 - y, 1);
 }
 
 /* a picture's handle: 5 x 5 framed on paper, or 7 x 7 solid while its knob turns */
@@ -224,6 +276,13 @@ static void handle(int x, int y, int hot)
     if (hot) { rect(x - 3, y - 3, 7, 7, 1); return; }
     rect(x - 2, y - 2, 5, 5, 0);
     frame(x - 2, y - 2, 5, 5, 1);
+}
+
+/* where a live thing is (a voice's level, an LFO's value): 5 x 5 solid in a ring of paper, crisp over the bars */
+static void marker(int x, int y)
+{
+    rect(x - 3, y - 3, 7, 7, 0);
+    rect(x - 2, y - 2, 5, 5, 1);
 }
 
 static void line(int x0, int y0, int x1, int y1, int c)
@@ -312,6 +371,28 @@ static void glyph_solid(const m2k_font_t *f, int g, int x, int y, int fill)
     if (vy1 > M2K_H) vy1 = M2K_H;
     if (vx0 >= vx1 || vy0 >= vy1) return;
     const uint8_t *src = f->bits + f->off[g] + (vy0 - y) * bpr;
+    if (x >= 0 && bpr <= 4) {
+        /* a row's bytes as one word, shifted once into the screen's (up to five), the first and last masked to the
+         * clip: half the work of a byte gathered at a time (the type is most of a frame) */
+        const int bx = x >> 3, sh = x & 7, k0 = (vx0 >> 3) - bx, k1 = ((vx1 - 1) >> 3) - bx;
+        const uint8_t mlo = (uint8_t)(0xFFu >> (vx0 & 7)), mhi = (uint8_t)(0xFF00u >> (((vx1 - 1) & 7) + 1));
+        for (int j = vy0; j < vy1; j++, src += bpr) {
+            uint32_t r = (uint32_t)src[0] << 24;
+            if (bpr > 1) r |= (uint32_t)src[1] << 16;
+            if (bpr > 2) r |= (uint32_t)src[2] << 8;
+            if (bpr > 3) r |= src[3];
+            uint8_t *row = &fb[j * ROWB + bx];
+            for (int k = k0; k <= k1; k++) {
+                uint8_t v = k < 4 ? (uint8_t)(r >> (24 - 8 * k + sh)) : (uint8_t)(r << (8 - sh));
+                if (k == k0) v &= mlo;
+                if (k == k1) v &= mhi;
+                if (fill == 1) row[k] |= v;
+                else if (fill == 0) row[k] &= (uint8_t)~v;
+                else row[k] ^= v;
+            }
+        }
+        return;
+    }
     for (int j = vy0; j < vy1; j++, src += bpr) {
         uint8_t *row = &fb[j * ROWB];
         for (int d = vx0 >> 3; d <= (vx1 - 1) >> 3; d++) {
@@ -391,6 +472,18 @@ static int tag(int x, int y, const char *s, int on)
     int w = text_w(&F_S, s, 0) + 4;
     if (on) rect(x, y, w, F_S.base + 2, 1);
     text(&F_S, x + 2, y + 1, s, !on, 0);
+    return w;
+}
+
+/* the library's tag: f's type in a 1 px frame, a pixel clear above and below its capitals and two each side; on, the
+ * box solid and the type paper. Its box: rows y .. y + base + 3 (OTAG_H), its capitals from y + 2 */
+#define OTAG_H(f) ((f)->base + 4)
+static int otag_w(const m2k_font_t *f, const char *s) { return text_w(f, s, 0) + 6; }
+static int otag(const m2k_font_t *f, int x, int y, const char *s, int on)
+{
+    int w = otag_w(f, s);
+    if (on) rect(x, y, w, OTAG_H(f), 1); else frame(x, y, w, OTAG_H(f), 1);
+    text(f, x + 3, y + 2, s, !on, 0);
     return w;
 }
 
