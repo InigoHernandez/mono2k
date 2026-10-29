@@ -11,6 +11,7 @@
 #define M2K_TEXT_AUDIT 1                  /* every frame's text checked (ta_check) */
 #include "../firmware/src/m2k_core.c"
 #include "m2k_bank_rev9.c"                /* the bank before, for the tests */
+#include "m2k_lib_play.c"                 /* the sound library's audition */
 
 static void wav_write(const char *path, const int16_t *s, int frames)
 {
@@ -309,9 +310,16 @@ static int text_sweep(void)
     now += 4000; ui.trans_t = 0; ui.toast_t = 0;
     m2k_frame(now); ta_check((int)now);
     ui.nheld = 0; ui.grid = 0;
-    /* the library: every category shown */
+    /* the library: every category shown; every slot picked, its name in the list and on SLOT in focus */
     ui.page = PG_SYN; ui.sub = (uint8_t)(nsub(PG_SYN) - 1);
     for (int c = 0; c < CAT_COUNT; c++) { ui.snd_cat = (uint8_t)c; now += 3000; ui.trans_t = 0; ui.toast_t = 0; m2k_frame(now); ta_check((int)now); }
+    ui.snd_cat = 0;
+    for (int i = 0; i < M2K_SOUNDS; i++) {
+        ui.snd_sel = (uint8_t)i; ui.focus = 0; ui.focus_t = now; ui.roll_t = now - 2000;
+        now += 40; ui.trans_t = 0; ui.toast_t = 0;
+        m2k_frame(now); ta_check((int)now);
+    }
+    ui.snd_sel = 0;
     /* each layer latched, its map marked; each button's help card */
     static const uint8_t LAT[4] = {B_GLO, B_SEQ, B_HOME, B_FX};
     ui.page = PG_AMP; ui.sub = 0;
@@ -457,6 +465,79 @@ static int demo_render(const char *out, int argc, char **argv)
         printf("A%02d %-7s %.0f s: peak %.1f dBFS, rms %.1f dBFS -> %s\n", p + 1, pat[p].name, sec, pk, rms, path);
     }
     return 0;
+}
+
+/* the sound library's audition: each sound in its phrase on T1 (m2k_lib_play.c), a WAV each and index.json (its slot,
+ * category, name, machine, character, note, phrase; its peak, the highest on any of the six tracks, and rms; what the
+ * core weighs it at while it sounds, ccost, and with its delay as the cores' split weighs the track, weight);
+ * tools/lib_audition.py adds the loudness, how far apart they are and the instructions (m2k_draw --library). SLOTs
+ * (1..96): those alone, no index */
+static int lib_render(const char *out, int argc, char **argv)
+{
+    char path[512];
+    int some = argc > 3;
+    FILE *ix = 0;
+    if (!some) {
+        snprintf(path, sizeof path, "%s/index.json", out);
+        if (!(ix = fopen(path, "w"))) { perror(path); return 1; }
+        fprintf(ix, "{\"bpm\": 120, \"sounds\": [\n");
+    }
+    int clip = 0;
+    for (int i = 0; i < LIB_N; i++) {
+        int want = !some;
+        for (int a = 3; a < argc; a++) want |= atoi(argv[a]) == i + 1;
+        if (!want) continue;
+        int frames = lib_setup(i, 1), peak = 0, nb = 0, cmax = 0, wmax = 0;
+        int16_t *keep = malloc((size_t)frames * 4);
+        double ss = 0, csum = 0;
+        for (int f = 0; f < frames; f += 128) {
+            m2k_render(keep + 2 * f, 128);
+            if (trk[0].sounding) { csum += trk[0].ccost; nb++; if (trk[0].ccost > cmax) cmax = trk[0].ccost; }
+            /* and as the two cores' split weighs the track (m2k_fx.c, par_split): with its delay while it rings */
+            int w = (trk[0].sounding ? trk[0].ccost : C_IDLE) + (trk[0].dsleep ? 0 : trk[0].dmode ? C_DLY2 : C_DLY);
+            if (w > wmax) wmax = w;
+        }
+        for (int k = 0; k < 2 * frames; k++) { int v = keep[k], a = v < 0 ? -v : v; if (a > peak) peak = a; ss += (double)v * v; }
+        double rms = 10 * log10(ss / (2.0 * frames) / (32767.0 * 32767.0) + 1e-12);
+        char wav[64];
+        snprintf(wav, sizeof wav, "S%03d_%s.wav", i + 1, LIB[i].name);
+        snprintf(path, sizeof path, "%s/%s", out, wav);
+        wav_write(path, keep, frames);
+        free(keep);
+        int tpk0 = mon.peak[0];
+        /* the same on the other five tracks (their noises their own): the highest peak, the track nearest its ceiling */
+        int tpk = tpk0;
+        for (int t = 1; t < M2K_TRACKS; t++) {
+            static int16_t tb[256];
+            lib_setup_on(i, 1, t);
+            for (int f = 0; f < frames; f += 128) {
+                m2k_render(tb, 128);
+                for (int k = 0; k < 256; k++) { int a = tb[k] < 0 ? -tb[k] : tb[k]; if (a > peak) peak = a; }
+            }
+            if (mon.peak[t] > tpk) tpk = mon.peak[t];
+        }
+        double pk = 20 * log10(peak / 32767.0 + 1e-9);
+        int tclip = tpk >= T_CLIP;                            /* the track's own ceiling reached, before LEVL */
+        double head = 20 * log10(tpk / (double)T_CLIP + 1e-9);
+        clip += pk > -1.0 || tclip;
+        int ph = lib_phrase(i), root = LIB[i].root;
+        printf("S%03d %-5s %-7s %-8s %5.1f dBFS peak %5.1f rms, track %5.1f dB  ccost %3.0f, weight %d%s%s\n", i + 1,
+               CAT_N[LIB[i].cat], LIB[i].name, MI[LIB[i].m].name, pk, rms, head, nb ? csum / nb : 0.0, wmax,
+               pk > -1.0 ? "  OVER -1 dBFS" : "", tclip ? "  TRACK CLIPS" : "");
+        if (ix) {
+            fprintf(ix, "  {\"trigs\": [");                      /* (their seconds: a step is 0.125 s at 120 BPM) */
+            for (const ph_t *t = PHRASE[ph]; t->step != 0xFF; t++) fprintf(ix, "%s%.3f", t == PHRASE[ph] ? "" : ", ", t->step * 0.125);
+            fprintf(ix, "], \"slot\": %d, \"id\": \"S%03d\", \"cat\": \"%s\", \"name\": \"%s\", \"machine\": \"%s\", "
+                    "\"what\": \"%s\", \"note\": %d, \"note_name\": \"%s%d\", \"phrase\": \"%s\", \"secs\": %d, "
+                    "\"wav\": \"%s\", \"peak_db\": %.1f, \"rms_db\": %.1f, \"track_db\": %.1f, \"ccost\": %.0f, "
+                    "\"ccost_max\": %d, \"weight\": %d}%s\n", i + 1, i + 1, CAT_N[LIB[i].cat], LIB[i].name, MI[LIB[i].m].name,
+                    LIB[i].what, root, NOTE_N[root % 12], root / 12 - 1, PH_NAME[ph], PH_SECS[ph], wav, pk, rms, head,
+                    nb ? csum / nb : 0.0, cmax, wmax, i + 1 < LIB_N ? "," : "");
+        }
+    }
+    if (ix) { fprintf(ix, "]}\n"); fclose(ix); }
+    printf("%d over -1 dBFS or clipping on their track%s\n", clip, ix ? "; index.json written" : "");
+    return clip != 0;
 }
 
 /* each track of bank A alone, two loops, and every trig it plays: the frame, the note the engine was given, the
@@ -2598,8 +2679,9 @@ static int selftest(void)
      * four): bank A as it was, the rest blank, the sounds kept; a project file of version 1 still imported */
     {
         m2k_init(31);
-        CHECK(snd[0].name[0] && snd[0].machine == pat[0].machine[0] && !memcmp(snd[0].kit, pat[0].kit[0], P_COUNT),
-              "sounds: the factory's library holds bank A's tracks, A01 T1 first");
+        m2k_sound_t l0;
+        lib_sound(0, &l0);
+        CHECK(!memcmp(&snd[0], &l0, sizeof l0), "sounds: the factory's library is its own (m2k_lib.c), S001 its first kick");
         sound_save(63, &pat[2], 4, 0, -1);
         s_cpy(snd[63].name, "MINE");
         int n = m2k_store_pack();
@@ -2627,16 +2709,16 @@ static int selftest(void)
         CHECK(n > 0 && m2k_store_unpack(n) == 1 && !strcmp(m2k_project_name(0), "THIRD") && m2k_project_current() == 0,
               "store for the FM-1: the open project goes, whichever it is");
     }
-    /* SYN > SND: 128 slots, the demos' 24 sounds then 104 INIT; SAVE turned once keeps the track's sound in an INIT slot
+    /* SYN > SND: 128 slots, the library's 96 sounds then 32 INIT; SAVE turned once keeps the track's sound in an INIT slot
      * (twice over a sound), LOAD once puts it on a track, an INIT slot loaded starts the machine afresh; CAT shows one
      * category (and the INIT slots), SLOT steps through those */
     {
         m2k_init(34);
         open_b01();
         int cats = 1;
-        for (int i = 0; i < 24; i++) if (!snd[i].name[0] || !snd_cat[i]) cats = 0;
-        CHECK(cats && !snd[24].name[0] && !snd[127].name[0] && !snd_cat[24] && !snd_cat[100],
-              "sounds: 128 slots, the demos' 24 sounds (each with a category) and 104 INIT");
+        for (int i = 0; i < LIB_N; i++) if (!snd[i].name[0] || !snd_cat[i]) cats = 0;
+        CHECK(cats && !snd[LIB_N].name[0] && !snd[127].name[0] && !snd_cat[LIB_N] && !snd_cat[100],
+              "sounds: 128 slots, the library's 96 sounds (each with a category) and 32 INIT");
         ui.trk = 2;
         ui.page = PG_SYN; ui.sub = (uint8_t)(nsub(PG_SYN) - 1);
         ui.snd_sel = 100;
@@ -2672,6 +2754,97 @@ static int selftest(void)
         for (int k = 0; k < 40; k++) edit(0, 1);                  /* SLOT through them */
         CHECK(ui.snd_cat == CAT_KICK && shown_ok && n >= 32 && snd_shown(ui.snd_sel) && (c0 || 1),
               "sounds: CAT shows one category and the INIT slots; SLOT steps through those alone");
+    }
+    /* the factory's library (m2k_lib.c): S001..S096 twelve a category in the categories' order, each at its note, the
+     * names unique, S097..S128 INIT; its bytes held (LIB_HASH: a library changed is a new LIB_REV, its sounds of before
+     * added to LIB_OLD, which stays sorted for its search) */
+    {
+        m2k_init(36);
+        int order = 1, uniq = 1, sorted = 1;
+        for (int i = 0; i < M2K_SOUNDS; i++)
+            order &= i < LIB_N ? snd[i].name[0] && snd_cat[i] == 1 + i / 12 && snd_root[i] == LIB[i].root
+                               : !snd[i].name[0] && !snd_cat[i];
+        for (int i = 0; i < LIB_N; i++)
+            for (int j = i + 1; j < LIB_N; j++) uniq &= strcmp(LIB[i].name, LIB[j].name) != 0;
+        for (unsigned k = 1; k < sizeof LIB_OLD / sizeof LIB_OLD[0]; k++) sorted &= LIB_OLD[k - 1] < LIB_OLD[k];
+        uint32_t h = 2166136261u;
+        for (int i = 0; i < LIB_N; i++) {
+            const uint8_t *b = (const uint8_t *)&snd[i];
+            for (unsigned k = 0; k < sizeof snd[i]; k++) h = (h ^ b[k]) * 16777619u;
+            h = (h ^ snd_cat[i]) * 16777619u;
+            h = (h ^ snd_root[i]) * 16777619u;
+        }
+        if (h != LIB_HASH) printf("     LIB_HASH wants 0x%08xu\n", h);
+        CHECK(order && uniq && sorted && h == LIB_HASH,
+              "library: S001..S096 twelve a category (KICK .. FX) at their notes, names unique, the rest INIT; its bytes held");
+    }
+    /* each library sound loaded on T3 (LOAD on SYN > SND: its LFOs move T3, not the track it was made on) plays its
+     * audition there, the mix under -1 dBFS and the track under its own ceiling */
+    {
+        int clean = 1, own = 1, worst = 0, at = -1;
+        static int16_t lb[256];
+        for (int i = 0; i < LIB_N; i++) {
+            m2k_init(37);
+            m2k_pattern_t *p = &pat[16];
+            for (int t = 0; t < M2K_TRACKS; t++) for (int st = 0; st < M2K_STEPS; st++) p->step[t][st].flags = 0;
+            p->glob[G_TMPO] = 120 - 30;
+            p->glob[G_LEN] = 32;
+            p->mute = (uint8_t)(0x3F & ~(1u << 2));
+            ui.trk = 2;
+            ui.snd_sel = (uint8_t)i;
+            sound_load(p);
+            for (int l = 0; l < 3; l++) own &= ((p->kit[2][P_LFO + 8 * l + L_TRCK] * M2K_TRACKS) >> 7) == 2;
+            int ph = lib_phrase(i);
+            for (const ph_t *e = PHRASE[ph]; e->step != 0xFF; e++)
+                p->step[2][e->step] = (m2k_step_t){(uint8_t)(LIB[i].root + e->note), (uint8_t)(ST_TRIG | e->flags), C_ALWAYS, 0};
+            open_b01();
+            sq.queued = 16;
+            mon.peak[2] = 0;
+            seq_play(1);
+            int pk = 0;
+            for (int f = 0; f < PH_SECS[ph] * M2K_SR; f += 128) {
+                m2k_render(lb, 128);
+                for (int k = 0; k < 256; k++) { int a = lb[k] < 0 ? -lb[k] : lb[k]; if (a > pk) pk = a; }
+            }
+            if (pk > worst) { worst = pk; at = i; }
+            clean &= pk < 29204 && mon.peak[2] < T_CLIP;          /* (-1 dBFS) */
+        }
+        printf("     library: the loudest %s at %.1f dBFS\n", at >= 0 ? LIB[at].name : "-", 20 * log10(worst / 32767.0 + 1e-9));
+        CHECK(clean && own, "library: every sound loaded on T3 (its LFOs on T3) plays its audition under -1 dBFS, unclipped");
+    }
+    /* a store saved before the library (1.4.2's: bank A's 24 tracks, the rest INIT): each slot still holding a factory
+     * sound of before, or nothing, takes the library's; the owner's own (S025) and one they edited (S004) stay, the
+     * library's sounds for those two go to S097 and S098; a store of this revision is read as it is */
+    {
+        m2k_init(38);
+        m_set(snd, 0, sizeof snd);
+        m_set(snd_cat, 0, sizeof snd_cat);
+        m_set(snd_root, 0, sizeof snd_root);
+        for (int i = 0; i < 24; i++) sound_save(i, &pat[i / 6], i % 6, 0, -1);   /* as that factory made them */
+        int known = 1;
+        for (int i = 0; i < 24; i++) known &= lib_old(snd_fnv(&snd[i]));
+        snd[3].kit[P_DEC] ^= 5;
+        sound_save(24, &pat[0], 2, CAT_HATS, 60);
+        s_cpy(snd[24].name, "MINE");
+        m2k_sound_t edited = snd[3], mine = snd[24], ls;
+        int n = m2k_store_pack();
+        store_buf[7] = 14;                                         /* (its factory revision: 1.4.2's) */
+        m2k_init(39);
+        int ok = m2k_store_unpack(n) == 1, lib = 1, rest = 1;
+        for (int i = 0; i < LIB_N; i++) {
+            int to = i == 3 ? 96 : i == 24 ? 97 : i;
+            lib_sound(i, &ls);
+            lib &= !memcmp(&snd[to], &ls, sizeof ls) && snd_cat[to] == LIB[i].cat && snd_root[to] == LIB[i].root;
+        }
+        for (int i = 98; i < M2K_SOUNDS; i++) rest &= !snd[i].name[0];
+        int kept = !memcmp(&snd[3], &edited, sizeof edited) && !memcmp(&snd[24], &mine, sizeof mine) && snd_cat[24] == CAT_HATS;
+        sound_save(5, &pat[0], 0, 0, -1);                          /* a factory sound of before, in today's store */
+        m2k_sound_t s5 = snd[5];
+        n = m2k_store_pack();
+        m2k_init(40);
+        int as_is = m2k_store_unpack(n) == 1 && !memcmp(&snd[5], &s5, sizeof s5);
+        CHECK(known && ok && lib && kept && rest && as_is,
+              "library: an older store's factory sounds become the library's, the owner's stay (theirs moved on to S097); today's as it is");
     }
     /* the machines' INITs (MACH_INIT): each its own sound on its own chain, kit_default's left as it was; their home
      * notes; rendered at those, no two alike (GND-PERC's INIT and GND-NOIS's were one white noise) */
@@ -2807,8 +2980,8 @@ static int selftest(void)
     {
         m2k_init(52);
         int fac = 1;
-        for (int i = 0; i < 6 * FACTORY_DEMOS; i++) fac &= snd_root[i] == pat_root(&pat[i / 6], i % 6);
-        fac &= pat[0].machine[0] == M_DKIK && snd_root[0] == 33;  /* A01's kick on A1 */
+        for (int i = 0; i < LIB_N; i++) fac &= snd_root[i] == LIB[i].root;
+        fac &= snd[0].machine == M_DKIK && snd_root[0] == 33;     /* the first kick on A1 */
         m2k_pattern(16);
         for (int s = 0; s < 16; s += 4) pat[16].step[1][s] = (m2k_step_t){.note = 36, .flags = ST_TRIG};
         m2k_track(1);
@@ -2830,12 +3003,12 @@ static int selftest(void)
         m2k_init(54);
         int old = tag && m2k_store_unpack(n - 130) == 1 && snd_root[100] == 36 && snd_root[101] == 60 && !strcmp(snd[101].name, "HIGH");
         for (int i = 0; i < M2K_SOUNDS; i++) if (snd[i].name[0]) old &= snd_root[i] == root_guess(snd_cat[i]);
-        old &= snd_root[3] == 48 && snd_cat[3] == CAT_BASS;       /* A01's sine bass */
+        old &= snd_root[48] == 48 && snd_cat[48] == CAT_BASS;     /* the first bass */
         m2k_init(55);
         s_cpy(pat[0].name, "MINE");
         int cut = !m2k_store_unpack(n - 10) && !strcmp(pat[0].name, "MINE");
         CHECK(fac && saved && loaded && kept && old && cut,
-              "sounds: each kept with its note (the demos' roots, SAVE's), loaded there (a kick at C2); 'R' in the store, older ones guessed");
+              "sounds: each kept with its note (the library's, SAVE's), loaded there (a kick at C2); 'R' in the store, older ones guessed");
     }
     /* the verbs: GLO + SEQ clears the pattern's steps (the sounds stay), again within 3 s undoes it, held a second
      * makes it INIT; GLO + OCT- / OCT+ undo and redo; in GRID they act on the track; GLO + EDIT opens the library */
@@ -3094,7 +3267,7 @@ static int selftest(void)
         pat[0].kit[2][P_DEC] = 3;
         m2k_button(B_EDIT, 1);
         m2k_button(B_SAVE, 1); m2k_button(B_SAVE, 0);
-        int kept_snd = snd[24].name[0] && snd[24].kit[P_DEC] == 3;
+        int kept_snd = snd[LIB_N].name[0] && snd[LIB_N].kit[P_DEC] == 3;
         m2k_button(B_SEQ, 1); m2k_button(B_SEQ, 0);
         m2k_button(B_EDIT, 0);
         m2k_pattern_t fr;
@@ -5695,6 +5868,7 @@ int main(int argc, char **argv)
     if (argc > 2 && !strcmp(argv[2], "--bus")) return bus_measure(out);
     if (argc > 2 && !strcmp(argv[2], "--perform")) return perform_tool(out, argc, argv);   /* [KEY ...] */
     if (argc > 2 && !strcmp(argv[2], "--demo")) return demo_render(out, argc, argv);     /* [SECONDS] [SLOT ...] */
+    if (argc > 2 && !strcmp(argv[2], "--library")) return lib_render(out, argc, argv);  /* [SLOT ...] */
     if (argc > 2 && !strcmp(argv[2], "--demo-dry")) { demo_dry = 1; return demo_render(out, argc, argv); }
     /* 1: the three factory patterns, 12 s each */
     for (int p = 0; p < 3; p++) {

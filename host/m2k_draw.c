@@ -5,7 +5,8 @@
  * frames a second (a splash frame changes every strip: about 13 a second over its SPI).
  *   cc -O2 -fno-builtin -fno-vectorize -fno-slp-vectorize -DM2K_MUL_OUT -Ifirmware/src -Ifirmware/gen \
  *      -o build/host/m2k_draw host/m2k_draw.c && build/host/m2k_draw [--splash | --perform]
- * (--perform: the sound's cost with each PERFORM effect held, perform_cpu) */
+ * (--perform: the sound's cost with each PERFORM effect held, perform_cpu; --library [DIR]: each library sound's,
+ * library_cpu) */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -13,6 +14,7 @@
 #include <sys/resource.h>
 #include <unistd.h>
 #include "m2k_core.c"
+#include "m2k_lib_play.c"
 
 static uint64_t instr(void)
 {
@@ -84,10 +86,53 @@ static int perform_cpu(void)
     return 0;
 }
 
+/* --library [DIR]: each library sound's cost on one core, instructions a sample while it sounds (or its delay rings):
+ * its audition (m2k_lib_play.c) rendered block by block, less the same pattern without its trigs, over the blocks it
+ * is heard in; its mean and its 90th percentile. DIR/cpu.json for tools/lib_audition.py */
+static int library_cpu(const char *dir)
+{
+    static int16_t b[256];
+    char path[512];
+    FILE *f = 0;
+    if (dir) {
+        snprintf(path, sizeof path, "%s/cpu.json", dir);
+        if (!(f = fopen(path, "w"))) { perror(path); return 1; }
+        fprintf(f, "{\"unit\": \"Mac instructions a sample, one core, built as the FM-1 builds the core\", \"sounds\": [\n");
+    }
+    printf("instructions a sample while the sound is heard (mean, 90th percentile), over the same pattern silent\n");
+    for (int i = 0; i < LIB_N; i++) {
+        int frames = lib_setup(i, 0);
+        uint64_t idle = 0;
+        for (int fr = 0; fr < frames; fr += 128) { uint64_t a = instr(); m2k_render(b, 128); idle += instr() - a - base_cost; }
+        double per = (double)idle / (frames / 128);
+        lib_setup(i, 1);
+        static double cs[4 * M2K_SR / 128 + 1];
+        double sum = 0;
+        int n = 0;
+        for (int fr = 0; fr < frames; fr += 128) {
+            uint64_t a = instr();
+            m2k_render(b, 128);
+            double c = (double)(instr() - a - base_cost) - per;
+            if (!trk[0].sounding && trk[0].dsleep) continue;
+            sum += c;
+            cs[n++] = c;
+        }
+        for (int x = 1; x < n; x++) for (int y = x; y > 0 && cs[y - 1] > cs[y]; y--) { double t = cs[y]; cs[y] = cs[y - 1]; cs[y - 1] = t; }
+        double mean = n ? sum / n / 128 : 0, worst = n ? cs[n * 9 / 10] : 0;   /* (the worst tenth's least: one trig's
+                                                                                * block is not the sound's cost) */
+        printf("  S%03d %-7s %-8s %5.0f %5.0f\n", i + 1, LIB[i].name, MI[LIB[i].m].name, mean, worst / 128);
+        if (f) fprintf(f, "  {\"slot\": %d, \"name\": \"%s\", \"instr\": %.0f, \"peak\": %.0f}%s\n", i + 1, LIB[i].name, mean,
+                       worst / 128, i + 1 < LIB_N ? "," : "");
+    }
+    if (f) { fprintf(f, "]}\n"); fclose(f); }
+    return 0;
+}
+
 int main(int argc, char **argv)
 {
     for (int r = 0; r < 20; r++) { uint64_t a = instr(); uint64_t b = instr() - a; if (!base_cost || b < base_cost) base_cost = b; }
     if (argc > 1 && !strcmp(argv[1], "--perform")) return perform_cpu();
+    if (argc > 1 && !strcmp(argv[1], "--library")) return library_cpu(argc > 2 ? argv[2] : 0);
     if (argc > 1 && !strcmp(argv[1], "--splash")) {
         /* every splash frame at 60 a second, as the host draws them */
         m2k_init(2000);

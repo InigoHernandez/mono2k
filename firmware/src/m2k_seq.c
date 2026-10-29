@@ -1012,6 +1012,7 @@ static void pat_init(m2k_pattern_t *p, const char *name)
 
 #include "m2k_factory.c"
 #include "m2k_proj.c"
+#include "m2k_lib.c"
 
 /* ------------------------------------------------------------------------------------------------ store */
 
