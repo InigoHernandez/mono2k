@@ -20,7 +20,8 @@ enum {
     K_LSPD, K_LDPT,                                                        /* the LFOs' speed and depth */
     K_DCAY, K_DAMP,                                                        /* the reverb's */
     K_PCT, K_GRES, K_LANE,                                                 /* GRIDS' */
-    K_MUTQ, K_MOTN                                                         /* GLO > PLAY's, the screen's motion */
+    K_MUTQ, K_MOTN,                                                        /* GLO > PLAY's, the screen's motion */
+    K_TLEN                                                                 /* a track's own length (SEQ held) */
 };
 typedef struct { const char *s4, *name; uint8_t kind; } pi_t;
 
@@ -55,6 +56,8 @@ static const pi_t PI_GLOB[G_COUNT] = {
     {"BD", "KICK DENSITY", K_PCT}, {"SD", "SNARE DENSITY", K_PCT}, {"HH", "HATS DENSITY", K_PCT},
     {"LANE", "T1 LANE", K_LANE}, {"LANE", "T2 LANE", K_LANE}, {"LANE", "T3 LANE", K_LANE}, {"LANE", "T4 LANE", K_LANE},
     {"LANE", "T5 LANE", K_LANE}, {"LANE", "T6 LANE", K_LANE},
+    {"TLEN", "T1 LENGTH", K_TLEN}, {"TLEN", "T2 LENGTH", K_TLEN}, {"TLEN", "T3 LENGTH", K_TLEN}, {"TLEN", "T4 LENGTH", K_TLEN},
+    {"TLEN", "T5 LENGTH", K_TLEN}, {"TLEN", "T6 LENGTH", K_TLEN},
 };
 
 static const pi_t PI_SET[17] = {
@@ -233,7 +236,7 @@ static int kind_choices(int k)
     }
 }
 
-static int kind_max(int k) { return k == K_BPM ? 255 : k == K_LEN ? 64 : k == K_DEST ? P_COUNT : 127; }
+static int kind_max(int k) { return k == K_BPM ? 255 : k == K_LEN || k == K_TLEN ? 64 : k == K_DEST ? P_COUNT : 127; }
 static int kind_min(int k) { return k == K_LEN ? 1 : 0; }
 
 /* ------------------------------------------------------------------------------------------------ strings */
@@ -447,6 +450,14 @@ static void fmt(const pi_t *pi, int t, int v, char *out, const char **unit)
     case K_BPM: s_int(out, 30 + v); *unit = "BPM"; break;
     case K_SWNG: s_int(out, 50 + (v * 25) / 127); *unit = "%"; break;
     case K_LEN: s_int(out, v); *unit = "STEPS"; break;
+    case K_TLEN: {                     /* 0: the pattern's LEN, as long as it is; on a lane, Grids' cycle plays */
+        static char u[12];
+        if (v) s_int(out, v); else s_cpy(out, "PAT");
+        if (lane_of(PAT(cur_pat), t)) *unit = "ON A LANE";
+        else if (v) *unit = "STEPS";
+        else { s_cpy(s_int(u, seq_len()), " STEPS"); *unit = u; }
+        break;
+    }
     case K_GLCH: {                     /* a sixteenth's chance of a repeat, its law's: 0.4 % .. 50 % */
         int c10 = (int)((T_GLCH_P[v & 127] * 1000u + 32768u) >> 16);
         if (c10 < 100) s_dec1(out, c10); else s_int(out, (c10 + 5) / 10);
@@ -783,14 +794,15 @@ static void sound_load(m2k_pattern_t *p)
 }
 
 /* the value a knob shows: a held step's lock, or the kit */
-/* the knob k turns: the page's, or while SEQ is held the sequencer's (LEN, SWING, ACCENT, TEMPO) */
+/* the knob k turns: the page's, or while SEQ is held the sequencer's (the pattern's LEN, the track in view's own length
+ * and speed, SWING; the tempo stays on HOME's and GLO > TIME's) */
 static int held(int b) { return ui.btn[b] || ui.latch == b + 1; }    /* (a latched layer is held) */
 static int seq_layer(void) { return held(B_SEQ) && !held(B_GLO) && !held(B_HOME) && !ui.btn[B_EDIT]; }
 static int perf_layer(void) { return held(B_FX) && !held(B_GLO) && !held(B_HOME) && !ui.btn[B_EDIT]; }
 static int mom_layer(void) { return ui.btn[B_LFO] && !held(B_GLO) && !held(B_HOME) && !ui.btn[B_EDIT]; }
 static int knob_at(int k)
 {
-    const uint8_t SEQ_K[4] = {GL(G_LEN), (uint8_t)GL(G_SPD1 + ui.trk), GL(G_SWNG), GL(G_TMPO)};   /* (the track's speed) */
+    const uint8_t SEQ_K[4] = {GL(G_LEN), (uint8_t)GL(G_TLEN1 + ui.trk), (uint8_t)GL(G_SPD1 + ui.trk), GL(G_SWNG)};
     static const uint8_t PERF_K[4] = {GL(G_GLCH), GL(G_TAPE), GL(G_ADPC), GL(G_DRIV)};   /* the bus's, to stay */
     return seq_layer() ? SEQ_K[k] : perf_layer() ? PERF_K[k] : knob_param(ui.page, ui.sub, k);
 }
@@ -1016,12 +1028,15 @@ static void held_remove(int s)
     ui.nheld = (uint8_t)j;
 }
 
+/* the steps the track in view reaches, for its pages: the pattern's, or its own length when longer */
+static int view_len(void) { int a = seq_len(), b = tlen_of(ui.trk); return a > b ? a : b; }
+
 /* a page key in GRID: the page, or why it is empty; tapped again, the view follows the playhead */
 static void page_key(int pg)
 {
     char a[16], o[24], *e;
     e = s_cpy(a, "PAGE "); s_int(e, pg + 1);
-    if (pg * 16 >= seq_len()) {
+    if (pg * 16 >= view_len()) {
         e = s_cpy(o, "PAST THE END, HOLD: ");
         s_int(e, (pg + 1) * 16);
         toast(a, o);
@@ -1034,18 +1049,19 @@ static void page_key(int pg)
     toast(a, o);
 }
 
-/* a page key held: the pattern's length ends with that page; new steps take the pattern so far, so it goes on.
- * Returns 1 when the locks' pool could not take every lock the new steps copy (the message says so) */
+/* a page key held: the pattern's length ends with that page; new steps take the pattern so far, so it goes on (a
+ * track on a length of its own plays on as it was: its steps untouched). Returns 1 when the locks' pool could not take
+ * every lock the new steps copy (the message says so) */
 static int page_length(int pg)
 {
     m2k_pattern_t *p = PAT(cur_pat);
     int old = seq_len(), len = (pg + 1) * 16, lost = 0;
     if (len > old) {
         for (int t = 0; t < M2K_TRACKS; t++)
-            for (int s = old; s < len; s++) { p->step[t][s] = p->step[t][s % old]; lock_clear_step(t, s); }
+            for (int s = old; s < len && !p->glob[G_TLEN1 + t]; s++) { p->step[t][s] = p->step[t][s % old]; lock_clear_step(t, s); }
         for (int i = 0; i < M2K_LOCKS; i++) {
             m2k_lock_t l = p->lock[i];
-            if (l.trk >= M2K_TRACKS || l.step >= old) continue;
+            if (l.trk >= M2K_TRACKS || l.step >= old || p->glob[G_TLEN1 + l.trk]) continue;
             for (int s = l.step + old; s < len; s += old) lost |= !lock_set(l.trk, s, l.param, l.val);
         }
     }
@@ -1084,6 +1100,7 @@ static void entry_show(const char *what)
 
 static void entry_write(int note)
 {
+    if (ui.cursor >= tlen_of(ui.trk)) ui.cursor = 0;   /* (a shorter track picked meanwhile: its first step) */
     m2k_step_t *st = &PAT(cur_pat)->step[ui.trk][ui.cursor];
     step_pop(ui.trk, ui.cursor);
     st->flags = ST_TRIG;
@@ -1094,12 +1111,13 @@ static void entry_write(int note)
     char n[8];
     s_note(n, note);
     entry_show(n);
-    ui.cursor = (uint8_t)((ui.cursor + 1) % seq_len());
+    ui.cursor = (uint8_t)((ui.cursor + 1) % tlen_of(ui.trk));
 }
 
 static void select_pattern(int n);
 
-/* the SEQ layer's tools, on the track in view over the pattern's length: its locks move with its steps */
+/* the SEQ layer's tools, on the track in view over its length (its own, or the pattern's): its locks move with its
+ * steps. LEN X2 and HALF are the pattern's */
 static struct { m2k_step_t st[M2K_STEPS]; uint16_t nlk; uint8_t ok; m2k_lock_t lk[M2K_LOCKS]; } seq_clip;   /* (every lock: 384) */
 static const char *const SEQ_TOOL[8] = {"CLEAR", "REVERSE", "SHIFT <", "SHIFT >", "RANDOM", "LEN X2", "COOK", "HALF"};
 static void tool_undo(int i);                       /* (below: the undo's copy, a run of one tool keeping the first) */
@@ -1108,7 +1126,7 @@ static void seq_tool(int i)
 {
     tool_undo(i);
     m2k_pattern_t *p = PAT(cur_pat);
-    int t = ui.trk, len = seq_len();
+    int t = ui.trk, len = i == 5 || i == 7 ? seq_len() : tlen_of(t);
     m2k_step_t *st = p->step[t];
     char o[24] = {'T', (char)('1' + t), ' ', 0};
     switch (i) {
@@ -1152,7 +1170,7 @@ static void seq_tool(int i)
     case 7:                                            /* HALF: the pattern half as long (the steps after it kept) */
         if (len < 2) return;
         p->glob[G_LEN] = (uint8_t)(len / 2);
-        if (ui.spage * 16 >= len / 2) ui.spage = 0;
+        if (ui.spage * 16 >= view_len()) ui.spage = 0;
         s_int(s_cpy(o, "LENGTH "), len / 2);
         toast("SEQ", o);
         return;
@@ -1320,7 +1338,7 @@ static void key_event(int k, int down)
         return;
     }
     int s = ui.spage * 16 + w;
-    if (ui.nheld >= 8 || s >= seq_len()) return;      /* (past the end: no trig placed there unseen) */
+    if (ui.nheld >= 8 || s >= tlen_of(ui.trk)) return;   /* (past the track's end: no trig placed there unheard) */
     m2k_step_t *st = &p->step[ui.trk][s];
     int added = 0;
     if (!(st->flags & ST_TRIG)) {
@@ -1600,7 +1618,7 @@ static void verb(int noun, int v)
         if (!step_clip.ok) { toast("NOTHING", "A STEP + REC COPIES IT"); break; }
         int first = ui.held[0];
         for (int i = 0; i < ui.nheld; i++) if (ui.held[i] < first) first = ui.held[i];
-        int len = seq_len(), lost = 0;
+        int len = tlen_of(ui.trk), lost = 0;                             /* (round the track's length) */
         for (int h = 0; h < (step_clip.n == 1 ? ui.nheld : 1); h++) {   /* one step onto each held; several from the first */
             int base = step_clip.n == 1 ? ui.held[h] : first;
             for (int i = 0; i < step_clip.n; i++) {
@@ -1618,9 +1636,10 @@ static void verb(int noun, int v)
     lockmap_build();
 }
 
-/* GRIDS + OCT+, stopped: the lanes written into the steps of the tracks that follow them, as many as the pattern's
- * length, as they play from its start (the chaos of a PLAY's first cycles), at the track's note (lane_note), the
- * accents its accents; their locks there cleared and their following off, so the steps can be edited and locked */
+/* GRIDS + OCT+, stopped: the lanes written into the steps of the tracks that follow them, as many as each track's
+ * length (its own, or the pattern's: what it plays once off the lane), as they play from its start (the chaos of a
+ * PLAY's first cycles), at the track's note (lane_note), the accents its accents; their locks there cleared and their
+ * following off, so the steps can be edited and locked */
 static int grids_followers(const m2k_pattern_t *p)
 {
     int m = 0;
@@ -1630,9 +1649,8 @@ static int grids_followers(const m2k_pattern_t *p)
 
 static void grids_write(m2k_pattern_t *p)
 {
-    const int len = CLAMP(p->glob[G_LEN], 1, 64);
     for (int t = 0; t < M2K_TRACKS; t++) {
-        int lane = lane_of(p, t);
+        int lane = lane_of(p, t), len = pat_tlen(p, t);
         if (!lane) continue;
         int note = lane_note(p, t);
         for (int st = 0; st < len; st++) {
@@ -1663,10 +1681,10 @@ static void grids_written(int m)
 static void grids_snapshot(void)
 {
     m2k_pattern_t *p = PAT(cur_pat);
-    int m = grids_followers(p), over = 0, len = seq_len();
+    int m = grids_followers(p), over = 0;
     if (!m) { toast("NO LANE FOLLOWED", "LANES: A TRACK'S LANE"); return; }
     for (int t = 0; t < M2K_TRACKS; t++)
-        for (int st = 0; st < len && (m >> t & 1); st++) if (p->step[t][st].flags & ST_TRIG) over |= 1 << t;
+        for (int st = 0; st < pat_tlen(p, t) && (m >> t & 1); st++) if (p->step[t][st].flags & ST_TRIG) over |= 1 << t;
     if (over) {                        /* over trigs: asked */
         char o[28];
         s_cpy(s_tracks(s_cpy(o, "OVER"), over), " TRIGS");
@@ -1896,7 +1914,7 @@ static void button_event(int b, int down)
                 ui.pads = 0;
                 ui.grid = 1;
                 ui.nheld = 0;
-                if (ui.spage * 16 >= seq_len()) ui.spage = 0;
+                if (ui.spage * 16 >= view_len()) ui.spage = 0;
             } else ui.pads = 1;
             if (ui.grid) toast("GRID: OCT-/+ PAGES", "HOLD G#4-D#5: LENGTH");
             else toast(ui.pads ? "PADS" : "KEYS", ui.pads ? "WHITE 1-6, 9-14: T1-T6" : "PLAY THE TRACK");
@@ -1999,7 +2017,7 @@ static void button_event(int b, int down)
         ui.grid ^= 1;
         ui.pads = 0;
         ui.nheld = 0;
-        if (ui.spage * 16 >= seq_len()) ui.spage = 0;
+        if (ui.spage * 16 >= view_len()) ui.spage = 0;
         toast(ui.grid ? "GRID: OCT-/+ PAGES" : "KEYS", ui.grid ? "HOLD G#4-D#5: LENGTH" : "PLAY THE TRACK");
         start_trans(250);
         latch_tapped(b, hd);
@@ -2021,7 +2039,7 @@ static void button_event(int b, int down)
             sq.rec ^= 1;
             if (!sq.rec) sq.ready = 0;     /* (REC off: no longer waiting for a note) */
             if (sq.rec && !sq.playing) {   /* stopped: step entry from the page in view */
-                ui.cursor = (uint8_t)(ui.spage * 16 < seq_len() ? ui.spage * 16 : 0);
+                ui.cursor = (uint8_t)(ui.spage * 16 < tlen_of(ui.trk) ? ui.spage * 16 : 0);
                 if (ui.grid) toast("REC", "SEQ: KEYS WRITE STEPS");
                 else toast("STEP ENTRY", "KEYS WRITE, EDIT RESTS");
             }
@@ -2055,9 +2073,10 @@ static void button_event(int b, int down)
     case B_SEL: go(PG_FILT); break;
     case B_ENV: go(PG_AMP); break;
     case B_EDIT:
-        if (step_entry()) {                            /* step entry: a rest, and on */
+        if (step_entry()) {                            /* step entry: a rest, and on (round the track's length) */
+            if (ui.cursor >= tlen_of(ui.trk)) ui.cursor = 0;
             step_remove(ui.trk, ui.cursor);
-            ui.cursor = (uint8_t)((ui.cursor + 1) % seq_len());
+            ui.cursor = (uint8_t)((ui.cursor + 1) % tlen_of(ui.trk));
             entry_show("REST");
             ui.edit_t0 = 0;
             break;
@@ -2094,7 +2113,7 @@ static void button_event(int b, int down)
         int d = b == B_OCTU ? 1 : -1;
         if (d > 0 && ui.page == PG_ARP && ui.sub && !sq.playing && !(ui.grid && ui.nheld)) { grids_snapshot(); break; }
         if (ui.grid && ui.nheld) held_step_edit(0, d);
-        else if (ui.grid) { ui.spage = (uint8_t)CLAMP(ui.spage + d, 0, (seq_len() - 1) / 16); ui.follow = 0; }   /* (the pattern's pages) */
+        else if (ui.grid) { ui.spage = (uint8_t)CLAMP(ui.spage + d, 0, (view_len() - 1) / 16); ui.follow = 0; }   /* (the pages it reaches) */
         else {                                       /* the track in view's octave (each track keeps its own) */
             int8_t *oc = &ui.oct[ui.trk];
             *oc = (int8_t)CLAMP(*oc + d, -3, 3);
@@ -2132,7 +2151,7 @@ static void select_pattern(int n)
     int other = n != cur_pat;
     cur_pat = n;
     sq.queued = (uint8_t)n;
-    if (ui.spage * 16 >= seq_len()) ui.spage = 0;     /* a page this pattern does not reach shows nothing: its first */
+    if (ui.spage * 16 >= view_len()) ui.spage = 0;    /* a page this pattern does not reach shows nothing: its first */
     ui.follow = 1;
     lockmap_build();
     for (int t = 0; t < M2K_TRACKS; t++) m_cpy(trk[t].eff, PAT(n)->kit[t], P_COUNT);
@@ -2215,7 +2234,8 @@ void m2k_encoder(int e, int d)
     case E_PRESET: {
         if (ui.grid && ui.nheld) { held_step_edit(d > 0 ? 1 : -1, 0); break; }
         if (step_entry()) {                            /* step entry: the cursor */
-            ui.cursor = (uint8_t)((ui.cursor + seq_len() + (d > 0 ? 1 : -1)) % seq_len());
+            int tl = tlen_of(ui.trk);                  /* (round the track's length) */
+            ui.cursor = (uint8_t)((ui.cursor + tl + (d > 0 ? 1 : -1)) % tl);
             entry_show(d > 0 ? "NEXT" : "BACK");
             break;
         }
@@ -2506,7 +2526,8 @@ static int play_step(void) { int s = (int)sq.step - 1; return s < 0 ? seq_len() 
 /* a step's box (a ring pops round it as it is toggled): empty its outline; a trig solid; with locks a checker in its
  * outline; on a condition (a chance, A:B, PRE, FILL ...) framed, its block inset; on some of its trig tracks a third
  * filled for each (AMP, FILTER, LFO, left to right), NONE a dot; accent a notch, slide a dotted edge, ratchets dots
- * along the foot; past the pattern's end a dot at its centre. The playing step framed */
+ * along the foot; past the track's end (its own length's, or the pattern's) a dot at its centre. The playing step
+ * framed, the track's own */
 static void step_cell(int x, int y, int w, int h, int t, int s)
 {
     m2k_pattern_t *p = PAT(cur_pat);
@@ -2514,7 +2535,7 @@ static void step_cell(int x, int y, int w, int h, int t, int s)
     int playing = sq.playing && track_pos(t) == s;
     int held = 0;
     if (ui.grid && t == ui.trk) for (int i = 0; i < ui.nheld; i++) if (ui.held[i] == s) held = 1;
-    if (s >= seq_len()) { px(x + w / 2, y + h / 2, 1); return; }
+    if (s >= tlen_of(t)) { px(x + w / 2, y + h / 2, 1); return; }
     if (lane_of(p, t)) {               /* following a lane: its trigs in this loop (stopped, a PLAY's first), dotted round */
         uint32_t len = (uint32_t)seq_len(), n = !sq.playing ? 0 : spd_of(t) == 4 ? sq.n1x : sq.tk[t];
         int hit = grids_hit(p, lane_of(p, t) - 1, (n ? (n - 1) / len * len : 0) + (uint32_t)s, 0);
@@ -3496,7 +3517,7 @@ static void home(void)
             for (int i = 0; i < 16; i++) {
                 int s = ui.spage * 16 + i, x = 18 + (i >> 2) * 56 + (i & 3) * 13;
                 if (muted) {
-                    if (p->step[t][s].flags & ST_TRIG) dots_frame(x, y, 11, 16); else px(x + 5, y + 8, 1);
+                    if (s < tlen_of(t) && (p->step[t][s].flags & ST_TRIG)) dots_frame(x, y, 11, 16); else px(x + 5, y + 8, 1);
                     continue;
                 }
                 step_cell(x, y, 11, 16, t, s);
@@ -3876,7 +3897,7 @@ static void hold_help(void)
     }
 }
 
-/* SEQ held a moment: its tools on the white keys (the knobs above show LEN, SPEED, SWING, TEMPO meanwhile) */
+/* SEQ held a moment: its tools on the white keys (the knobs above show LEN, the track's TLEN and SPD, SWNG meanwhile) */
 static void seq_help(void)
 {
     if (!seq_layer() || (ui.latch != B_SEQ + 1 && (!ui.seq_t0 || ui.now - (ui.seq_t0 & ~1u) < 350))) return;
@@ -4150,7 +4171,7 @@ const uint8_t *m2k_leds(void)
         if (ui.grid) {
             if (w >= 0) {
                 int s = ui.spage * 16 + w;
-                if (s < seq_len()) {
+                if (s < tlen_of(ui.trk)) {             /* (the track's steps: past its length dark) */
                     if (!(w & 3)) v = 14;      /* the beats' landmarks, faint (off on the FM-1) */
                     if (p->step[ui.trk][s].flags & ST_TRIG) v = 110;
                     if (s == tp) v = 255;

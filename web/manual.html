@@ -210,7 +210,7 @@
     </tbody>
   </table>
   <h2>Hold SEQ and press</h2>
-  <p>The white keys 1–8 are tools for the track in view, over the pattern's length (its locks move with its steps); the knobs are the sequencer's while SEQ is held. GLO + OCT− undoes a tool.</p>
+  <p>The white keys 1–8 are tools for the track in view, over its length (its locks move with its steps); the knobs are the sequencer's while SEQ is held. GLO + OCT− undoes a tool.</p>
   <table>
     <thead><tr><th>With SEQ</th><th>Does</th></tr></thead>
     <tbody>
@@ -222,7 +222,7 @@
       <tr><td>White 7</td><td>COOK: a few of its notes moved a tone, a third, a fourth or a fifth.</td></tr>
       <tr><td>White 8</td><td>HALF: the pattern half as long (the steps after it kept).</td></tr>
       <tr><td>REC / PLAY</td><td>Copy the track's steps / paste them onto the track in view (pick another with SELECT first).</td></tr>
-      <tr><td>KNOB 1–4</td><td>LEN; SPEED, the track's own (1/8×, 1/4×, 1/2×, 3/4×, 1×, 3/2×, 2×); SWING; TEMPO.</td></tr>
+      <tr><td>KNOB 1–4</td><td>LEN, the pattern's; TLEN, the track's own length (PAT: the pattern's, 1–64 steps); SPEED, the track's own (1/8×, 1/4×, 1/2×, 3/4×, 1×, 3/2×, 2×); SWING. Tempo is on HOME and GLO &gt; TIME.</td></tr>
       <tr><td>ALGORITHM</td><td>The accent's amount.</td></tr>
     </tbody>
   </table>
@@ -378,7 +378,8 @@
   <ol class="steps">
     <li>Hold SEQ: white 3 and 4 shift the track's steps a step earlier or later, white 2 plays them backwards, white 5 throws in a random quarter of the steps, white 7 moves a few notes.</li>
     <li>To give another track the same steps: hold SEQ, press REC (copy); turn SELECT to the other track; hold SEQ, press PLAY (paste).</li>
-    <li>To run one track slower or faster than the rest: hold SEQ and turn KNOB 2 (3/4× against 1× for a lilt, 1/2× for a long line).</li>
+    <li>To run one track slower or faster than the rest: hold SEQ and turn KNOB 3 (3/4× against 1× for a lilt, 1/2× for a long line).</li>
+    <li>For a polyrhythm: hold SEQ and turn KNOB 2, the track's own length (12 or 7 against 16).</li>
   </ol>
   <h2>Vary the steps quickly</h2>
   <ol class="steps">
@@ -552,6 +553,11 @@
     </tbody>
   </table>
   <p>A page past the end says so when you tap its key, and which length holding it makes.</p>
+  <h2>Tracks of their own length</h2>
+  <p>Hold SEQ and turn KNOB 2: the track in view loops over its own length, PAT for the pattern's. 16 against 12 against 7 drift apart and all start together again at PLAY and at the next pattern; the pattern's LEN still sets the bars.</p>
+  <div class="figs">
+    <figure class="fig"><canvas data-scr="33_home_lengths"></canvas><figcaption>Six lengths: 16, 12, 7, 5, 10, 3. Past each one's end, dots; each playhead its own.</figcaption></figure>
+  </div>
   <h2>Choosing patterns</h2>
   <p>PRESETS picks the pattern: at once when stopped, at the end of the bar while playing, so patterns chain as you play.</p>
   <p>An accent plays the step harder (GLO &gt; TIME's ACNT says how much); a slide glides into the next note without trigging again.</p>
@@ -634,9 +640,9 @@
     </tbody>
   </table>
   <ul>
-    <li>A track on a lane plays its trigs, not its steps: its own sound, at its root, Grids' accents.</li>
+    <li>A track on a lane plays its trigs, not its steps: its own sound, at its root, Grids' accents, on Grids' cycle (its own length waits for the lane to be off).</li>
     <li>It runs at the track's speed. CHAOS is the same at every PLAY.</li>
-    <li>Stopped, OCT+ on GRIDS or LANES writes the lanes into those tracks' steps and lets go of the lanes.</li>
+    <li>Stopped, OCT+ on GRIDS or LANES writes the lanes into those tracks' steps (as many as each track's length) and lets go of the lanes.</li>
   </ul>
   <div class="figs">
     <figure class="fig"><canvas data-scr="20d_lanes"></canvas><figcaption>LANES: each lane's levels, its density dotted, the step playing.</figcaption></figure>
@@ -831,7 +837,7 @@
 </footer>
 <script src="site.js?v=3"></script>
 <script src="panel.js?v=2"></script>
-<script src="changelog.js?v=38"></script>
-<script src="manual.js?v=42"></script>
+<script src="changelog.js?v=39"></script>
+<script src="manual.js?v=43"></script>
 </body>
 </html>

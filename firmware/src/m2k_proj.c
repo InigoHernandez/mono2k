@@ -13,9 +13,10 @@
 #define M2K_IMG_DATA (160u * 1024u)        /* a project's packed patterns (the FM-1's first build: 28 KB, 16 of them) */
 #endif
 #define IMG_DATA M2K_IMG_DATA
-/* (its head, 2 + 8 + M2K_TRACKS + G_COUNT + 1, fills the 48 since format 18: the Patch Editor keeps this number) */
-typedef char blob_head_fits[2 + 8 + M2K_TRACKS + G_COUNT + 1 <= 48 ? 1 : -1];
-#define BLOB_MAX (48 + M2K_TRACKS * P_COUNT + M2K_TRACKS * M2K_STEPS / 8 + M2K_TRACKS * M2K_STEPS * 4 + 2 + M2K_LOCKS * 4)
+/* (its head, 2 + 8 + M2K_TRACKS + G_COUNT + 1, fills the 54 since format 19, the 48 since 18: the Patch Editor keeps
+ * this number) */
+typedef char blob_head_fits[2 + 8 + M2K_TRACKS + G_COUNT + 1 <= 54 ? 1 : -1];
+#define BLOB_MAX (54 + M2K_TRACKS * P_COUNT + M2K_TRACKS * M2K_STEPS / 8 + M2K_TRACKS * M2K_STEPS * 4 + 2 + M2K_LOCKS * 4)
 
 typedef struct {
     char name[8];
@@ -31,7 +32,8 @@ static int cur_proj;
 
 /* -------------------------------------------------------------------------------------- one pattern, packed */
 
-/* a pattern in the layout of a version (18, today's; the self-test writes the older ones, 3..17; 3..7 kits 70 wide) */
+/* a pattern in the layout of a version (19 and 18, today's; the self-test writes the older ones, 3..17; 3..7 kits 70
+ * wide) */
 static int pat_pack_v(const m2k_pattern_t *p, uint8_t *o, int ver)
 {
     int n = 0, stride = ver >= 8 ? P_COUNT : P_WBNK;
@@ -44,10 +46,11 @@ static int pat_pack_v(const m2k_pattern_t *p, uint8_t *o, int ver)
                                         * 15: the tracks' speeds, after the globals; 16: the amp's ATK DEC REL and the
                                         * LFOs' SPD and DPTH on the owner's laws; 17: the bus's effects rebuilt (the
                                         * reverb, its and the delay's sends, the glitch); 18: Grids (its map, its
-                                        * lanes, after the speeds) and four more chances, after the conditions */
+                                        * lanes, after the speeds) and four more chances, after the conditions; 19:
+                                        * the tracks' own lengths, after the lanes */
     m_cpy(o + n, p->name, 8); n += 8;
     m_cpy(o + n, p->machine, M2K_TRACKS); n += M2K_TRACKS;
-    int gl = ver >= 18 ? G_COUNT : ver >= 15 ? G_COUNT_V17 : G_COUNT_V14;
+    int gl = ver >= 19 ? G_COUNT : ver >= 18 ? G_COUNT_V18 : ver >= 15 ? G_COUNT_V17 : G_COUNT_V14;
     m_cpy(o + n, p->glob, (uint32_t)gl); n += gl;
     o[n++] = p->mute;
     for (int t = 0; t < M2K_TRACKS; t++) { m_cpy(o + n, p->kit[t], stride); n += stride; }
@@ -75,7 +78,14 @@ static int pat_pack_v(const m2k_pattern_t *p, uint8_t *o, int ver)
     return n;
 }
 
-static int pat_pack(const m2k_pattern_t *p, uint8_t *o) { return pat_pack_v(p, o, 18); }
+/* a pattern none of whose tracks has a length of its own packs as format 18, byte for byte as before (bank A's, a
+ * blank's: the stores' demos and blanks still match, and 1.4 reads it); one with a length, as 19 */
+static int pat_pack(const m2k_pattern_t *p, uint8_t *o)
+{
+    int own = 0;
+    for (int t = 0; t < M2K_TRACKS; t++) own |= p->glob[G_TLEN1 + t];
+    return pat_pack_v(p, o, own ? 19 : 18);
+}
 
 static uint8_t tune_v5(int v)
 {
@@ -85,7 +95,7 @@ static uint8_t tune_v5(int v)
 
 /* a pattern's values in their ranges, as the knobs keep them: a damaged or hand-made store reaches past no table
  * (the kit and the locks 0..127, the notes too, ratchets 0..4, each global to its own: the tempo to 255, the length
- * 1..64). Before the conversions (they index by the old values) and after them */
+ * 1..64, a track's 0..64). Before the conversions (they index by the old values) and after them */
 static void pat_clamp(m2k_pattern_t *p)
 {
     for (int t = 0; t < M2K_TRACKS; t++) {
@@ -98,16 +108,18 @@ static void pat_clamp(m2k_pattern_t *p)
     }
     for (int g = 0; g < G_COUNT; g++) if (g != G_TMPO && p->glob[g] > 127) p->glob[g] = 127;
     p->glob[G_LEN] = (uint8_t)CLAMP(p->glob[G_LEN], 1, 64);
+    for (int t = 0; t < M2K_TRACKS; t++) if (p->glob[G_TLEN1 + t] > 64) p->glob[G_TLEN1 + t] = 64;
     for (int i = 0; i < M2K_LOCKS; i++) if (p->lock[i].val > 127) p->lock[i].val = 127;
 }
 
 static int pat_unpack(m2k_pattern_t *p, const uint8_t *o, int len)
 {
     int n = 0;
-    if (len < 2 || o[0] != 'P' || o[1] < 1 || o[1] > 18) return 0;
+    if (len < 2 || o[0] != 'P' || o[1] < 1 || o[1] > 19) return 0;
     int ver = o[1], stride = ver >= 8 ? P_COUNT : ver >= 3 ? P_WBNK : P_MODT;   /* before 3 a kit ended before the MOD
                                                                                * effect, before 8 before the bank */
-    const int gl = ver >= 18 ? G_COUNT : ver >= 15 ? G_COUNT_V17 : G_COUNT_V14;   /* before 15 no speeds, 18 no Grids */
+    /* before 15 no speeds, 18 no Grids, 19 no lengths of the tracks' own (0: each the pattern's, as they played) */
+    const int gl = ver >= 19 ? G_COUNT : ver >= 18 ? G_COUNT_V18 : ver >= 15 ? G_COUNT_V17 : G_COUNT_V14;
     const int nc = ver >= 18 ? C_COUNT : C_COUNT_V17;                       /* (a condition past them was ALWAYS) */
     const int head = 2 + 8 + M2K_TRACKS + gl + 1 + M2K_TRACKS * stride + M2K_TRACKS * M2K_STEPS / 8 + 2;
     if (len < head) return 0;

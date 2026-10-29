@@ -63,10 +63,12 @@ enum {
     G_GRX = G_SPD1 + 6, G_GRY, G_GRCH, G_GRES,   /* Grids (format 18, m2k_grids.c): the map's X, Y, CHAOS, its cycle */
     G_GRBD, G_GRSD, G_GRHH,                  /* the kick's, the snare's, the hats' density */
     G_LANE1,                                 /* + t: the lane track t follows: OFF BD SD HH, (v * 4) >> 7 */
-    G_COUNT = G_LANE1 + 6
+    G_TLEN1 = G_LANE1 + 6,                   /* + t: track t's own length, 1..64 steps; 0 the pattern's (format 19) */
+    G_COUNT = G_TLEN1 + 6
 };
 #define G_COUNT_V14 G_SPD1                   /* the globals before the speeds */
 #define G_COUNT_V17 G_GRX                    /* and before Grids */
+#define G_COUNT_V18 G_TLEN1                  /* and before the tracks' lengths */
 #define SPD_1X 82                            /* a speed's value at 1x (the fifth of seven) */
 
 /* machines */

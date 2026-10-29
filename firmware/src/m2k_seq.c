@@ -1,7 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /* MONO2K's sequencer: six tracks of up to 64 steps, each step a trig with its note, accent and slide, and
  * parameter locks: any track parameter set for one step only, back to the kit on the next trig (as on the
- * Elektron machines). Swing, a pattern queued for the end of the bar, live recording, an arpeggiator per track. */
+ * Elektron machines). Swing, a pattern queued for the end of the bar, live recording, an arpeggiator per track, each
+ * track on a speed and a length of its own. */
 
 static struct {
     uint8_t playing, step, queued, rec;   /* step: the next to play (at the end, the wrap waits for it) */
@@ -12,12 +13,13 @@ static struct {
     uint8_t mq_m, mq_v, sq_m, sq_v;    /* mutes and solos waiting for the next bar (GLO > PLAY): which, and as what */
     uint8_t solo_rel;                  /* solo keys let go before their bar came: off at the bar after it */
     uint8_t fill_next, fill_auto;      /* a fill for the next loop (GLO + white 7), and that loop's own */
-    /* the tracks off 1x: each on its own step and clock (Q8 samples), over the pattern's length, from its start */
+    /* the tracks off 1x: each on its own step and clock (Q8 samples), over its length, from the pattern's start */
     uint8_t ts[M2K_TRACKS];
     uint32_t tk[M2K_TRACKS];           /* (their steps played since the pattern's start) */
     int32_t tctr[M2K_TRACKS];
     uint8_t tpat;                      /* the pattern those clocks belong to (a new one starts them over) */
     uint8_t tspd[M2K_TRACKS];          /* each track's speed as it last ran (turned: on from where the pattern is) */
+    uint8_t tlv[M2K_TRACKS];           /* and its own length's value (turned so too) */
     uint8_t relock;                    /* a continue: the next step puts them back where the pattern is */
     uint32_t n1x;                      /* the pattern's steps played since its start: theirs follow from it */
     int32_t ctr;                       /* Q8 samples to the next step (under the clock in, as expected: for REC) */
@@ -236,6 +238,18 @@ static int mach_home(int m);
 static inline int lane_of(const m2k_pattern_t *p, int t) { return (p->glob[G_LANE1 + t] * 4) >> 7; }   /* 0, 1 BD .. 3 HH */
 static inline int grids_cyc(const m2k_pattern_t *p) { return (p->glob[G_GRES] * 2) >> 7 ? 32 : 16; }
 
+/* a track's own length (format 19; SEQ held, KNOB 2): its steps loop over it, free of the pattern's, so 16 against 12
+ * against 7 drift apart and meet again at a start or a new pattern; 0 is the pattern's LEN. A track on a lane plays
+ * Grids' cycle: its length waits for the lane to be off */
+static inline int pat_tlen(const m2k_pattern_t *p, int t)
+{
+    int l = p->glob[G_TLEN1 + t];
+    return l ? (l > 64 ? 64 : l) : CLAMP(p->glob[G_LEN], 1, 64);
+}
+static inline int tlen_of(int t) { const m2k_pattern_t *p = PAT(cur_pat); return lane_of(p, t) ? seq_len() : pat_tlen(p, t); }
+/* a track at 1x on a length other than the pattern's: its step the pattern's count since its start, round its own */
+static inline int track_own(int t) { return tlen_of(t) != seq_len(); }
+
 /* part's hit at the K-th step: 0 none, 1 a trig, 2 an accent; *lv its level */
 static int grids_hit(const m2k_pattern_t *p, int part, uint32_t k, int *lv)
 {
@@ -298,13 +312,23 @@ static void fire_track(int t, int s, int32_t len, uint32_t k)
     }
 }
 
-static void fire_step(int s)                         /* the pattern's step: the tracks at 1x */
+/* the pattern's step: the tracks at 1x, on its swing. One on a length of its own plays its step of the pattern's count
+ * since the start, its loops counted at its own wrap */
+static void fire_step(int s)
 {
-    for (int t = 0; t < M2K_TRACKS; t++) if (spd_of(t) == 4) fire_track(t, s, step_len(s), sq.n1x);
+    for (int t = 0; t < M2K_TRACKS; t++) {
+        if (spd_of(t) != 4) continue;
+        int ts = s;
+        if (track_own(t)) {
+            ts = (int)(sq.n1x % (uint32_t)tlen_of(t));
+            if (!ts && sq.n1x) sq.loops[t]++;
+        }
+        fire_track(t, ts, step_len(s), sq.n1x);
+    }
     bus_step(s);
 }
 
-/* the tracks off 1x start over with the pattern, from their first step with its first */
+/* the tracks start over with the pattern, every one from its first step with its first */
 static void tracks_restart(void)
 {
     sq.tpat = (uint8_t)cur_pat;
@@ -313,30 +337,32 @@ static void tracks_restart(void)
     m_set(sq.ts, 0, sizeof sq.ts);
     m_set(sq.tk, 0, sizeof sq.tk);
     m_set(sq.tctr, 0, sizeof sq.tctr);
-    for (int t = 0; t < M2K_TRACKS; t++) sq.tspd[t] = (uint8_t)spd_of(t);
+    for (int t = 0; t < M2K_TRACKS; t++) { sq.tspd[t] = (uint8_t)spd_of(t); sq.tlv[t] = G()[G_TLEN1 + t]; }
 }
 
-/* a track off 1x (speed c) meets the pattern where its step K starts with the pattern's P: as many steps of each kind
- * (the even, swung long, and the odd) gone by on both, in its time (without swing, any step of both) */
+/* a track off 1x (speed c, its steps TL long a loop) meets the pattern where its step K starts with the pattern's P: as
+ * many steps of each kind (the even, swung long, and the odd) gone by on both, in its time (without swing, any step of
+ * both) */
 static inline uint32_t evens(uint32_t n, uint32_t len) { return n / len * ((len + 1) / 2) + (n % len + 1) / 2; }
-static int track_meets(int c, uint32_t k, uint32_t p)
+static int track_meets(int c, uint32_t k, uint32_t p, uint32_t tl)
 {
     if (k * SPD_NUM[c] != p * SPD_DEN[c]) return 0;
     uint32_t len = (uint32_t)seq_len();
-    return step_len(0) == step_len(1) || evens(k, len) * SPD_NUM[c] == evens(p, len) * SPD_DEN[c];
+    return step_len(0) == step_len(1) || evens(k, tl) * SPD_NUM[c] == evens(p, len) * SPD_DEN[c];
 }
 
 /* track t, off 1x, put where the pattern is: its step P since the start, EL Q8 samples into it (of SL). The track's
- * step there starts now, or plays on (its trig gone by) and the next is due in what is left of it, swing aside;
- * PH: now, on the track's clock */
+ * step there (round its own length) starts now, or plays on (its trig gone by) and the next is due in what is left of
+ * it, swing aside; PH: now, on the track's clock */
 static void track_place(int t, uint32_t p, int32_t el, int32_t sl, int32_t ph)
 {
-    int c = spd_of(t), n = SPD_NUM[c], len = seq_len();
+    int c = spd_of(t), n = SPD_NUM[c], len = tlen_of(t);
     int32_t e = el >> 8, l1 = sl >> 8;
     uint32_t f = e > 0 && l1 > 0 ? (uint32_t)(e < l1 ? e : l1 - 1) * 4096u / (uint32_t)l1 : 0;   /* Q12 of the step */
     uint32_t q = ((p % n) * 4096u + f) * SPD_DEN[c] / n, k = p / n * SPD_DEN[c] + (q >> 12);       /* the track's */
     int s = (int)(k % (uint32_t)len);
     sq.tspd[t] = (uint8_t)c;
+    sq.tlv[t] = G()[G_TLEN1 + t];
     if (!(q & 4095)) { sq.tk[t] = k; sq.ts[t] = (uint8_t)s; sq.tctr[t] = ph; return; }
     int32_t l = track_len(t, s);
     sq.tk[t] = k + 1;
@@ -349,13 +375,12 @@ static void track_place(int t, uint32_t p, int32_t el, int32_t sl, int32_t ph)
  * its place from it */
 static void tracks_lock(uint32_t p, int32_t ph)
 {
-    int len = seq_len();
     for (int t = 0; t < M2K_TRACKS; t++) {
-        int c = spd_of(t);
+        int c = spd_of(t), len = tlen_of(t);
         if (c == 4) continue;
         if (sq.relock) { track_place(t, p, 0, 0, ph); continue; }
         uint32_t k = p * SPD_DEN[c] / SPD_NUM[c];
-        if (!track_meets(c, k, p)) continue;
+        if (!track_meets(c, k, p, (uint32_t)len)) continue;
         int s = (int)(k % (uint32_t)len);
         sq.tspd[t] = (uint8_t)c;
         if (sq.tk[t] == k + 1) { sq.tctr[t] = ph + track_len(t, s); continue; }   /* it played it already */
@@ -368,16 +393,17 @@ static void tracks_lock(uint32_t p, int32_t ph)
     sq.relock = 0;
 }
 
-/* the tracks off 1x, each on its own clock; a step that starts with one of the pattern's waits for it. A new pattern
- * (or the start) sets them going from its first step; a speed turned takes the track on from where the pattern is */
+/* the tracks off 1x, each on its own clock and length; a step that starts with one of the pattern's waits for it. A new
+ * pattern (or the start) sets them going from its first step; a speed or a length turned takes the track on from where
+ * the pattern is (its step there round the new length, as a track at 1x) */
 static void tracks_off_1x(void)
 {
     if (sq.tpat != cur_pat) tracks_restart();
-    int len = seq_len();
     for (int t = 0; t < M2K_TRACKS; t++) {
-        int c = spd_of(t);
-        if (c != sq.tspd[t]) {
+        int c = spd_of(t), len = tlen_of(t), lv = G()[G_TLEN1 + t];
+        if (c != sq.tspd[t] || lv != sq.tlv[t]) {
             sq.tspd[t] = (uint8_t)c;
+            sq.tlv[t] = (uint8_t)lv;
             if (c != 4 && sq.n1x) {
                 int32_t sl = step_len(sq.step ? sq.step - 1 : 0);
                 track_place(t, sq.n1x - 1, sl - sq.ctr, sl, M2K_SUB << 8);
@@ -387,7 +413,7 @@ static void tracks_off_1x(void)
         sq.tctr[t] -= M2K_SUB << 8;
         while (sq.tctr[t] <= 0) {
             uint32_t k = sq.tk[t], p = k * SPD_NUM[c] / SPD_DEN[c];
-            if (p >= sq.n1x && track_meets(c, k, p)) { sq.tctr[t] = 0; break; }
+            if (p >= sq.n1x && track_meets(c, k, p, (uint32_t)len)) { sq.tctr[t] = 0; break; }
             if (sq.ts[t] >= len) { sq.ts[t] = 0; sq.loops[t]++; }
             int st = sq.ts[t];
             int32_t l = track_len(t, st);
@@ -401,8 +427,10 @@ static void tracks_off_1x(void)
 
 static int track_pos(int t)
 {
-    int s = (int)(spd_of(t) == 4 ? sq.step : sq.ts[t]) - 1;
-    return s < 0 ? seq_len() - 1 : s;
+    const int x1 = spd_of(t) == 4, len = tlen_of(t);
+    if (x1 && len != seq_len()) return (int)((sq.n1x + (uint32_t)len - 1u) % (uint32_t)len);   /* (its own, at 1x) */
+    int s = (int)(x1 ? sq.step : sq.ts[t]) - 1;
+    return s < 0 ? (x1 ? seq_len() : len) - 1 : s;
 }
 
 /* the pattern's next step comes in another pattern (the queued one at the end, or jumped to) */
@@ -421,7 +449,7 @@ static void step_wrap(void)
     if (sq.step < seq_len() && !(sq.jump && sq.queued != cur_pat)) return;
     sq.jump = 0;
     sq.step = 0;
-    for (int t = 0; t < M2K_TRACKS; t++) if (spd_of(t) == 4) sq.loops[t]++;
+    for (int t = 0; t < M2K_TRACKS; t++) if (spd_of(t) == 4 && !track_own(t)) sq.loops[t]++;   /* (one of its own: at its wrap) */
     if (sq.fill_next) { sq.fill = 1; sq.fill_next = 0; sq.fill_auto = 1; }   /* a loop of fill, then back */
     else if (sq.fill_auto) { sq.fill = 0; sq.fill_auto = 0; }
     if (sq.queued != cur_pat && !pat_can_open(sq.queued)) {   /* the FM-1's patterns full: this one plays on */
@@ -635,10 +663,11 @@ static void clock_start(int cont)
 {
     if (sq.playing && !mx.ext) seq_play(0);
     if (!cont) seq_reset();
-    else if (!sq.playing) {            /* on from the step it stopped at (or the song position): the tracks off 1x too */
-        lockmap_build();
-        sq.ctr = 0;
+    else if (!sq.playing) {            /* on from the step it stopped at (or the song position): the tracks off 1x too, */
+        lockmap_build();               /* and those of their own length at 1x from its count (a pattern opened while */
+        sq.ctr = 0;                    /* stopped keeps it: not started over by the first block) */
         sq.relock = 1;
+        sq.tpat = (uint8_t)cur_pat;
     }
     mx.ext = 1;
     mx.pulses = 0;
@@ -671,13 +700,14 @@ static void clock_pulse(void)
 /* ------------------------------------------------------------------------------------------- live play */
 
 /* the step a note played now is written to on track t: the one it plays, or the next if that is nearer (then not
- * played again this time), on the track's own steps and clock off 1x, under the clock in on the step expected; the
- * one it plays if the next is another pattern's */
+ * played again this time), on the track's own steps (its length's) and clock off 1x, under the clock in on the step
+ * expected; the one it plays if the next is another pattern's */
 static int rec_step(int t)
 {
-    int off = spd_of(t) != 4, s = track_pos(t), len = seq_len();
-    if ((off ? sq.tctr[t] : sq.ctr) >= track_len(t, s) / 2 || pat_coming_in()) return s;
-    int nx = off ? sq.ts[t] : sq.step;
+    int off = spd_of(t) != 4, s = track_pos(t), len = tlen_of(t), own = !off && len != seq_len();
+    int ps = own ? (sq.step ? sq.step - 1 : seq_len() - 1) : s;     /* (at 1x its step is as long as the pattern's) */
+    if ((off ? sq.tctr[t] : sq.ctr) >= track_len(t, ps) / 2 || pat_coming_in()) return s;
+    int nx = off ? sq.ts[t] : own ? (int)(sq.n1x % (uint32_t)len) : sq.step;
     if (nx >= len) nx = 0;
     sq.rec_skip[t] = (int8_t)nx;
     return nx;

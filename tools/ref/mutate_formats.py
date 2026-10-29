@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
-# Mutation tests of the pattern format's conversions (fm_v9, sid_v10, gsin_v11, hold_v12, vox_v13, feel_v15, fx_v16, grids_v17): each mutant is one small change to a conversion;
+# Mutation tests of the pattern format's conversions (fm_v9, sid_v10, gsin_v11, hold_v12, vox_v13, feel_v15, fx_v16, grids_v17, the tracks' lengths of format 19): each mutant is one small change to a conversion;
 # the self-test must fail on every one. A survivor is a conversion the self-test does not hold.
 #   .venv/bin/python tools/ref/mutate_formats.py [TREE]     (default: this checkout; it restores each file it touches)
 import subprocess, sys, os
@@ -114,10 +114,18 @@ M = [
  ("GRIDS two bars", F, "    g[G_GRX] = 64; g[G_GRY] = 64; g[G_GRCH] = 0; g[G_GRES] = 0;", "    g[G_GRX] = 64; g[G_GRY] = 64; g[G_GRCH] = 0; g[G_GRES] = 127;"),
  ("GRIDS the hats' density", F, "    g[G_GRBD] = 64; g[G_GRSD] = 64; g[G_GRHH] = 64;", "    g[G_GRBD] = 64; g[G_GRSD] = 64; g[G_GRHH] = 0;"),
  ("GRIDS a lane followed", F, "    for (int t = 0; t < M2K_TRACKS; t++) g[G_LANE1 + t] = 0;", "    for (int t = 0; t < M2K_TRACKS; t++) g[G_LANE1 + t] = (uint8_t)(t ? 0 : 127);"),
- ("GRIDS 17's globals read as 18's", P, "    const int gl = ver >= 18 ? G_COUNT : ver >= 15 ? G_COUNT_V17 : G_COUNT_V14;",
-                                        "    const int gl = ver >= 17 ? G_COUNT : ver >= 15 ? G_COUNT_V17 : G_COUNT_V14;"),
- ("GRIDS 17 written with 18's globals", P, "    int gl = ver >= 18 ? G_COUNT : ver >= 15 ? G_COUNT_V17 : G_COUNT_V14;",
-                                           "    int gl = ver >= 17 ? G_COUNT : ver >= 15 ? G_COUNT_V17 : G_COUNT_V14;"),
+ ("GRIDS 17's globals read as 18's", P, "    const int gl = ver >= 19 ? G_COUNT : ver >= 18 ? G_COUNT_V18 : ver >= 15 ? G_COUNT_V17 : G_COUNT_V14;",
+                                        "    const int gl = ver >= 19 ? G_COUNT : ver >= 17 ? G_COUNT_V18 : ver >= 15 ? G_COUNT_V17 : G_COUNT_V14;"),
+ ("GRIDS 17 written with 18's globals", P, "    int gl = ver >= 19 ? G_COUNT : ver >= 18 ? G_COUNT_V18 : ver >= 15 ? G_COUNT_V17 : G_COUNT_V14;",
+                                           "    int gl = ver >= 19 ? G_COUNT : ver >= 17 ? G_COUNT_V18 : ver >= 15 ? G_COUNT_V17 : G_COUNT_V14;"),
+ ("TLEN 18's globals read as 19's", P, "    const int gl = ver >= 19 ? G_COUNT : ver >= 18 ? G_COUNT_V18 : ver >= 15 ? G_COUNT_V17 : G_COUNT_V14;",
+                                       "    const int gl = ver >= 18 ? G_COUNT : ver >= 15 ? G_COUNT_V17 : G_COUNT_V14;"),
+ ("TLEN 18 written with 19's globals", P, "    int gl = ver >= 19 ? G_COUNT : ver >= 18 ? G_COUNT_V18 : ver >= 15 ? G_COUNT_V17 : G_COUNT_V14;",
+                                          "    int gl = ver >= 18 ? G_COUNT : ver >= 15 ? G_COUNT_V17 : G_COUNT_V14;"),
+ ("TLEN lengths packed as 18", P, "    return pat_pack_v(p, o, own ? 19 : 18);", "    return pat_pack_v(p, o, 18 + 0 * own);"),
+ ("TLEN no lengths packed as 19", P, "    return pat_pack_v(p, o, own ? 19 : 18);", "    return pat_pack_v(p, o, 19 + 0 * own);"),
+ ("TLEN 19 refused", P, "o[1] < 1 || o[1] > 19) return 0;", "o[1] < 1 || o[1] > 18) return 0;"),
+ ("TLEN a length past 64 kept", P, "    for (int t = 0; t < M2K_TRACKS; t++) if (p->glob[G_TLEN1 + t] > 64) p->glob[G_TLEN1 + t] = 64;\n", "\n"),
  ("COND a condition past 17's kept", P, "    const int nc = ver >= 18 ? C_COUNT : C_COUNT_V17;", "    const int nc = C_COUNT;"),
  ("COND 18's new chances refused", P, "    const int nc = ver >= 18 ? C_COUNT : C_COUNT_V17;", "    const int nc = C_COUNT_V17;"),
 ]
