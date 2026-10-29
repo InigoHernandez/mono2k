@@ -3902,11 +3902,56 @@ static int selftest(void)
                 int16_t *o = mode ? b : a;
                 for (int f = 0; f < 44100; f += 128) m2k_render(o + 2 * f, 128 < 44100 - f ? 128 : (44100 - f) & ~15);
                 if (mode && memcmp(a, b, sizeof a)) { same = 0; printf("     A%02d differs with the second core's tracks %s\n", p + 1, mode == 1 ? "first" : "last"); }
-                split_seen |= par_from < M2K_TRACKS;
+                split_seen |= par_mask != 0;
             }
         }
         m2k_par_begin = 0; m2k_par_end = 0;
         CHECK(same && split_seen, "two cores: bank A the same sample for sample, the second core's tracks first or last");
+    }
+    /* and whichever tracks the second core takes: bank A's four demos with every set of tracks there (an FX machine's
+     * kept with what it hears), its tracks first and last, each the same as on one core */
+    {
+        static int16_t a[2 * 22050], b[2 * 22050];
+        int same = 1, sets = 0;
+        for (int p = 0; p < 4; p++) {
+            par_mode = 0; m2k_par_begin = 0; m2k_par_end = 0; par_force = -1;
+            m2k_init(21); m2k_pattern(p); seq_play(1);
+            for (int f = 0; f < 22050; f += 128) m2k_render(a + 2 * f, 128 < 22050 - f ? 128 : (22050 - f) & ~15);
+            for (int m = 1; m < (1 << M2K_TRACKS) - 1; m++)
+                for (int mode = 1; mode < 3; mode++) {
+                    par_mode = mode; m2k_par_begin = par_test_begin; m2k_par_end = par_test_end; par_force = m;
+                    m2k_init(21); m2k_pattern(p); seq_play(1);
+                    for (int f = 0; f < 22050; f += 128) m2k_render(b + 2 * f, 128 < 22050 - f ? 128 : (22050 - f) & ~15);
+                    if (memcmp(a, b, sizeof a)) { if (same) printf("     A%02d differs with tracks %02x on the second core (%s)\n", p + 1, m, mode == 1 ? "first" : "last"); same = 0; }
+                    sets++;
+                }
+        }
+        /* and the FX machines, kept with what they hear: a SWAV-SAW into FX-CHORUS, two GND-SINs into FX-RING (EXT up:
+         * the one two before too), FX-DYNAMIX after it; any set asked for, the groups kept */
+        for (int mode = 0; mode < 3; mode++)
+            for (int m = mode ? 1 : 0; m < (mode ? (1 << M2K_TRACKS) - 1 : 1); m++) {
+                static const uint8_t MS[M2K_TRACKS] = {M_SAW, M_FXC, M_GSIN, M_GSIN, M_FXR, M_FXD};
+                par_mode = mode; m2k_par_begin = mode ? par_test_begin : 0; m2k_par_end = mode ? par_test_end : 0;
+                par_force = mode ? m : -1;
+                m2k_init(23);
+                m2k_pattern_t *q = &pat[47];
+                pat_init(q, "FXS");
+                for (int t = 0; t < M2K_TRACKS; t++) {
+                    kit_default(q, t, MS[t]);
+                    q->kit[t][P_HOLD] = 127;
+                    for (int st = t & 1; st < 16; st += 2) q->step[t][st] = (m2k_step_t){.note = (uint8_t)(45 + 5 * t), .flags = ST_TRIG};
+                }
+                q->kit[1][P_SYN + 3] = 127; q->kit[4][P_SYN + 1] = 127; q->kit[4][P_SYN + 3] = 127;
+                m2k_pattern(47);
+                seq_play(1);
+                int16_t *o = mode ? b : a;
+                for (int f = 0; f < 22050; f += 128) m2k_render(o + 2 * f, 128 < 22050 - f ? 128 : (22050 - f) & ~15);
+                if (mode && memcmp(a, b, sizeof a)) { if (same) printf("     the FX pattern differs with tracks %02x on the second core (%s)\n", m, mode == 1 ? "first" : "last"); same = 0; }
+                if (mode) sets++;
+            }
+        m2k_par_begin = 0; m2k_par_end = 0; par_force = -1;
+        CHECK(same && sets == 5 * 62 * 2, "two cores: any set of tracks on the second (FX machines kept with what they hear), "
+              "bank A and six FX-chained tracks the same sample for sample");
     }
     /* NOTES OUT on two cores: six tracks' gates end in the same blocks on both; the second core's job queues no MIDI
      * (a gate's end is marked on its core, its note-off sent by the first after both) and the notes come out as on
@@ -3936,7 +3981,7 @@ static int selftest(void)
                     m_cpy(ev[mode][nev[mode]], m, 3);
                     evt[mode][nev[mode]++] = m2k_samples();
                 }
-                split |= par_from < M2K_TRACKS;
+                split |= par_mask != 0;
             }
         }
         m2k_par_begin = 0; m2k_par_end = 0;

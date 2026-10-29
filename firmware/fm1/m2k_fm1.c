@@ -47,17 +47,28 @@ static void app_audio(int32_t *out, uint32_t n)
 /* at most half the ring a pass: were the core slower than the sound, the loop still reaches the panel and the
  * watchdog (the sound would stutter, the FM-1 would not reset) */
 static uint32_t load_ticks, load_frames;        /* render time against the frames rendered, the meter's */
+static uint32_t busy_ticks, busy_t0;            /* and the same over each quarter second, for the screen's pace */
+static uint32_t frame_gap = 33u;                /* ms between frames: 33 (30 a second), further while the render is busy */
 
 static void render_ahead(void)
 {
     uint32_t k;
     for (k = 0; k < RING / 2u && ring_w - ring_r < RING; k++) {
-        uint32_t t0 = fm1_ticks();
+        uint32_t t0 = fm1_ticks(), dt;
         m2k_render(ring[ring_w % RING], (int)BLK);
-        load_ticks += fm1_ticks() - t0;
+        dt = fm1_ticks() - t0;
+        load_ticks += dt;
+        busy_ticks += dt;
         load_frames += BLK;
         RING_PUBLISH();
         ring_w++;
+    }
+    uint32_t span = fm1_ticks() - busy_t0;
+    if (span >= 250u * 1000u * FM1_TICKS_PER_US) {       /* the render's share: under 70 % 30 frames a second, to 85 % 20, */
+        uint32_t pct = busy_ticks / (span / 100u);         /* over it 15 */
+        frame_gap = pct < 70u ? 33u : pct < 85u ? 50u : 66u;
+        busy_ticks = 0;
+        busy_t0 += span;
     }
 }
 
@@ -192,10 +203,21 @@ static void screen_frame(void)
     }
 }
 
+/* a nibble of the frame as its four pixels (ink and paper: pure black and white, the panel's most contrast), so a
+ * strip is turned a byte at a time, not a pixel (it runs on the first core, beside the sound) */
+static uint16_t nib[16][4];
+
+static void screen_init(void)
+{
+    uint32_t v, k;
+    for (v = 0; v < 16u; v++)
+        for (k = 0; k < 4u; k++)
+            nib[v][k] = v >> (3u - k) & 1u ? be16(0x0000u) : be16(0xFFFFu);
+}
+
 static void screen_send(void)                   /* one strip, if the last has gone out */
 {
-    uint32_t s, x, y;
-    uint16_t ink = be16(0x0000u), paper = be16(0xFFFFu);   /* pure black and white: the panel's most contrast */
+    uint32_t s, x, y, i;
     if (!pending || !lcd_idle())
         return;
     for (s = 0; s < NSTRIP && !todo[s]; s++)
@@ -204,9 +226,12 @@ static void screen_send(void)                   /* one strip, if the last has go
     lcd_sync();
     uint16_t *px = strip[sbuf];
     const uint8_t *src = frame + s * ROWS * 30u;
-    for (y = 0; y < ROWS; y++)
-        for (x = 0; x < 240u; x++)
-            px[y * 240u + x] = src[y * 30u + (x >> 3)] >> (7u - (x & 7u)) & 1u ? ink : paper;
+    for (i = 0; i < ROWS * 30u; i++) {
+        const uint16_t *a = nib[src[i] >> 4], *b = nib[src[i] & 15u];
+        uint16_t *o = px + i * 8u;
+        o[0] = a[0]; o[1] = a[1]; o[2] = a[2]; o[3] = a[3];
+        o[4] = b[0]; o[5] = b[1]; o[6] = b[2]; o[7] = b[3];
+    }
     memcpy(shown + s * ROWS * 30u, src, ROWS * 30u);
     if (M2K_FM1_DIAG && s < 2u) {               /* the meter over the first two strips (resent each frame) */
         uint16_t red = be16(RGB(255, 0, 0));
@@ -245,6 +270,7 @@ static void app_init(void)
 #if DINGHY_DUAL_CORE
     if (audio_worker_online) { m2k_par_begin = par_begin; m2k_par_end = par_end; }
 #endif
+    screen_init();
     m2k_init(fm1_ticks());
     store_load();                               /* the factory's bank stays when there is none */
     lcd_fill(0, 0, 240, 240, 0xFFFFu);
@@ -260,7 +286,11 @@ static void app_loop(void)
     midi_drain();
     render_ahead();
     midi_drain();
-    if (!pending && fm1_ms - frame_ms >= 33u) {   /* 30 frames a second at most, as the browser draws them */
+    /* a frame once the last has gone out, 30 a second at most (as the browser draws them); the sound first: while
+     * the ring is under half full the frame waits for the render to catch up (a frame is drawn whole, the sound not
+     * rendered meanwhile), and while the render is busy (frame_gap) they come further apart; never more than 150 ms */
+    uint32_t since = fm1_ms - frame_ms;
+    if (!pending && since >= frame_gap && (ring_w - ring_r >= RING / 2u || since >= 150u)) {
         lights();
         screen_frame();
     }

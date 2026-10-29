@@ -1262,11 +1262,11 @@ static void seq_block(void);
 static int seq_running(void);
 static void mx_gates_out(void);
 
-/* the second core's share of a block: tracks par_from..5, into their own sums (par_L ...); it touches no MIDI (a
+/* the second core's share of a block: the tracks in par_mask, into their own sums (par_L ...); it touches no MIDI (a
  * gate's end only marked, its note-off sent by the first core after both) */
 int (*m2k_par_begin)(void (*job)(void));
 void (*m2k_par_end)(void);
-static int par_from = M2K_TRACKS;
+static uint8_t par_mask;
 static int32_t par_L[M2K_SUB], par_R[M2K_SUB], par_rs[M2K_SUB], par_ds[M2K_SUB];
 
 static void par_job(void)
@@ -1274,59 +1274,67 @@ static void par_job(void)
     m_set(par_L, 0, sizeof par_L);
     m_set(par_R, 0, sizeof par_R);
     m_set(par_rs, 0, sizeof par_rs);
-    for (int t = par_from; t < M2K_TRACKS; t++) {
+    for (int t = 0; t < M2K_TRACKS; t++) {
+        if (!(par_mask >> t & 1)) continue;
         m_set(par_ds, 0, sizeof par_ds);
         track_block(t, par_L, par_R, par_ds, par_rs);
         delay_block(t, par_ds, par_L, par_R);
     }
 }
 
-/* where the tracks split: an FX machine stays with the track it hears (the one before it, FX-RING's EXT the one before
- * that), and the work is shared out as each track's last block weighed it (T_MCOST: its machine, chain and stages, its
- * delay while it rings), the first core keeping the sequencer, the LFOs and the bus as their controls stand. In Mac
+/* which tracks the second core takes: any set of them, as the tracks' sums are plain adds (the same whoever adds
+ * them); an FX machine stays with the track it hears (the one before it, FX-RING's EXT the one before that), so the
+ * tracks go in groups of those. The work is shared out as each track's last block weighed it (T_MCOST: its machine,
+ * chain and stages, its delay while it rings) for the slower core to be as quick as it can: the sequencer, the LFOs
+ * and the bus run before and after the tracks on the first core alone, the second waiting, so they weigh nothing
+ * here. Worked out again every eighth block, and at once when the groups change (a machine assigned). In Mac
  * instructions a sample, measured as T_MCOST is */
-#define C_CORE1 140                    /* the sequencer, the mix, the bus dry */
-#define C_LFO 8                        /* an LFO that moves something */
-#define C_VERB 85                      /* (the feedback delay network; the combs were 72) */
-#define C_TAPE 97
-#define C_ADPC 129
-#define C_HISS 34
 #define C_IDLE 12                      /* a track that does not sound */
 #define C_DLY 92                       /* a delay that rings: one line, ping-pong */
 #define C_DLY2 116
 #define C_PAR 10                       /* the second core's sums */
-#define C_PF_RING 75                   /* PERFORM: a repeat, reverse, stop, stutter, scatter, roll, spin */
-#define C_PF_GR 140                    /* FREEZE or an octave: three grains */
-#define C_PF_FLT 155                   /* LPF or HPF */
-#define C_PF_SHIM 110                  /* SHIMMER's octave and send (the reverb's own C_VERB) */
-#define C_PF_GATE 37
-static int par_split(void)
+static int par_force = -1;             /* (the self-test: a set of its own, its groups kept) */
+static uint8_t par_tie_last = 0xFF, par_age;
+static uint8_t par_split(void)
 {
-    const m2k_pattern_t *pp = PAT(cur_pat);
-    const uint8_t *mc = pp->machine, *g = pp->glob;
-    int32_t c[M2K_TRACKS], a = C_CORE1 + modpn * C_LFO + (g[G_VERB] || bus.sh_on ? C_VERB : 0) + (g[G_TAPE] || perf.on[PF_WOW] ? C_TAPE : 0)
-                                  + (g[G_ADPC] || perf.on[PF_CRSH] ? C_ADPC : 0) + (g[G_HISS] ? C_HISS : 0), b = C_PAR;
-    /* PERFORM's on the first core (measured as T_MCOST, a demo with the key held against without: DUB's delay is its
-     * track's above) */
-    if (bus.g_on) a += bus.g_mode == GM_FRZ || bus.g_mode == GM_PSU || bus.g_mode == GM_PSD ? C_PF_GR : C_PF_RING;
-    if (bus.fmix[0]) a += C_PF_FLT;
-    if (bus.fmix[1]) a += C_PF_FLT;
-    if (bus.sh_on) a += C_PF_SHIM;
-    if (bus.gtd) a += C_PF_GATE;
+    const uint8_t *mc = PAT(cur_pat)->machine;
+    uint8_t tie = 0;                   /* track t's bit: it goes where track t - 1 goes */
+    for (int t = 1; t < M2K_TRACKS; t++)
+        if (mc[t] == M_FXC || mc[t] == M_FXR || mc[t] == M_FXD || (t + 1 < M2K_TRACKS && mc[t + 1] == M_FXR)) tie |= (uint8_t)(1u << t);
+    if (par_force >= 0) {
+        uint8_t m = (uint8_t)par_force;
+        for (int t = 1; t < M2K_TRACKS; t++) if (tie >> t & 1) m = (uint8_t)((m & ~(1u << t)) | (m >> (t - 1) & 1u) << t);
+        return m;
+    }
+    if (tie == par_tie_last && (++par_age & 7)) return par_mask;
+    par_tie_last = tie;
+    par_age = 0;
+    int32_t u[M2K_TRACKS], all = 0;    /* the groups' costs */
+    uint8_t ub[M2K_TRACKS];            /* and their tracks */
+    int n = 0;
     for (int t = 0; t < M2K_TRACKS; t++) {
-        c[t] = (trk[t].sounding ? trk[t].ccost : C_IDLE) + (trk[t].dsleep ? 0 : trk[t].dmode ? C_DLY2 : C_DLY);
-        b += c[t];
+        int32_t c = (trk[t].sounding ? trk[t].ccost : C_IDLE) + (trk[t].dsleep ? 0 : trk[t].dmode ? C_DLY2 : C_DLY);
+        if (!(tie >> t & 1) || !n) { u[n] = 0; ub[n] = 0; n++; }
+        u[n - 1] += c;
+        ub[n - 1] |= (uint8_t)(1u << t);
+        all += c;
     }
-    int best = M2K_TRACKS;
-    int32_t cost = INT32_MAX;
-    for (int s = 1; s < M2K_TRACKS; s++) {
-        a += c[s - 1];
-        b -= c[s - 1];
-        if (mc[s] == M_FXC || mc[s] == M_FXR || mc[s] == M_FXD || (s + 1 < M2K_TRACKS && mc[s + 1] == M_FXR)) continue;
-        int32_t w = a > b ? a : b;
-        if (w < cost) { cost = w; best = s; }
+    if (n < 2) return 0;
+    /* every set of groups for the second core but none and all, in Gray code order (one group in or out a step) */
+    int32_t b = 0, best = INT32_MAX;
+    uint32_t g = 0, pick = 0;
+    for (uint32_t i = 1; i < 1u << n; i++) {
+        int k = 0;
+        while (!(i >> k & 1)) k++;
+        g ^= 1u << k;
+        b += g >> k & 1 ? u[k] : -u[k];
+        if (g == (1u << n) - 1) continue;
+        int32_t a = all - b, w = a > b + C_PAR ? a : b + C_PAR;
+        if (w < best) { best = w; pick = g; }
     }
-    return best;
+    uint8_t m = 0;
+    for (int k = 0; k < n; k++) if (pick >> k & 1) m |= ub[k];
+    return m;
 }
 
 void m2k_render(int16_t *lr, int frames)
@@ -1344,18 +1352,19 @@ void m2k_render(int16_t *lr, int frames)
         m_set(rs, 0, sizeof rs);
         hold_bpm = ext_bpm ? ext_bpm : 30u + PAT(cur_pat)->glob[G_TMPO];
         PROF(0);
-        int split = M2K_TRACKS;
+        uint8_t two = 0;               /* the second core's tracks this block */
         if (m2k_par_begin) {
-            par_from = par_split();
-            if (par_from < M2K_TRACKS && m2k_par_begin(par_job)) split = par_from;
+            par_mask = par_split();
+            if (par_mask && m2k_par_begin(par_job)) two = par_mask;
         }
-        for (int t = 0; t < split; t++) {
+        for (int t = 0; t < M2K_TRACKS; t++) {
+            if (two >> t & 1) continue;
             m_set(ds, 0, sizeof ds);
             track_block(t, L, R, ds, rs);
             delay_block(t, ds, L, R);
             PROF(3);
         }
-        if (split < M2K_TRACKS) {
+        if (two) {
             m2k_par_end();
             for (int i = 0; i < M2K_SUB; i++) { L[i] += par_L[i]; R[i] += par_R[i]; rs[i] += par_rs[i]; }
         }
