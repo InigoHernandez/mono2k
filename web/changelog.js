@@ -15,6 +15,9 @@ window.M2K_CHANGES = [
       ["sequencer", "1.5: The SEQ tools (clear, reverse, shift, random, cook) work within the track's length; LEN \u00d72 and HALF stay the pattern's."],
       ["screen", "1.5: HOME's lanes and GRID show each track's own length (dots past its end) and its own playhead; GRID's pages reach a track longer than the pattern."],
       ["patterns", "1.5: Pattern format 19 keeps the tracks' lengths; older patterns, and any pattern without them, load and play exactly as before."],
+      ["sound", "1.5: A lighter bus, so heavy patterns leave the FM-1 time: HISS, TAPE and the glitch (GLCH, SIZE) are gone. Patterns keep those settings, unheard: A01 loses its tape wobble, A01\u2013A04 their hiss."],
+      ["workflow", "1.5: GLO's GLITCH and VERB pages are one, BUS: DCAY, DAMP, ADPC, DRIV, its picture the reverb's tail lifted by DRIV and stepped by ADPC. GLO's pages: TIME, BUS, SET, MIDI, IN, PLAY."],
+      ["workflow", "1.5: Holding FX, PERFORM's knobs are BUS's four. WOW and every repeat play as before."],
     ],
   },
   {

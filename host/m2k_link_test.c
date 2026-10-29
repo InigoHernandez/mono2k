@@ -445,7 +445,7 @@ static void setting_tests(void)
     m2k_init(1);
     store_save();
     m2k_dirty();
-    ui.page = PG_GLO; ui.sub = 4;
+    ui.page = PG_GLO; ui.sub = GS_MIDI;
     edit(0, 1);
     edit(0, 1);
     int v = store_.set[S_MCH], early = m2k_dirty();
@@ -466,8 +466,8 @@ static void demo_tests(void)
     for (int s = 0; s < 64; s++) PAT(4)->step[0][s].flags = ST_TRIG;
     m2k_pattern(0);
     memset(PAT(0)->name, 0, 8); memcpy(PAT(0)->name, "WIPED", 5);
-    ui.page = PG_GLO; ui.sub = 3; ui.now = 3200;
-    int dk = knob_param(PG_GLO, 3, 2) == SETTING(23);
+    ui.page = PG_GLO; ui.sub = GS_SET; ui.now = 3200;
+    int dk = knob_param(PG_GLO, GS_SET, 2) == SETTING(23);
     edit(2, 1);
     m2k_button(B_OCTU, 1); m2k_button(B_OCTU, 0);   /* YES */
     int mine = 0;

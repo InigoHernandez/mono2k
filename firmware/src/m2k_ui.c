@@ -13,7 +13,7 @@
 enum {
     K_NUM, K_BI, K_TIME, K_HOLD, K_DECT, K_ATIM, K_AHLD, K_ADEC, K_AREL, K_MODT, K_MHZ, K_HZ, K_PAN, K_DTIM, K_BITS, K_SEMI, K_RATIO, K_SEMI24, K_INT25, K_SIDW, K_SIDM,
     K_ALGO, K_VOIC, K_WAVE, K_VOF1, K_VOF2, K_CONS, K_TRK, K_DEST, K_LWAV, K_LTRG, K_MULT, K_AMOD, K_ASPD, K_ARNG, K_GATE,
-    K_BPM, K_SWNG, K_LEN, K_GLCH, K_GSIZ, K_FINE, K_TUN2, K_SCRN, K_PROJ, K_LOAD, K_MCH, K_SSEL, K_SLOAD, K_SSAVE, K_SCAT, K_WIPE, K_DEMO, K_SPD,
+    K_BPM, K_SWNG, K_LEN, K_FINE, K_TUN2, K_SCRN, K_PROJ, K_LOAD, K_MCH, K_SSEL, K_SLOAD, K_SSAVE, K_SCAT, K_WIPE, K_DEMO, K_SPD,
     K_SYIN, K_NTIN, K_THRU,                                              /* GLO > MIDI's and IN's: where MIDI comes from */
     K_FOCT, K_FWID, K_FATK, K_FDEC, K_EQHZ, K_DBHZ, K_SRR, K_PCH, K_WBNK, K_FR24, K_FR64, K_FRSQ, K_ONOFF, K_MSRC, K_MFRQ,
     K_DWV4, K_DWV5, K_DRA, K_DRD, K_DOPN, K_DMUL, K_DNHZ, K_DCNT,         /* the DRM- drums' */
@@ -48,7 +48,8 @@ static const pi_t PI_MOD[4] = {
 
 static const pi_t PI_GLOB[G_COUNT] = {
     {"BPM", "TEMPO", K_BPM}, {"SWNG", "SWING", K_SWNG}, {"LEN", "PATTERN LENGTH", K_LEN}, {"ACNT", "ACCENT", K_NUM},
-    {"TAPE", "TAPE WOW", K_NUM}, {"ADPC", "ADPCM CRUNCH", K_NUM}, {"GLCH", "GLITCH AMOUNT", K_GLCH}, {"SIZE", "REPEAT SIZE", K_GSIZ},
+    /* (TAPE, GLCH, SIZE and HISS: kept in the pattern, on no knob and unheard since 1.5) */
+    {"TAPE", "TAPE WOW", K_NUM}, {"ADPC", "ADPCM CRUNCH", K_NUM}, {"GLCH", "GLITCH AMOUNT", K_NUM}, {"SIZE", "REPEAT SIZE", K_NUM},
     {"DCAY", "REVERB DECAY", K_DCAY}, {"DAMP", "REVERB DAMPING", K_DAMP}, {"HISS", "HISS AND DUST", K_NUM}, {"DRIV", "BUS DRIVE", K_NUM},
     {"SPD", "T1 SPEED", K_SPD}, {"SPD", "T2 SPEED", K_SPD}, {"SPD", "T3 SPEED", K_SPD}, {"SPD", "T4 SPEED", K_SPD},
     {"SPD", "T5 SPEED", K_SPD}, {"SPD", "T6 SPEED", K_SPD},
@@ -161,7 +162,6 @@ static const char *const LWAV_N[7] = {"TRI", "SIN", "SQR", "SAW", "EXP", "RMP", 
 static const char *const LTRG_N[5] = {"FREE", "TRIG", "HOLD", "ONE", "HALF"};
 static const char *const AMOD_N[6] = {"OFF", "UP", "DOWN", "U/D", "RND", "ORDR"};
 static const char *const ASPD_N[4] = {"1/32", "1/16", "1/8", "1/4"};
-static const char *const GSIZ_N[5] = {"1/64", "1/32", "1/16", "1/8", "1/4"};
 /* the trig types a held step steps through with VOL (the expert's order): what each masks, and its name */
 static const uint8_t TTYPE[8] = {0, ST_NOFLT | ST_NOLFO, ST_NOAMP | ST_NOLFO, ST_NOAMP | ST_NOFLT, ST_NOLFO, ST_NOFLT,
                                  ST_NOAMP, ST_TTYPE};
@@ -225,7 +225,7 @@ static int kind_choices(int k)
     case K_PROJ: return M2K_PROJECTS;
     case K_VOIC: case K_LWAV: return 7;
     case K_TRK: case K_AMOD: return 6;
-    case K_LTRG: case K_GSIZ: return 5;
+    case K_LTRG: return 5;
     case K_MULT: return 8;
     case K_DWV4: return 4;
     case K_DWV5: return 5;
@@ -458,12 +458,6 @@ static void fmt(const pi_t *pi, int t, int v, char *out, const char **unit)
         else { s_cpy(s_int(u, seq_len()), " STEPS"); *unit = u; }
         break;
     }
-    case K_GLCH: {                     /* a sixteenth's chance of a repeat, its law's: 0.4 % .. 50 % */
-        int c10 = (int)((T_GLCH_P[v & 127] * 1000u + 32768u) >> 16);
-        if (c10 < 100) s_dec1(out, c10); else s_int(out, (c10 + 5) / 10);
-        *unit = "% A STEP";
-        break;
-    }
     case K_DCAY: {                     /* the reverb's RT60, its law's: 0.3 s .. 24 s */
         uint32_t ms = T_RV_MS[v & 127];
         if (!v) s_cpy(out, "OFF");
@@ -478,7 +472,6 @@ static void fmt(const pi_t *pi, int t, int v, char *out, const char **unit)
         *unit = "TOP'S TIME";
         break;
     }
-    case K_GSIZ: s_cpy(out, GSIZ_N[(v * 5) >> 7]); *unit = "NOTE"; break;
     case K_SCRN: s_cpy(out, c ? "DARK" : "LIGHT"); *unit = "DISPLAY"; break;
     case K_MCH: { char *e = s_cpy(out, "CH"); s_int(e, c + 1); *unit = "T1; T2 NEXT"; break; }
     case K_SYIN: case K_NTIN: {        /* (BOTH: "USB+TRS" is wider than a knob) */
@@ -513,12 +506,15 @@ static void fmt(const pi_t *pi, int t, int v, char *out, const char **unit)
 /* -------------------------------------------------------------------------------------------- the pages */
 
 enum { PG_HOME, PG_SYN, PG_AMP, PG_FILT, PG_FX, PG_LFO, PG_ARP, PG_GLO, PG_COUNT };
-static const uint8_t NSUB[PG_COUNT] = {1, 3, 2, 2, 4, 6, 3, 7};   /* SYN: its two, then SND (BANK before it); ARP, GRIDS */
+enum { GS_TIME, GS_BUS, GS_SET, GS_MIDI, GS_IN, GS_PLAY, GS_COUNT };   /* GLO's (1.5: GLITCH and VERB one page, BUS) */
+static const uint8_t NSUB[PG_COUNT] = {1, 3, 2, 2, 4, 6, 3, GS_COUNT};   /* SYN: its two, then SND (BANK before it); ARP, GRIDS */
 static int nsub(int page);                     /* SYN has a third page, the bank, where the machine plays waves */
 #define SETTING(i) (0xC0 | (i))
 #define GL(g) (0x80 | (g))
 #define NONE 0xFF
 static int view_trk(void);                     /* the track in view (LANE is its own) */
+/* the bus's four, GLO > BUS's and PERFORM's knobs: the reverb, the crunch, the drive (the owner's "the important") */
+static const uint8_t BUS_K[4] = {GL(G_VERB), GL(G_DAMP), GL(G_ADPC), GL(G_DRIV)};
 
 static int knob_param(int page, int sub, int k)
 {
@@ -531,11 +527,11 @@ static int knob_param(int page, int sub, int k)
     case PG_FX: return sub < 3 ? P_EQF + sub * 4 + k : P_MODT + k;
     case PG_LFO: return P_LFO + (sub >> 1) * 8 + (sub & 1) * 4 + k;
     case PG_ARP: return sub == 0 ? P_AMOD + k : sub == 1 ? GL(G_GRX + k) : k < 3 ? GL(G_GRBD + k) : GL(G_LANE1 + view_trk());
-    case PG_GLO: return sub == 6 ? (k == 0 ? SETTING(S_MUTQ) : k == 1 && M2K_PROJECTS > 1 ? SETTING(S_MOTN) : NONE)   /* PLAY */
-                        : sub == 5 ? (k == 0 ? SETTING(S_NTIN) : k == 1 ? SETTING(S_THRU) : NONE)   /* IN */
-                        : sub < 3 ? GL(sub * 4 + k) : sub == 4 ? SETTING(S_MCH + k)      /* PROJ and LOAD only with */
+    case PG_GLO: return sub == GS_PLAY ? (k == 0 ? SETTING(S_MUTQ) : k == 1 && M2K_PROJECTS > 1 ? SETTING(S_MOTN) : NONE)
+                        : sub == GS_IN ? (k == 0 ? SETTING(S_NTIN) : k == 1 ? SETTING(S_THRU) : NONE)
+                        : sub == GS_TIME ? GL(G_TMPO + k) : sub == GS_BUS ? BUS_K[k] : sub == GS_MIDI ? SETTING(S_MCH + k)
                         : k == 0 ? SETTING(S_SCREEN) : M2K_PROJECTS < 2 ? (k == 1 ? SETTING(22) : k == 2 ? SETTING(23) : SETTING(S_MOTN))
-                        : k == 1 ? SETTING(16) : k == 2 ? SETTING(17) : k == 3 ? SETTING(22) : NONE;   /* projects to choose */
+                        : k == 1 ? SETTING(16) : k == 2 ? SETTING(17) : k == 3 ? SETTING(22) : NONE;   /* SET: PROJ, LOAD with projects */
     default: return NONE;
     }
 }
@@ -546,7 +542,8 @@ static void page_label(int page, int sub, char *o)
     switch (page) {
     case PG_FX: s_cpy(o, sub == 0 ? "FX" : sub == 1 ? "DELAY" : sub == 2 ? "DSTR" : "MOD"); break;
     case PG_LFO: { char *e = s_cpy(o, "LFO"); e = s_int(e, (sub >> 1) + 1); s_cpy(e, (sub & 1) ? "B" : "A"); break; }
-    case PG_GLO: s_cpy(o, sub == 0 ? "TIME" : sub == 1 ? "GLITCH" : sub == 2 ? "VERB" : sub == 3 ? "SET" : sub == 4 ? "MIDI" : sub == 5 ? "IN" : "PLAY"); break;
+    case PG_GLO: { static const char *const GN[GS_COUNT] = {"TIME", "BUS", "SET", "MIDI", "IN", "PLAY"};
+                   s_cpy(o, GN[sub < GS_COUNT ? sub : 0]); break; }
     case PG_ARP: s_cpy(o, sub == 0 ? "ARP" : sub == 1 ? "GRIDS" : "LANES"); break;
     case PG_SYN: s_cpy(o, sub >= 2 && sub == nsub(PG_SYN) - 1 ? "SND" : sub == 2 ? "BANK" : "SYN"); break;
     default: s_cpy(o, N[page]); break;
@@ -803,8 +800,7 @@ static int mom_layer(void) { return ui.btn[B_LFO] && !held(B_GLO) && !held(B_HOM
 static int knob_at(int k)
 {
     const uint8_t SEQ_K[4] = {GL(G_LEN), (uint8_t)GL(G_TLEN1 + ui.trk), (uint8_t)GL(G_SPD1 + ui.trk), GL(G_SWNG)};
-    static const uint8_t PERF_K[4] = {GL(G_GLCH), GL(G_TAPE), GL(G_ADPC), GL(G_DRIV)};   /* the bus's, to stay */
-    return seq_layer() ? SEQ_K[k] : perf_layer() ? PERF_K[k] : knob_param(ui.page, ui.sub, k);
+    return seq_layer() ? SEQ_K[k] : perf_layer() ? BUS_K[k] : knob_param(ui.page, ui.sub, k);   /* (PERFORM: the bus's) */
 }
 
 /* LFO held: what the knobs move snaps back when it is let go (OCT+ while held keeps it), into the pattern it was
@@ -3287,7 +3283,7 @@ static void picture(void)
         break;
     }
     case PG_GLO: {
-        if (ui.sub == 3) {             /* the project picked, the open one; the display disc */
+        if (ui.sub == GS_SET) {        /* the project picked, the open one; the display disc */
             char o[16] = {'P', (char)('1' + ui.proj_sel), 0};
             text(&F_L, X, Y0, o, 1, 0);
             text_fit(X, Y0 + 28, m2k_project_name(ui.proj_sel), 0, W, 1);
@@ -3300,25 +3296,16 @@ static void picture(void)
                     if (d > (r - 2) * (r - 2) || i >= 0) px(cx + i, cy + j, 1);
                     else if (T_BAYER[(cy + j) & 7][(cx + i) & 7] < 8) px(cx + i, cy + j, 1);
                 }
-        } else if (ui.sub == 1) {      /* the master, and the repeat when it bites */
-            int prev = 0;
-            const int mid = Y0 + 56;
-            for (int i = 0; i < W; i++) {
-                int v = mon.scope[(uint8_t)(mon.scope_w - W * 2 + i * 2)];
-                int y = mid - (v * 50 >> 15);
-                if (i) line(X + i - 1, prev, X + i, y, 1);
-                prev = y;
-            }
-            dots_h(X, mid, W);
-            static const char *const GM_N[GM_COUNT] = {"REPEAT", "REVERSE", "GATED", "OCTAVE UP", "OCTAVE DOWN", "ROLL",
-                                                       "SLOWING", "STOP", "FREEZE", "OCTAVE UP", "OCTAVE DOWN", "SCATTER",
-                                                       "ROLL", "SPIN"};
-            tag(X, L_B0 - TY, GM_N[mon.gmode < GM_COUNT ? mon.gmode : 0], mon.glitch);
-        } else if (ui.sub == 2) {      /* the decay: its level over time (0.1 .. 30 s on a log scale), 60 dB down the
-                                        * height; the bottom's solid, the top's dotted (DAMP's share of it) */
-            int v = p->glob[G_VERB];
+        } else if (ui.sub == GS_BUS) { /* the reverb's tail through the bus: its level over time (0.1 .. 30 s on a log
+                                        * scale), 60 dB down the height, the bottom's solid, the top's dotted (DAMP's
+                                        * share of it); DRIV lifts it by its gain, held flat at the top where it clips,
+                                        * ADPC holds the bottom's in 4-bit stairs */
+            int v = p->glob[G_VERB], ad = p->glob[G_ADPC];
             const int top = Y0 + 6, ty = Y0 + 112, dh = ty - top;
             uint32_t t60 = T_RV_MS[v], th = (t60 * 256u) / (256u + T_RV_DA[p->glob[G_DAMP]]);
+            int dg = (ilog2_q8(T_DRIV[p->glob[G_DRIV]]) - 8 * 256) * dh / 2560;    /* 6 dB a doubling, dh / 60 a dB */
+            int sq_h = ad ? 1 + (ad * 2 > 127 ? 127 : ad * 2) * 6 / 127 : 1;        /* (the crunch's mix: steps to 7 px) */
+            int sq_w = ad ? T_ADPC_DIV[ad] >> 7 : 1, hold = 0;                     /* (its rate: 2 px, 6 at 127) */
             hline(X, ty, W, 1);
             static const char *const TN[3] = {"0.1", "1 S", "10 S"};
             for (int s = 0; s < 3; s++) {
@@ -3331,7 +3318,10 @@ static void picture(void)
             for (int i = 0; v && i < W; i++) {
                 /* the time at column i: 100 ms 2^(i / (W - 1) log2 300), in ms */
                 uint32_t e = (uint32_t)i * 2105u / (uint32_t)(W - 1), ms = (100u * T_EXP2F[e & 255]) >> (16 - (e >> 8));
-                int yl = (int)(ms * (uint32_t)dh / (t60 ? t60 : 1)), yh = (int)(ms * (uint32_t)dh / (th ? th : 1));
+                int yl = (int)(ms * (uint32_t)dh / (t60 ? t60 : 1)) - dg, yh = (int)(ms * (uint32_t)dh / (th ? th : 1)) - dg;
+                yl = yl < 0 ? 0 : yl;
+                yh = yh < 0 ? 0 : yh;
+                if (sq_h > 1) { if (!(i % sq_w)) hold = yl / sq_h * sq_h; yl = hold; }
                 if (yl <= dh) {
                     int y = top + yl;
                     if (lp >= 0) { line(X + i - 1, lp, X + i, y, 1); line(X + i - 1, lp + 1, X + i, y + 1, 1); } else px(X + i, y, 1);
@@ -3340,7 +3330,7 @@ static void picture(void)
                 if (yh <= dh && !((X + i + top + yh) & 1)) px(X + i, top + yh, 1);
             }
             if (!v) text_c(&F_S, X + W / 2, Y0 + 44, "OFF", 1, 0);
-        } else if (ui.sub == 4) {      /* MIDI: the six tracks on their channels, the clock in and out, the beat */
+        } else if (ui.sub == GS_MIDI) { /* MIDI: the six tracks on their channels, the clock in and out, the beat */
             int ch = (store_.set[S_MCH] * 16) >> 7;
             for (int i = 0; i < M2K_TRACKS; i++) {
                 int x = X + (i % 3) * 44, y = Y0 + (i / 3) * 30, w = 41;
@@ -3360,9 +3350,9 @@ static void picture(void)
             char o[12];
             s_int(o, (int)seq_bpm());
             text_c(&F_M, X + W / 2, Y0 + 110, o, 1, 0);
-        } else if (ui.sub == 6) {      /* PLAY: the mutes and when they come */
+        } else if (ui.sub == GS_PLAY) { /* PLAY: the mutes and when they come */
             play_picture();
-        } else if (ui.sub == 5) {      /* IN: what each port feeds, its square lit while it brings something */
+        } else if (ui.sub == GS_IN) {  /* IN: what each port feeds, its square lit while it brings something */
             const int clk = clk_from(), nts = notes_from();
             for (int s = 0; s < 2; s++) {
                 int x = X + s * 66, b = 1 << s, w = text(&F_S, x, Y0 + 4, s ? "TRS" : "USB", 1, 0);
@@ -4087,7 +4077,7 @@ const uint8_t *m2k_frame(uint32_t ms)
     if (ui.rec_t0 && ui.btn[B_REC] && !ui.rec_used && ms - ui.rec_t0 >= 300) sq.fill = 1;
     if (ui.pkey && !ui.pfired && ms - ui.pkey_t0 >= 600 && ui.grid && ui.keys[ui.pkey_k]) { ui.pfired = 1; page_length(ui.pkey - 1); }
     if (ui.save_t0 && ui.btn[B_SAVE] && !ui.save_fired && ms - ui.save_t0 >= 700) {
-        int slot = ui.page == PG_GLO && ui.sub == 3 ? ui.proj_sel : cur_proj;
+        int slot = ui.page == PG_GLO && ui.sub == GS_SET ? ui.proj_sel : cur_proj;
         ui.save_fired = 1;
         char o[16] = {'P', (char)('1' + slot), ' ', 0};
         s_cpy(o + 3, "SAVED");

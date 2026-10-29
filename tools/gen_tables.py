@@ -581,31 +581,17 @@ out.append(arr("T_ADPCM_STEP", "int16_t", steps))
 # converts to the new one that sounds the same:
 #   GLCH, DRIV, HISS's crackle  old 10 at 64 and 127 at 127, a ratio a step (x1.041): old 1 at 7
 #   TAPE                        old 20 (+-6.4 c) at 64, 127 at 127 (x1.030 a step): +-1 c at 1
-#   HISS's hiss                 its own: 66 dB under the reference mix at 1, 40 at 64, the old top at 127: the
-#                               crackle's law with a bump over it that dies at the top, so a converted value's hiss
-#                               is never quieter than it was (the crackle sets the conversion)
 #   ADPC                        0..64 as before (the 4-bit mix comes in); 64..127 its rate falls continuously,
 #                               1 to 1/2 at 96 and 1/3 at 127, where before it stepped at 86 and 108
+# 1.5 cut GLCH, TAPE and HISS from the bus (the FM-1's time): their tables went, the conversions (T_V9_*) stay, the
+# pattern keeping their bytes; WOW (PERFORM) plays the tape at the old TAPE 127's depth (m2k_fx.c's WOW_Q8)
 def bus_exp(v, mid):
     return 0.0 if v == 0 else mid * (127.0 / mid) ** ((v - 64) / 63.0)
-def hiss_old_v(v):          # the old value whose hiss level this one has
-    if v == 0:
-        return 0.0
-    # the old hiss's level is 40 log10(old) dB over a constant (old 10: 43.7 dB under the reference mix); over the
-    # crackle's law, c ((127 - v) / 126)^p: 66 dB under at 1 and 40 at 64 fix c and p
-    line = lambda x: math.log10(bus_exp(x, 10))
-    c = math.log10(10) + (-66 + 43.7) / 40.0 - line(1)
-    p = math.log2(c / (math.log10(10) + (-40 + 43.7) / 40.0 - line(64)))
-    return 10 ** (line(v) + c * ((127 - v) / 126.0) ** p)
 def adpc_div(v):            # samples a 4-bit sample is held, Q8
     return 256 if v <= 64 else round(256 + 256 * (v - 64) / 32) if v <= 96 else round(512 + 256 * (v - 96) / 31)
 def v9_conv(f, o):          # the new value that sounds as old value o: nearest on a log scale
     return 0 if o == 0 else nearest_v(lambda v: math.log(max(f(v), 1e-9)), math.log(o), 1)
 out.append(arr("T_DRIV", "uint16_t", [round(256 + 10 * bus_exp(v, 10)) for v in range(128)]))    # the bus's gain, Q8
-out.append(arr("T_TAPE_Q8", "uint16_t", [round(256 * bus_exp(v, 20)) for v in range(128)]))    # the old TAPE, Q8
-out.append(arr("T_HISS_G", "uint16_t", [round(hiss_old_v(v) ** 2) for v in range(128)]))        # the hiss's gain, Q15
-out.append(arr("T_CRK_P", "uint16_t", [round(8 * bus_exp(v, 10)) for v in range(128)]))         # a crackle's chance, Q3 of the old value
-out.append(arr("T_CRK_A", "uint16_t", [round(16 * (16 + bus_exp(v, 10))) if v else 0 for v in range(128)]))   # its level, Q4
 out.append(arr("T_ADPC_DIV", "uint16_t", [adpc_div(v) for v in range(128)]))
 out.append(arr("T_V9_GLCH", "uint8_t", [v9_conv(lambda v: bus_exp(v, 10), o) for o in range(128)], 16))
 out.append(arr("T_V9_DRIV", "uint8_t", [v9_conv(lambda v: bus_exp(v, 10), o) for o in range(128)], 16))
@@ -639,22 +625,8 @@ out.append(arr("T_RV_MD", "uint16_t", [0] + [round(rv_swing(v) / (2 * math.pi) *
 out.append(arr("T_RV_MS", "uint16_t", [0] + [round(1000 * rv_t60(v)) for v in range(1, 128)]))
 out.append(arr("T_RV_DA", "uint16_t", [round(256 * (30 ** (v / 127.0) - 1)) for v in range(128)]))   # 1 / a - 1, Q8
 out.append(arr("T_RV_BW", "uint16_t", [round(32767 * (1 - math.exp(-2 * math.pi * 14000 * (5000 / 14000) ** (v / 127.0) / RV_FS))) for v in range(128)]))
-# GLCH (pattern format 17): one knob for how much glitch, u = (v - 1) / 126. Low, a rare repeat (a sixteenth's chance
-# 0.4 %, one in 16 bars at 1), short (two times round a slice of at most 1/32), mixed in 18 dB under the dry and
-# leaving it whole, no other mode; up the knob, a ratio a step more often (50 % a sixteenth at 127), louder (all of
-# it from 3/4 up), longer (2 to 8 times round; SIZE's slice from half way), the dry giving way (from 0.3, gone by 0.85)
-# and the modes coming in (reversed, gated, an octave up, down, a roll, slowing: one by one, an event's chance of one
-# to 85 %). The sixteenth's chance Q16, the wet's and the dry's levels Q15, the times round Q4, the longest slice
-# (0 1/64 .. 4 1/4), an artifact's chance Q8, how many of the modes it draws from
-def gl_u(v):
-    return (v - 1) / 126.0
-out.append(arr("T_GLCH_P", "uint16_t", [0] + [round(65536 * 0.004 * 125 ** gl_u(v)) for v in range(1, 128)]))
-out.append(arr("T_GL_WET", "uint16_t", [0] + [round(32767 * 10 ** (-18 * (1 - min(1.0, gl_u(v) / 0.75)) / 20)) for v in range(1, 128)]))
-out.append(arr("T_GL_DRY", "uint16_t", [32767] + [round(32767 * clamp(1 - (gl_u(v) - 0.3) / 0.55, 0, 1)) for v in range(1, 128)]))
-out.append(arr("T_GL_REP", "uint8_t", [0] + [round(16 * (2 + 6 * gl_u(v))) for v in range(1, 128)], 16))
-out.append(arr("T_GL_CAP", "uint8_t", [0] + [1 if gl_u(v) < 0.12 else 2 if gl_u(v) < 0.3 else 3 if gl_u(v) < 0.5 else 4 for v in range(1, 128)], 16))
-out.append(arr("T_GL_ART", "uint16_t", [0] + [round(256 * clamp((gl_u(v) - 0.1) / 0.8, 0, 0.85)) for v in range(1, 128)]))
-out.append(arr("T_GL_NM", "uint8_t", [1] + [max(1, min(6, round(gl_u(v) * 7.5))) for v in range(1, 128)], 16))
+# (GLCH, format 17's glitch, one knob from rare quiet repeats to wild: its laws went with it in 1.5; T_V17_GLCH, its
+# conversion, stays below)
 
 # the sends, the track's reverb (VERB) and its delay (DSND): straight in level, half way -6 dB (format 17; before, the
 # square: a quarter way was -24 dB, a third of the knob near nothing)

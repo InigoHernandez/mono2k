@@ -7,7 +7,7 @@
   "use strict";
   const $ = (id) => document.getElementById(id);
   /* the firmware, fetched and compiled once for every copy the page runs */
-  const wasmP = fetch("m2k.wasm?v=98").then((r) => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); });
+  const wasmP = fetch("m2k.wasm?v=99").then((r) => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); });
   window.M2K_CORE = { bytes: wasmP, module: wasmP.then((b) => WebAssembly.compile(b)) };
   const NS = "http://www.w3.org/2000/svg";
   const css = () => getComputedStyle(document.documentElement);
@@ -620,7 +620,7 @@
       ...[0, 1, 2, 3].map((sub) => [cstr(x, x.w_page_label(P.FX, sub)), P.FX, [sub]]),
       ...[0, 1, 2].map((l) => [`LFO ${l + 1}`, P.LFO, [2 * l, 2 * l + 1]]),
       ["ARP", P.ARP, [0]], ["HOME", P.HOME, [0]],
-      ...[0, 1, 2, 3].map((sub) => [cstr(x, x.w_page_label(P.GLO, sub)), P.GLO, [sub]]),
+      ...[0, 1, 2].map((sub) => [cstr(x, x.w_page_label(P.GLO, sub)), P.GLO, [sub]]),   /* TIME, BUS, SET */
     ];
     const li = (r) => `<li><b>${r.s4}</b>${r.name}</li>`;
     grid.innerHTML = blocks.map(([t, page, subs]) => page === P.SYN

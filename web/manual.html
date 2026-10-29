@@ -101,7 +101,7 @@
     <a href="#steps"><b>Sequencer</b><span>Steps, notes, pages and length</span></a>
     <a href="#trig-types"><b>Trig types</b><span>AMP, FILTER and LFO, one step at a time</span></a>
     <a href="#chain"><b>Track chain</b><span>Amp, filter, FX, LFOs and the arpeggiator</span></a>
-    <a href="#bus"><b>The bus</b><span>Tape, glitch, ADPCM, reverb, drive</span></a>
+    <a href="#bus"><b>The bus</b><span>Reverb, ADPCM, drive</span></a>
     <a href="#projects"><b>Projects</b><span>Save, reload, copy, paste, export</span></a>
     <a href="#midi"><b>MIDI</b><span>Channels and the Monomachine's CC map</span></a>
     <a href="#parameters"><b>Every parameter</b><span>All the pages and their knobs</span></a>
@@ -245,7 +245,7 @@
   <h2>Hold FX: PERFORM</h2>
   <p>The black keys play the bus's effects while held. The white keys still play the track.</p>
   <p>Two banks: OCT− is bank A, OCT+ bank B. The window and the OCT lights show which. A held effect keeps going when you switch.</p>
-  <p>The knobs are GLCH, TAPE, ADPC and DRIV. Nothing clicks, and the repeats land on the beat even if you press late.</p>
+  <p>The knobs are the bus's: DCAY, DAMP, ADPC and DRIV. Nothing clicks, and the repeats land on the beat even if you press late.</p>
   <div class="figs">
     <figure class="fig"><canvas data-scr="29f_perform_b"></canvas><figcaption>FX, then OCT+: bank B, FREEZE held.</figcaption></figure>
   </div>
@@ -694,25 +694,22 @@
 
 <article id="bus" data-group="Sound">
   <h1>The bus</h1>
-  <p class="sub">Where the six tracks meet: a reverb, a glitch, tape, ADPCM, hiss and a drive into the soft clip.</p>
+  <p class="sub">Where the six tracks meet: a reverb, a 4-bit crunch and a drive into the soft clip.</p>
   <div class="figs">
-    <figure class="fig"><canvas data-scr="16_glo_bus"></canvas><figcaption>GLO, GLITCH: tape, ADPCM, how much glitch and the repeat's size.</figcaption></figure>
-    <figure class="fig"><canvas data-scr="16b_glo_verb"></canvas><figcaption>GLO, VERB: the reverb's decay, its bottom solid and its top dotted, over 0.1 to 30 s.</figcaption></figure>
+    <figure class="fig"><canvas data-scr="16_glo_bus"></canvas><figcaption>GLO, BUS: the reverb's tail over 0.1 to 30 s, its top dotted; DRIV lifts it, ADPC steps it.</figcaption></figure>
   </div>
   <table>
     <thead><tr><th>Page</th><th>Knobs</th></tr></thead>
     <tbody>
       <tr><td>TIME</td><td>BPM the tempo, SWNG the swing, LEN the pattern's length, ACNT how hard an accent plays.</td></tr>
-      <tr><td>GLITCH</td><td>TAPE wow and flutter, ADPC a 4-bit ADPCM crunch, GLCH how much glitch, SIZE the longest slice it repeats.</td></tr>
-      <tr><td>VERB</td><td>DCAY the reverb's length, DAMP how much sooner its top dies; HISS adds hiss and dust; DRIV drives the bus into its soft clip.</td></tr>
+      <tr><td>BUS</td><td>DCAY the reverb's length, DAMP how much sooner its top dies, ADPC a 4-bit ADPCM crunch, DRIV the drive into the soft clip.</td></tr>
       <tr><td>SET</td><td>SCRN the screen light or dark. In the browser PROJ and LOAD pick a project and load it, WIPE makes every pattern INIT; on the FM-1 WIPE and DEMO (bank A's demos back), each asking first (OCT+ YES, OCT− NO), and MOTN the screen's motion: CALM or GLTCH.</td></tr>
     </tbody>
   </table>
-  <h2>The glitch</h2>
-  <p>GLCH is one knob for how much. Low, it is a ghost: now and then (one in sixteen bars at 1) a short slice, at most a thirty-second, comes back twice under the music, 18 dB down, the music left whole. Turning up, the repeats come more often (half the sixteenths at 127), louder (as loud as the music from three quarters up), longer (up to eight times round) and with SIZE's whole slice; past a third the music gives way under them, and the other kinds come in one by one: reversed, gated, an octave up, an octave down, a roll that halves each time round, a slice slowing to a stop. At the top it is wild. Every repeat fades in and out and its joins are crossfaded, so nothing cuts. The screen's value is the chance a sixteenth has; the tag under the scope names what is playing.</p>
-  <h2>The reverb</h2>
-  <p>Four delay lines feeding each other through a matrix, at 22 kHz, two of them turned slowly into each other so a long tail does not ring. DCAY sets its length, RT60 from 0.3 s (a small room: the lines are made shorter with it) to about 24 s, a ratio a step; 0 turns it off, its tail fading in 6 ms. DAMP sets how much sooner the top dies: 1/1 keeps the top as long as the bottom (bright), 1/30 lets it die thirty times sooner (dark), and darkens what goes in with it. Short and bright, long and dark, short and dark, long and bright: each is its own space. The first reflection keeps the sound's top; each pass after is darker. Each track sends to it with DSTR's VERB.</p>
-  <p>Patterns saved before this reverb load on it at the setting that measures nearest (each part of the old decay matched), their sends carried at the level that keeps the reverb as loud.</p>
+  <h2>BUS</h2>
+  <p>DCAY: 0.3 s (a small room) to 24 s, 0 off. DAMP: 1/1 keeps the top as long as the bottom (bright), 1/30 lets it die thirty times sooner (dark). Each track sends to it with DSTR's VERB.</p>
+  <p>ADPC: the 4-bit crunch comes in up to 64, then its rate falls. DRIV: into the soft clip, never past full scale.</p>
+  <p>The tape's wow and the repeats are PERFORM's now (hold FX). HISS, TAPE and the glitch left the bus in 1.5, to give the FM-1 time.</p>
   <p>The bus's settings belong to the pattern, so each part of a song can be worn differently.</p>
 </article>
 
@@ -837,7 +834,7 @@
 </footer>
 <script src="site.js?v=3"></script>
 <script src="panel.js?v=2"></script>
-<script src="changelog.js?v=39"></script>
-<script src="manual.js?v=43"></script>
+<script src="changelog.js?v=40"></script>
+<script src="manual.js?v=44"></script>
 </body>
 </html>

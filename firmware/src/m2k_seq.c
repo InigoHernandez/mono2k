@@ -1094,7 +1094,6 @@ void m2k_init(uint32_t seed)
         trk[t].gate_left = -1;
         trk[t].dt_q8 = 400 << 8;
     }
-    bus.hs = 0xACE1u;
     bus.grng = 0x6C078965u ^ seed;
     for (int i = 0; i < M2K_TRACKS; i++) sq.rec_skip[i] = -1;
     m_set(store_.set, 0, sizeof store_.set);

@@ -74,9 +74,10 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   screen, bank A and every reference spec under ASan + UBSan, clean; the format's conversions mutated
   (`tools/ref/mutate_formats.py`: every mutant of `fm_v9` / `sid_v10` caught by the self-test but the one equivalent);
   the wave banks (`tools/wave_check.py`); the bus's controls (`tools/bus_curves.py`: `m2k_host DIR --bus` measures
-  every value of GLCH HISS ADPC DRIV TAPE DCAY DAMP, held to `tools/ref/bus_m2k.json`; each old value through `T_V9_*`
-  to the old engine's, `tools/ref/bus_v8.json`, and through `T_V17_*` to format 16's, `tools/ref/bus_v16.json`; the
-  reference mix's kits turned to today's amp, so under -25 dB DRIV's residual against the old engine may only not grow).
+  every value of ADPC DRIV DCAY DAMP, held to `tools/ref/bus_m2k.json`; each old ADPC and DRIV through `T_V9_*` to the
+  old engine's, `tools/ref/bus_v8.json`, and `T_V17_RV` to `tools/ref/conv17.json`; the reference mix's kits turned to
+  today's amp, so under -25 dB DRIV's residual against the old engine may only not grow; GLCH HISS TAPE measured too
+  until 1.5, their rows kept in `bus_v8.json` / `bus_v16.json`, their conversions held by the self-test alone).
 - The FM-1 build (`firmware/fm1/README.md`): `.venv/bin/python tools/fm1/build.py [--diag] [--release X.Y]` makes
   `build/fm1/mono2k.fwsc` (identity FM-1_980 for every build and release: the hub's FM-1_981 and _983 are others'; a
   release sets APP_VER and names the file `mono2k-X.Y.fwsc`, the one the installer and the GitHub release share) with JieLi's toolchain in a linux/amd64 container
@@ -119,6 +120,13 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   frames further apart while the render is busy). `--diag` packages show CPU (the first core's render, the waits
   included), W (the second's) and F (drawing) in % over the screen's top. The 2026-10-29 owner: "dont make the sound
   engine worst": CPU savings must keep the sound bit for bit.
+- The bus (1.5, for the FM-1's time; the owner: "the important are: ADPC, reverb, drive"): GLO's pages TIME BUS SET
+  MIDI IN PLAY (`GS_*` in m2k_ui.c: name them, never their numbers), BUS's knobs DCAY DAMP ADPC DRIV (`BUS_K`, PERFORM's
+  knobs too), its picture the reverb's tail lifted by DRIV and stepped by ADPC. HISS, TAPE, GLCH and SIZE were cut: the
+  pattern keeps their bytes (`G_TAPE` .. no format change, the conversions as they were), unheard; the tape runs only for
+  PERFORM's WOW (`WOW_Q8`, the old TAPE 127's depth, its glide in and out kept), the glitch's ring is written always for
+  PERFORM's repeats and `bus_step` keeps only the grid's places. Saved ~46 Mac instructions a sample on every bank A
+  pattern (the hiss), ~161 on A01 (its tape too); the self-test holds TAPE HISS GLCH SIZE at 127 to 0, sample for sample.
 - MIDI (GLO > MIDI, settings S_MCH S_SYNI S_SYNO S_NOTO; GLO > IN, S_NTIN S_THRU): `m2k_midi_out(msg, played)` hands
   out what is due once the sound has reached sample `played` (`m2k_samples`); the FM-1 sends it as the ISR takes the
   ring, the worklet as it renders (the page stamps it with the audio latency). In: `m2k_midi_from(src, ...)`, USB or
@@ -142,7 +150,7 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   16 the amp's ATK DEC REL and the LFOs' SPD and DPTH on the owner's laws (`feel_v15`: T_AMP15 by the time heard,
   ATK's rise by its loudness, T_SPD15 by the rate, T_DPTH15 by the swing, an LFO on a DEC or REL by the new law's
   steps; the store's version 4 converts a version-3 store's sounds alike); 17 the bus's GLCH (subtle to wild, its own
-  dice, every event crossfaded), the reverb (an FDN, DCAY's RT60 0.3 .. 21 s, DAMP the top's time as a share of the
+  dice, every event crossfaded; cut in 1.5), the reverb (an FDN, DCAY's RT60 0.3 .. 21 s, DAMP the top's time as a share of the
   bottom's) and the sends linear, the owner's departure from the Monomachine's square DSND (`fx_v16`: DCAY and DAMP
   through a 9 x 9 grid measured on the old engine, `T_V17_RV`, `tools/conv17.py`; the VERB send by its heard level,
   DSND |d|^2 / 64, `T_V17_GLCH`; the store's version 5 converts the sounds through `fx_kit_v16`); 18 Grids (Mutable

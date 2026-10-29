@@ -152,7 +152,7 @@ int main(int argc, char **argv)
     static const uint8_t TO[3][2] = {{PG_LFO, 0}, {PG_HOME, 0}, {PG_AMP, 0}};
     static const char *const TN[3] = {"LFO1A, turned to", "HOME, turned to", "AMP, turned to"};
     for (int i = 0; i < 3; i++) {
-        ui.page = PG_GLO; ui.sub = 3; frame_cost();
+        ui.page = PG_GLO; ui.sub = GS_SET; frame_cost();
         ui.page = TO[i][0]; ui.sub = TO[i][1];
         now += 40; ui.trans_t = 0; ui.in_trans = 0; ui.toast_t = 0; ui.glitch_t = 0;
         uint64_t a = instr();

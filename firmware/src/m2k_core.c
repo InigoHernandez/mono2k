@@ -109,10 +109,7 @@ static struct {
     uint8_t astage[M2K_TRACKS];
     int32_t cut_hp[M2K_TRACKS], cut_lp[M2K_TRACKS];   /* q3 cutoff index, live */
     int32_t lfo[M2K_TRACKS][3];        /* -32767..32767 */
-    int16_t scope[256];                /* the master, every 8th sample */
-    uint8_t scope_w;
-    uint8_t glitch;                    /* 1 while the bus repeats */
-    uint8_t gmode;                     /* what it plays (the glitch's GM_ mode) */
+    uint8_t glitch;                    /* 1 while a PERFORM effect plays from the glitch's ring */
     int32_t dly[M2K_TRACKS];           /* delay return level */
     uint8_t lfo_view;                  /* the track the screen shows: its LFOs are worked out though they move nothing */
 } mon;
