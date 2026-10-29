@@ -776,6 +776,8 @@ static void sound_load(m2k_pattern_t *p)
     if (sd->name[0]) {                           /* its keys and new trigs on the note it was made at */
         p->machine[ui.trk] = sd->machine;
         m_cpy(p->kit[ui.trk], sd->kit, P_COUNT);
+        for (int l = 0; l < 3; l++) p->kit[ui.trk][P_LFO + 8 * l + L_TRCK] = enc(ui.trk, M2K_TRACKS);   /* its LFOs move
+                                                                       * it, on whichever track (they moved the one saved) */
         track_home(ui.trk, snd_root[ui.snd_sel]);
         s_cpy(o + 3, sd->name);
         toast("SOUND LOADED", o);

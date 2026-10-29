@@ -364,7 +364,7 @@ static int img_pack_all(m2k_img_t *dst, const char *name)
 
 /* the sound library: 128 slots (S001..S128, M2K_SOUNDS in m2k.h), each a track's machine and its parameters, a
  * category and the note it was made at, kept with the store. An empty slot (no name) is INIT: loading it starts the
- * track's machine afresh. The factory fills the first 24 from bank A's demos (four, six tracks each), the rest INIT */
+ * track's machine afresh. The factory fills the first 96 with its own, twelve a category (m2k_lib.c), the rest INIT */
 typedef struct { char name[8]; uint8_t machine, kit[P_COUNT]; } m2k_sound_t;
 static m2k_sound_t snd[M2K_SOUNDS] POOL;
 enum { CAT_ALL, CAT_KICK, CAT_SNARE, CAT_HATS, CAT_PERC, CAT_BASS, CAT_LEAD, CAT_PAD, CAT_FX, CAT_COUNT };
@@ -449,14 +449,10 @@ static int root_guess(int cat) { return cat == CAT_KICK ? 36 : cat == CAT_BASS ?
 
 #define FACTORY_DEMOS 4                          /* bank A's slots with a demo, A01-A04: factory() writes those alone */
 
-static void sounds_factory(void)              /* the demos' tracks, at their roots, A01 T1 first; the rest INIT */
-{
-    m_set(snd, 0, sizeof snd);
-    m_set(snd_cat, 0, sizeof snd_cat);
-    m_set(snd_root, 0, sizeof snd_root);
-    for (int i = 0; i < M2K_SOUNDS && i / M2K_TRACKS < (M2K_PATTERNS < FACTORY_DEMOS ? M2K_PATTERNS : FACTORY_DEMOS); i++)
-        sound_save(i, PAT(i / M2K_TRACKS), i % M2K_TRACKS, 0, -1);
-}
+#define LIB_REV 15                             /* the factory revision the library (m2k_lib.c) last changed in */
+static void lib_factory(void);                  /* (m2k_lib.c) */
+static void lib_refresh(void);
+static void sounds_factory(void) { lib_factory(); }   /* the library, S001..S096; the rest INIT */
 
 /* the blank pattern (INIT): six machines for six purposes, each its INIT sound (a bass, a kit, keys, a pad) */
 static void pattern_init_blank(m2k_pattern_t *p)
@@ -690,8 +686,9 @@ uint8_t *m2k_store_buf(int *max)
  * RIVETS to A11; 10: a new bank, LO-BIT CLUB, whole; 11: four parts from the owner's sound sheets (CIRCUIT, TIDE,
  * SUSPEND, LANTERN), the rest of the bank blank (docs/bank-a.md); 12: the four on pattern format 16's amp and LFO laws,
  * as they sounded; 13: on format 17's bus (their reverbs, their sends and their delays' turned as an old pattern's);
- * 14: packed as format 18 (Grids' globals at their start), as they sound */
-#define FACTORY_REV 14
+ * 14: packed as format 18 (Grids' globals at their start), as they sound; 15: the same bank, the sound library its
+ * own (m2k_lib.c: 96 sounds, a store's factory sounds of before replaced, the owner's kept) */
+#define FACTORY_REV 15
 static const char *const OLD_DEMO[FACTORY_REV][16] = {
     {"LATEX", "PVC", "SPU RM", "ELECTRO", "GLITCH", "CHROME", "ACID", "2STEP", "GROOVE", "HYPRPOP", "DUB", "CHIP",
      "HARDGRV", "IDM", "DUBSTEP", "INIT"},
@@ -715,6 +712,8 @@ static const char *const OLD_DEMO[FACTORY_REV][16] = {
      "RIBBON", "MOTEL", "FOUNDRY", "SPLICE"},
     {"LUMEN", "PULSAR", "LATTICE", "SPUDUB", "PROCESS", "SQUELCH", "GROWL", "BREAKS", "SPRITES", "OPLL", "JUKE", "CHIPJNG",
      "VIOLET", "DUSKLIT", "FLUTE", "EMBERS"},
+    {"CIRCUIT", "TIDE", "SUSPEND", "LANTERN", "INIT", "INIT", "INIT", "INIT", "INIT", "INIT", "INIT", "INIT", "INIT", "INIT",
+     "INIT", "INIT"},
     {"CIRCUIT", "TIDE", "SUSPEND", "LANTERN", "INIT", "INIT", "INIT", "INIT", "INIT", "INIT", "INIT", "INIT", "INIT", "INIT",
      "INIT", "INIT"},
     {"CIRCUIT", "TIDE", "SUSPEND", "LANTERN", "INIT", "INIT", "INIT", "INIT", "INIT", "INIT", "INIT", "INIT", "INIT", "INIT",
@@ -747,6 +746,9 @@ static const struct { uint8_t rev; uint16_t len[16]; uint32_t fnv[16]; } OLD_PAC
      {0x0b6423b9u, 0xbdf29132u, 0x59b9bcbau, 0xb84c63d1u, 0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u,
       0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u}},
     {14, {1104, 948, 892, 924},
+     {0x5e08bcdcu, 0x7671d05fu, 0x875724e1u, 0x495ffb00u, 0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u,
+      0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u}},
+    {15, {1104, 948, 892, 924},
      {0x5e08bcdcu, 0x7671d05fu, 0x875724e1u, 0x495ffb00u, 0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u,
       0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u, 0x811c9dc5u}},
 };
@@ -876,6 +878,7 @@ int m2k_store_unpack(int len)
             if (snd[i].name[0] && !snd_cat[i]) snd_cat[i] = (uint8_t)sound_guess(snd[i].machine, snd[i].kit, 127, 0);
             if (i >= nr) snd_root[i] = (uint8_t)root_guess(snd_cat[i]);
         }
+        if (rev < LIB_REV) lib_refresh();               /* the factory's sounds of before become the library's */
     }
     /* today's demos, where the old ones still are (not with the cache: the factory would write into the working
      * image being read; the FM-1 takes new demos through the Patch Editor) */

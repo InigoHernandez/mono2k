@@ -737,7 +737,7 @@
   <div class="figs">
     <figure class="fig"><canvas data-scr="25_syn_snd"></canvas><figcaption>SYN &gt; SND: the library's slots, each with its machine; SLOT picks one.</figcaption></figure>
   </div>
-  <p>128 sounds, S001 to S128, kept apart from the patterns: a sound saved there can go onto any track of any pattern. A sound is a track's machine and every setting (the machine's knobs, the amp, the filter, the FX, the LFOs), a category (KICK, SNARE, HATS, PERC, BASS, LEAD, PAD or FX) and the note it was made at: the track's root when it was saved, the note its trigs sit on most. Loaded, it is ready to sound as it did: the track's keys, pad and new trigs go to that note and its octave (a kick saved at C2 plays at C2). The library starts with the demos' 24 sounds, each in the category its part gives it and at the note it plays there, then 104 INIT slots; it is saved with the rest. (Sounds kept before their notes were: a kick at C2, a bass at C3, the rest at C4.)</p>
+  <p>128 sounds, S001 to S128, kept apart from the patterns: a sound saved there can go onto any track of any pattern. A sound is a track's machine and every setting (the machine's knobs, the amp, the filter, the FX, the LFOs), a category (KICK, SNARE, HATS, PERC, BASS, LEAD, PAD or FX) and the note it was made at: the track's root when it was saved, the note its trigs sit on most. Loaded, it is ready to sound as it did: the track's keys, pad and new trigs go to that note and its octave (a kick saved at C2 plays at C2). Its LFOs move the track it is loaded on. The library starts with 96 sounds of its own, twelve in each category (S001–S012 the kicks, then the snares, hats, percussion, basses, leads, pads and FX), each a different character at its note, then 32 INIT slots; it is saved with the rest. A library saved by an older MONO2K keeps every sound you saved or changed; only the factory's old sounds become the new ones (where yours stands, its new sound goes to S097 on). (Sounds kept before their notes were: a kick at C2, a bass at C3, the rest at C4.)</p>
   <p>Press EDIT until the footer says SND (the page after SYN, and after BANK on DIGI-WAV), or GLO + EDIT from anywhere.</p>
   <table>
     <thead><tr><th>Knob</th><th>Does</th></tr></thead>
@@ -834,7 +834,7 @@
 </footer>
 <script src="site.js?v=3"></script>
 <script src="panel.js?v=2"></script>
-<script src="changelog.js?v=40"></script>
-<script src="manual.js?v=44"></script>
+<script src="changelog.js?v=41"></script>
+<script src="manual.js?v=45"></script>
 </body>
 </html>

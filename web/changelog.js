@@ -7,7 +7,7 @@ window.M2K_KINDS = {
 };
 window.M2K_CHANGES = [
   {
-    date: "2026-10-29", title: "MONO2K 1.5: tracks of their own length",
+    date: "2026-10-29", title: "MONO2K 1.5: tracks of their own length, a sound library of 96, a lighter bus",
     items: [
       ["sequencer", "1.5: Each track can loop over its own length: hold SEQ and turn KNOB 2 (TLEN), 1 to 64 steps, or PAT for the pattern's. 16 against 12 against 7 drift apart, then start together again at PLAY and at the next pattern."],
       ["sequencer", "1.5: The pattern's LEN still decides when the next pattern comes in, the bars, mutes on the bar and fills. Conditions like 1:2 count each track's own loops; recording lands on the track's own step."],
@@ -18,6 +18,10 @@ window.M2K_CHANGES = [
       ["sound", "1.5: A lighter bus, so heavy patterns leave the FM-1 time: HISS, TAPE and the glitch (GLCH, SIZE) are gone. Patterns keep those settings, unheard: A01 loses its tape wobble, A01\u2013A04 their hiss."],
       ["workflow", "1.5: GLO's GLITCH and VERB pages are one, BUS: DCAY, DAMP, ADPC, DRIV, its picture the reverb's tail lifted by DRIV and stepped by ADPC. GLO's pages: TIME, BUS, SET, MIDI, IN, PLAY."],
       ["workflow", "1.5: Holding FX, PERFORM's knobs are BUS's four. WOW and every repeat play as before."],
+      ["patterns", "1.5: The sound library starts with 96 sounds of its own, twelve in each category: kicks, snares, hats, percussion, basses, leads, pads and FX, each a different character (SYN > SND; CAT shows one category)."],
+      ["patterns", "1.5: A library saved by an older MONO2K keeps every sound you saved or changed; only the factory's old sounds are replaced (where yours stands, its new sound goes to S097 on)."],
+      ["fixes", "1.5: A sound loaded onto another track than the one it was saved from: its LFOs now move the track it is on."],
+      ["screen", "1.5: On the FM-1 the screen goes out four times faster and only where it changed; frames come as the processor has room, and the knob bars and meters glide by the time, so the motion is even."],
     ],
   },
   {
