@@ -119,7 +119,7 @@ static const mi_t MI[M_COUNT] = {
      {{"WAVE", "WAVE", K_WAVE}, {"SCAN", "SCAN BY ENV", K_BI}, {"STIM", "SCAN TIME", K_DECT}, {"SYNC", "HARD SYNC", K_NUM},
       {"BITS", "WAVE BITS", K_NUM}, {"DTUN", "OSC 2 DETUNE", K_BI}, {"MIX2", "OSC 2 LEVEL", K_NUM}, {"STEP", "PHASE STEPS", K_NUM}}},
     {"VOX-6", "VOX", "VOICE", "VOICE", {1, 2, 5},
-     {{"VOC1", "VOWEL F1", K_VOF1}, {"VOC2", "VOWEL F2", K_VOF2}, {"V-SW", "VOWEL SWITCH", K_ONOFF}, {"VOIC", "WHISPER", K_NUM},
+     {{"VOC1", "VOWEL F1", K_VOF1}, {"VOC2", "VOWEL F2", K_VOF2}, {"V-STW", "VOWEL SWITCH", K_ONOFF}, {"VOIC", "WHISPER", K_NUM},
       {"CONS", "CONSONANT", K_CONS}, {"CLEN", "CONS LENGTH", K_NUM}, {"CVOL", "CONS VOLUME", K_NUM}, {"TUNE", "TUNE", K_TUN2}}},
     {"FM+PAR", "FM+", "TRIPLE", "SYNTH", {4, 5, 3},
      {{"1FRQ", "RATIO 1", K_FR24}, {"1ENV", "DEPTH / DECAY 1", K_BI}, {"2FRQ", "RATIO 2", K_FR24}, {"2ENV", "DEPTH / DECAY 2", K_BI},
@@ -2373,46 +2373,43 @@ void m2k_encoder(int e, int d)
 
 /* ---------------------------------------------------------------------------------------------- drawing */
 
-/* the grid (docs/screen-grid.md), every text in MONO2K's Orbitron (F_S 12 px at 800 the primary type: values, names,
- * lines; F_M and F_L the stage's big type; F_B, the first redesign's 11 px at 700, the bars' type and, in ink, the
- * secondary: labels, units, machines, categories). In the sound library's style: cards (a 1 px frame, 2 px in from the
- * screen's sides, 4 apart), outlined tags (solid when on: pressed is filled), pictures in bars (two columns on, one off,
- * light one in three) on dotted guides, cells 2 px apart. The header an ink bar (rows 0-15: the pattern, the modes,
- * REC, the tempo, the transport); the knobs 16-60 (four cards under the FM-1's four knobs, rows 18..57: label, value,
- * a bar, 3 px in); the stage 61-201 (one card, rows 62..199: the value's pane [5, 101), a solid rule on 104, the
- * picture [107, 235)); the steps 202-223 (16 cells 12 x 12, a beat's four under each knob's card); the footer an ink
- * bar (224-239: the bars, the breadcrumb, the page). No text within 2 px of a card's frame or a rule: the audit fails
- * one that leaves its cell or comes near them */
+/* the grid (docs/screen-grid.md): every position, size and text baseline on 4 px. MONO2K's Orbitron, a light face and
+ * three bold sizes: F_B (11 px at 700, capitals 8 rows) the light one, for labels, units, hints and the names in
+ * pictures; F_S (12 px at 800, 9) the primary lines; F_M (16, 12) the knobs' values; F_L (24, 18) a page's one big
+ * word. The header and the footer ink bars (0-15, 224-239); the knobs 16-55 under the FM-1's four, frameless in
+ * columns of 60 (label, value, a thin bar, 4 px in); a dotted rule on 56; the stage [4, 236) x [60, 200), the page's
+ * picture its hero, its info line on baseline 196 (what turns and its value, a held step, else the picture's names);
+ * the steps 204-223, 16 cells 8 x 8 12 apart, a beat's four under each knob. One language for every picture: areas
+ * in bars (two columns on, one off; the other state one in three) from dotted floors and zero lines, editable points
+ * handles (solid while turned), live ones markers, discrete things cells (solid on, framed off, dotted gone). Panels
+ * only for the held layers: one frame, its title on its top line, the keys' hints at its foot. No text within 2 px of
+ * a rule or a frame (the audit) */
 #define HEAD_H 16                       /* the header's bar */
 #define KNOB_Y 16
-#define KNOB_R 60                       /* the knobs' band's last row */
-#define STAGE_Y 61
-#define STAGE_H 141                     /* 61..201 */
-#define STEPS_R 202                     /* the steps' band's first row */
-#define STRIP_Y 203
+#define KNOB_R 56                       /* the knobs' dotted rule */
+#define STAGE_Y 60                      /* the stage: [SX0, SX1) x [STAGE_Y, STAGE_Y + STAGE_H) */
+#define STAGE_H 140
+#define STEPS_R 200                     /* the steps' band from here */
+#define STRIP_Y 204
 #define FOOT_Y 224                      /* the footer's bar: rows 224..239 */
-/* the cards (the sound library's): 1 px frames 2 px in from the screen's sides, 4 apart; the knobs' four under the
- * knobs, rows 18..57; the stage's one, rows 62..199, its two panes apart on the solid rule at GX */
-#define CARD_Y 18
-#define CARD_H 40
-#define ST_Y 62                         /* the stage's card */
-#define ST_H 138
-#define GX 104                          /* where the stage's two panes meet */
-#define VX 5                            /* the value's pane: [VX, VX + VW), 3 px in from the frame and the rule */
-#define VW 96
-#define PX0 107                         /* the picture: [PX0, PX0 + PIC_W) x [PY0, PY0 + PIC_H), 2 px clear of both */
-#define PIC_W 128
-#define PY0 65
-#define PIC_H 132
-#define TY 1                            /* a tag's type below its box's top */
-/* the stage's lines of small type (their tops: the capitals are the 9 rows from there) */
-#define L_TOP 67                        /* the label, its tag's box from 65 (OTAG_H: 13 rows) */
-#define BIG_TOP 84                      /* the big name or value's top */
-#define L_B0 186                        /* the stage's last line: a picture's names (a tag's box from 184) */
-#define STEP_Y 206                      /* the steps' cells, 12 x 12, 2 px apart */
-#define STEP_N 12
-
-static int tag_w(const char *s) { return text_w(&F_S, s, 0) + 4; }
+#define SX0 4                           /* the content's columns, 4 px in from the screen's sides */
+#define SX1 236
+#define STW (SX1 - SX0)
+#define GX 124                          /* two columns' meeting (SYN: its name's [VX, VX + VW), its mark's past it) */
+#define VX 4
+#define VW 112
+#define INFO_B 196                      /* the stage's info line: its baseline (the light type's rows 188..195) */
+#define PIC_T 64                        /* a picture: [SX0, SX1) x [PIC_T, PIC_B) */
+#define PIC_B 184
+#define K_LB 28                         /* a knob's label's baseline (rows 20..27) */
+#define K_VB 44                         /* its value's (F_M rows 32..43, F_S 35..43) */
+#define K_BAR 48                        /* its bar: rows 48..49 */
+#define KB_H 2
+#define KX 4                            /* a knob's column: [60 k + KX, 60 k + KX + KW) */
+#define KW 52
+#define STEP_Y 208                      /* the steps' cells, 8 x 8, 12 apart */
+#define STEP_N 8
+#define TY 1                            /* (a filled tag's type below its box's top: tag()) */
 
 /* a line in at most w px: in f, then the alternative s2, then each size under f to the small type. The font picked
  * (0: nothing fits), *s the text, *tr its tracking (0: every size keeps its own, a pixel of the design) */
@@ -2453,8 +2450,8 @@ static int text_fit_f(const m2k_font_t *f, int x, int y, const char *s, int w, i
     return r < w ? r : w;
 }
 
-/* the big name or value, from the stage's BIG_TOP in the size asked (a size down where too wide); as it changes two
- * bands of it slip sideways a moment (the glitch in motion, still type at rest). Its last row */
+/* a big name or value from its top in the size asked (a size down where too wide); as it changes two bands of it slip
+ * sideways a moment (the glitch in motion: GLTCH only). Its last row */
 static int big_value(int x, int y, int w, const char *s, const m2k_font_t *f, uint32_t roll)
 {
     int tr;
@@ -2467,6 +2464,47 @@ static int big_value(int x, int y, int w, const char *s, const m2k_font_t *f, ui
         row_slip(x, y + (2 * g->base) / 3, w, g->base / 7, roll < 45 ? -3 : -1);
     }
     return y + g->base - 1;
+}
+
+/* a text on its baseline (the grid's: its capitals end on the row above it); its width */
+static int tx_b(const m2k_font_t *f, int x, int b, const char *s, int ink) { return text(f, x, b - f->base, s, ink, 0); }
+static int tx_br(const m2k_font_t *f, int xr, int b, const char *s, int ink) { return text_r(f, xr, b - f->base, s, ink, 0); }
+static int tx_bc(const m2k_font_t *f, int cx, int b, const char *s, int ink) { return text_c(f, cx, b - f->base, s, ink, 0); }
+/* the light type in at most w, else s2, else cut (the audit fails it); its width */
+static int lite_fit(int x, int b, const char *s, const char *s2, int w)
+{
+    const char *c = text_w(&F_B, s, 0) <= w || !s2 ? s : s2;
+    return text_fit_f(&F_B, x, b - F_B.base, c, w, 1);
+}
+
+/* pressed, picked, on: f's type in paper on a solid box 2 px round its capitals; its width */
+static int inv_tag(const m2k_font_t *f, int x, int b, const char *s)
+{
+    int w = text_w(f, s, 0);
+    rect(x - 2, b - f->base - 2, w + 4, f->base + 4, 1);
+    tx_b(f, x, b, s, 0);
+    return w;
+}
+
+/* a key, for a hint: the light type in a 1 px frame, 2 px clear each side and 1 above and below; its type's width */
+static int key_tag(int x, int b, const char *s)
+{
+    int w = text_w(&F_B, s, 0);
+    frame(x - 3, b - F_B.base - 2, w + 6, F_B.base + 4, 1);
+    tx_b(&F_B, x, b, s, 1);
+    return w;
+}
+
+/* a row of hints, [KEY] ACTION, from x on baseline b, as many as fit before xr; its end */
+static int hints(int x, int b, int xr, const char *const *kv, int n)
+{
+    for (int i = 0; i < n; i++) {
+        int w = text_w(&F_B, kv[2 * i], 0) + 7 + text_w(&F_B, kv[2 * i + 1], 0);
+        if (x + w > xr) break;
+        x += key_tag(x, b, kv[2 * i]) + 7;
+        x += tx_b(&F_B, x, b, kv[2 * i + 1], 1) + 12;
+    }
+    return x;
 }
 
 /* ---- the header, an ink bar (the first redesign's, filled), in the bars' type: the pattern (its slot a paper tag,
@@ -2491,7 +2529,7 @@ static void header(void)
     rect(0, 0, 240, HEAD_H, 1);
     CELL(0, 0, 240, HEAD_H, 2, 1, 238, HEAD_H - 1);
     const int y = BAR_TY;                               /* the capitals' rows 4..11 */
-    int xr = 236;                                       /* the free space's last column */
+    int xr = 235;                                       /* the free space's last column */
     if (sq.playing) for (int j = 0; j < 8; j++) hline(xr - 4, y + j, j < 4 ? j + 2 : 9 - j, 0);
     else rect(xr - 7, y, 8, 8, 0);
     xr -= 8 + 6;
@@ -2517,33 +2555,12 @@ static void header(void)
     if (text_w(&F_B, nm, 0) <= room) text(&F_B, pw + 6, y, nm, 0, text_w(&F_B, nm, 1) <= room);
 }
 
-/* ---- the knobs, along the top as on the panel: each a card, its label the secondary type (a solid tag while
- * turned), its value under it (in F_M where the row's every value fits, else F_S; locked: a solid box), and a bar under
- * that, easing to where the value sits in its range: a dotted track and a solid part (from the middle for a two-sided
- * one), segments for a few choices, nothing for an action. Everything 3 px in from the card's frame */
+/* ---- the knobs, along the top as on the panel, frameless (the S4's): each its label in the light type (solid while
+ * turned: pressed is filled), its value under it (F_M where the row's every value fits, else F_S; locked, solid), and
+ * a thin bar easing to where the value sits in its range: a dotted track and the part up to it solid (from the middle
+ * for a two-sided one), segments for a few choices, nothing for an action; a free knob its track alone */
 static int bipolar(int kind) { return kind == K_BI || kind == K_PAN || kind == K_SEMI || kind == K_FINE || kind == K_TUN2 || kind == K_SEMI24; }
 static int action(int kind) { return kind == K_LOAD || kind == K_SLOAD || kind == K_SSAVE || kind == K_WIPE || kind == K_DEMO; }
-
-/* a level (a picture's amount): a bar to w8 (Q8 of w) on a dotted track, from the middle when two-sided; 3 rows */
-static void level(int x, int y, int w, int n, int c, int w8, int bip)
-{
-    (void)n; (void)c;
-    int f = CLAMP(w8 >> 8, 0, w);
-    dots_h(x, y + 2, w);
-    if (bip) {
-        int mid = x + w / 2;
-        vline(mid, y - 2, 5, 1);
-        if (x + f > mid) rect(mid, y, x + f - mid, 3, 1);
-        else rect(x + f, y, mid - x - f, 3, 1);
-    } else rect(x, y, f, 3, 1);
-}
-
-#define KX 5                            /* a knob card's content: [60 k + KX, 60 k + KX + KW), 3 px in from its frame */
-#define KW 50
-#define K_LBL (CARD_Y + 4)              /* the label's capitals (the small light type): rows 22..29 */
-#define K_BASE (CARD_Y + 28)            /* the value's last row, 46, whatever its size */
-#define KB_H 3                          /* the bar's rows: 2 read thin under the bold values */
-#define K_BAR (CARD_Y + 33)             /* the bar: rows 51..53, 3 clear of the frame as the label is */
 
 /* a knob's bar, KB_H rows from y, w wide: n choices (n <= 8) a segment each, the chosen solid and the rest a line on
  * the last row; else a dotted track on the last row and the part up to q (0..256) solid, from the middle when
@@ -2571,8 +2588,8 @@ static void knob_bar(int x, int y, int w, int n, int c, int q, int bip, int pop)
     if (pop) rect(CLAMP(e, x, x + w - 2), y - 3, 2, h + 3, 1);
 }
 
-/* the value's size a knob's parameter allows: F_M if its every value fits the cell, else F_S. Kept per knob while its
- * parameter stays */
+/* the value's size a knob's parameter allows: F_M if its every value fits the column, else F_S. Kept per knob while
+ * its parameter stays */
 static const m2k_font_t *knob_font(int k, const pi_t *pi, int code)
 {
     static int key[4] = {-1, -1, -1, -1};
@@ -2592,6 +2609,8 @@ static const m2k_font_t *knob_font(int k, const pi_t *pi, int code)
     return f[k];
 }
 
+static int knob_turned(int k) { return ui.focus_t && ui.focus == k && ui.now - ui.focus_t < 2500; }
+
 static void knobs(void)
 {
     /* the row's values in one size: F_M where all four allow it, else F_S (turning one never changes it) */
@@ -2604,23 +2623,19 @@ static void knobs(void)
     }
     for (int k = 0; k < 4; k++) {
         int x = k * 60, cx = x + KX, code = knob_at(k);
-        CELL(x, KNOB_Y, x + 60, STAGE_Y, cx, CARD_Y + 3, cx + KW, CARD_Y + CARD_H - 3);
+        CELL(x, KNOB_Y, x + 60, KNOB_R, cx, KNOB_Y + 2, cx + KW, KNOB_R - 2);
         const pi_t *pi = code == NONE ? 0 : pinfo(ui.trk, code);
-        card(x + 2, CARD_Y, 56, CARD_H, !pi || pi->s4[0] == '-');   /* (free: a dotted card, nothing in it) */
-        if (!pi || pi->s4[0] == '-') continue;
-        int v = knob_value(code), lk = knob_locked(code);
-        int focus = ui.focus_t && ui.focus == k && ui.now - ui.focus_t < 2500;
-        /* the label the secondary type; turned, a solid tag (pressed is filled) */
-        if (focus) rect(x + 4, K_LBL - 1, text_w(&F_B, pi->s4, 0) + 2, F_B.base + 2, 1);
-        text(&F_B, cx, K_LBL, pi->s4, !focus, 0);
+        if (!pi || pi->s4[0] == '-') { dots_h(cx, K_BAR + KB_H - 1, KW); continue; }
+        int v = knob_value(code), lk = knob_locked(code), focus = knob_turned(k);
+        if (focus) inv_tag(&F_B, cx, K_LB, pi->s4); else tx_b(&F_B, cx, K_LB, pi->s4, 1);
         char o[16];
         const char *u;
         fmt(pi, ui.trk, v, o, &u);
         int tr;
         const char *c = o;
         const m2k_font_t *vf = fit_font(rf, &c, 0, KW, &tr), *g = vf ? vf : &F_S;   /* (a size down where one is wider) */
-        int vy = K_BASE - (g->base - 1);
-        if (lk) rect(x + 4, vy - 1, (vf ? text_w(g, c, tr) : KW) + 2, g->base + 2, 1);   /* (locked: a solid box) */
+        int vy = K_VB - g->base;
+        if (lk) rect(cx - 2, vy - 2, (vf ? text_w(g, c, tr) : KW) + 4, g->base + 4, 1);   /* (locked: solid) */
         if (vf) text(vf, cx, vy, c, !lk, tr);
         else text_fit(cx, vy, o, 0, KW, !lk);           /* (too wide even small: cut, the audit says so) */
         if (action(pi->kind)) continue;
@@ -2631,30 +2646,34 @@ static void knobs(void)
         knob_bar(cx, K_BAR, KW, n && n <= 8 ? n : 0, choice_of(pi->kind, v), ui.ease[k] >> 8, bipolar(pi->kind),
                  focus && ui.now - ui.focus_t < 200);
     }
+    rule_h(SX0, KNOB_R, STW, 1);
 }
 
 /* ---- the steps */
 static int play_step(void) { int s = (int)sq.step - 1; return s < 0 ? seq_len() - 1 : s; }
+static int step_held(int t, int s)
+{
+    if (ui.grid && t == ui.trk) for (int i = 0; i < ui.nheld; i++) if (ui.held[i] == s) return 1;
+    return 0;
+}
 
-/* a step's box (a ring pops round it as it is toggled): empty its outline; a trig solid; with locks a checker in its
+/* a step's cell (a ring pops round it as it is toggled): empty its outline; a trig solid; with locks a checker in its
  * outline; on a condition (a chance, A:B, PRE, FILL ...) framed, its block inset; on some of its trig tracks a third
  * filled for each (AMP, FILTER, LFO, left to right), NONE a dot; accent a notch, slide a dotted edge, ratchets dots
  * along the foot; past the track's end (its own length's, or the pattern's) a dot at its centre. The playing step
- * framed, the track's own */
+ * framed 2 px out (Hortator's), the track's own */
 static void step_cell(int x, int y, int w, int h, int t, int s)
 {
     m2k_pattern_t *p = PAT(cur_pat);
     m2k_step_t st = p->step[t][s];
-    int playing = sq.playing && track_pos(t) == s;
-    int held = 0;
-    if (ui.grid && t == ui.trk) for (int i = 0; i < ui.nheld; i++) if (ui.held[i] == s) held = 1;
-    if (s >= tlen_of(t)) { px(x + w / 2, y + h / 2, 1); return; }
+    int playing = sq.playing && track_pos(t) == s, held = step_held(t, s);
+    if (s >= tlen_of(t)) { rect(x + w / 2 - 1, y + h / 2 - 1, 2, 2, 1); return; }
     if (lane_of(p, t)) {               /* following a lane: its trigs in this loop (stopped, a PLAY's first), dotted round */
         uint32_t len = (uint32_t)seq_len(), n = !sq.playing ? 0 : spd_of(t) == 4 ? sq.n1x : sq.tk[t];
         int hit = grids_hit(p, lane_of(p, t) - 1, (n ? (n - 1) / len * len : 0) + (uint32_t)s, 0);
         if (hit) { rect(x, y, w, h, 1); if (hit == 2) rect(x + 2, y + 2, 2, 2, 0); }
         else dots_frame(x, y, w, h);
-        if (playing) { frame(x - 1, y - 1, w + 2, h + 2, 1); frame(x, y, w, h, 1); }
+        if (playing) frame(x - 2, y - 2, w + 4, h + 4, 1);
         if (held && ((ui.now >> 7) & 1)) rect(x, y, w, h, 2);
         return;
     }
@@ -2666,25 +2685,25 @@ static void step_cell(int x, int y, int w, int h, int t, int s)
             for (int k = 0; k < 3; k++) {
                 if (sk & (ST_NOAMP << k)) continue;
                 int x0 = x + 1 + k * (w - 2) / 3, x1 = x + 1 + (k + 1) * (w - 2) / 3;
-                rect(x0 + (in ? 1 : 0), y + 1 + in / 2, x1 - x0 - (in ? 1 : 0), h - 2 - in, 1);
+                rect(x0, y + 1 + in / 2, x1 - x0, h - 2 - in, 1);
             }
-            if (sk == ST_TTYPE) rect(x + w / 2 - 1, y + h / 2 - 1, 3, 3, 1);
+            if (sk == ST_TTYPE) rect(x + w / 2 - 1, y + h / 2 - 1, 2, 2, 1);
         } else if (lk && !in) {
-            for (int j = 2; j < h - 2; j++) for (int i = 2; i < w - 2; i++) if (!((x + i + y + j) & 1)) px(x + i, y + j, 1);
+            for (int j = 2; j < h - 2; j++) dots_h(x + 2, y + j, w - 4);
         } else rect(x + in, y + in, w - 2 * in, h - 2 * in, 1);
         if (st.flags & ST_ACC) rect(x + 2, y + 2, 2, 2, 0);
         if (st.flags & ST_SLD) for (int j = 0; j < h; j += 2) px(x + w - 2, y + j, 0);
-        for (int i = 1; i < st.rtrg && i < 4; i++) rect(x + i * 3 - 1, y + h - 3, 2, 2, 2);
+        const int d = (w - 2) / 3;                      /* (ratchets: a dot each along the foot) */
+        for (int i = 1; i < st.rtrg && i < 4; i++) rect(x + 1 + (i - 1) * d, y + h - 2, d - 1 > 0 ? d - 1 : 1, 1, 2);
     } else frame(x, y, w, h, 1);
-    if (playing) { frame(x - 1, y - 1, w + 2, h + 2, 1); frame(x, y, w, h, 1); }   /* (the playhead: its outline 2 px) */
-    if (step_entry() && t == ui.trk && s == ui.cursor && ((ui.now >> 8) & 1)) frame(x - 1, y - 1, w + 2, h + 2, 1);
+    if (playing) frame(x - 2, y - 2, w + 4, h + 4, 1);   /* (the playhead: 2 px round) */
+    if (step_entry() && t == ui.trk && s == ui.cursor && ((ui.now >> 8) & 1)) frame(x - 2, y - 2, w + 4, h + 4, 1);
     if (ui.pop_t && t == ui.pop_trk && s == ui.pop_s && ui.now - ui.pop_t < 160) rect(x - 1, y - 1, w + 2, h + 2, 2);   /* toggled */
     if (held && ((ui.now >> 7) & 1)) rect(x, y, w, h, 2);
 }
 
-/* the steps of the page in view, the track's: 16 cells 2 px apart (the library's strip), a beat's four under each
- * knob's card (the groups are the beats) */
-static int step_x(int i) { return (i >> 2) * 60 + 3 + (i & 3) * 14; }
+/* the steps of the page in view, the track's: 16 cells 8 x 8, 12 apart, a beat's four under each knob */
+static int step_x(int i) { return (i >> 2) * 60 + 8 + (i & 3) * 12; }
 
 static void strip(void)
 {
@@ -2707,24 +2726,24 @@ static void foot(void)
     rect(0, FOOT_Y, 240, 240 - FOOT_Y, 1);
     CELL(0, FOOT_Y, 240, 240, 2, FOOT_Y + 1, 238, 239);
     for (int pg = 0; pg < 4; pg++) {
-        int x = 4 + pg * 11, used = pg * 16 < seq_len(), on = pg == ui.spage;
+        int x = 4 + pg * 12, used = pg * 16 < seq_len(), on = pg == ui.spage;
         if (!used) {                                    /* past the end: dotted, in step with the checker */
-            for (int i = 0; i < 9; i++)
+            for (int i = 0; i < 8; i++)
                 for (int j = 0; j < 8; j++)
-                    if ((i == 0 || i == 8 || j == 0 || j == 7) && !((x + i + y + j) & 1)) px(x + i, y + j, 0);
+                    if ((i == 0 || i == 7 || j == 0 || j == 7) && !((x + i + y + j) & 1)) px(x + i, y + j, 0);
             continue;
         }
-        if (on) rect(x, y, 9, 8, 0); else frame(x, y, 9, 8, 0);
-        if (sq.playing && play_step() / 16 == pg) rect(x + 3, y + 3, 3, 2, on);
+        if (on) rect(x, y, 8, 8, 0); else frame(x, y, 8, 8, 0);
+        if (sq.playing && play_step() / 16 == pg) rect(x + 3, y + 3, 2, 2, on);
     }
     char pl[12], cnt[8];
     page_label(ui.page, ui.sub, pl);
-    int n = nsub(ui.page), xr = 236;
+    int n = nsub(ui.page), xr = 235;
     if (n > 1) {
         char *e = s_int(cnt, ui.sub + 1);
         *e++ = '/';
         s_int(e, n);
-        xr -= text_r(&F_B, 237, y, cnt, 0, 0) + 8;
+        xr -= text_r(&F_B, 236, y, cnt, 0, 0) + 8;
     }
     const mi_t *mi = &MI[PAT(cur_pat)->machine[ui.trk]];
     char tn[3] = {'T', (char)('1' + ui.trk), 0};
@@ -2733,7 +2752,7 @@ static void foot(void)
     if (ui.page == PG_GLO) it[k++] = "GLO";
     else { it[k++] = tn; it[k++] = mi->name; }
     it[k++] = pl;
-    const int x0 = 52, room = xr - x0 + 1;
+    const int x0 = 56, room = xr - x0 + 1;
     if (k == 3 && crumb_w(it, k) > room) it[1] = mi->badge;       /* the machine's badge, else none */
     if (k == 3 && crumb_w(it, k) > room) { it[1] = it[2]; k = 2; }
     for (int i = 0, x = x0; i < k; i++) {
@@ -2742,175 +2761,141 @@ static void foot(void)
     }
 }
 
-/* ---- the value's column (left of the stage) */
-
-/* a parameter's values in one size: the largest its widest value fits the column in (each choice measured; a number
- * at its ends and middle), so turning it never changes the size. Kept while the same parameter is in focus */
-static const m2k_font_t *value_font(const pi_t *pi, int code)
+/* ---- the stage's info line (baseline INFO_B): the knob turned last, while its value shows (its full name in the
+ * light type, its value primary and its unit at the right, LOCK solid or REC blinking before it); a step held in GRID
+ * (its number, its tags, its note); else nothing (1 when it drew: the page's own names then wait) */
+static int fresh_focus(void)
 {
-    static int key = -1;
-    static const m2k_font_t *f;
-    int k = code | ui.trk << 8 | PAT(cur_pat)->machine[ui.trk] << 12;
-    if (k == key) return f;
-    key = k;
-    int n = kind_choices(pi->kind), cnt = n ? n : 3, w = 0;
-    for (int i = 0; i < cnt && i < 64; i++) {
-        int mn = kind_min(pi->kind), mx = kind_max(pi->kind);
-        int v = n ? enc(i, n) : i == 0 ? mn : i == 1 ? mx : (mn + mx) / 2;
-        char o[16];
-        const char *u;
-        fmt(pi, ui.trk, v, o, &u);
-        int ow = text_w(&F_L, o, 0);
-        w = ow > w ? ow : w;
-    }
-    f = w <= VW ? &F_L : &F_M;
-    return f;
+    int fcode = knob_at(ui.focus);
+    return ui.focus_t && ui.now - ui.focus_t < 2500 && fcode != NONE;
 }
 
-/* the stage's card: its frame, the solid rule between its panes (the owner's, frame to frame), the value's pane */
-static void stage_card(void)
+static void focus_info(int code)
 {
-    card(2, ST_Y, 236, ST_H, 0);
-    rule_v(GX, ST_Y + 1, ST_H - 2, 0);
-    CELL(0, STAGE_Y, GX, STEPS_R, VX, ST_Y + 3, VX + VW, ST_Y + ST_H - 3);
-}
-
-/* the stage's head: its tag (outlined, the first of s, s2, s3 that fits w) on L_TOP's row; its width */
-static int head_tag(int x, const char *s, const char *s2, const char *s3, int w, int on)
-{
-    const char *c = otag_w(&F_S, s) <= w || !s2 ? s : otag_w(&F_S, s2) <= w || !s3 ? s2 : s3;
-    return otag(&F_S, x, L_TOP - 2, c, on);
-}
-
-/* a line of the secondary type (the small light face) in at most w, else s2, else cut (the audit fails it); its width */
-static int text_lite(int x, int y, const char *s, const char *s2, int w, int ink)
-{
-    const char *c = text_w(&F_B, s, 0) <= w || !s2 ? s : s2;
-    return text_fit_f(&F_B, x, y, c, w, ink);
-}
-
-/* a knob in focus, a card's head: its name a tag, its value in big type (the primary), its unit under it in the light
- * type (and LOCK, or REC blinking, a small tag beside) */
-static void focus_left(int code, int k)
-{
-    char v[16], o[32];
+    char v[16];
     const char *u;
     const pi_t *pi = pinfo(ui.trk, code);
-    int val = knob_value(code);
-    fmt(pi, ui.trk, val, v, &u);
-    char *e = o;
-    if (code < 8) { *e++ = (char)('A' + code); *e++ = ' '; *e++ = '/'; *e++ = ' '; }
+    fmt(pi, ui.trk, knob_value(code), v, &u);
+    int xr = SX1;
+    if (*u) xr -= tx_br(&F_B, xr, INFO_B, u, 1) + 8;
+    xr -= tx_br(&F_S, xr, INFO_B, v, 1);
+    int mark = knob_locked(code) ? 1 : sq.rec && sq.playing && code < 0x80 ? 2 : 0;
+    if (mark == 1) xr -= inv_tag(&F_B, xr - 8 - text_w(&F_B, "LOCK", 0), INFO_B, "LOCK") + 8;
+    else if (mark == 2) {
+        int w = text_w(&F_B, "REC", 0);
+        if ((ui.now >> 8) & 1) inv_tag(&F_B, xr - 8 - w, INFO_B, "REC"); else tx_b(&F_B, xr - 8 - w, INFO_B, "REC", 1);
+        xr -= w + 8;
+    }
+    char o[32], *e = o;
+    if (code < 8) { *e++ = (char)('A' + code); *e++ = ' '; }
     s_cpy(e, pi->name);
-    head_tag(VX, o, pi->name, pi->s4, VW, 0);
-    int y = big_value(VX, BIG_TOP, VW, v, value_font(pi, code), ui.now - ui.roll_t) + 8;
-    int x = VX, mark = knob_locked(code) ? 1 : sq.rec && sq.playing && code < 0x80 ? 2 : 0;
-    if (*u) x += text_lite(VX, y, u, 0, VW, 1) + 8;
-    if (mark && x + otag_w(&F_B, "LOCK") > VX + VW) { x = VX; y += 16; }   /* (beside the unit, else under it) */
-    if (mark == 1) otag(&F_B, x, y - 2, "LOCK", 1);
-    else if (mark == 2) otag(&F_B, x, y - 2, "REC", (ui.now >> 8) & 1);
-    (void)k;
+    lite_fit(SX0, INFO_B, text_w(&F_B, o, 0) <= xr - 8 - SX0 ? o : pi->name, pi->s4, xr - 8 - SX0);
 }
 
-/* the machine card, after Model:Cycles' engine screens: its class a tag and its style; the name after its family in
- * big type; the family's badge and which of the machines; punch, metal and plastic, five segments each, dealt in */
-static void machine_card(void)
-{
-    const int m = PAT(cur_pat)->machine[ui.trk];
-    const mi_t *mi = &MI[m];
-    /* the library's card head: the class a tag, the style the light type at its right, else the style the tag */
-    if (otag_w(&F_S, mi->cls) + 4 + text_w(&F_B, mi->style, 0) <= VW) {
-        otag(&F_S, VX, L_TOP - 2, mi->cls, 0);
-        text_r(&F_B, VX + VW, L_TOP + 1, mi->style, 1, 0);
-    } else head_tag(VX, mi->style, 0, 0, VW, 0);
-    int n = 0;
-    while (mi->name[n] && mi->name[n] != '-' && mi->name[n] != '+' && n < 6) n++;
-    const char *model = mi->name[n] ? mi->name + n + 1 : mi->name;
-    int y = big_value(VX, BIG_TOP, VW, model, &F_L, 1000) + 8;
-    char o[16], *e = s_cpy(o, mi->badge);
-    int i = m_place(m) + 1;
-    *e++ = ' '; *e++ = '#'; *e++ = (char)('0' + i / 10); *e++ = (char)('0' + i % 10); *e++ = '/';
-    s_int(e, M_COUNT);
-    text_lite(VX, y, o, mi->badge, VW, 1);
-    /* punch, metal, plastic: the light type, five cells 2 px apart, solid as far as the machine has it */
-    static const char *const ST[3] = {"PNCH", "METL", "PLST"};
-    uint32_t age = ui.card_t ? ui.now - ui.card_t : 1000;
-    for (int r = 0; r < 3; r++) {
-        int ry = y + 20 + r * 16;
-        text(&F_B, VX, ry, ST[r], 1, 0);
-        for (int sg = 0; sg < 5; sg++) {
-            if (age <= (uint32_t)(60 + (r * 5 + sg) * 25)) continue;
-            int sx = VX + VW - 48 + sg * 10;                /* (right-aligned with the style) */
-            if (sg < mi->stat[r]) rect(sx, ry, 8, 8, 1);
-            else frame(sx, ry, 8, 8, 1);
-        }
-    }
-}
-
-/* SND: the sound picked as the sound library's card has it: its slot a tag and its category at the right, its name
- * big, its machine and note in the light type, its amp envelope in bars on a dotted floor under a dotted hairline */
-static void env_bars(const uint8_t *k, int X, int W, int top, int yb, int fk, int *xs, int *ys);
-static void sound_card(void)
-{
-    const int i = ui.snd_sel;
-    const m2k_sound_t *s = &snd[i];
-    char o[24] = {'S'};
-    s_num3(o + 1, i + 1);
-    otag(&F_S, VX, L_TOP - 2, o, 0);
-    if (!s->name[0]) {
-        int y = big_value(VX, BIG_TOP, VW, "INIT", &F_L, 1000) + 8;
-        text_lite(VX, y, "AN EMPTY SLOT", "EMPTY", VW, 1);
-        return;
-    }
-    if (snd_cat[i]) text_r(&F_B, VX + VW, L_TOP + 1, CAT_N[snd_cat[i]], 1, 0);
-    int y = big_value(VX, BIG_TOP, VW, s->name, &F_L, 1000) + 8;
-    const mi_t *mi = &MI[s->machine < M_COUNT ? s->machine : 0];
-    char nt[6];
-    s_note(nt, snd_root[i]);
-    int nw = text_w(&F_B, nt, 0);
-    text_lite(VX, y, mi->name, mi->badge, VW - nw - 6, 1);
-    text_r(&F_B, VX + VW, y, nt, 1, 0);
-    int xs[5], ys[5];
-    const int top = y + 22, yb = ST_Y + ST_H - 12;
-    dots_h(VX, top - 4, VW);
-    env_bars(s->kit, VX, VW, top, yb, -1, xs, ys);
-}
-
-/* a held step: its note in big type, what turns it, its condition, ratchet, trig type, accent and slide */
-static void step_card(void)
+/* a held step: its number (and how many more), its condition, ratchet, trig type, accent and slide solid; its note */
+static void step_info(void)
 {
     m2k_step_t st = PAT(cur_pat)->step[ui.trk][ui.held[0]];
     char o[24], *e = s_cpy(o, "STEP ");
     e = s_int(e, ui.held[0] + 1);
     if (ui.nheld > 1) { e = s_cpy(e, " +"); s_int(e, ui.nheld - 1); }
-    head_tag(VX, o, 0, 0, VW, 0);
-    s_note(o, st.note);
-    int y = big_value(VX, BIG_TOP, VW, o, &F_L, 1000) + 8;
-    text_lite(VX, y, "TRACK: NOTE", "TRK: NOTE", VW, 1);  /* the TRACK knob turns the note */
-    int x = VX;
-    y += 16;
-    const char *tg[5] = {COND_N[st.cond], 0, (st.flags & ST_TTYPE) ? TTYPE_N[ttype_of(st.flags)] : 0,
-                         (st.flags & ST_ACC) ? "ACC" : 0, (st.flags & ST_SLD) ? "SLD" : 0};
+    char nt[8];
+    s_note(nt, st.note);
+    int xr = SX1 - tx_br(&F_S, SX1, INFO_B, nt, 1) - 8;
+    int x = SX0 + tx_b(&F_B, SX0, INFO_B, o, 1) + 10;
     char r[4] = {'X', (char)('0' + (st.rtrg ? st.rtrg : 1)), 0, 0};
-    tg[1] = r;
-    const int on[5] = {st.cond != C_ALWAYS, st.rtrg > 1, 1, 1, 1};
-    for (int i = 0; i < 5; i++) {                 /* in a row, on to the next line when the column is full */
-        if (!tg[i]) continue;
-        if (x + otag_w(&F_B, tg[i]) > VX + VW) { x = VX; y += 16; }
-        x += otag(&F_B, x, y - 2, tg[i], on[i]) + 4;
+    const char *tg[5] = {st.cond != C_ALWAYS ? COND_N[st.cond] : 0, st.rtrg > 1 ? r : 0,
+                         (st.flags & ST_TTYPE) ? TTYPE_N[ttype_of(st.flags)] : 0, (st.flags & ST_ACC) ? "ACC" : 0,
+                         (st.flags & ST_SLD) ? "SLD" : 0};
+    for (int i = 0; i < 5; i++) {
+        if (!tg[i] || x + text_w(&F_B, tg[i], 0) > xr) continue;
+        x += inv_tag(&F_B, x, INFO_B, tg[i]) + 8;
     }
 }
 
-/* the page at rest: its name in big type */
-static void page_rest(void)
+static int info_line(void)
 {
-    char o[24];
-    page_label(ui.page, ui.sub, o);
-    /* the library's card head: the track a tag (GLO's: the section), the page's title big (every page's one size;
-     * the picture says the rest), the machine in the light type */
-    char tn[3] = {'T', (char)('1' + ui.trk), 0};
-    head_tag(VX, ui.page == PG_GLO ? "GLO" : tn, 0, 0, VW, 0);
-    int y = big_value(VX, BIG_TOP, VW, o, &F_L, 1000) + 8;
-    if (ui.page != PG_GLO) text_lite(VX, y, MI[PAT(cur_pat)->machine[ui.trk]].name, MI[PAT(cur_pat)->machine[ui.trk]].badge, VW, 1);
+    int fresh = fresh_focus();
+    if (ui.grid && ui.nheld && !fresh) { step_info(); return 1; }
+    if (fresh) { focus_info(knob_at(ui.focus)); return 1; }
+    return 0;
+}
+
+/* the knob being turned (-1 none) */
+static int turned(void) { return ui.focus_t && ui.now - ui.focus_t < 2500 ? ui.focus : -1; }
+
+/* ---- HOME: the six tracks as lanes (Hortator's tracks page): each its number and its machine's model (solid for the
+ * track in view, or a moment as it trigs), its 16 steps of the page in view grouped by the beat, its level live */
+#define LANE_B 80                       /* the lanes' baselines: 80, 100 .. 180 */
+#define LANE_P 20
+#define LANE_X 68                       /* their steps from 68, 8 apart, a beat 40; the level from 224 */
+static int lane_x(int i) { return LANE_X + (i >> 2) * 40 + (i & 3) * 8; }
+
+/* a machine's model, its name after the family ("KICK" of DRM-KICK) */
+static const char *model_of(const mi_t *mi)
+{
+    int n = 0;
+    while (mi->name[n] && mi->name[n] != '-' && mi->name[n] != '+' && n < 6) n++;
+    return mi->name[n] ? mi->name + n + 1 : mi->name;
+}
+
+/* a lane's step on baseline b: nothing past the track's end; a rest a short line on the baseline; a trig a block 6
+ * wide, 8 tall (an accent 10, one on a condition 4: what it may be), with locks a frame round a checker; muted, every
+ * trig dotted round and the rests dotted; the playing step a bar under it; held in GRID, or toggled, inverted */
+static void lane_step(int x, int b, int t, int s)
+{
+    const m2k_pattern_t *p = PAT(cur_pat);
+    if (s >= tlen_of(t)) return;
+    int muted = (p->mute >> t) & 1, h = 0, lk = 0;
+    if (lane_of(p, t)) {
+        uint32_t len = (uint32_t)seq_len(), n = !sq.playing ? 0 : spd_of(t) == 4 ? sq.n1x : sq.tk[t];
+        int hit = grids_hit(p, lane_of(p, t) - 1, (n ? (n - 1) / len * len : 0) + (uint32_t)s, 0);
+        h = hit == 2 ? 10 : hit ? 8 : 0;
+    } else {
+        m2k_step_t st = p->step[t][s];
+        if (st.flags & ST_TRIG) { h = (st.flags & ST_ACC) ? 10 : st.cond != C_ALWAYS ? 4 : 8; lk = has_locks(t, s); }
+    }
+    if (!h) { if (muted) dots_h(x, b - 1, 6); else hline(x, b - 1, 6, 1); }
+    else if (muted) dots_frame(x, b - h, 6, h);
+    else if (lk) { frame(x, b - h, 6, h, 1); for (int j = 1; j < h - 1; j++) dots_h(x + 1, b - h + j, 4); }
+    else rect(x, b - h, 6, h, 1);
+    if (sq.playing && track_pos(t) == s) rect(x, b + 2, 6, 2, 1);
+    int blink = (step_held(t, s) && ((ui.now >> 7) & 1)) || (step_entry() && t == ui.trk && s == ui.cursor && ((ui.now >> 8) & 1)) ||
+                (ui.pop_t && t == ui.pop_trk && s == ui.pop_s && ui.now - ui.pop_t < 160);
+    if (blink) rect(x - 1, b - 11, 8, 12, 2);
+}
+
+static void home(void)
+{
+    m2k_pattern_t *p = PAT(cur_pat);
+    CELL(0, STAGE_Y - 3, 240, STEPS_R + 2, SX0, STAGE_Y, SX1, STEPS_R);
+    for (int t = 0; t < M2K_TRACKS; t++) {
+        int b = LANE_B + t * LANE_P;
+        int flash = ui.now - ui.flash_t[t] < 90, inv = t == ui.trk || flash;
+        if ((((sq.mq_m | sq.sq_m | sq.solo_rel) >> t) & 1) && ((ui.now >> 7) & 1)) inv = !inv;   /* waits for the bar */
+        char n[2] = {(char)('1' + t), 0};
+        if (inv) rect(SX0 - 2, b - 11, 60, 13, 1);
+        tx_b(&F_S, SX0, b, n, !inv);
+        const char *mn = model_of(&MI[p->machine[t]]);
+        text_fit_f(&F_B, 20, b - F_B.base, text_w(&F_B, mn, 0) <= 40 ? mn : MI[p->machine[t]].badge, 40, !inv);
+        for (int i = 0; i < 16; i++) lane_step(lane_x(i), b, t, ui.spage * 16 + i);
+        int w = ui.meter[t] * 12 >> 15;                 /* the level, live: solid as loud, its track dotted */
+        if (w) rect(224, b - 4, w, 4, 1);
+        if (w < 12) dots_h(224 + w, b - 1, 12 - w);
+    }
+    info_line();
+    /* the four bars under the knobs, a beat to 11 px: the one in view solid, past the end dotted, the playhead */
+    for (int pg = 0; pg < 4; pg++) {
+        int x = pg * 60 + 8, w = 44, y = STEP_Y;
+        int used = pg * 16 < seq_len();
+        if (!used) { dots_frame(x, y, w, STEP_N); continue; }
+        int on = pg == ui.spage;
+        if (on) rect(x, y, w, STEP_N, 1); else frame(x, y, w, STEP_N, 1);
+        for (int i = 1; i < 4; i++) vline(x + i * 11, y + 5, 2, !on);
+        if (sq.playing && play_step() / 16 == pg) rect(x + 2 + (play_step() % 16) * 40 / 16, y + 2, 2, 4, !on);
+    }
+    knobs();
+    foot();
 }
 
 /* the mark, after the machine's 3D logo: it jumps off its dithered shadow on each of the track's hits (higher for a
@@ -3063,13 +3048,6 @@ static void env_bars(const uint8_t *k, int X, int W, int top, int yb, int fk, in
     ys[4] = yb;
 }
 
-/* ---- the pictures (right of the stage): what the page is about, live. Each keeps to [PX0, PX0 + PIC_W) x [PY0, PY0 +
- * PIC_H): its plot above, its names on the stage's last line (L_B0). The sound library's: areas in bars (bar_col: all
- * solid at rest, the part being turned solid and the rest light) on a dotted floor, references dotted on the checker,
- * handles 5 x 5 (7 x 7 solid while turned), a live value a marker, names outlined tags (solid for what turns). (The
- * pages not restyled yet keep curves two dots thick and hatched areas) */
-static void lfo_scopes(const uint8_t *k);
-
 /* GRIDS' pictures. A lane's K playing now: the track in view's when it follows the lane, else the first that does, else
  * the pattern's (-1 stopped: a PLAY's first cycle is shown) */
 static int lane_now(const m2k_pattern_t *p, int part)
@@ -3081,654 +3059,583 @@ static int lane_now(const m2k_pattern_t *p, int part)
     return n ? (int)(n - 1) : -1;
 }
 
-/* a lane's cycle as it plays: a bar a step (16 or 32), as tall as its level (CHAOS's raise in it), solid where it trigs,
- * framed under its density (the dotted line), an accent a notch at its top; the step playing marked under it */
-static void grids_lane(int x, int y, int h, int part)
+
+/* ---- the pictures: what the page is about, live, its hero across [SX0, SX1) x [PIC_T, PIC_B), its names on the info
+ * line while nothing turns. One language: areas in bars (bar_col: solid at rest, the part being turned solid and the
+ * rest light) from dotted floors and zero lines, editable points handles, live ones markers and a dotted cursor,
+ * discrete things cells, the names the light type */
+
+/* bars from a zero line at row mid to row y, either side (a bipolar picture's column) */
+static void bar_bi(int x, int x0, int y, int mid, int light)
 {
-    const m2k_pattern_t *p = PAT(cur_pat);
-    const int cyc = grids_cyc(p), kn = lane_now(p, part), base = kn < 0 ? 0 : kn - kn % cyc, bw = PIC_W / cyc;
-    const int th = 255 - gr8(p->glob[G_GRBD + part]);
-    for (int i = 0; i < cyc; i++) {
-        int lv, hit = grids_hit(p, part, (uint32_t)(base + i), &lv), bh = (lv * h + 254) / 255, bx = x + i * bw;
-        if (hit) rect(bx, y + h - bh, bw - 1, bh, 1);
-        else if (bh > 1) frame(bx, y + h - bh, bw - 1, bh, 1);
-        else if (bh) hline(bx, y + h - 1, bw - 1, 1);
-        if (hit == 2 && bw > 4) rect(bx + 1, y + h - bh + 1, bw - 3, 2, 0);
-        else if (hit == 2) px(bx + 1, y + h - bh + 1, 0);
-        if (base + i == kn) rect(bx, y + h + 2, bw - 1, 2, 1);
-    }
-    dots_h(x, y + h - (th * h + 127) / 255, cyc * bw - 1);
+    if (y < mid) bar_col(x, x0, y, mid, light); else if (y > mid) bar_col(x, x0, mid + 1, y + 1, light);
 }
 
-/* GRIDS: the map's 25 nodes (dotted between), the four X and Y read solid, the place X and Y read a dot on its
- * cross; the three lanes under it. LANES: the three lanes, each its name (inverted for the track in view's) and the
- * tracks that follow it */
+/* SYN: the machine (Hortator's machine page): its class and style in the light type, its model big, punch, metal and
+ * plastic five cells each (dealt in as it arrives); its mark at the right, jumping on the track's hits, a cell a
+ * machine under it; at the foot which of the machines, and ALGO to turn it */
+static void syn_picture(int busy)
+{
+    const int m = PAT(cur_pat)->machine[ui.trk];
+    const mi_t *mi = &MI[m];
+    int x = SX0 + tx_b(&F_B, SX0, 72, mi->cls, 1) + 8;
+    lite_fit(x, 72, mi->style, 0, GX + 24 - x);              /* (short of the mark) */
+    big_value(VX, 100 - F_L.base, VW, model_of(mi), &F_L, 1000);
+    static const char *const ST[3] = {"PNCH", "METL", "PLST"};
+    uint32_t age = ui.card_t ? ui.now - ui.card_t : 1000;
+    for (int r = 0; r < 3; r++) {
+        int b = 132 + r * 16;
+        tx_b(&F_B, SX0, b, ST[r], 1);
+        for (int sg = 0; sg < 5; sg++) {
+            if (age <= (uint32_t)(60 + (r * 5 + sg) * 25)) continue;
+            int sx = SX0 + 48 + sg * 12;
+            if (sg < mi->stat[r]) rect(sx, b - 8, 8, 8, 1); else frame(sx, b - 8, 8, 8, 1);
+        }
+    }
+    mark_3d(GX + 4 + (SX1 - GX - 4 - ICON_N) / 2, 72, m);
+    machine_dots((GX + SX1) / 2, 168, m);
+    if (busy) return;
+    char o[16], *e = s_cpy(o, mi->badge);
+    int i = m_place(m) + 1;
+    *e++ = ' '; *e++ = (char)('0' + i / 10); *e++ = (char)('0' + i % 10); *e++ = '/';
+    s_int(e, M_COUNT);
+    tx_b(&F_B, SX0, INFO_B, o, 1);
+    static const char *const H[2] = {"ALGO", "MACHINE"};
+    hints(SX1 - 2 - text_w(&F_B, H[0], 0) - 7 - text_w(&F_B, H[1], 0), INFO_B, SX1, H, 1);
+}
+
+/* the library's rows (SND, the catalogue): the slots shown, rows of 12 from baseline b0 in [x0, x1): the slot in the
+ * light type, the name primary, the machine light at the right; the one picked a solid bar (the menu's); an INIT slot
+ * light; the scroll past x1 (the rows shown solid on a dotted track) */
+static void snd_rows(int x0, int x1, int b0, int rows)
+{
+    int n = 0, at = snd_list(ui.snd_sel, &n), first = CLAMP(at - rows / 2, 0, n > rows ? n - rows : 0);
+    for (int r = 0; r < rows && first + r < n; r++) {
+        int i = snd_nth(first + r), b = b0 + r * 12, on = i == ui.snd_sel;
+        char o[4];
+        s_num3(o, i + 1);
+        if (on) rect(x0, b - 11, x1 - x0, 13, 1);
+        tx_b(&F_B, x0 + 4, b, o, !on);
+        if (!snd[i].name[0]) { tx_b(&F_B, x0 + 40, b, "INIT", !on); continue; }
+        int e = x0 + 40 + text_fit(x0 + 40, b - F_S.base, snd[i].name, 0, x1 - x0 - 44, !on) + 8;
+        const mi_t *mi = &MI[snd[i].machine < M_COUNT ? snd[i].machine : 0];
+        const char *mn = text_w(&F_B, mi->name, 0) <= x1 - 4 - e ? mi->name : mi->badge;
+        if (text_w(&F_B, mn, 0) <= x1 - 4 - e) tx_br(&F_B, x1 - 4, b, mn, !on);
+    }
+    const int top = b0 - 11, h = rows * 12;
+    int sh = n > rows ? rows * h / n : h, sy = n > rows ? first * (h - sh) / (n - rows) : 0;
+    dots_v(x1 + 3, top, h);
+    rect(x1 + 2, top + sy, 3, sh < 4 ? 4 : sh, 1);
+}
+
+/* the sound picked's machine and note at the left, its category at the right, on baseline b in [x0, x1) */
+static void snd_meta(int x0, int x1, int b)
+{
+    const m2k_sound_t *s = &snd[ui.snd_sel];
+    if (!s->name[0]) { tx_b(&F_B, x0, b, "AN EMPTY SLOT", 1); return; }
+    const mi_t *mi = &MI[s->machine < M_COUNT ? s->machine : 0];
+    char o[20], *e = s_cpy(o, mi->name);
+    *e++ = ' '; *e++ = ' ';
+    s_note(e, snd_root[ui.snd_sel]);
+    int cw = snd_cat[ui.snd_sel] ? tx_br(&F_B, x1, b, CAT_N[snd_cat[ui.snd_sel]], 1) + 8 : 0;
+    lite_fit(x0, b, o, mi->name, x1 - cw - x0);
+}
+
+/* SYN > SND, the library as a menu: its rows, the one picked's machine, note and category at the foot */
+static void snd_picture(int busy)
+{
+    snd_rows(SX0, SX1 - 8, 72, 10);
+    if (!busy) snd_meta(SX0, SX1, INFO_B);
+}
+
+/* AMP: the envelope, attack hold decay release on the voice's own curves in bars on a dotted floor, full and half
+ * dotted; dotted lines and handles where each segment ends; the live voice a dotted cursor and a marker where its
+ * level is; the letters under their segments */
+static void amp_env(int busy, const uint8_t *k, int fk)
+{
+    const int top = 72, yb = 176, hgt = yb - top;
+    int xs[5], ys[5], dec_inf = k[P_DEC] == 127;
+    dots_h(SX0, top, STW);
+    dots_h(SX0, top + hgt / 2, STW);
+    env_bars(k, SX0, STW, top, yb, fk, xs, ys);
+    for (int b = 1; b < 4; b++) if (ys[b] - top > 5) dots_v(xs[b], top + 2, ys[b] - top - 5);
+    for (int b = 1; b < 5; b++) handle(xs[b], ys[b], b - 1 == fk);
+    int wa = xs[1] - xs[0], wh = xs[2] - xs[1], wd = xs[3] - xs[2], wr = xs[4] - xs[3];
+    int st = mon.astage[ui.trk], lv = mon.aenv[ui.trk];
+    if (st) {
+        int y = yb - (hgt * lv >> 15);
+        /* along its segment as its level says: the attack's square root (ATK 0: straight), the decay's and the
+         * release's halvings (two to a quarter, eight on) */
+        int dn = lv ? (ilog2_q8(32768) - ilog2_q8((uint32_t)lv)) : 8 * 256;          /* halvings under full, Q8 */
+        int ra = !k[P_ATK] ? lv : (int)(atk_from((uint32_t)lv << 15) >> 15);
+        int x = st == 1 ? xs[0] + wa * ra / 32768 : st == 2 ? xs[1] + wh / 2
+              : st == 3 ? xs[2] + wd * CLAMP(dn, 0, 512) / 512
+              : xs[3] + wr * CLAMP(dn - (dec_inf ? 0 : 512), 0, 2048) / 2048;
+        dots_v(x, top, yb - top);
+        marker(x, y);
+    }
+    if (busy) return;
+    static const char *const L[4] = {"A", "H", "D", "R"};
+    int lx = -100;
+    for (int i = 0; i < 4; i++) {          /* under its segment; a letter that would touch the last is left out */
+        int c = (xs[i] + xs[i + 1]) / 2, w = text_w(&F_B, L[i], 0), x = CLAMP(c - w / 2, SX0, SX1 - w);
+        if (x > lx + 4) { tx_b(&F_B, x, INFO_B, L[i], 1); lx = x + w; }
+    }
+}
+
+/* AMP 2: the chain's four, a picture each under its knob: the drive's transfer curve in bars from the middle (the
+ * clean line dotted), the level a block as tall as VOL, the pan a handle on a dotted line, the glide a ramp as long as
+ * PORT; the one turned solid, the others light; their names under them */
+static void amp_chain(int busy, const uint8_t *k, int fk)
+{
+    static const char *const N[4] = {"DRIVE", "LEVEL", "PAN", "GLIDE"};
+    const int top = 76, yb = 172, mid = (top + yb) / 2;
+    for (int c = 0; c < 4; c++) {
+        const int x0 = 60 * c + KX, w = KW, light = fk >= 0 && fk != c;
+        if (c == 0) {
+            int32_t dh = (int32_t)T_DIST_H[k[P_DIST]], dc = T_DIST_C[k[P_DIST]], vol = T_VOL[k[P_VOL]];
+            for (int i = 0; i < w; i++) {
+                int32_t in = (i - w / 2) * 65535 / w;
+                int64_t q = mul_sh(in, dh, 24);
+                int32_t cl = (int32_t)CLAMP(q, -dc, dc);                              /* the headroom and the clip */
+                int32_t o = ((cl * 128) / (T_DIST_C[64] >> 8)) * (vol >> 3) >> 12;   /* Q15, 32-bit division only */
+                bar_bi(x0 + i, x0, CLAMP(mid - (int)((o * (mid - top - 2)) >> 15), top, yb), mid, light);
+                if (!(i & 3)) px(x0 + i, mid + (w / 2 - i) * (mid - top) / (w / 2), 1);   /* (the clean line) */
+            }
+            dots_h(x0, mid, w);
+        } else if (c == 1) {
+            int h = (int)(((int32_t)(yb - top) * T_VOL[k[P_VOL]]) >> 15);
+            for (int i = 0; i < w; i++) bar_col(x0 + i, x0, yb - CLAMP(h, 0, yb - top), yb, light);
+            dots_h(x0, yb + 1, w);
+        } else if (c == 2) {
+            dots_h(x0, mid, w);
+            vline(x0, mid - 2, 5, 1); vline(x0 + w - 1, mid - 2, 5, 1); vline(x0 + w / 2, mid - 4, 9, 1);
+            handle(x0 + 2 + k[P_PAN] * (w - 5) / 127, mid, fk == 2);
+        } else {
+            int gl = 2 + k[P_PORT] * (w - 8) / 127, lo = yb - (yb - top) / 3;
+            for (int i = 0; i < w; i++) {
+                int y = i < 3 ? lo : i < 3 + gl ? lo - (lo - top) * (i - 3) / gl : top;
+                bar_col(x0 + i, x0, y, yb, light);
+            }
+            dots_h(x0, yb + 1, w);
+        }
+        if (!busy) tx_b(&F_B, x0, INFO_B, N[c], 1);
+    }
+}
+
+/* FILT: the band, the chain's response in bars on its floor, its resonances as they peak, 0 dB dotted; the cutoffs
+ * dotted down to their handles, the width solid on the floor while WDTH turns; the decades under it. Page 2 the
+ * filter envelope: the curve where the envelope takes it, its reach dotted at each cutoff, then the envelope in bars,
+ * the part turned solid, where it is now a marker, ATK and DEC under their segments */
+static void filt_picture(int busy, const uint8_t *k, int fk)
+{
+    const trk_t *t = &trk[ui.trk];
+    const int FW = STW - 4;             /* (the curve's handles inside the picture) */
+    int db = k[P_BOF] - 64, dw = k[P_WOF] - 64, ob = 7 * db * (db < 0 ? -db : db), ow = 7 * dw * (dw < 0 ? -dw : dw);
+    int hp0 = filt_q3(ui.trk, k[P_BASE] << 8), lp0 = filt_q3(ui.trk, (k[P_BASE] + k[P_WDTH]) << 8);
+    int hq = k[P_HPQ], lq = k[P_LPQ];
+    /* one curve, never two: the band the knobs set, and while the track sounds where its envelope (and LFOs) have it
+     * now, so it moves as it plays */
+    int live = t->sounding && (mon.cut_hp[ui.trk] != hp0 || mon.cut_lp[ui.trk] != lp0);
+    int hp = live ? mon.cut_hp[ui.trk] : hp0, lp = live ? mon.cut_lp[ui.trk] : lp0, yh, yl;
+    if (ui.sub == 1) {
+        int hp1 = filt_q3(ui.trk, (k[P_BASE] << 8) + ob);
+        int lp1 = filt_q3(ui.trk, ((k[P_BASE] + k[P_WDTH]) << 8) + ob + ow);
+        if (fk == 2 || fk == 3) { hp = hp1; lp = lp1; }
+        const int top = 68, yb = 112;
+        filt_curve(SX0, FW, top, yb, hp, lp, hq, lq, fk == 0 || fk == 1, &yh, &yl);
+        int xh1 = SX0 + hp1 * (FW - 1) / FQ_MAX, xl1 = SX0 + lp1 * (FW - 1) / FQ_MAX;
+        dots_v(xh1, top, yb - top + 1);
+        dots_v(xl1, top, yb - top + 1);
+        handle(SX0 + hp * (FW - 1) / FQ_MAX, yh, fk == 2);
+        handle(SX0 + lp * (FW - 1) / FQ_MAX, yl, fk == 3);
+        const int ex = SX0, ew = FW, et = 128, eb = 176;
+        int a = 2 + k[P_FATK] * (ew / 3 - 2) / 127, d = 3 + k[P_FDEC] * (ew - a - 4) / 127;
+        for (int x = 0; x <= a + d; x++) {
+            int y = x <= a ? eb - (eb - et) * x / (a ? a : 1) : eb - (eb - et) * (a + d - x) / (d ? d : 1);
+            bar_col(ex + x, ex, y, eb, fk >= 0 && (fk >= 2 || (x <= a) != (fk == 0)));
+        }
+        dots_h(ex, eb + 1, ew);
+        uint32_t fe = t->fenv >> 22;                    /* (Q8 of full) */
+        if (t->sounding && (t->fstage == 1 || fe)) {
+            int x = ex + (t->fstage == 1 ? (int)(a * fe >> 8) : a + (int)(d * (256 - fe) >> 8));
+            dots_v(x, et - 4, eb - et + 4);
+            marker(x, eb - (int)((eb - et) * fe >> 8));
+        }
+        if (busy) return;
+        int wa = text_w(&F_B, "ATK", 0), xa = CLAMP(ex + a / 2 - wa / 2, SX0, SX1 - wa);
+        int wd = text_w(&F_B, "DEC", 0), xd = CLAMP(ex + a + d / 2 - wd / 2, xa + wa + 8, SX1 - wd);
+        tx_b(&F_B, xa, INFO_B, "ATK", 1);
+        tx_b(&F_B, xd, INFO_B, "DEC", 1);
+        return;
+    }
+    const int top = 72, yb = 176;
+    filt_curve(SX0, FW, top, yb, hp, lp, hq, lq, 0, &yh, &yl);
+    int xh = SX0 + hp * (FW - 1) / FQ_MAX, xl = SX0 + lp * (FW - 1) / FQ_MAX;
+    if (yh - PIC_T > 5) dots_v(xh, PIC_T, yh - PIC_T - 4);
+    if (yl - PIC_T > 5) dots_v(xl, PIC_T, yl - PIC_T - 4);
+    handle(xh, yh, fk == 0 || fk == 2);
+    handle(xl, yl, fk == 3);
+    if (fk == 1) rect(xh, yb + 1, xl - xh + 1, 2, 1);
+    if (busy) return;
+    static const int16_t DEC[3] = {236, 575, 913};     /* 100 Hz, 1 kHz, 10 kHz on the axis */
+    static const char *const DN[3] = {"100", "1K", "10K"};
+    for (int d = 0; d < 3; d++) {
+        int w = text_w(&F_B, DN[d], 0);
+        tx_b(&F_B, CLAMP(SX0 + DEC[d] * (FW - 1) / FQ_MAX - w / 2, SX0, SX1 - w), INFO_B, DN[d], 1);
+    }
+}
+
+/* FX: the EQ's band in bars about its 0 dB line and the rate's reduction as a stepped sine, each named at its left;
+ * DELAY's echoes, a bar each as loud as the feedback leaves it, lit as it sounds; DSTR a sine through the track's
+ * destruction in bars about its middle; MOD the sweep at its rate, as deep as DPTH, its mix a bar at the foot */
+static void fx_picture(int busy, const uint8_t *k, int fk)
+{
+    if (ui.sub == 1) {
+        int dt = k[P_DTIM] ? k[P_DTIM] : 1, fbk = k[P_DFB], lvl = 256;   /* (feedback: 64 is unity) */
+        uint32_t ms_step = 15000u / seq_bpm(), since = ui.now - ui.flash_t[ui.trk];   /* (a sixteenth in ms) */
+        const int top = 76, yb = 176;
+        for (int i = 0; i < 6; i++) bar_col(SX0 + i, SX0, top, yb, 0);   /* the sound itself */
+        for (int e = 0; e < 12; e++) {
+            int x = SX0 + 12 + (dt * (e + 1) * (STW - 18)) / 128;
+            if (x + 6 > SX1) break;
+            int h = ((yb - top) * lvl) >> 8;
+            uint32_t at = (uint32_t)dt * (uint32_t)(e + 1) * ms_step / 16u;
+            int lit = since >= at && since < at + 90;
+            for (int i = 0; i < 6; i++) bar_col(x + i, x, yb - h, yb, !lit);
+            lvl = CLAMP((lvl * fbk) >> 6, 0, 256);
+            if (lvl < 8) break;
+        }
+        dots_h(SX0, yb + 1, STW);
+        if (!busy) { tx_b(&F_B, SX0, INFO_B, "DRY", 1); tx_br(&F_B, SX1, INFO_B, "ECHOES", 1); }
+        return;
+    }
+    if (ui.sub == 2) {
+        int bits = 16 - (k[P_BITS] * 14 >> 7), fold = k[P_FOLD], xm = (k[P_XOR] * k[P_XOR] * 2) & 0x7FFF;
+        int srr = k[P_SRR], step = (128 - srr) * (128 - srr) * 4, acc = 0, hold = 0;
+        uint32_t ph = (uint32_t)ui.now * 2000000u;
+        const int mid = 124;
+        for (int i = 0; i < STW; i++) {
+            int32_t s = sinp(ph + (uint32_t)i * (0xFFFFFFFFu / STW) * 2) * 7 / 8;
+            if (fold) s = fold16((s * (256 + fold * 6)) >> 8);
+            if (xm) s = (int16_t)((uint16_t)s ^ (uint16_t)xm);
+            if (bits < 16) s = (s >> (16 - bits)) * (1 << (16 - bits));   /* a multiply: no left shift of a negative */
+            acc += step;
+            if (acc >= 65536 || i == 0) { acc -= 65536; hold = s; }
+            if (srr) s = hold;
+            bar_bi(SX0 + i, SX0, mid - (s * 52 >> 15), mid, 0);
+        }
+        dots_h(SX0, mid, STW);
+        return;
+    }
+    if (ui.sub == 3) {
+        static const char *const N[3] = {"CHORUS", "FLANGER", "PHASER"};
+        int type = (k[P_MODT] * 3) >> 7, dep = k[P_MODD], mix = k[P_MODM];
+        uint32_t ph = (uint32_t)ui.now * (T_MOD_INC[k[P_MODR]] * 44u);
+        const int yb = 168, amp = 4 + dep * 44 / 127, mid = yb - 48;
+        for (int i = 0; i < STW; i++) {
+            int32_t tri = (int32_t)((ph + (uint32_t)i * (0xFFFFFFFFu / STW)) >> 16);
+            tri = tri < 32768 ? tri : 65535 - tri;
+            bar_col(SX0 + i, SX0, mid + amp - (tri * amp * 2 >> 15) - 4, yb, fk == 3);
+        }
+        dots_h(SX0, yb + 1, STW);
+        if (busy) return;
+        tx_b(&F_B, SX0, INFO_B, N[type], 1);
+        int bx = 160, bw = SX1 - bx, f = mix * bw / 127;
+        tx_br(&F_B, bx - 8, INFO_B, "MIX", 1);
+        dots_h(bx, INFO_B - 3, bw);
+        rect(bx, INFO_B - 4, f, 2, 1);
+        return;
+    }
+    /* EQ and RATE, each its row: its name at the left, its picture from 44 */
+    const int X = 44, W = SX1 - X;
+    tx_b(&F_B, SX0, 104, "EQ", 1);
+    tx_b(&F_B, SX0, 164, "RATE", 1);
+    int f = k[P_EQF] * (W - 1) / 127, g = k[P_EQG] - 64, emid = 100, bw = W / 4;
+    for (int i = 0; i < W; i++) {
+        int d = i - f, bump = d > -bw && d < bw ? (g * (bw - (d < 0 ? -d : d))) / bw : 0;
+        bar_bi(X + i, X, emid - bump * 28 / 64, emid, fk == 2 || fk == 3);
+    }
+    dots_h(X, emid, W);
+    handle(X + f, emid - g * 28 / 64, fk == 0 || fk == 1);
+    int n = 4 + (127 - k[P_SRR]) * 40 / 127, smid = 160;
+    for (int i = 0; i < W; i++) {
+        int q = (i * n / W) * W / n;
+        bar_bi(X + i, X, smid - (sinp((uint32_t)q * (0xFFFFFFFFu / W)) * 14 >> 15), smid, fk == 0 || fk == 1);
+    }
+    dots_h(X, smid, W);
+    (void)busy;
+}
+
+/* LFO: the three side by side (Hortator's two), each its number (solid for the one the knobs turn) and where it goes;
+ * its wave over a cycle in bars from its dotted zero line as deep as DPTH swings it (light for the two the knobs do
+ * not turn, the line alone when it goes nowhere), live: a dotted cursor where its phase is, a marker on the value it
+ * sends now; its rate at the foot. (A scope of its past would alias: a 1/16 LFO turns faster than the FM-1 draws) */
+static void lfo_page(int busy, const uint8_t *k)
+{
+    const int el = ui.sub >> 1, w = 72, mid = 124, A = 40;
+    const trk_t *tk = &trk[ui.trk];
+    for (int l = 0; l < 3; l++) {
+        const uint8_t *b = &k[P_LFO + 8 * l];
+        const int x0 = SX0 + 80 * l, on = l == el;
+        char n[2] = {(char)('1' + l), 0}, d[12], r[20];
+        int tw = on ? inv_tag(&F_S, x0 + 2, 72, n) + 4 : tx_b(&F_S, x0, 72, n, 1);
+        const char *u;
+        fmt(&PI_LFO[8 * l + L_DEST], ui.trk, b[L_DEST], d, &u);
+        lite_fit(x0 + tw + 6, 72, d, 0, w - tw - 6);
+        dots_h(x0, mid, w);
+        if (!busy) {
+            s_lfo_cycle(r, &u, b[L_SPD], choice_of(K_MULT, b[L_MULT]));
+            if (*u && u[0] != 'N' && u[0] != 'S' && text_w(&F_B, r, 0) + text_w(&F_B, u, 0) + 4 <= w) {
+                char *e = r;                            /* bars, beats and hertz say so where they fit */
+                while (*e) e++;
+                *e++ = ' ';
+                s_cpyn(e, u, (int)(r + sizeof r - e));
+            }
+            lite_fit(x0, INFO_B, r, 0, w);
+        }
+        if (!b[L_DEST]) continue;
+        int wave = (b[L_WAVE] * 7) >> 7;
+        int32_t dp = T_LDPTH[b[L_DPTH]], rr = 0;
+        for (int i = 0; i < w; i++) {
+            int32_t v = wave == 6 ? (int32_t)(hash32((uint32_t)(i / 6) + 77u) >> 16) - 32768
+                                  : lfo_shape(wave, (uint32_t)i * (0xFFFFFFFFu / (uint32_t)(w - 1)), &rr);
+            bar_bi(x0 + i, x0, mid - (int)((((v * dp) >> 14) * A) >> 15), mid, !on);
+        }
+        int cx = x0 + (int)(((tk->lph[l] >> 16) * (uint32_t)(w - 1)) >> 16);
+        int cy = mid - (int)((((tk->lval[l] * dp) >> 14) * A) >> 15);
+        dots_v(cx, mid - A - 4, 2 * A + 9);
+        marker(cx, cy);
+    }
+}
+
+/* ARP: the notes it plays in its order, a bar each rising (an octave's range up the staircase), the one sounding
+ * solid; HOLD solid in the corner; no keys: what to do */
+static void arp_picture(const uint8_t *k)
+{
+    int n = sq.nheld, rng = 1 + ((k[P_ARNG] * 4) >> 7), tot = n * rng;
+    if (sq.arp_hold) inv_tag(&F_B, SX0 + 2, 72, "HOLD");
+    if (!n) {
+        tx_bc(&F_S, 120, 124, sq.arp_hold ? "PLAY" : "HOLD", 1);
+        tx_bc(&F_B, 120, 140, "SOME KEYS", 1);
+        return;
+    }
+    const int yb = 176, cnt = tot < 32 ? tot : 32, pitch = CLAMP(STW / cnt, 6, 32), bw = pitch * 2 / 3;
+    const int x0 = SX0 + (STW - cnt * pitch + pitch - bw) / 2;   /* (the staircase centred) */
+    int on = sq.arp_i ? (int)((sq.arp_i - 1) % (uint32_t)tot) : -1;
+    for (int i = 0; i < cnt; i++) {
+        int x = x0 + i * pitch, h = 24 + i * 72 / cnt;
+        for (int c = 0; c < bw; c++) bar_col(x + c, x, yb - h, yb, i != on);
+    }
+    dots_h(SX0, yb + 1, STW);
+}
+
+/* a lane's cycle as it plays, from x on baseline b, w wide and h tall: a bar a step (16 or 32) as tall as its level
+ * (CHAOS's raise in it), solid where it trigs and a hairline where not, an accent a notch at its top; its density a
+ * dotted line; the step playing a mark under it */
+static void grids_lane(int x, int b, int w, int h, int part)
+{
+    const m2k_pattern_t *p = PAT(cur_pat);
+    const int cyc = grids_cyc(p), kn = lane_now(p, part), base = kn < 0 ? 0 : kn - kn % cyc, pw = w / cyc;
+    const int th = 255 - gr8(p->glob[G_GRBD + part]), bw = pw > 3 ? pw - 2 : pw - 1;
+    for (int i = 0; i < cyc; i++) {
+        int lv, hit = grids_hit(p, part, (uint32_t)(base + i), &lv), bh = (lv * h + 254) / 255, bx = x + i * pw;
+        if (hit) { rect(bx, b - bh, bw, bh, 1); if (hit == 2 && bh > 3) rect(bx, b - bh + 1, bw, 1, 0); }
+        else if (bh) vline(bx, b - bh, bh, 1);
+        if (base + i == kn) rect(bx, b + 2, bw, 2, 1);
+    }
+    dots_h(x, b - (th * h + 127) / 255, cyc * pw);
+    dots_h(x, b, cyc * pw);
+}
+
+/* GRIDS: the map (Hortator's), 25 nodes a dot each, the four X and Y read solid, the place a marker on its dotted
+ * cross; the three lanes at the right, their names at their left. LANES: the three lanes, each its name (solid for the
+ * one the track in view follows) and the tracks that follow it, its cycle under them */
 static void grids_picture(void)
 {
     const m2k_pattern_t *p = PAT(cur_pat);
-    const int X = PX0, Y0 = PY0;
+    static const char *const N[3] = {"BD", "SD", "HH"};
     if (ui.sub == 2) {
-        static const char *const N[3] = {"BD", "SD", "HH"};
         for (int l = 0; l < 3; l++) {
-            int y = Y0 + l * 44, m = 0;
+            int b = 76 + l * 40, m = 0;
             for (int t = 0; t < M2K_TRACKS; t++) if (lane_of(p, t) == l + 1) m |= 1 << t;
-            int tw = tag(X, y - TY, N[l], lane_of(p, ui.trk) == l + 1);
+            int x = SX0 + (lane_of(p, ui.trk) == l + 1 ? inv_tag(&F_S, SX0 + 2, b, N[l]) + 2 : tx_b(&F_S, SX0, b, N[l], 1)) + 8;
             char o[24];
-            if (m) { s_tracks(o, m); text(&F_S, X + tw + 6, y, o + 1, 1, 0); }
-            grids_lane(X, y + 14, 23, l);
+            if (m) { s_tracks(o, m); tx_b(&F_B, x, b, o + 1, 1); }
+            grids_lane(SX0, b + 28, STW, 20, l);
         }
         return;
     }
+    const int X = 8, Y = 76, S = 24;                    /* the map: nodes 24 apart, [8, 104] x [76, 172] */
     const int x8 = gr8(p->glob[G_GRX]), y8 = gr8(p->glob[G_GRY]), i0 = x8 >> 6, j0 = y8 >> 6;
-    for (int j = 0; j < 5; j++) dots_h(X + 4, Y0 + 4 + 21 * j, 121);
-    for (int i = 0; i < 5; i++) dots_v(X + 4 + 30 * i, Y0 + 4, 85);
-    const int px0 = X + 4 + x8 * 30 / 64, py0 = Y0 + 4 + y8 * 21 / 64;
-    hline(X + 4, py0, 121, 1);
-    vline(px0, Y0 + 4, 85, 1);
+    const int qx = X + x8 * S / 64, qy = Y + y8 * S / 64;
+    dots_h(X, qy, 4 * S + 1);
+    dots_v(qx, Y, 4 * S + 1);
     for (int j = 0; j < 5; j++)
         for (int i = 0; i < 5; i++) {
-            int cx = X + 4 + 30 * i, cy = Y0 + 4 + 21 * j;
-            if ((i == i0 || i == i0 + 1) && (j == j0 || j == j0 + 1)) rect(cx - 2, cy - 2, 5, 5, 1);
-            else { rect(cx - 2, cy - 2, 5, 5, 0); frame(cx - 2, cy - 2, 5, 5, 1); }
+            int cx = X + S * i, cy = Y + S * j;
+            if ((i == i0 || i == i0 + 1) && (j == j0 || j == j0 + 1)) rect(cx - 2, cy - 2, 4, 4, 1);
+            else rect(cx - 1, cy - 1, 2, 2, 1);
         }
-    rect(px0 - 4, py0 - 4, 9, 9, 0);
-    rect(px0 - 3, py0 - 3, 7, 7, 1);
-    for (int l = 0; l < 3; l++) grids_lane(X, Y0 + 98 + 12 * l, 7, l);
+    marker(qx, qy);
+    for (int l = 0; l < 3; l++) {
+        int b = 100 + l * 36;
+        tx_b(&F_B, 124, b, N[l], 1);
+        grids_lane(148, b, SX1 - 148, 24, l);
+    }
 }
 
-/* GLO > PLAY: the six tracks heard (solid) or muted (framed), one waiting for the bar blinking to what it will be; the
- * bar in play, its steps gone solid; when a mute comes */
-static void play_picture(void)
+/* GLO > PLAY: the six tracks heard (solid) or muted (framed), soloed away dotted, one waiting for the bar blinking to
+ * what it will be; the bar in play, its steps gone solid; when a mute comes */
+static void play_picture(int busy)
 {
     const m2k_pattern_t *p = PAT(cur_pat);
-    const int X = PX0, Y0 = PY0, fast = (ui.now >> 7) & 1;
+    const int fast = (ui.now >> 7) & 1;
     for (int i = 0; i < M2K_TRACKS; i++) {
-        int x = X + (i % 3) * 44, y = Y0 + (i / 3) * 30, w = 41, b = 1 << i;
+        int x = SX0 + (i % 3) * 80, y = 68 + (i / 3) * 32, w = 72, b = 1 << i;
         int muted = p->mute & b, solo = sq.solo;
         if (fast && (sq.mq_m & b)) muted = sq.mq_v & b;
         if (fast && (sq.sq_m & b)) solo = (solo & ~b) | (sq.sq_v & b);
         if (fast && (sq.solo_rel & b)) solo |= b;
         int heard = !muted && (!solo || (solo & b));
-        if (heard) rect(x, y, w, 26, 1); else if (muted) frame(x, y, w, 26, 1); else dots_frame(x, y, w, 26);
-        text(&F_S, x + 3, y + 3, (const char[]){'T', (char)('1' + i), 0}, !heard, 0);
+        if (heard) rect(x, y, w, 24, 1); else if (muted) frame(x, y, w, 24, 1); else dots_frame(x, y, w, 24);
+        tx_b(&F_S, x + 4, y + 16, (const char[]){'T', (char)('1' + i), 0}, !heard);
     }
     const int len = seq_len(), ps = sq.playing ? play_step() : -1, bar = ps < 0 ? 0 : ps / 16, bl = CLAMP(len - bar * 16, 1, 16);
     for (int i = 0; i < 16; i++) {
-        int x = X + i * 8, y = Y0 + 64;
-        if (i >= bl) px(x + 3, y + 5, 1);
-        else if (ps >= 0 && i <= ps % 16) rect(x, y, 7, 11, 1);
-        else frame(x, y, 7, 11, 1);
+        int x = step_x(i), y = 140;
+        if (i >= bl) rect(x + 3, y + 3, 2, 2, 1);
+        else if (ps >= 0 && i <= ps % 16) rect(x, y, 8, 8, 1);
+        else frame(x, y, 8, 8, 1);
     }
     if (mute_pending() && sq.playing) {
         int nx = sq.step >= len ? 0 : sq.step, left = !(nx & 15) ? 0 : CLAMP(16 - (nx & 15), 0, len - nx);
         char o[20];
         if (left) s_cpy(s_int(s_cpy(o, "IN "), left), left == 1 ? " STEP" : " STEPS"); else s_cpy(o, "AT THE NEXT STEP");
-        tag(X, Y0 + 84 - TY, "WAITS", fast);
-        text(&F_S, X, Y0 + 99, o, 1, 0);
+        int x = SX0 + (fast ? inv_tag(&F_B, SX0 + 2, 172, "WAITS") + 2 : tx_b(&F_B, SX0, 172, "WAITS", 1)) + 8;
+        tx_b(&F_B, x, 172, o, 1);
     }
-    text(&F_S, X, L_B0, set_on(S_MUTQ) ? "AT ONCE" : "AT THE BAR", 1, 0);
+    if (!busy) tx_b(&F_B, SX0, INFO_B, set_on(S_MUTQ) ? "AT ONCE" : "AT THE BAR", 1);
 }
 
-static void picture(void)
+/* GLO's pages: TIME the tempo big and its four beats under the knobs; BUS the reverb's tail in bars over time (0.1 ..
+ * 30 s on a log scale, 60 dB down the height; DAMP's top dotted, DRIV lifting it, ADPC stepping it); SET the project
+ * picked, the open one marked, the display disc; MIDI the tracks' channels and the clocks; IN each port's roles, its
+ * square lit while it brings something; PLAY the mutes */
+static void glo_picture(int busy)
 {
-    const int X = PX0, W = PIC_W, Y0 = PY0;
-    trk_t *t = &trk[ui.trk];
+    const m2k_pattern_t *p = PAT(cur_pat);
+    if (ui.sub == GS_SET) {
+        char o[16] = {'P', (char)('1' + ui.proj_sel), 0};
+        tx_b(&F_L, SX0, 100, o, 1);
+        text_fit(SX0, 120 - F_S.base, m2k_project_name(ui.proj_sel), 0, 140, 1);
+        if (ui.proj_sel == cur_proj) inv_tag(&F_B, SX0 + 2, 140, "OPEN");
+        int cx = 196, cy = 120, r = 24;
+        for (int j = -r; j <= r; j++)
+            for (int i = -r; i <= r; i++) {
+                int d = i * i + j * j;
+                if (d > r * r) continue;
+                if (d > (r - 2) * (r - 2) || i >= 0) px(cx + i, cy + j, 1);
+                else if (T_BAYER[(cy + j) & 7][(cx + i) & 7] < 8) px(cx + i, cy + j, 1);
+            }
+    } else if (ui.sub == GS_BUS) {
+        int v = p->glob[G_VERB], ad = p->glob[G_ADPC];
+        const int top = 72, ty = 176, dh = ty - top;
+        uint32_t t60 = T_RV_MS[v], th = (t60 * 256u) / (256u + T_RV_DA[p->glob[G_DAMP]]);
+        int dg = (ilog2_q8(T_DRIV[p->glob[G_DRIV]]) - 8 * 256) * dh / 2560;    /* 6 dB a doubling, dh / 60 a dB */
+        int sq_h = ad ? 1 + (ad * 2 > 127 ? 127 : ad * 2) * 6 / 127 : 1;        /* (the crunch's mix: steps to 7 px) */
+        int sq_w = ad ? T_ADPC_DIV[ad] >> 7 : 1, hold = 0;                     /* (its rate: 2 px, 6 at 127) */
+        if (!v) tx_bc(&F_S, 120, 124, "OFF", 1);
+        for (int i = 0; v && i < STW; i++) {
+            /* the time at column i: 100 ms 2^(i / (STW - 1) log2 300), in ms */
+            uint32_t e = (uint32_t)i * 2105u / (uint32_t)(STW - 1), ms = (100u * T_EXP2F[e & 255]) >> (16 - (e >> 8));
+            int yl = (int)(ms * (uint32_t)dh / (t60 ? t60 : 1)) - dg, yh = (int)(ms * (uint32_t)dh / (th ? th : 1)) - dg;
+            yl = yl < 0 ? 0 : yl;
+            yh = yh < 0 ? 0 : yh;
+            if (sq_h > 1) { if (!(i % sq_w)) hold = yl / sq_h * sq_h; yl = hold; }
+            if (yl < dh) bar_col(SX0 + i, SX0, top + yl, ty, 0);
+            if (yh <= dh && !((SX0 + i + top + yh) & 1)) px(SX0 + i, top + yh, 1);
+        }
+        dots_h(SX0, ty + 1, STW);
+        if (busy) return;
+        static const char *const TN[3] = {"0.1", "1 S", "10 S"};
+        for (int s = 0; s < 3; s++) {
+            int tx = SX0 + s * 4037 * (STW - 1) / 10000, w = text_w(&F_B, TN[s], 0);
+            vline(tx, ty + 3, 2, 1);
+            tx_b(&F_B, CLAMP(tx - w / 2, SX0, SX1 - w), INFO_B, TN[s], 1);
+        }
+    } else if (ui.sub == GS_MIDI) {
+        int ch = (store_.set[S_MCH] * 16) >> 7;
+        for (int i = 0; i < M2K_TRACKS; i++) {
+            int x = SX0 + (i % 3) * 80, y = 68 + (i / 3) * 32, w = 72, on = i == ui.trk;
+            char o[4];
+            s_int(o, (ch + i) % 16 + 1);
+            if (on) rect(x, y, w, 24, 1); else frame(x, y, w, 24, 1);
+            tx_b(&F_B, x + 4, y + 16, (const char[]){'T', (char)('1' + i), 0}, !on);
+            tx_br(&F_M, x + w - 4, y + 18, o, !on);
+        }
+        static const char *const FL[3] = {"CLOCK IN", "CLOCK OUT", "NOTES OUT"};
+        const int fon[3] = {clk_from() != 0, store_.set[S_SYNO] >= 64, store_.set[S_NOTO] >= 64};
+        for (int f = 0; f < 3; f++) {
+            int b = 148 + f * 16;
+            if (fon[f]) inv_tag(&F_B, SX0 + 2, b, FL[f]); else tx_b(&F_B, SX0, b, FL[f], 1);
+        }
+        int beat = sq.playing && (sq.step & 3) == 1;
+        if (beat) rect(SX1 - 16, 136, 16, 16, 1); else frame(SX1 - 16, 136, 16, 16, 1);
+        char o[12];
+        s_int(o, (int)seq_bpm());
+        int bw = tx_br(&F_M, SX1, 180, o, 1);
+        tx_br(&F_B, SX1 - bw - 6, 180, "BPM", 1);
+    } else if (ui.sub == GS_PLAY) {
+        play_picture(busy);
+    } else if (ui.sub == GS_IN) {
+        const int clk = clk_from(), nts = notes_from();
+        for (int s = 0; s < 2; s++) {
+            int x = SX0 + s * 120, b = 1 << s, w = tx_b(&F_S, x, 76, s ? "TRS" : "USB", 1);
+            if ((mx.in_seen & b) && mx.now - mx.in_at[s] < M2K_SR / 8u) rect(x + w + 8, 68, 8, 8, 1);
+            else frame(x + w + 8, 68, 8, 8, 1);
+            static const char *const R[3] = {"CLOCK", "NOTES", "THRU"};
+            const int ron[3] = {clk & b, nts & b, set_on(S_THRU)};
+            for (int r = 0; r < (s ? 3 : 2); r++) {
+                int rb = 100 + r * 16;
+                if (ron[r]) inv_tag(&F_B, x + 2, rb, R[r]); else tx_b(&F_B, x, rb, R[r], 1);
+            }
+        }
+    } else {
+        int beat = sq.playing ? (sq.step ? sq.step - 1 : 0) / 4 % 4 : -1;
+        char o[12];
+        s_int(o, (int)seq_bpm());
+        int w = text_w(&F_L, o, 0) + 8 + text_w(&F_B, "BPM", 0), x = 120 - w / 2;
+        x += tx_b(&F_L, x, 120, o, 1) + 8;
+        tx_b(&F_B, x, 120, "BPM", 1);
+        for (int i = 0; i < 4; i++) {
+            int bx = 60 * i + 8;
+            if (i == beat) rect(bx, 148, 44, 16, 1); else frame(bx, 148, 44, 16, 1);
+        }
+    }
+}
+
+static void picture(int busy)
+{
     m2k_pattern_t *p = PAT(cur_pat);
     const uint8_t *k = p->kit[ui.trk];
-    int m = p->machine[ui.trk];
-    int fk = ui.focus_t && ui.now - ui.focus_t < 2500 ? ui.focus : -1;   /* the knob being turned */
-    CELL(GX, STAGE_Y, 240, STEPS_R, PX0, ST_Y + 3, PX0 + PIC_W, ST_Y + ST_H - 3);
+    const int fk = turned();
+    CELL(0, STAGE_Y - 3, 240, STEPS_R + 2, SX0, STAGE_Y, SX1, STEPS_R);
     switch (ui.page) {
-    case PG_SYN:
-    case PG_HOME: {
-        if (snd_page()) {
-            /* the library, a row a sound: its slot an outlined tag, its name the primary type (its category and
-             * machine on the card at the left); the one picked solid, its tag a paper frame; an INIT slot the light
-             * type, dotted on to the right; a cell a row at the right edge, the list's place among all shown */
-            int n = 0, at = snd_list(ui.snd_sel, &n), first = CLAMP(at - 3, 0, n > 8 ? n - 8 : 0);
-            const int tw = otag_w(&F_B, "000"), nx = X + 2 + tw + 5, xe = X + W - 8;
-            for (int r = 0; r < 8 && first + r < n; r++) {
-                int i = snd_nth(first + r), y = Y0 + 2 + r * 16, on = i == ui.snd_sel;
-                char o[4];
-                s_num3(o, i + 1);
-                if (on) rect(X, y - 2, xe - X, OTAG_H(&F_B) + 4, 1);
-                frame(X + 2, y, tw, OTAG_H(&F_B), !on);
-                text_c(&F_B, X + 2 + tw / 2, y + 2, o, !on, 0);
-                if (snd[i].name[0]) text_fit(nx, y + 1, snd[i].name, 0, xe - 2 - nx, !on);
-                else {
-                    int iw = text(&F_B, nx, y + 2, "INIT", !on, 0);
-                    if (!on) dots_h(nx + iw + 4, y + 9, xe - 2 - (nx + iw + 4));
-                }
-            }
-            /* the scroll: the rows shown solid on a dotted track, as tall as the list */
-            int sh = n > 8 ? 8 * 126 / n : 126, sy = n > 8 ? first * (126 - sh) / (n - 8) : 0;
-            dots_v(X + W - 3, Y0 + 1, 126);
-            rect(X + W - 4, Y0 + 1 + sy, 3, sh < 4 ? 4 : sh, 1);
-            break;
-        }
-        if (ui.page == PG_SYN) {         /* the mark, one dot a machine (its place: the card's #12/19) */
-            mark_3d(X + (W - ICON_N) / 2, Y0 + 26, m);
-            machine_dots(X + W / 2, L_B0 + 3, m);
-            break;
-        }
-        /* HOME, a step held: the track in the corner, its mark, the machine's name, the six tracks' meters */
-        char tn[3] = {'T', (char)('1' + ui.trk), 0};
-        tag(X, Y0 - TY, tn, 1);
-        mark_3d(X + (W - ICON_N) / 2, Y0 + 2, m);
-        const char *nm = MI[m].name;
-        text_c(&F_S, X + W / 2, Y0 + 76, nm, 1, 0);
-        for (int i = 0; i < M2K_TRACKS; i++) {           /* the six tracks' meters: a frame, the level solid in it */
-            int x = X + i * 22, h = (ui.meter[i] * 40) >> 15;
-            frame(x, Y0 + 90, 19, 44, 1);
-            rect(x + 2, Y0 + 132 - h, 15, h, 1);
-        }
-        break;
+    case PG_SYN: if (snd_page()) snd_picture(busy); else syn_picture(busy); break;
+    case PG_AMP: if (ui.sub) amp_chain(busy, k, fk); else amp_env(busy, k, fk); break;
+    case PG_FILT: filt_picture(busy, k, fk); break;
+    case PG_FX: fx_picture(busy, k, fk); break;
+    case PG_LFO: lfo_page(busy, k); break;
+    case PG_ARP: if (ui.sub) grids_picture(); else arp_picture(k); break;
+    case PG_GLO: glo_picture(busy); break;
+    default: break;
     }
-    case PG_AMP: {
-        if (ui.sub == 1) {
-            /* distortion as a transfer curve, the volume as a meter, the pan on a line, the glide as a ramp between two
-             * notes; the part being turned is drawn heavy and its tag inverted */
-            int32_t dh = (int32_t)T_DIST_H[k[P_DIST]];
-            int32_t dc = T_DIST_C[k[P_DIST]], vol = T_VOL[k[P_VOL]];
-            const int bs = 52, bx = X, by = Y0, mid = by + bs / 2;
-            frame(bx, by, bs, bs, 1);
-            for (int j = 4; j < bs; j += 4) px(bx + j, by + bs - 1 - j, 1);           /* the clean line */
-            int prev = mid;
-            for (int i = 0; i < bs - 2; i++) {
-                int32_t in = (i - (bs - 2) / 2) * 65535 / (bs - 2);
-                int64_t q = mul_sh(in, dh, 24);
-                int32_t c = (int32_t)CLAMP(q, -dc, dc);                                /* the headroom and the clip */
-                int32_t o = ((c * 128) / (T_DIST_C[64] >> 8)) * (vol >> 3) >> 12;   /* Q15, 32-bit division only */
-                int y = mid - (int)((o * (bs / 2 - 2)) >> 15);
-                if (i) { line(bx + i, prev, bx + 1 + i, y, 1); if (fk == 0) line(bx + i, prev + 1, bx + 1 + i, y + 1, 1); }
-                prev = y;
-            }
-            int vx = X + bs + 8, vw = X + W - vx, vh = (bs - 4) * vol >> 15;
-            frame(vx, by, vw, bs, 1);
-            rect(vx + 2, by + bs - 2 - vh, vw - 4, vh, 1);
-            tag(bx, by + bs + 4, "DS", fk == 0);
-            tag(vx, by + bs + 4, "VL", fk == 1);
-            int lx = X + 30, lw = W - 30, pan = k[P_PAN];
-            int py = by + bs + 34;                                   /* (the pan's tag on it, the glide's under) */
-            tag(X, py - 6, "PN", fk == 2);
-            hline(lx, py, lw, 1);
-            vline(lx + lw / 2, py - 3, 7, 1);
-            vline(lx, py - 2, 5, 1); vline(lx + lw - 1, py - 2, 5, 1);
-            int mx = lx + 2 + pan * (lw - 5) / 127;
-            if (fk == 2) rect(mx - 2, py - 5, 5, 11, 1); else { rect(mx - 2, py - 5, 5, 11, 0); frame(mx - 2, py - 5, 5, 11, 1); }
-            int gy = py + 34, gl = 2 + k[P_PORT] * (lw - 10) / 127;
-            tag(X, gy - 11, "GL", fk == 3);
-            hline(lx, gy, 4, 1);
-            line(lx + 4, gy, lx + 4 + gl, gy - 9, 1);
-            if (fk == 3) line(lx + 5, gy, lx + 5 + gl, gy - 9, 1);
-            hline(lx + 4 + gl, gy - 9, lw - 4 - gl, 1);
-            break;
-        }
-        /* attack, hold, decay, release as lengths on a log scale (a long decay does not crowd the attack out), the level
-         * on the voice's own curves (env_level), in the library's bars on a dotted floor: all solid at rest, the
-         * segment being turned solid and the others light; dotted lines and handles where each ends, full and half
-         * dotted, the letters under their segments, and the live voice running on it, where its level is */
-        int dec_inf = k[P_DEC] == 127, yb = Y0 + 106, top = Y0 + 12, hgt = yb - top, xs[5], ys[5];
-        dots_h(X, top, W);                                          /* full, and half way up */
-        dots_h(X, top + hgt / 2, W);
-        env_bars(k, X, W, top, yb, fk, xs, ys);
-        for (int b = 1; b < 4; b++) if (ys[b] - top > 5) dots_v(xs[b], top + 2, ys[b] - top - 5);
-        int wa = xs[1] - xs[0], wh = xs[2] - xs[1], wd = xs[3] - xs[2], wr = xs[4] - xs[3];
-        for (int b = 1; b < 5; b++) handle(xs[b], ys[b], b - 1 == fk);
-        static const char *const L[4] = {"A", "H", "D", "R"};
-        int lx = -100;
-        for (int i = 0; i < 4; i++) {          /* under its segment; a letter that would touch the last is left out */
-            int c = (xs[i] + xs[i + 1]) / 2, w = text_w(&F_S, L[i], 0), tw = otag_w(&F_S, L[i]);
-            if (i == fk) { int tx = CLAMP(c - tw / 2, X, X + W - tw); otag(&F_S, tx, L_B0 - 2, L[i], 1); lx = tx + tw; }
-            else if (c - w / 2 > lx + 3 && (fk < 0 || fk != i + 1 || c + w / 2 + 6 < (xs[fk] + xs[fk + 1]) / 2 - tw / 2)) {
-                text(&F_S, c - w / 2, L_B0, L[i], 1, 0);
-                lx = c + w / 2;
-            }
-        }
-        int st = mon.astage[ui.trk], lv = mon.aenv[ui.trk];
-        if (st) {
-            int y = yb - (hgt * lv >> 15);
-            /* along its segment as its level says: the attack's square root (ATK 0: straight), the decay's and the
-             * release's halvings (two to a quarter, eight on) */
-            int dn = lv ? (ilog2_q8(32768) - ilog2_q8((uint32_t)lv)) : 8 * 256;          /* halvings under full, Q8 */
-            int ra = !k[P_ATK] ? lv : (int)(atk_from((uint32_t)lv << 15) >> 15);
-            int x = st == 1 ? xs[0] + wa * ra / 32768 : st == 2 ? xs[1] + wh / 2
-                  : st == 3 ? xs[2] + wd * CLAMP(dn, 0, 512) / 512
-                  : xs[3] + wr * CLAMP(dn - (dec_inf ? 0 : 512), 0, 2048) / 2048;
-            vline(x, top, yb - top, 2);
-            marker(x, y);
-        }
-        break;
-    }
-    case PG_FILT: {
-        const int FW = W - 4;          /* (the curve's handles inside the picture, clear of the card's frame) */
-        int db = k[P_BOF] - 64, dw = k[P_WOF] - 64, ob = 7 * db * (db < 0 ? -db : db), ow = 7 * dw * (dw < 0 ? -dw : dw);
-        int hp0 = filt_q3(ui.trk, k[P_BASE] << 8), lp0 = filt_q3(ui.trk, (k[P_BASE] + k[P_WDTH]) << 8);
-        int hq = k[P_HPQ], lq = k[P_LPQ];
-        /* one curve, never two: the band the knobs set, and while the track sounds where its envelope (and LFOs)
-         * have it now, so it moves as it plays */
-        int live = t->sounding && (mon.cut_hp[ui.trk] != hp0 || mon.cut_lp[ui.trk] != lp0);
-        int hp = live ? mon.cut_hp[ui.trk] : hp0, lp = live ? mon.cut_lp[ui.trk] : lp0, yh, yl;
-        if (ui.sub == 1) {
-            /* the filter envelope, two blocks on equal gaps: the curve (while B-OF or W-OF turns, where the envelope
-             * takes it), the envelope's reach a dotted line at each cutoff, BO and WO under them; then the envelope,
-             * a straight attack up and a straight decay down (as the chain's), where it is now marked, ATK and DEC
-             * under their segments */
-            int hp1 = filt_q3(ui.trk, (k[P_BASE] << 8) + ob);
-            int lp1 = filt_q3(ui.trk, ((k[P_BASE] + k[P_WDTH]) << 8) + ob + ow);
-            if (fk == 2 || fk == 3) { hp = hp1; lp = lp1; }
-            const int top = Y0 + 4, yb = Y0 + 46, ty = yb + 6;   /* the curve 69..111, its names 117..129 */
-            filt_curve(X, FW, top, yb, hp, lp, hq, lq, fk == 0 || fk == 1, &yh, &yl);
-            int xh1 = X + hp1 * (FW - 1) / FQ_MAX, xl1 = X + lp1 * (FW - 1) / FQ_MAX;
-            dots_v(xh1, top, yb - top + 1);
-            dots_v(xl1, top, yb - top + 1);
-            handle(X + hp * (FW - 1) / FQ_MAX, yh, fk == 2);
-            handle(X + lp * (FW - 1) / FQ_MAX, yl, fk == 3);
-            int wB = otag_w(&F_S, "BO"), wW = otag_w(&F_S, "WO");
-            int tb = CLAMP(xh1 - wB / 2, X, X + W - wB - wW - 3), tw = CLAMP(xl1 - wW / 2, tb + wB + 3, X + W - wW);
-            otag(&F_S, tb, ty, "BO", fk == 2);
-            otag(&F_S, tw, ty, "WO", fk == 3);
-            /* the envelope 140..178 in bars on its floor, the part turned solid and the other light */
-            const int ex = X, ew = FW, et = ty + 23, eb = L_B0 - 8;
-            int a = 2 + k[P_FATK] * (ew / 3 - 2) / 127, d = 3 + k[P_FDEC] * (ew - a - 4) / 127;
-            for (int x = 0; x <= a + d; x++) {
-                int y = x <= a ? eb - (eb - et) * x / (a ? a : 1) : eb - (eb - et) * (a + d - x) / (d ? d : 1);
-                bar_col(ex + x, ex, y, eb, fk >= 0 && fk < 2 && (x <= a) != (fk == 0));
-            }
-            dots_h(ex, eb + 1, ew);
-            uint32_t fe = t->fenv >> 22;                /* (Q8 of full) */
-            if (t->sounding && (t->fstage == 1 || fe)) {
-                int x = ex + (t->fstage == 1 ? (int)(a * fe >> 8) : a + (int)(d * (256 - fe) >> 8));
-                vline(x, et - 4, eb - et + 4, 2);
-                marker(x, eb - (int)((eb - et) * fe >> 8));
-            }
-            int wA = otag_w(&F_S, "ATK"), wD = otag_w(&F_S, "DEC");
-            int ta = CLAMP(ex + a / 2 - wA / 2, X, X + W - wA - wD - 3), td = CLAMP(ex + a + d / 2 - wD / 2, ta + wA + 3, X + W - wD);
-            otag(&F_S, ta, L_B0 - 2, "ATK", fk == 0);
-            otag(&F_S, td, L_B0 - 2, "DEC", fk == 1);
-            break;
-        }
-        /* the band: the chain's response in the library's bars, its resonances as they peak; handles on each cutoff,
-         * the width a bracket under the floor (solid while WDTH turns), the names outlined tags (solid while theirs) */
-        int top = Y0 + 14, yb = Y0 + 100;
-        filt_curve(X, FW, top, yb, hp, lp, hq, lq, 0, &yh, &yl);
-        int xh = X + hp * (FW - 1) / FQ_MAX, xl = X + lp * (FW - 1) / FQ_MAX;
-        dots_v(xh, top - 8, yh - top + 5);
-        dots_v(xl, top - 8, yl - top + 5);
-        int hot_h = fk == 0 || fk == 2, hot_l = fk == 3;
-        handle(xh, yh, hot_h);
-        handle(xl, yl, hot_l);
-        /* the width */
-        int wy = yb + 7;
-        vline(xh, wy, 5, 1); vline(xl, wy, 5, 1);
-        if (fk == 1) rect(xh, wy + 1, xl - xh + 1, 3, 1); else dots_h(xh, wy + 2, xl - xh + 1);
-        /* the names, under their cutoffs and inside the picture, apart */
-        int wH = otag_w(&F_S, "HP"), wL = otag_w(&F_S, "LP");
-        int th = CLAMP(xh - wH / 2, X, X + W - wH - wL - 3), tl = CLAMP(xl - wL / 2, th + wH + 3, X + W - wL);
-        otag(&F_S, th, L_B0 - 2, "HP", hot_h);
-        otag(&F_S, tl, L_B0 - 2, "LP", hot_l);
-        break;
-    }
-    case PG_FX: {
-        if (ui.sub == 1) {             /* echoes: the width is half a bar; each lights when it sounds */
-            int dt = k[P_DTIM] ? k[P_DTIM] : 1;
-            int fb_ = k[P_DFB];                          /* 64 is unity */
-            int lvl = 256;
-            uint32_t ms_step = 15000u / seq_bpm();       /* a sixteenth in ms */
-            uint32_t since = ui.now - ui.flash_t[ui.trk];
-            const int base = Y0 + 112;
-            for (int e = 0; e < 12; e++) {
-                int x = X + 8 + (dt * (e + 1) * (W - 12)) / 128;
-                if (x + 4 > X + W) break;
-                int h = ((base - Y0 - 4) * lvl) >> 8;
-                uint32_t at = (uint32_t)dt * (uint32_t)(e + 1) * ms_step / 16u;
-                int lit = since >= at && since < at + 90;
-                if (lit) rect(x, base - h, 4, h, 1); else frame(x, base - h, 4, h, 1);
-                lvl = CLAMP((lvl * fb_) >> 6, 0, 256);
-                if (lvl < 8) break;
-            }
-            rect(X, Y0 + 4, 4, base - Y0 - 4, 1);        /* the sound itself */
-            hline(X, base + 1, W, 1);
-            static const char *const DN[2] = {"DRY", "ECHOES"};
-            text(&F_S, X, L_B0, DN[0], 1, 0);
-            text_r(&F_S, X + W, L_B0, DN[1], 1, 0);
-        } else if (ui.sub == 2) {      /* a sine through this track's destruction */
-            int bits = 16 - (k[P_BITS] * 14 >> 7), fold = k[P_FOLD], xm = (k[P_XOR] * k[P_XOR] * 2) & 0x7FFF;
-            int srr = k[P_SRR], step = (128 - srr) * (128 - srr) * 4, acc = 0, hold = 0, prev = 0;
-            uint32_t ph = (uint32_t)ui.now * 2000000u;
-            const int mid = Y0 + 56;
-            for (int i = 0; i < W; i++) {
-                int32_t s = sinp(ph + (uint32_t)i * (0xFFFFFFFFu / W) * 2) * 7 / 8;
-                if (fold) s = fold16((s * (256 + fold * 6)) >> 8);
-                if (xm) s = (int16_t)((uint16_t)s ^ (uint16_t)xm);
-                if (bits < 16) s = (s >> (16 - bits)) * (1 << (16 - bits));   /* a multiply: no left shift of a negative */
-                acc += step;
-                if (acc >= 65536 || i == 0) { acc -= 65536; hold = s; }
-                if (srr) s = hold;
-                int y = mid - (s * 50 >> 15);
-                if (i) { line(X + i - 1, prev, X + i, y, 1); line(X + i - 1, prev + 1, X + i, y + 1, 1); }
-                prev = y;
-            }
-            dots_h(X, mid, W);
-            static const char *const DN[4] = {"BITS", "FOLD", "XOR", "VERB"};
-            if (fk >= 0) tag(X, L_B0 - TY, DN[fk], 1);
-        } else if (ui.sub == 3) {      /* the modulation: its sweep at its rate, as deep as DPTH, and how much of it */
-            int type = (k[P_MODT] * 3) >> 7, dep = k[P_MODD], mix = k[P_MODM];
-            uint32_t ph = (uint32_t)ui.now * (T_MOD_INC[k[P_MODR]] * 44u);
-            int mid = Y0 + 56, amp = 3 + dep * 46 / 127, prev = mid;
-            for (int i = 0; i < W; i++) {
-                int32_t tri = (int32_t)((ph + (uint32_t)i * (0xFFFFFFFFu / W)) >> 16);
-                tri = tri < 32768 ? tri : 65535 - tri;
-                int y = mid + amp - (tri * amp * 2 >> 15);
-                for (int j = y; j <= mid + amp; j++) if (pat_ink(PT_HATCH, X + i, j)) px(X + i, j, 1);
-                if (i) { line(X + i - 1, prev, X + i, y, 1); line(X + i - 1, prev - 1, X + i, y - 1, 1); }
-                prev = y;
-            }
-            hline(X, mid + amp + 1, W, 1);
-            static const char *const N[3] = {"CHOR", "FLNG", "PHAS"};
-            int bx = X + tag(X, L_B0 - TY, N[type], 1) + 6, bw = X + W - bx;
-            level(bx, L_B0 + 4, bw, 0, 0, mix * 256 * bw / 127, 0);
-        } else {                       /* EQ: the band and its gain; the rate reduction as steps under it */
-            int f = k[P_EQF] * (W - 1) / 127, g = k[P_EQG] - 64, prev = 0;
-            const int mid = Y0 + 48;
-            for (int i = 0; i < W; i++) {
-                int d = i - f;
-                int bw = W / 4, bump = d > -bw && d < bw ? (g * (bw - (d < 0 ? -d : d))) / bw : 0;
-                int y = mid - bump * 42 / 64;
-                for (int j = (y < mid ? y : mid); j <= (y < mid ? mid : y); j++) if (pat_ink(PT_HATCH, X + i, j)) px(X + i, j, 1);
-                if (i) { line(X + i - 1, prev, X + i, y, 1); line(X + i - 1, prev + (y < mid ? -1 : 1), X + i, y + (y < mid ? -1 : 1), 1); }
-                prev = y;
-            }
-            dots_h(X, mid, W);
-            int n = 4 + (127 - k[P_SRR]) * 40 / 127, sy = Y0 + 104, pq = -1, pyy = sy;
-            for (int i = 0; i < W; i++) {
-                int q = (i * n / W) * W / n;
-                int y = sy - (sinp((uint32_t)q * (0xFFFFFFFFu / W)) * 8 >> 15);
-                if (q != pq && i) vline(X + i, y < pyy ? y : pyy, (y < pyy ? pyy - y : y - pyy) + 1, 1);
-                px(X + i, y, 1);
-                pq = q; pyy = y;
-            }
-            text(&F_S, X, L_B0, "EQ", 1, 0);
-            text_r(&F_S, X + W, L_B0, "RATE", 1, 0);
-        }
-        break;
-    }
-    case PG_LFO: lfo_scopes(k); break;
-    case PG_ARP: {
-        if (ui.sub) { grids_picture(); break; }
-        int n = sq.nheld, rng = 1 + ((k[P_ARNG] * 4) >> 7), tot = n * rng, cw = (W - 7 * 3) / 8;
-        for (int i = 0; i < tot && i < 24; i++) {
-            int x = X + (i % 8) * (cw + 3), y = Y0 + 98 - (i / 8) * 30 - (i % 8) * 2;
-            int on = (int)(sq.arp_i ? (sq.arp_i - 1) % (tot ? tot : 1) : -1) == i;
-            if (on) rect(x, y, cw, 9, 1); else frame(x, y, cw, 9, 1);
-        }
-        if (sq.arp_hold) tag(X, Y0 - TY, "HOLD", 1);       /* the arp's HOLD: the notes outlast the keys */
-        if (!n) { text_c(&F_S, X + W / 2, Y0 + 44, sq.arp_hold ? "PLAY" : "HOLD", 1, 0); text_c(&F_S, X + W / 2, Y0 + 58, "SOME KEYS", 1, 0); }
-        break;
-    }
-    case PG_GLO: {
-        if (ui.sub == GS_SET) {        /* the project picked, the open one; the display disc */
-            char o[16] = {'P', (char)('1' + ui.proj_sel), 0};
-            text(&F_L, X, Y0, o, 1, 0);
-            text_fit(X, Y0 + 28, m2k_project_name(ui.proj_sel), 0, W, 1);
-            if (ui.proj_sel == cur_proj) tag(X - 2, Y0 + 44 - TY, "OPEN", 1);
-            int cx = X + W - 16, cy = Y0 + 110, r = 12;
-            for (int j = -r; j <= r; j++)
-                for (int i = -r; i <= r; i++) {
-                    int d = i * i + j * j;
-                    if (d > r * r) continue;
-                    if (d > (r - 2) * (r - 2) || i >= 0) px(cx + i, cy + j, 1);
-                    else if (T_BAYER[(cy + j) & 7][(cx + i) & 7] < 8) px(cx + i, cy + j, 1);
-                }
-        } else if (ui.sub == GS_BUS) { /* the reverb's tail through the bus: its level over time (0.1 .. 30 s on a log
-                                        * scale), 60 dB down the height, the bottom's solid, the top's dotted (DAMP's
-                                        * share of it); DRIV lifts it by its gain, held flat at the top where it clips,
-                                        * ADPC holds the bottom's in 4-bit stairs */
-            int v = p->glob[G_VERB], ad = p->glob[G_ADPC];
-            const int top = Y0 + 6, ty = Y0 + 112, dh = ty - top;
-            uint32_t t60 = T_RV_MS[v], th = (t60 * 256u) / (256u + T_RV_DA[p->glob[G_DAMP]]);
-            int dg = (ilog2_q8(T_DRIV[p->glob[G_DRIV]]) - 8 * 256) * dh / 2560;    /* 6 dB a doubling, dh / 60 a dB */
-            int sq_h = ad ? 1 + (ad * 2 > 127 ? 127 : ad * 2) * 6 / 127 : 1;        /* (the crunch's mix: steps to 7 px) */
-            int sq_w = ad ? T_ADPC_DIV[ad] >> 7 : 1, hold = 0;                     /* (its rate: 2 px, 6 at 127) */
-            hline(X, ty, W, 1);
-            static const char *const TN[3] = {"0.1", "1 S", "10 S"};
-            for (int s = 0; s < 3; s++) {
-                int tx = X + s * 4037 * (W - 1) / 10000;
-                vline(tx, ty, 4, 1);
-                int w = text_w(&F_S, TN[s], 0);
-                text(&F_S, CLAMP(tx - w / 2, X, X + W - w), L_B0, TN[s], 1, 0);
-            }
-            int lp = -1;
-            for (int i = 0; v && i < W; i++) {
-                /* the time at column i: 100 ms 2^(i / (W - 1) log2 300), in ms */
-                uint32_t e = (uint32_t)i * 2105u / (uint32_t)(W - 1), ms = (100u * T_EXP2F[e & 255]) >> (16 - (e >> 8));
-                int yl = (int)(ms * (uint32_t)dh / (t60 ? t60 : 1)) - dg, yh = (int)(ms * (uint32_t)dh / (th ? th : 1)) - dg;
-                yl = yl < 0 ? 0 : yl;
-                yh = yh < 0 ? 0 : yh;
-                if (sq_h > 1) { if (!(i % sq_w)) hold = yl / sq_h * sq_h; yl = hold; }
-                if (yl <= dh) {
-                    int y = top + yl;
-                    if (lp >= 0) { line(X + i - 1, lp, X + i, y, 1); line(X + i - 1, lp + 1, X + i, y + 1, 1); } else px(X + i, y, 1);
-                    lp = y;
-                }
-                if (yh <= dh && !((X + i + top + yh) & 1)) px(X + i, top + yh, 1);
-            }
-            if (!v) text_c(&F_S, X + W / 2, Y0 + 44, "OFF", 1, 0);
-        } else if (ui.sub == GS_MIDI) { /* MIDI: the six tracks on their channels, the clock in and out, the beat */
-            int ch = (store_.set[S_MCH] * 16) >> 7;
-            for (int i = 0; i < M2K_TRACKS; i++) {
-                int x = X + (i % 3) * 44, y = Y0 + (i / 3) * 30, w = 41;
-                char o[4];
-                s_int(o, (ch + i) % 16 + 1);
-                if (i == ui.trk) rect(x, y, w, 26, 1); else frame(x, y, w, 26, 1);
-                text(&F_S, x + 3, y + 3, (const char[]){'T', (char)('1' + i), 0}, i != ui.trk, 0);
-                text_r(&F_S, x + w - 3, y + 13, o, i != ui.trk, 0);
-            }
-            int beat = sq.playing && (sq.step & 3) == 1;
-            const int on_in = clk_from() != 0, on_out = store_.set[S_SYNO] >= 64;
-            tag(X - 2, Y0 + 64 - TY, "CLOCK IN", on_in);
-            tag(X - 2, Y0 + 79 - TY, "CLOCK OUT", on_out);
-            tag(X - 2, Y0 + 94 - TY, "NOTES OUT", store_.set[S_NOTO] >= 64);
-            int cx = X + W - 12, cy = Y0 + 82;
-            if (beat) rect(cx - 10, cy - 10, 21, 21, 1); else frame(cx - 10, cy - 10, 21, 21, 1);
-            char o[12];
-            s_int(o, (int)seq_bpm());
-            text_c(&F_M, X + W / 2, Y0 + 110, o, 1, 0);
-        } else if (ui.sub == GS_PLAY) { /* PLAY: the mutes and when they come */
-            play_picture();
-        } else if (ui.sub == GS_IN) {  /* IN: what each port feeds, its square lit while it brings something */
-            const int clk = clk_from(), nts = notes_from();
-            for (int s = 0; s < 2; s++) {
-                int x = X + s * 66, b = 1 << s, w = text(&F_S, x, Y0 + 4, s ? "TRS" : "USB", 1, 0);
-                if ((mx.in_seen & b) && mx.now - mx.in_at[s] < M2K_SR / 8u) rect(x + w + 6, Y0 + 5, 8, 8, 1);
-                else frame(x + w + 6, Y0 + 5, 8, 8, 1);
-                tag(x - 2, Y0 + 24 - TY, "CLOCK", clk & b);
-                tag(x - 2, Y0 + 39 - TY, "NOTES", nts & b);
-                if (s) tag(x - 2, Y0 + 54 - TY, "THRU", set_on(S_THRU));
-            }
-        } else {                       /* four beats, the tempo */
-            int beat = sq.playing ? (sq.step ? sq.step - 1 : 0) / 4 % 4 : -1, bw = (W - 3 * 3) / 4;
-            for (int i = 0; i < 4; i++) {
-                int x = X + i * (bw + 3);
-                if (i == beat) rect(x, Y0 + 4, bw, 48, 1);
-                else frame(x, Y0 + 4, bw, 48, 1);
-            }
-            char o[12];
-            s_int(o, (int)seq_bpm());
-            text_c(&F_L, X + W / 2, Y0 + 66, o, 1, 0);
-            text_c(&F_S, X + W / 2, L_B0, "BPM", 1, 0);
-        }
-        break;
-    }
-    default:
-        break;
-    }
-}
-
-/* the LFO pages: the three LFOs stacked, each its number (inverted for the one the knobs turn), where it goes and how
- * fast; its wave over a cycle as deep as DPTH swings it (heavy for the one the knobs turn, flat and dotted when it goes
- * nowhere), and live: a cursor where its phase is, a block on the value it sends now. (A scope of its past would
- * alias: a 1/16 LFO turns faster than the FM-1 draws) */
-static void lfo_scopes(const uint8_t *k)
-{
-    const int X = PX0, W = PIC_W, el = ui.sub >> 1;
-    const trk_t *tk = &trk[ui.trk];
-    for (int l = 0; l < 3; l++) {
-        const uint8_t *b = &k[P_LFO + 8 * l];
-        int y = PY0 + l * 44, on = l == el;
-        char n[2] = {(char)('1' + l), 0}, d[12], r[20];
-        int tw = otag(&F_S, X, y, n, on);              /* (the library's tag: solid for the one the knobs turn) */
-        const char *u;
-        fmt(&PI_LFO[8 * l + L_DEST], ui.trk, b[L_DEST], d, &u);
-        s_lfo_cycle(r, &u, b[L_SPD], choice_of(K_MULT, b[L_MULT]));
-        if (*u && u[0] != 'N' && u[0] != 'S') {          /* bars, beats and hertz say so; a note is its fraction */
-            char *e = r;
-            while (*e) e++;
-            *e++ = ' ';
-            s_cpyn(e, u, (int)(r + sizeof r - e));
-        }
-        int rw = text_w(&F_B, r, 0);                     /* (the rate the light type, at the right) */
-        if (rw > W - tw - 54) { s_lfo_cycle(r, &u, b[L_SPD], choice_of(K_MULT, b[L_MULT])); rw = text_w(&F_B, r, 0); }
-        text(&F_B, X + W - rw, y + 3, r, 1, 0);
-        text_fit(X + tw + 5, y + 2, d, 0, W - tw - 5 - rw - 8, 1);
-        const int mid = y + 28, A = 11;
-        dots_h(X, mid, W);
-        if (!b[L_DEST]) continue;
-        /* its wave over a cycle in the library's bars from the dotted middle, as deep as DPTH swings it (solid for the
-         * one the knobs turn, light for the others) */
-        int wave = (b[L_WAVE] * 7) >> 7;
-        int32_t dp = T_LDPTH[b[L_DPTH]], rr = 0;
-        for (int i = 0; i < W; i++) {
-            int32_t v = wave == 6 ? (int32_t)(hash32((uint32_t)(i / 16) + 77u) >> 16) - 32768
-                                  : lfo_shape(wave, (uint32_t)i * (0xFFFFFFFFu / (uint32_t)(W - 1)), &rr);
-            int yy = mid - (int)((((v * dp) >> 14) * A) >> 15);
-            if (yy < mid) bar_col(X + i, X, yy, mid, !on); else bar_col(X + i, X, mid + 1, yy + 1, !on);
-        }
-        int cx = X + (int)(((tk->lph[l] >> 16) * (uint32_t)(W - 1)) >> 16);
-        int cy = mid - (int)((((tk->lval[l] * dp) >> 14) * A) >> 15);
-        dots_v(cx, mid - A - 3, 2 * A + 7);
-        marker(cx, cy);
-    }
-}
-
-/* ---- the pages */
-
-/* the windows' system (docs/screen-grid.md, Windows): a layer's is the stage's card (x 2..237, rows 62..199), the
- * others cards of their own (2 px of paper round them, no shadow); a title bar inside the frame, ink, 14 rows, its
- * title in the bars' type (paper) 5 px in, a mark (LATCHED) at its right; the content 5 px in from the frame (4
- * blank), its first row 5 under the bar, rows W_ROW apart (a tag's 12 and 3); pairs a true table (pairs()); nothing
- * within 2 px of the frame */
-#define W_X 2                           /* a layer's window: the stage's card (x 2..237, rows 62..199) */
-#define W_W 236
-#define W_IN 5
-#define W_BAR 14
-#define W_ROW 15
-#define W_TOP (1 + W_BAR + 5)
-#define W_H(rows) (W_TOP + (rows) * W_ROW + 2)   /* (the last row's 11, 5 blank, the frame) */
-
-/* a window and its title bar; the first row's y. A layer's (W_X, W_W) is the stage's card itself, whatever its rows
- * (the page under it never peeks out: one card, its title bar filled) */
-static int window(int x, int y, int w, int h, const char *title, const char *mark)
-{
-    if (x == W_X && w == W_W) { y = ST_Y; h = ST_H; }
-    win(x, y, w, h);
-    rect(x + 1, y + 1, w - 2, W_BAR, 1);
-    int mw = mark ? text_w(&F_B, mark, 0) + 8 : 0;
-    text_fit_f(&F_B, x + W_IN, y + 4, title, w - 2 * W_IN - mw, 0);
-    if (mark) text_r(&F_B, x + w - W_IN, y + 4, mark, 0, 0);
-    return y + W_TOP;
-}
-
-static const char *latch_title(int b) { return ui.latch == b + 1 ? "LATCHED" : 0; }   /* (a title bar's mark) */
-
-/* a table of n key -> action pairs (kv: key, action, ...) in cols columns, filled row by row, from (x, y), w wide:
- * the keys the library's outlined tags in the light type, one width (the widest's and 2 each side), their type
- * centred; the actions the primary type 5 after, aligned, on the tags' line; a column's gutter 7. Its rows */
-static int pairs(int x, int y, int w, const char *const *kv, int n, int cols)
-{
-    int kt = 0;
-    for (int i = 0; i < n; i++) { int t = otag_w(&F_B, kv[2 * i]); if (t > kt) kt = t; }
-    const int cw = cols > 1 ? (w - 7 * (cols - 1)) / cols : w;
-    for (int i = 0; i < n; i++) {
-        int cx = x + (i % cols) * (cw + 7), cy = y + (i / cols) * W_ROW;
-        frame(cx, cy, kt, OTAG_H(&F_B), 1);
-        text(&F_B, cx + (kt - text_w(&F_B, kv[2 * i], 0) + 1) / 2, cy + 2, kv[2 * i], 1, 0);
-        text_fit(cx + kt + 5, cy + 1, kv[2 * i + 1], 0, cw - kt - 5, 1);
-    }
-    return (n + cols - 1) / cols;
-}
-
-/* a knob turned on HOME: its value in big type in a window over the lanes */
-static void focus_popup(int code)
-{
-    const pi_t *pi = pinfo(ui.trk, code);
-    char v[16];
-    const char *u;
-    fmt(pi, ui.trk, knob_value(code), v, &u);
-    const int x = 30, y = STAGE_Y + 14, w = 180, h = 88;
-    int r = window(x, y, w, h, pi->name, pi->s4);
-    int b = big_value(x + W_IN, r, w - 2 * W_IN, v, value_font(pi, code), ui.now - ui.roll_t);
-    if (*u) text_fit(x + W_IN, b + 8, u, 0, w - 2 * W_IN, 1);
-}
-
-static void home(void)
-{
-    m2k_pattern_t *p = PAT(cur_pat);
-    int fcode = knob_at(ui.focus), fresh = ui.focus_t && ui.now - ui.focus_t < 1800 && fcode != NONE;   /* (a layer let go) */
-    if (ui.grid && ui.nheld && !fresh) {         /* a held step: its card and the track's picture, as on a page */
-        stage_card();
-        step_card();
-        picture();
-    } else {
-        /* the six lanes, the page in view, grouped by the beat as the steps below are (the library's strip): each its
-         * number a tag (solid for the track in view, or as it trigs), 16 cells 2 px apart, a beat's four 6 from the next */
-        CELL(0, STAGE_Y, 240, STEPS_R, 2, STAGE_Y + 2, 238, STEPS_R - 1);
-        for (int t = 0; t < M2K_TRACKS; t++) {
-            int y = PY0 - 1 + t * 24;
-            int flash = ui.now - ui.flash_t[t] < 90, inv = t == ui.trk || flash;
-            if ((((sq.mq_m | sq.sq_m | sq.solo_rel) >> t) & 1) && ((ui.now >> 7) & 1)) inv = !inv;   /* waits for the bar */
-            char n[2] = {(char)('1' + t), 0};
-            if (inv) rect(2, y, 14, 16, 1); else frame(2, y, 14, 16, 1);
-            text_c(&F_S, 9, y + 4, n, !inv, 0);
-            int muted = (p->mute >> t) & 1;
-            for (int i = 0; i < 16; i++) {
-                int s = ui.spage * 16 + i, x = 20 + (i >> 2) * 56 + (i & 3) * 13;
-                if (muted) {
-                    if (s < tlen_of(t) && (p->step[t][s].flags & ST_TRIG)) dots_frame(x, y, 11, 16); else px(x + 5, y + 8, 1);
-                    continue;
-                }
-                step_cell(x, y, 11, 16, t, s);
-            }
-            if (muted) dots_h(20, y + 8, 218);
-        }
-        if (fresh) focus_popup(fcode);
-    }
-    /* the four bars, a card each under the knobs' (a beat to 12 px): the one in view solid, past the end dotted, its
-     * beats and the playhead in the other colour */
-    for (int pg = 0; pg < 4; pg++) {
-        int x = pg * 60 + 2, w = 56, y = STEP_Y;
-        int used = pg * 16 < seq_len();
-        if (!used) { dots_frame(x, y, w, STEP_N); continue; }
-        int on = pg == ui.spage;
-        if (on) rect(x, y, w, STEP_N, 1); else frame(x, y, w, STEP_N, 1);
-        for (int i = 1; i < 4; i++) vline(x + 4 + i * 12, y + 8, 2, !on);
-        if (sq.playing && play_step() / 16 == pg) rect(x + 4 + (play_step() % 16) * 3, y + 2, 3, STEP_N - 4, !on);
-    }
-    knobs();
-    foot();
 }
 
 static void param_page(void)
 {
-    /* the knob turned last, while its value shows; one a layer gave (PERFORM's, SEQ's) and the page has not is none */
-    int fcode = knob_at(ui.focus), fresh = ui.focus_t && ui.now - ui.focus_t < 2500 && fcode != NONE;
-    stage_card();
-    if (ui.grid && ui.nheld && !fresh) step_card();
-    else if (snd_page() && (!fresh || ui.focus == 0 || ui.focus == 3)) sound_card();   /* (SLOT and CAT: the card) */
-    else if (ui.page == PG_SYN && (!fresh || (ui.card_t && ui.now - ui.card_t < 1500))) machine_card();
-    else if (fresh) focus_left(fcode, ui.focus);
-    else page_rest();
-    picture();
+    picture(info_line());
     strip();
     knobs();
     foot();
@@ -3979,110 +3886,157 @@ static void wipe(int p)
     }
 }
 
-/* ---- the windows over the stage (window(), pairs() above): from y 64 */
-#define WY 64
+/* ---- the panels over the stage (the held layers, the button cards, the catalogue, the question, the clear's ring),
+ * only where a layer covers the page: one frame, cleared 2 px round, its title solid on its top line, centred (the
+ * menu's); rows 16 apart from baseline P_B0, the keys' hints on the foot's baseline P_FB. Nothing within 2 px of it */
+#define P_X SX0                         /* a layer's: x 4..235, rows 68..203 */
+#define P_W STW
+#define P_TOP 68
+#define P_H 136
+#define P_IN 4                          /* its content 4 px in from its frame (its text 7) */
+#define P_B0 88
+#define P_ROW 16
+#define P_FB 196
 
-/* GLO's white keys drawn, 15 of 12 x 14 a 14 px pitch from x (208 px), y the labels' first row: FILL and ALL over their
- * keys, MUTE, TAP and SOLO under theirs (no label crosses another). The mute keys show the tracks (heard solid, muted
- * framed, soloed away a dot; one waiting for the bar blinks between), the solo keys solid while held, FILL solid
- * while one is queued. Its height, 38 */
-static int white_keys(int x, int y)
+static int panel(int x, int y, int w, int h, const char *title, int full)
+{
+    if (full) rect(0, KNOB_R + 1, 240, STRIP_Y + 2 - (KNOB_R + 1), 0);   /* (a layer's or a question's: the stage whole) */
+    else rect(x - 2, y - 2, w + 4, h + 4, 0);
+    frame(x, y, w, h, 1);
+    int tw = text_w(&F_B, title, 0), tx = x + (w - tw) / 2;
+    inv_tag(&F_B, tx, y + 4, title);
+#ifdef M2K_TEXT_AUDIT
+    ta_rule_add(x, y, tx - 6, y); ta_rule_add(tx + tw + 5, y, x + w - 1, y);   /* (its top line each side of the title) */
+    ta_rule_add(x, y + h - 1, x + w - 1, y + h - 1);
+    ta_rule_add(x, y, x, y + h - 1); ta_rule_add(x + w - 1, y, x + w - 1, y + h - 1);
+#endif
+    return y + 20;
+}
+
+/* a table of n key -> action pairs (kv: key, action, ...) in cols columns, filled row by row, from baseline b over
+ * [x, x + w): the keys outlined tags one width (the widest's), their type centred; the actions the primary type 4
+ * after, aligned; a gutter of 8. Its rows */
+static int pair_key_w(const char *const *kv, int n)
+{
+    int kt = 0;
+    for (int i = 0; i < n; i++) { int t = text_w(&F_B, kv[2 * i], 0); if (t > kt) kt = t; }
+    return kt;
+}
+static int pairs(int x, int b, int w, const char *const *kv, int n, int cols)
+{
+    const int kt = pair_key_w(kv, n), cw = cols > 1 ? (w - 8 * (cols - 1)) / cols : w;
+    for (int i = 0; i < n; i++) {
+        int cx = x + (i % cols) * (cw + 8), cb = b + (i / cols) * P_ROW;
+        frame(cx, cb - F_B.base - 2, kt + 6, F_B.base + 4, 1);
+        tx_b(&F_B, cx + 3 + (kt - text_w(&F_B, kv[2 * i], 0) + 1) / 2, cb, kv[2 * i], 1);
+        text_fit(cx + kt + 10, cb - F_S.base, kv[2 * i + 1], 0, cw - kt - 10, 1);
+    }
+    return (n + cols - 1) / cols;
+}
+
+static const char *latch_title(int b) { return ui.latch == b + 1 ? "LATCHED" : 0; }
+
+/* GLO's white keys drawn, 15 cells 8 x 12 a 12 px pitch from x (176 px, the steps' rhythm), b the labels' baseline
+ * over them: FILL and ALL over their keys, MUTE, TAP and SOLO under theirs in the light type (no label crosses
+ * another). The mute keys show the tracks (heard solid, muted framed, soloed away a dot; one waiting for the bar blinks
+ * between), the solo keys solid while held, FILL solid while one is queued */
+static void white_keys(int x, int b)
 {
     const m2k_pattern_t *p = PAT(cur_pat);
-    const int fast = (ui.now >> 7) & 1, ky = y + 12;
+    const int fast = (ui.now >> 7) & 1, ky = b + 4;
     for (int i = 0; i < 15; i++) {
-        int bx = x + i * 14, on = 0, dot = 0;
+        int bx = x + i * 12, on = 0, dot = 0;
         if (i < M2K_TRACKS) {
-            const int b = 1 << i;
-            int muted = p->mute & b, solo = sq.solo;
-            if (fast && (sq.mq_m & b)) muted = sq.mq_v & b;
-            if (fast && (sq.sq_m & b)) solo = (solo & ~b) | (sq.sq_v & b);
-            if (fast && (sq.solo_rel & b)) solo |= b;
-            on = !muted && (!solo || (solo & b));
+            const int m = 1 << i;
+            int muted = p->mute & m, solo = sq.solo;
+            if (fast && (sq.mq_m & m)) muted = sq.mq_v & m;
+            if (fast && (sq.sq_m & m)) solo = (solo & ~m) | (sq.sq_v & m);
+            if (fast && (sq.solo_rel & m)) solo |= m;
+            on = !muted && (!solo || (solo & m));
             dot = !muted && !on;
         } else if (i >= 8 && i < 8 + M2K_TRACKS) on = (sq.solo >> (i - 8)) & 1;
         else if (i == 6) on = sq.fill_next;
-        if (on) rect(bx, ky, 12, 14, 1); else frame(bx, ky, 12, 14, 1);
-        if (dot) rect(bx + 5, ky + 6, 2, 2, 1);
+        if (on) rect(bx, ky, 8, 12, 1); else frame(bx, ky, 8, 12, 1);
+        if (dot) rect(bx + 3, ky + 5, 2, 2, 1);
     }
-    /* (the groups' labels the light type, as the library's strip has them) */
-    text_c(&F_B, x + 6 * 14 + 6, y + 1, "FILL", 1, 0);
-    text_r(&F_B, x + 14 * 14 + 12, y + 1, "ALL", 1, 0);
-    text_c(&F_B, x + (5 * 14 + 12) / 2, ky + 18, "MUTE", 1, 0);
-    text_c(&F_B, x + 7 * 14 + 6, ky + 18, "TAP", 1, 0);
-    text_c(&F_B, x + 8 * 14 + (5 * 14 + 12) / 2, ky + 18, "SOLO", 1, 0);
-    return 38;
+    tx_bc(&F_B, x + 6 * 12 + 4, b, "FILL", 1);
+    tx_br(&F_B, x + 14 * 12 + 8, b, "ALL", 1);
+    tx_bc(&F_B, x + (5 * 12 + 8) / 2, b + 28, "MUTE", 1);
+    tx_bc(&F_B, x + 7 * 12 + 4, b + 28, "TAP", 1);
+    tx_bc(&F_B, x + 8 * 12 + (5 * 12 + 8) / 2, b + 28, "SOLO", 1);
 }
 
-/* GLO held a moment alone: what it does with each, in a window over the page */
+/* GLO held a moment alone: what it does with each, the white keys under; latched: its keys alone */
 static void glo_help(void)
 {
     if (ui.latch != B_GLO + 1 && (!ui.btn[B_GLO] || !ui.glo_t0 || (!ui.glo_used && ui.now - (ui.glo_t0 & ~1u) < 350))) return;
     if (ring.t0 && !ring.done) return;                 /* the ring has the stage */
-    const int x = W_X, y = WY, w = W_W, lat = ui.latch == B_GLO + 1;
-    if (lat) {                                         /* latched: its keys (the combos want it held) */
-        int r = window(x, y, w, W_TOP + 38 + 5 + 9 + 7, "GLO KEYS", "LATCHED");
-        r += white_keys(x + 14, r) + 5;
-        text(&F_B, x + W_IN, r + 1, "TAP GLO TO LET GO", 1, 0);
+    if (ui.latch == B_GLO + 1) {                       /* latched: its keys (the combos want it held) */
+        panel(P_X, P_TOP, P_W, P_H, "GLO LATCHED", 1);
+        white_keys(32, 104);
+        static const char *const H[2] = {"GLO", "LET GO"};
+        hints(P_X + P_IN + 3, P_FB, SX1 - P_IN, H, 1);
         return;
     }
     static const char *const L[16] = {"REC", "COPY", "PLAY", "PASTE", "SEQ", "CLEAR", "SAVE", "RELOAD",
                                       "OCT-", "UNDO", "OCT+", "REDO", "EDIT", "SOUNDS", "HOME", "KEYS"};
-    int r = window(x, y, w, W_TOP + 4 * W_ROW + 2 + 38 + 7, "GLO HELD", "SELECT: BPM");
-    r += pairs(x + W_IN, r, w - 2 * W_IN, L, 8, 2) * W_ROW + 2;
-    white_keys(x + 14, r);
+    int b = panel(P_X, P_TOP, P_W, P_H, "GLO HELD", 1);
+    pairs(P_X + P_IN, b, P_W - 2 * P_IN, L, 8, 2);
+    white_keys(32, 152);
+    static const char *const H[2] = {"SELECT", "TEMPO"};
+    hints(P_X + P_IN + 3, P_FB, SX1 - P_IN, H, 1);
 }
 
-/* HOME held a moment: the bank's 16 patterns as the white keys pick them, a cell each (the open one inverted, those
- * picked a square at its end, INIT ones dotted), the one picked last (or the open one) named over them; EDIT held: what it
- * does */
+/* HOME held a moment: the bank's 16 patterns as the white keys pick them (the open one solid, those picked a square
+ * after, INIT ones in the light type), the one picked last (or the open one) its title; the black keys' banks and the
+ * verbs at the foot */
 static void hold_help(void)
 {
     const int lat = ui.latch == B_HOME + 1;
     if (held(B_GLO) || (!lat && (!ui.hold_t0 || ui.now - (ui.hold_t0 & ~1u) < 350))) return;
-    const int x = W_X, y = WY, w = W_W;
-    if (held(B_HOME)) {
-        int f = sq.playing ? sq.queued : cur_pat;      /* (a pick opens or queues its pattern) */
-        char a[24], *e = s_pat(a, f);
-        *e++ = ' ';
-        s_cpy(e, pat_name(f));
-        static const char *const P[6] = {"SEQ", "CLEAR", "REC", "COPY", "PLAY", "PASTE"};
-        int r = window(x, y, w, W_TOP + 4 * W_ROW + 1 + (lat ? 13 + 9 + 6 : W_H(2) - W_TOP), a,
-                       lat ? "LATCHED" : "BLACK 1-4: BANKS");
-        for (int i = 0; i < 16; i++) {                 /* a cell a key: its slot, an INIT one dotted */
-            int n = ui.pbank * 16 + i, cw = 52, ch = 13, cx = x + W_IN + (i & 3) * (cw + 5), cy = r + (i >> 2) * W_ROW;
-            if (n >= M2K_PATTERNS) continue;
-            int on = n == cur_pat, picked = ui.pick[n >> 3] >> (n & 7) & 1, blank = name_is(pat_name(n), "INIT");
-            if (on) rect(cx, cy, cw, ch, 1);
-            else if (blank && !picked) dots_frame(cx, cy, cw, ch);
-            else frame(cx, cy, cw, ch, 1);
-            if (picked) rect(cx + cw - 10, cy + 4, 6, 6, !on);
-            char num[8];
-            s_pat(num, n);
-            text(&F_S, cx + 4, cy + 2, num, !on, 0);
-        }
-        r += 4 * W_ROW + 1;
-        if (lat) { text(&F_B, x + W_IN, r + 1, "AGAIN: AT ONCE", 1, 0); text(&F_B, x + W_IN, r + 14, "TAP HOME TO LET GO", 1, 0); }
-        else pairs(x + W_IN, r, w - 2 * W_IN, P, 3, 2);
+    if (!held(B_HOME)) return;
+    int f = sq.playing ? sq.queued : cur_pat;          /* (a pick opens or queues its pattern) */
+    char a[24], *e = s_pat(a, f);
+    *e++ = ' ';
+    s_cpy(e, pat_name(f));
+    int b = panel(P_X, P_TOP, P_W, P_H, a, 1);
+    for (int i = 0; i < 16; i++) {
+        int n = ui.pbank * 16 + i, cx = P_X + P_IN + 4 + (i & 3) * 56, cb = b + (i >> 2) * P_ROW;
+        if (n >= M2K_PATTERNS) continue;
+        int on = n == cur_pat, picked = ui.pick[n >> 3] >> (n & 7) & 1, blank = name_is(pat_name(n), "INIT");
+        char num[8];
+        s_pat(num, n);
+        const m2k_font_t *ft = blank ? &F_B : &F_S;
+        int w = on ? inv_tag(ft, cx, cb, num) : tx_b(ft, cx, cb, num, 1);
+        if (picked) rect(cx + w + 6, cb - 6, 4, 4, 1);
+    }
+    if (lat) {
+        tx_b(&F_B, P_X + P_IN, 172, "AGAIN: AT ONCE", 1);
+        static const char *const H[2] = {"HOME", "LET GO"};
+        hints(P_X + P_IN + 3, P_FB, SX1 - P_IN, H, 1);
         return;
     }
+    static const char *const K[2] = {"BLACK 1-4", "BANKS"};
+    static const char *const P[6] = {"SEQ", "CLEAR", "REC", "COPY", "PLAY", "PASTE"};
+    pairs(P_X + P_IN, 164, P_W - 2 * P_IN, P, 3, 2);
+    hints(P_X + P_IN + 3, P_FB, SX1 - P_IN, K, 1);
 }
 
 /* SEQ held a moment: its tools on the white keys (the knobs above show LEN, the track's TLEN and SPD, SWNG meanwhile) */
 static void seq_help(void)
 {
     if (!seq_layer() || (ui.latch != B_SEQ + 1 && (!ui.seq_t0 || ui.now - (ui.seq_t0 & ~1u) < 350))) return;
-    const int x = W_X, y = WY, w = W_W, lat = ui.latch == B_SEQ + 1;
-    char o[16] = {'S', 'E', 'Q', ' ', 'T', (char)('1' + ui.trk), 0};
-    s_cpy(o + 6, " STEPS");
-    static const char *const P[4] = {"REC", "COPY", "PLAY", "PASTE"};
-    int r = window(x, y, w, lat ? W_TOP + 4 * W_ROW + 9 + 6 : W_H(5), o, latch_title(B_SEQ));
+    const int lat = ui.latch == B_SEQ + 1;
+    char o[20] = {'S', 'E', 'Q', ' ', 'T', (char)('1' + ui.trk), 0};
+    s_cpy(o + 6, lat ? " LATCHED" : " STEPS");
+    int b = panel(P_X, P_TOP, P_W, P_H, o, 1);
     const char *kv[16];
     static const char N[8][2] = {"1", "2", "3", "4", "5", "6", "7", "8"};
     for (int i = 0; i < 8; i++) { kv[2 * i] = N[(i & 1) * 4 + (i >> 1)]; kv[2 * i + 1] = SEQ_TOOL[(i & 1) * 4 + (i >> 1)]; }
-    r += pairs(x + W_IN, r, w - 2 * W_IN, kv, 8, 2) * W_ROW;   /* (1-4 down the left, 5-8 the right) */
-    if (lat) text(&F_B, x + W_IN, r + 1, "TAP SEQ TO LET GO", 1, 0);
-    else pairs(x + W_IN, r, w - 2 * W_IN, P, 2, 2);
+    pairs(P_X + P_IN, b, P_W - 2 * P_IN, kv, 8, 2);   /* (1-4 down the left, 5-8 the right) */
+    static const char *const L[2] = {"SEQ", "LET GO"};
+    static const char *const P[4] = {"REC", "COPY", "PLAY", "PASTE"};
+    hints(P_X + P_IN + 3, P_FB, SX1 - P_IN, lat ? L : P, lat ? 1 : 2);
 }
 
 /* FX held a moment: PERFORM's effects on the black keys, the bus's knobs; LFO held: the knobs snap back */
@@ -4090,41 +4044,35 @@ static void lay_help(void)
 {
     int i = perf_layer() ? 0 : mom_layer() ? 1 : -1;
     if (i < 0 || ((i || ui.latch != B_FX + 1) && (!ui.lay_t0[i] || (!ui.lay_used[i] && ui.now - (ui.lay_t0[i] & ~1u) < 350)))) return;
-    const int y = WY;
     if (i) {
-        static const char *const P[2] = {"OCT+", "KEEPS THEM"};
-        int r = window(W_X, y, W_W, W_H(2), "LFO HELD", 0);
-        text(&F_S, W_X + W_IN, r + TY, "THE KNOBS SNAP BACK", 1, 0);
-        pairs(W_X + W_IN, r + W_ROW, W_W - 2 * W_IN, P, 1, 1);
+        static const char *const P[2] = {"OCT+", "KEEP THEM"};
+        panel(P_X, P_TOP, P_W, 56, "LFO HELD", 0);       /* (compact: the page moves on under it) */
+        tx_b(&F_S, P_X + P_IN + 3, P_B0, "THE KNOBS SNAP BACK", 1);
+        hints(P_X + P_IN + 3, P_B0 + 20, SX1 - P_IN, P, 1);
         return;
     }
-    /* the bank shown, its eleven black keys a table (1-6 down the left, 7-11 the right), an effect on in inverse;
-     * under it both banks on OCT- and OCT+, the one shown in inverse */
-    const int x = W_X + W_IN, w = W_W - 2 * W_IN, cw = (w - 7) / 2;
-    int r = window(W_X, y, W_W, W_H(7), ui.pfb ? "PERFORM: BANK B" : "PERFORM: BANK A", latch_title(B_FX));
+    /* the bank shown, its eleven black keys a table (1-6 down the left, 7-11 the right), an effect on solid; both banks
+     * on OCT- and OCT+ at the foot, the one shown solid */
+    const int x = P_X + P_IN, w = P_W - 2 * P_IN, cw = (w - 8) / 2;
+    int b = panel(P_X, P_TOP, P_W, P_H, latch_title(B_FX) ? "PERFORM LATCHED" : ui.pfb ? "PERFORM BANK B" : "PERFORM BANK A", 1);
     static const char N[PF_BANK][3] = {"1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11"};
     const char *kv[2 * PF_BANK];                       /* (filled row by row: item j is key j / 2 or 7 + j / 2) */
-    int kt = 0;
     for (int j = 0; j < PF_BANK; j++) {
         int s = (j & 1) ? 6 + (j >> 1) : j >> 1, k = s + ui.pfb * PF_BANK;
         kv[2 * j] = N[s];
         kv[2 * j + 1] = perf.on[k] ? "" : PF_NAME[k];
-        if (otag_w(&F_B, N[s]) > kt) kt = otag_w(&F_B, N[s]);   /* (the table's tag width, as pairs() has it) */
     }
-    pairs(x, r, w, kv, PF_BANK, 2);
-    for (int j = 0; j < PF_BANK; j++) {                /* the effects on: their names in inverse */
+    pairs(x, b, w, kv, PF_BANK, 2);
+    const int kt = pair_key_w(kv, PF_BANK);
+    for (int j = 0; j < PF_BANK; j++) {                /* the effects on: their names solid */
         int s = (j & 1) ? 6 + (j >> 1) : j >> 1, k = s + ui.pfb * PF_BANK;
-        if (!perf.on[k]) continue;
-        int ax = x + (j & 1) * (cw + 7) + kt + 5, cy = r + (j >> 1) * W_ROW;
-        rect(ax - 2, cy, text_w(&F_S, PF_NAME[k], 0) + 4, F_S.base + 2, 1);
-        text(&F_S, ax, cy + TY, PF_NAME[k], 0, 0);
+        if (perf.on[k]) inv_tag(&F_S, x + (j & 1) * (cw + 8) + kt + 10, b + (j >> 1) * P_ROW, PF_NAME[k]);
     }
     static const char *const B[4] = {"OCT-", "BANK A", "OCT+", "BANK B"};
-    int by = r + 6 * W_ROW, bt = otag_w(&F_B, "OCT-") > otag_w(&F_B, "OCT+") ? otag_w(&F_B, "OCT-") : otag_w(&F_B, "OCT+");
-    pairs(x, by, w, B, 2, 2);
-    int ax = x + ui.pfb * (cw + 7) + bt + 5;
-    rect(ax - 2, by, text_w(&F_S, B[2 * ui.pfb + 1], 0) + 4, F_S.base + 2, 1);
-    text(&F_S, ax, by + TY, B[2 * ui.pfb + 1], 0, 0);
+    for (int k = 0, bx = x + 3; k < 2; k++) {
+        bx += key_tag(bx, P_FB, B[2 * k]) + 7;
+        bx += (k == ui.pfb ? inv_tag(&F_B, bx + 2, P_FB, B[2 * k + 1]) + 2 : tx_b(&F_B, bx, P_FB, B[2 * k + 1], 1)) + 12;
+    }
 }
 
 /* a button's card (card_up): its tap, then what it does with the others, a row each */
@@ -4151,18 +4099,18 @@ static void card_draw(void)
     while (c[1 + 2 * rows]) rows++;
     char t[24];
     s_cpy(s_cpy(s_cpy(t, BTN_N[b]), " "), c[0]);
-    int r = window(W_X, WY, W_W, W_H(rows), t, 0);    /* over the stage, whatever the page has there */
-    pairs(W_X + W_IN, r, W_W - 2 * W_IN, c + 1, rows, 1);
+    int r = panel(P_X, P_TOP, P_W, P_H, t, 1);         /* over the stage, whatever the page has there */
+    pairs(P_X + P_IN, r, P_W - 2 * P_IN, c + 1, rows, 1);
 }
 
-/* a clear held on: a ring of twelve fills in a second, then INIT */
+/* a clear held on: a ring of twelve cells fills in a second, then INIT */
 static void ring_draw(void)
 {
     if (!ring.t0 || ring.done) return;
     uint32_t a = ui.now - (ring.t0 & ~1u);
     if (a < 150) return;
-    const int w = 120, h = 104, x = 120 - w / 2, y = STAGE_Y + 14, cx = 120, cy = y + W_TOP + 34;
-    window(x, y, w, h, "HOLD: INIT", 0);
+    const int cx = 120, cy = 136;
+    panel(68, 84, 104, 100, "HOLD: INIT", 1);
     static const int8_t RX[12] = {0, 14, 24, 28, 24, 14, 0, -14, -24, -28, -24, -14};
     static const int8_t RY[12] = {-28, -24, -14, 0, 14, 24, 28, 24, 14, 0, -14, -24};
     int n = (int)(a > 1000 ? 12 : a * 12 / 1000);
@@ -4172,17 +4120,38 @@ static void ring_draw(void)
     }
 }
 
+/* a question: its title what it asks, the line what of, OCT- NO and OCT+ YES at its foot */
 static void ask_draw(void)
 {
     if (!ask.kind) return;
     if (ui.now - (ask.t & ~1u) > 8000) { ask.kind = ASK_NONE; return; }
-    const int x = 20, y = STAGE_Y + 24, w = 200;
-    char t[16];
+    const int x = 24, y = 96, w = 192;
+    char t[24];
     s_cpy(s_cpy(t, ask.a), " ?");
-    int r = window(x, y, w, W_H(2), t, 0);
-    text_fit(x + W_IN, r + TY, ask.b, 0, w - 2 * W_IN, 1);
+    int b = panel(x, y, w, 68, t, 1);
+    text_fit(x + P_IN, b + 8 - F_S.base, ask.b, 0, w - 2 * P_IN, 1);
     static const char *const P[4] = {"OCT-", "NO", "OCT+", "YES"};
-    pairs(x + W_IN, r + W_ROW, w - 2 * W_IN, P, 2, 2);
+    hints(x + P_IN + 3, b + 28, x + w - P_IN, P, 2);
+}
+
+/* the catalogue: the library's rows over the page (the knobs SLOT and CAT), the sound shown's machine, note and
+ * category, and at the foot OCT+ LOAD, OCT- BACK, ALGO another track (while EDIT is still held, its own combos) */
+static void cat_draw(void)
+{
+    if (!cat.open) return;
+    char t[16] = {'T', (char)('1' + cat.trk), ' ', 0};
+    s_cpy(t + 3, "SOUNDS");
+    panel(P_X, P_TOP, P_W, P_H, t, 1);
+    snd_rows(P_X + P_IN, SX1 - P_IN - 8, P_B0, 7);
+    static const char *const H[6] = {"OCT+", "LOAD", "OCT-", "BACK", "ALGO", "TRACK"};
+    static const char *const E[8] = {"SEQ", "INIT", "REC", "COPY", "PLAY", "PASTE", "SAVE", "KEEP"};
+    if (ui.btn[B_EDIT]) {                              /* (EDIT still held: its own, on the track's sound) */
+        hints(P_X + P_IN + 3, 180, SX1 - P_IN, E, 2);
+        hints(P_X + P_IN + 3, P_FB, SX1 - P_IN, E + 4, 2);
+        return;
+    }
+    snd_meta(P_X + P_IN, SX1 - P_IN, 176);
+    hints(P_X + P_IN + 3, P_FB, SX1 - P_IN, H, 3);
 }
 
 /* a message takes the header for a moment: inverted, its text, a gradient tail (a long one the line under it too) */
@@ -4282,6 +4251,7 @@ const uint8_t *m2k_frame(uint32_t ms)
     cls();
     if (ui.page == PG_HOME) { header(); home(); }
     else { header(); param_page(); }
+    cat_draw();
     glo_help();
     if (held(B_HOME) || ui.btn[B_EDIT]) hold_help();
     seq_help();

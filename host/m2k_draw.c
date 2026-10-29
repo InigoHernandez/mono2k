@@ -190,6 +190,7 @@ int main(int argc, char **argv)
     ui.latch = B_HOME + 1; row("HOME held (patterns)", frame_cost());
     ui.latch = B_SEQ + 1; row("SEQ held (tools)", frame_cost());
     ui.latch = B_FX + 1; row("PERFORM", frame_cost());
+    ui.latch = 0; cat_open(); row("catalogue (EDIT held)", frame_cost()); cat_back();
     ui.latch = 0;
     store_.set[S_SCREEN] = 127; ui.page = PG_HOME; row("HOME dark", frame_cost());
     store_.set[S_SCREEN] = 0;
