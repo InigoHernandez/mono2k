@@ -732,6 +732,20 @@ static void go(int page)
     start_trans(250);
 }
 
+/* SELECT: the next page or the one before, every section's pages in the panel's order round (HOME, SYN, AMP, FILT, FX,
+ * LFO, ARP, GLO, HOME ...): any page a few detents away (Demake's rows, DUELL's pages) */
+static void page_turn(int d)
+{
+    int pg = ui.page, sub = ui.sub + d;
+    if (sub < 0 || sub >= nsub(pg)) {
+        pg = (pg + PG_COUNT + d) % PG_COUNT;
+        sub = d > 0 ? 0 : nsub(pg) - 1;
+    }
+    ui.page = (uint8_t)pg; ui.sub = (uint8_t)sub;
+    ui.focus_t = 0;
+    start_trans(150);
+}
+
 /* the verbs' nouns and verbs (below), and the undo's copy, for the knobs' own takings-away */
 enum { N_PAT, N_TRK, N_PICK, N_SND, N_STEP };
 enum { V_COPY, V_PASTE, V_CLEAR };
@@ -792,6 +806,79 @@ static void sound_load(m2k_pattern_t *p)
     start_glitch(2);
 }
 
+/* the catalogue (EDIT held alone 400 ms, Hortator's): the library over the page, its knobs SOUND and CAT. Each sound
+ * landed on is put on the track and heard at once, a step's note at the note it was made at (the pattern plays on
+ * under it); OCT+ keeps it, OCT- (EDIT, HOME, a page, SELECT, PRESET) puts the track's own back, byte for byte, as an
+ * empty slot does. The track's own: its machine, kit, its effective values, its keys' note and octave, in its pattern */
+static struct {
+    uint8_t open, trk, pn, machine, heard, note;
+    int8_t oct;
+    uint8_t kit[P_COUNT], eff[P_COUNT];
+} cat;
+
+static void cat_take(void)                       /* the track in view's own sound, kept */
+{
+    const m2k_pattern_t *p = PAT(cur_pat);
+    cat.trk = ui.trk; cat.pn = (uint8_t)cur_pat; cat.machine = p->machine[ui.trk];
+    m_cpy(cat.kit, p->kit[ui.trk], P_COUNT);
+    m_cpy(cat.eff, trk[ui.trk].eff, P_COUNT);
+    cat.note = ui.note[ui.trk]; cat.oct = ui.oct[ui.trk];
+    cat.heard = 0xFF;
+}
+
+static void cat_put_back(void)                   /* the track's own sound back where it was */
+{
+    m2k_pattern_t *p = PAT(cat.pn);
+    p->machine[cat.trk] = cat.machine;
+    m_cpy(p->kit[cat.trk], cat.kit, P_COUNT);
+    m_cpy(trk[cat.trk].eff, cat.eff, P_COUNT);
+    ui.note[cat.trk] = cat.note; ui.oct[cat.trk] = cat.oct;
+    cat.heard = 0xFF;
+    syn_sub_check();
+}
+
+/* slot i on the track and heard now (an empty one: the track's own, silent) */
+static void cat_hear(int i)
+{
+    const m2k_sound_t *sd = &snd[i];
+    if (!sd->name[0]) { if (cat.heard != 0xFF) cat_put_back(); cat.heard = (uint8_t)i; return; }
+    m2k_pattern_t *p = PAT(cur_pat);
+    const int t = cat.trk;
+    p->machine[t] = sd->machine;
+    m_cpy(p->kit[t], sd->kit, P_COUNT);
+    for (int l = 0; l < 3; l++) p->kit[t][P_LFO + 8 * l + L_TRCK] = enc(t, M2K_TRACKS);   /* (as LOAD sets them) */
+    m_cpy(trk[t].eff, p->kit[t], P_COUNT);
+    track_home(t, snd_root[i]);
+    voice_trig(t, snd_root[i], 100, 0, 0);       /* (a step's trig: its gate a step's) */
+    trk[t].gate_left = gate_blocks(t);
+    cat.heard = (uint8_t)i;
+    syn_sub_check();
+}
+
+static void cat_open(void)
+{
+    cat_take();
+    cat.open = 1;
+    ui.focus_t = 0;
+}
+
+static void cat_back(void)
+{
+    if (!cat.open) return;
+    cat_put_back();
+    cat.open = 0;
+    ui.focus_t = 0;
+}
+
+static void cat_keep(void)                      /* OCT+: the sound shown, the track's (an empty slot: its machine's INIT) */
+{
+    cat_put_back();                              /* (the undo keeps the track's own) */
+    undo_mark(N_SND, V_PASTE);
+    sound_load(PAT(cur_pat));
+    cat.open = 0;
+    ui.focus_t = 0;
+}
+
 /* the value a knob shows: a held step's lock, or the kit */
 /* the knob k turns: the page's, or while SEQ is held the sequencer's (the pattern's LEN, the track in view's own length
  * and speed, SWING; the tempo stays on HOME's and GLO > TIME's) */
@@ -802,6 +889,7 @@ static int mom_layer(void) { return ui.btn[B_LFO] && !held(B_GLO) && !held(B_HOM
 static int knob_at(int k)
 {
     const uint8_t SEQ_K[4] = {GL(G_LEN), (uint8_t)GL(G_TLEN1 + ui.trk), (uint8_t)GL(G_SPD1 + ui.trk), GL(G_SWNG)};
+    if (cat.open) return k == 0 ? SETTING(18) : k == 1 ? SETTING(21) : NONE;   /* the catalogue: SLOT, CAT */
     return seq_layer() ? SEQ_K[k] : perf_layer() ? BUS_K[k] : knob_param(ui.page, ui.sub, k);   /* (PERFORM: the bus's) */
 }
 
@@ -910,11 +998,13 @@ static void edit(int k, int d)
         at = CLAMP(at + (d > 0 ? 1 : -1), 0, n - 1);
         ui.snd_sel = (uint8_t)snd_nth(at);
         ui.snd_t = 0;
+        if (cat.open && ui.snd_sel != cat.heard) cat_hear(ui.snd_sel);   /* (the catalogue: heard as it is landed on) */
     } else if (code == SETTING(21)) {                             /* CAT: the category shown; the slot follows into it */
         ui.snd_cat = (uint8_t)CLAMP(ui.snd_cat + (d > 0 ? 1 : -1), 0, CAT_COUNT - 1);
         int n = 0, at = snd_list(ui.snd_sel, &n);
         if (!snd_shown(ui.snd_sel)) ui.snd_sel = (uint8_t)snd_nth(at < n ? at : 0);
         ui.snd_t = 0;
+        if (cat.open && ui.snd_sel != cat.heard) cat_hear(ui.snd_sel);
     } else if (code == SETTING(22)) {                             /* WIPE: every pattern INIT, asked */
         ask_open(ASK_WIPE, "WIPE", "EVERY PATTERN INIT");
     } else if (code == SETTING(23)) {                             /* DEMO: bank A's demos back, asked */
@@ -1430,7 +1520,7 @@ static void undo_mark(int noun, int verb)
     undo.trk = ui.trk; undo.step = (uint8_t)held_first();
     undo.t = ui.now | 1u;
 }
-static void undo_forget(void) { undo.ok = 0; }     /* another project, or the store loaded: nothing of it to undo */
+static void undo_forget(void) { undo.ok = 0; cat.open = 0; }   /* another project or store: nothing to undo, nor to put back */
 
 static void tool_undo(int i) { undo_mark(N_TRK, 10 + i); }
 static int first_pick(void) { for (int i = 0; i < M2K_PATTERNS; i++) if (ui.pick[i >> 3] >> (i & 7) & 1) return i; return cur_pat; }
@@ -1785,6 +1875,7 @@ static void ask_answer(int yes)
 static void ui_forget(void)
 {
     undo.ok = 0;
+    cat.open = 0;
     ask.kind = ASK_NONE;
     ring.t0 = 0;
     mom.n = 0; mom.keep = 0;
@@ -1888,6 +1979,18 @@ static void button_event(int b, int down)
         ui.btn[b] = 0;
         if (b == B_OCTU || b == B_OCTD) return;
         ui.btn[b] = 1;
+    }
+    /* the catalogue open: OCT+ keeps the sound shown, OCT- or EDIT puts the track's own back; anything else puts it back
+     * and does its own (PLAY plays on: the sound is heard in the pattern) */
+    if (cat.open && down) {
+        if (b == B_OCTU || b == B_OCTD || (b == B_EDIT && !ui.btn[B_GLO])) {
+            if (b == B_OCTU) cat_keep(); else cat_back();
+            ui.btn[b] = 0; ui.card = 0;
+            if (b == B_OCTD) ui.octd = 0;
+            if (b == B_EDIT) ui.edit_t0 = 0;
+            return;
+        }
+        if (b != B_PLAY || ui.btn[B_EDIT]) cat_back();   /* (EDIT + PLAY pastes: onto the track's own) */
     }
     if (down && latch_frees(b)) latch_off();
     /* GLO held (FUNC): the verbs on the pattern (the track's steps in GRID); OCT- UNDO, OCT+ REDO; SAVE reload; EDIT
@@ -2201,7 +2304,8 @@ void m2k_encoder(int e, int d)
             toast("TEMPO", o);
             break;
         }
-        track_to((ui.trk + M2K_TRACKS + (d > 0 ? 1 : -1)) % M2K_TRACKS);
+        if (cat.open) cat_back();                      /* (the catalogue left: the track's own sound back) */
+        page_turn(d > 0 ? 1 : -1);
         break;
     case E_ALGO:
         if (seq_layer()) {                             /* SEQ held: the accent's amount */
@@ -2221,10 +2325,12 @@ void m2k_encoder(int e, int d)
             ui.held_edit = 1;
             break;
         }
-        if (ui.page != PG_SYN) {                       /* ALGORITHM turns the page's pages (LFO 1A..3B, FX, GLO...), */
-            int n = nsub(ui.page);                     /* to its ends; only EDIT's (SYN) changes the machine (the owner's) */
-            int s = CLAMP(ui.sub + (d > 0 ? 1 : -1), 0, n - 1);
-            if (s != ui.sub) { ui.sub = (uint8_t)s; ui.focus_t = 0; start_trans(150); }
+        /* ALGORITHM: the track (SELECT turns the pages); on EDIT's (SYN) the machine, its name (the owner's); in the
+         * catalogue the track too, the one left given its own sound back and the sound shown heard on the next */
+        if (ui.page != PG_SYN || cat.open) {
+            int t = (ui.trk + M2K_TRACKS + (d > 0 ? 1 : -1)) % M2K_TRACKS;
+            if (cat.open) { cat_put_back(); track_to(t); cat_take(); cat_hear(ui.snd_sel); }
+            else track_to(t);
             break;
         }
         set_machine(M_ORDER[(m_place(p->machine[ui.trk]) + M_COUNT + (d > 0 ? 1 : -1)) % M_COUNT]);
@@ -2237,6 +2343,7 @@ void m2k_encoder(int e, int d)
             entry_show(d > 0 ? "NEXT" : "BACK");
             break;
         }
+        if (cat.open) cat_back();
         select_pattern(((sq.playing ? sq.queued : cur_pat) + M2K_PATTERNS + (d > 0 ? 1 : -1)) % M2K_PATTERNS);
         break;
     }
@@ -3959,12 +4066,6 @@ static void hold_help(void)
         else pairs(x + W_IN, r, w - 2 * W_IN, P, 3, 2);
         return;
     }
-    if (ui.btn[B_EDIT] && !ui.hold_used) {
-        static const char *const L[8] = {"SEQ", "INIT THE SOUND", "SAVE", "INTO THE LIBRARY", "REC", "COPY THE SOUND",
-                                         "PLAY", "PASTE IT"};
-        int r = window(x, y, w, W_H(4), "EDIT HELD", 0);
-        pairs(x + W_IN, r, w - 2 * W_IN, L, 4, 1);
-    }
 }
 
 /* SEQ held a moment: its tools on the white keys (the knobs above show LEN, the track's TLEN and SPD, SWNG meanwhile) */
@@ -4155,6 +4256,11 @@ const uint8_t *m2k_frame(uint32_t ms)
     syn_sub_check();                    /* (a queued pattern opened: the track's machine may be another) */
     if (sq.playing && ui.follow && !ui.nheld) ui.spage = (uint8_t)(track_pos(ui.trk) / 16);   /* (its own step, off 1x) */
     if (ui.rec_t0 && ui.btn[B_REC] && !ui.rec_used && ms - ui.rec_t0 >= 300) sq.fill = 1;
+    /* EDIT held alone 400 ms: the catalogue (it stays when EDIT is let go); a pattern coming in closes it first, the
+     * track's own sound back in the pattern it was taken from */
+    if (ui.edit_t0 && ui.btn[B_EDIT] && !ui.hold_used && !cat.open && ms - (ui.edit_t0 & ~1u) >= 400 && !held(B_GLO) &&
+        !held(B_HOME) && !ui.btn[B_SEQ]) { cat_open(); ui.hold_used = 1; }
+    if (cat.open && (cur_pat != cat.pn || (sq.playing && sq.queued != cur_pat))) cat_back();
     if (ui.pkey && !ui.pfired && ms - ui.pkey_t0 >= 600 && ui.grid && ui.keys[ui.pkey_k]) { ui.pfired = 1; page_length(ui.pkey - 1); }
     if (ui.save_t0 && ui.btn[B_SAVE] && !ui.save_fired && ms - ui.save_t0 >= 700) {
         int slot = ui.page == PG_GLO && ui.sub == GS_SET ? ui.proj_sel : cur_proj;
