@@ -18,6 +18,10 @@
 #define BANK_LEN 0x00020000u
 #define CV_MAX (240u * 18u)                     /* the platform's text: a line of FONT_S at a time (crash, update, rescue) */
 #define APP_SYSEX app_sysex                     /* the Patch Editor's link (below) */
+/* the panel's SPI at 60 MHz, about 44 in effect (fm1-amb's, measured on the FM-1; the ST7789 takes ~62): a whole
+ * screen in ~21 ms, where CS-1's and Felucca's 12 MHz took 77 and a busy frame's strips trailed. The app's alone:
+ * the update loader is built without this file and keeps its own */
+#define LCD_BAUD 0u
 #include "platform.c"
 #include "m2k.h"                                 /* the core: its own unit (core.o), its API alone */
 
@@ -48,7 +52,7 @@ static void app_audio(int32_t *out, uint32_t n)
  * watchdog (the sound would stutter, the FM-1 would not reset) */
 static uint32_t load_ticks, load_frames;        /* render time against the frames rendered, the meter's */
 static uint32_t busy_ticks, busy_t0;            /* and the same over each quarter second, for the screen's pace */
-static uint32_t frame_gap = 33u;                /* ms between frames: 33 (30 a second), further while the render is busy */
+static uint32_t frame_gap = 33u;                /* ms between frames: 25 to 66, by how busy the render is */
 
 static void render_ahead(void)
 {
@@ -64,9 +68,9 @@ static void render_ahead(void)
         ring_w++;
     }
     uint32_t span = fm1_ticks() - busy_t0;
-    if (span >= 250u * 1000u * FM1_TICKS_PER_US) {       /* the render's share: under 70 % 30 frames a second, to 85 % 20, */
-        uint32_t pct = busy_ticks / (span / 100u);         /* over it 15 */
-        frame_gap = pct < 70u ? 33u : pct < 85u ? 50u : 66u;
+    if (span >= 250u * 1000u * FM1_TICKS_PER_US) {       /* the render's share: under 50 % 40 frames a second, to 70 % 30, */
+        uint32_t pct = busy_ticks / (span / 100u);         /* to 85 % 20, over it 15 */
+        frame_gap = pct < 50u ? 25u : pct < 70u ? 33u : pct < 85u ? 50u : 66u;
         busy_ticks = 0;
         busy_t0 += span;
     }
@@ -182,6 +186,7 @@ static const uint16_t *diag_glyph(char c)
 static uint8_t shown[M2K_FB_BYTES];             /* what the panel shows */
 static uint16_t strip[2][240u * ROWS];          /* two: one fills while the other goes out */
 static uint8_t todo[NSTRIP], pending, sbuf;
+static uint8_t sx0[NSTRIP], sx1[NSTRIP];        /* a strip's changed bytes across, first and last of its 30 */
 static const uint8_t *frame;
 
 static uint16_t be16(uint16_t c) { return (uint16_t)((c >> 8) | (c << 8)); }
@@ -194,11 +199,15 @@ static void screen_frame(void)
     frame_ms = fm1_ms;
     frame = m2k_frame(fm1_ms);
     frame_ticks += fm1_ticks() - t0;
-    for (s = 0; s < NSTRIP; s++) {
+    for (s = 0; s < NSTRIP; s++) {             /* each strip's span of changed columns: only it goes out */
         const uint8_t *a = frame + s * ROWS * 30u, *b = shown + s * ROWS * 30u;
-        for (i = 0; i < ROWS * 30u && a[i] == b[i]; i++)
-            ;
-        todo[s] = i < ROWS * 30u;
+        uint32_t lo = 30u, hi = 0u, y;
+        for (i = 0; i < 30u; i++)
+            for (y = 0; y < ROWS; y++)
+                if (a[y * 30u + i] != b[y * 30u + i]) { if (lo == 30u) lo = i; hi = i; break; }
+        todo[s] = lo < 30u;
+        sx0[s] = (uint8_t)lo;
+        sx1[s] = (uint8_t)hi;
         pending += todo[s];
     }
 }
@@ -226,12 +235,17 @@ static void screen_send(void)                   /* one strip, if the last has go
     lcd_sync();
     uint16_t *px = strip[sbuf];
     const uint8_t *src = frame + s * ROWS * 30u;
-    for (i = 0; i < ROWS * 30u; i++) {
-        const uint16_t *a = nib[src[i] >> 4], *b = nib[src[i] & 15u];
-        uint16_t *o = px + i * 8u;
-        o[0] = a[0]; o[1] = a[1]; o[2] = a[2]; o[3] = a[3];
-        o[4] = b[0]; o[5] = b[1]; o[6] = b[2]; o[7] = b[3];
-    }
+    uint32_t c0 = sx0[s], c1 = sx1[s];
+    if (M2K_FM1_DIAG && s < 2u) { c0 = 0; c1 = 29u; }   /* (the meter's strips whole) */
+    uint32_t n = c1 - c0 + 1u;
+    for (y = 0; y < ROWS; y++)
+        for (i = 0; i < n; i++) {
+            uint8_t v = src[y * 30u + c0 + i];
+            const uint16_t *a = nib[v >> 4], *b = nib[v & 15u];
+            uint16_t *o = px + (y * n + i) * 8u;
+            o[0] = a[0]; o[1] = a[1]; o[2] = a[2]; o[3] = a[3];
+            o[4] = b[0]; o[5] = b[1]; o[6] = b[2]; o[7] = b[3];
+        }
     memcpy(shown + s * ROWS * 30u, src, ROWS * 30u);
     if (M2K_FM1_DIAG && s < 2u) {               /* the meter over the first two strips (resent each frame) */
         uint16_t red = be16(RGB(255, 0, 0));
@@ -248,7 +262,7 @@ static void screen_send(void)                   /* one strip, if the last has go
             for (y = 0; y < ROWS; y++) for (x = 232; x < 240u; x++) px[y * 240u + x] = red;
         shown[s * ROWS * 30u] ^= 0x01u;         /* so the next frame sends this strip again */
     }
-    lcd_blit(0, s * ROWS, 240, ROWS, px);
+    lcd_blit(c0 * 8u, s * ROWS, n * 8u, ROWS, px);
     sbuf ^= 1u;
     todo[s] = 0;
     pending--;
@@ -286,7 +300,7 @@ static void app_loop(void)
     midi_drain();
     render_ahead();
     midi_drain();
-    /* a frame once the last has gone out, 30 a second at most (as the browser draws them); the sound first: while
+    /* a frame once the last has gone out, 40 a second at most; the sound first: while
      * the ring is under half full the frame waits for the render to catch up (a frame is drawn whole, the sound not
      * rendered meanwhile), and while the render is busy (frame_gap) they come further apart; never more than 150 ms */
     uint32_t since = fm1_ms - frame_ms;
