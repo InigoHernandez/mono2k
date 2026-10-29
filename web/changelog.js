@@ -7,6 +7,14 @@ window.M2K_KINDS = {
 };
 window.M2K_CHANGES = [
   {
+    date: "2026-10-29", title: "MONO2K 1.4.1: a cleaner stage, FILT's one curve",
+    items: [
+      ["screen", "1.4.1: A line now divides the stage's two halves, the value on the left and the picture on the right."],
+      ["screen", "1.4.1: FILT draws one curve, not two: the band your knobs set, moving with the envelope while the track plays."],
+      ["screen", "1.4.1: FILT's second page on even gaps: the curve with the envelope's reach dotted, BO and WO under it, then the envelope with a dot riding it as it plays."],
+    ],
+  },
+  {
     date: "2026-10-28", title: "MONO2K 1.2 to 1.4: a new screen, the arp's HOLD, Grids, mutes on the bar, PERFORM's second bank",
     items: [
       ["workflow", "1.4: PERFORM has two banks: hold FX, OCT+ for bank B, OCT\u2212 for bank A. A held effect keeps going when you switch."],

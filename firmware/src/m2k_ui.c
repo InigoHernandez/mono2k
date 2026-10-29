@@ -2242,7 +2242,7 @@ void m2k_encoder(int e, int d)
  * rows of capitals; F_M and F_L the stage's big type; F_B, the first redesign's 11 px, the bars). The header an ink
  * bar (rows 0-15: the pattern, the modes, REC, the tempo, the transport); the knobs 16-60 (four cells of 60 under the
  * FM-1's four knobs, solid rules at x 60, 120, 180, each its label, its value and a bar, 5 px in; a solid rule
- * on 60); the stage 61-201 (the value's column [4, 101), the picture [108, 237)); the steps 202-223 (a dotted rule, 16
+ * on 60); the stage 61-201 (the value's column [4, 101), a solid rule on 104, the picture [108, 237)); the steps 202-223 (a dotted rule, 16
  * boxes, a beat to a knob's cell); the footer an ink bar (224-239: the bars, the breadcrumb, the page). A cell's
  * content begins 4 px past its left edge and ends 3 clear before its right one (a knob's 5 and 4): the audit fails a
  * text that leaves its cell or comes near a rule */
@@ -3091,31 +3091,30 @@ static void picture(void)
         int db = k[P_BOF] - 64, dw = k[P_WOF] - 64, ob = 7 * db * (db < 0 ? -db : db), ow = 7 * dw * (dw < 0 ? -dw : dw);
         int hp0 = filt_q3(ui.trk, k[P_BASE] << 8), lp0 = filt_q3(ui.trk, (k[P_BASE] + k[P_WDTH]) << 8);
         int hq = k[P_HPQ], lq = k[P_LPQ];
+        /* one curve, never two: the band the knobs set, and while the track sounds where its envelope (and LFOs)
+         * have it now, so it moves as it plays */
+        int live = t->sounding && (mon.cut_hp[ui.trk] != hp0 || mon.cut_lp[ui.trk] != lp0);
+        int hp = live ? mon.cut_hp[ui.trk] : hp0, lp = live ? mon.cut_lp[ui.trk] : lp0, yh, yl;
         if (ui.sub == 1) {
-            /* the filter envelope: the band the knobs set, hatched, as page 1 draws it; where the envelope takes it,
-             * dashed; the envelope's attack and decay under it */
+            /* the filter envelope, two blocks on equal gaps: the curve (while B-OF or W-OF turns, where the envelope
+             * takes it), the envelope's reach a dotted line at each cutoff, BO and WO under them; then the envelope,
+             * a straight attack up and a straight decay down (as the chain's), where it is now marked, ATK and DEC
+             * under their segments */
             int hp1 = filt_q3(ui.trk, (k[P_BASE] << 8) + ob);
             int lp1 = filt_q3(ui.trk, ((k[P_BASE] + k[P_WDTH]) << 8) + ob + ow);
-            int top = Y0 + 10, yb2 = Y0 + 64, yh, yl, prev = yb2;
-            filt_curve(X, FW, top, yb2, hp0, lp0, hq, lq, fk >= 2 ? PT_VLINES : PT_HATCH, fk >= 2, &yh, &yl);
-            for (int i = 0; i < FW; i++) {
-                int y = filt_row(filt_db(i * FQ_MAX / (FW - 1), hp1, lp1, hq, lq), top, yb2);
-                if (i && ((i >> 1) & 1)) line(X + i - 1, prev, X + i, y, 2);   /* the envelope's reach, dashed */
-                prev = y;
-            }
-            /* how far the envelope takes the base: an arrow over the band */
-            int xh0 = X + hp0 * (FW - 1) / FQ_MAX, xh1 = X + hp1 * (FW - 1) / FQ_MAX, ay = top - 5;
-            if (xh1 != xh0) {
-                hline(xh0 < xh1 ? xh0 : xh1, ay, (xh1 > xh0 ? xh1 - xh0 : xh0 - xh1) + 1, 1);
-                if (fk == 2) hline(xh0 < xh1 ? xh0 : xh1, ay + 1, (xh1 > xh0 ? xh1 - xh0 : xh0 - xh1) + 1, 1);
-                vline(xh0, ay - 2, 5, 1);
-                int dir = xh1 > xh0 ? -1 : 1;
-                for (int j = 1; j <= 3; j++) vline(xh1 + dir * j, ay - j, 2 * j + 1, 1);
-            }
-            tag(X, yb2 + 8, "BO", fk == 2);
-            tag(X, yb2 + 24, "WO", fk == 3);
-            /* the envelope: a straight attack up, a straight decay down (as the chain's) */
-            int ex = X + 30, ew = FW - 30, eb = Y0 + 112, et = yb2 + 10;
+            if (fk == 2 || fk == 3) { hp = hp1; lp = lp1; }
+            const int top = Y0 + 2, yb = Y0 + 48, ty = yb + 8;   /* the curve 66..112, its names 120..130 */
+            filt_curve(X, FW, top, yb, hp, lp, hq, lq, fk >= 2 ? PT_VLINES : PT_HATCH, fk >= 2, &yh, &yl);
+            int xh1 = X + hp1 * (FW - 1) / FQ_MAX, xl1 = X + lp1 * (FW - 1) / FQ_MAX;
+            dots_v(xh1, top, yb - top + 1);
+            dots_v(xl1, top, yb - top + 1);
+            handle(X + hp * (FW - 1) / FQ_MAX, yh, fk == 2);
+            handle(X + lp * (FW - 1) / FQ_MAX, yl, fk == 3);
+            int wB = tag_w("BO"), wW = tag_w("WO");
+            int tb = CLAMP(xh1 - wB / 2, X, X + W - wB - wW - 3), tw = CLAMP(xl1 - wW / 2, tb + wB + 3, X + W - wW);
+            tag(tb, ty, "BO", fk == 2);
+            tag(tw, ty, "WO", fk == 3);
+            const int ex = X, ew = FW, et = ty + 21, eb = L_B0 - TY - 6;   /* the envelope 141..181, its line 182 */
             int a = 2 + k[P_FATK] * (ew / 3 - 2) / 127, d = 3 + k[P_FDEC] * (ew - a - 4) / 127, pe = eb;
             for (int x = 0; x <= a + d; x++) {
                 int y = x <= a ? eb - (eb - et) * x / (a ? a : 1) : eb - (eb - et) * (a + d - x) / (d ? d : 1);
@@ -3125,23 +3124,22 @@ static void picture(void)
                 pe = y;
             }
             hline(ex, eb + 1, ew, 1);
-            tag(ex, L_B0 - TY, "ATK", fk == 0);
-            tag(ex + tag_w("ATK") + 4, L_B0 - TY, "DEC", fk == 1);
+            uint32_t fe = t->fenv >> 22;                /* (Q8 of full) */
+            if (t->sounding && (t->fstage == 1 || fe)) {
+                int x = ex + (t->fstage == 1 ? (int)(a * fe >> 8) : a + (int)(d * (256 - fe) >> 8));
+                vline(x, et - 4, eb - et + 4, 2);
+                disc(x, eb - (int)((eb - et) * fe >> 8), 3, 1);
+            }
+            int wA = tag_w("ATK"), wD = tag_w("DEC");
+            int ta = CLAMP(ex + a / 2 - wA / 2, X, X + W - wA - wD - 3), td = CLAMP(ex + a + d / 2 - wD / 2, ta + wA + 3, X + W - wD);
+            tag(ta, L_B0 - TY, "ATK", fk == 0);
+            tag(td, L_B0 - TY, "DEC", fk == 1);
             break;
         }
         /* the band: the chain's response, its resonances as they peak; handles on each cutoff, the width a bracket
-         * under the line; what is being turned is heavy. While the track sounds, its envelope moves it */
-        int hp = hp0, lp = lp0, yh, yl;
+         * under the line; what is being turned is heavy */
         int top = Y0 + 10, yb = Y0 + 100;
         filt_curve(X, FW, top, yb, hp, lp, hq, lq, fk >= 0 ? PT_VLINES : PT_HATCH, fk >= 0, &yh, &yl);
-        if (t->sounding && (mon.cut_hp[ui.trk] != hp || mon.cut_lp[ui.trk] != lp)) {   /* (the knobs' band stays as */
-            int prev = yb;                                                               /* their values say) */
-            for (int i = 0; i < FW; i++) {
-                int y = filt_row(filt_db(i * FQ_MAX / (FW - 1), mon.cut_hp[ui.trk], mon.cut_lp[ui.trk], hq, lq), top, yb);
-                if (i && ((i >> 1) & 1)) line(X + i - 1, prev, X + i, y, 2);   /* where the envelope has it now */
-                prev = y;
-            }
-        }
         int xh = X + hp * (FW - 1) / FQ_MAX, xl = X + lp * (FW - 1) / FQ_MAX;
         dots_v(xh, top - 6, yb - top + 6);
         dots_v(xl, top - 6, yb - top + 6);
@@ -3470,6 +3468,7 @@ static void home(void)
     int fcode = knob_at(ui.focus), fresh = ui.focus_t && ui.now - ui.focus_t < 1800 && fcode != NONE;   /* (a layer let go) */
     if (ui.grid && ui.nheld && !fresh) {         /* a held step: its card and the track's picture, as on a page */
         value_cell();
+        rule_v(GX, STAGE_Y, STEPS_R - STAGE_Y, 0);
         step_card();
         picture();
     } else {
@@ -3516,6 +3515,7 @@ static void param_page(void)
     /* the knob turned last, while its value shows; one a layer gave (PERFORM's, SEQ's) and the page has not is none */
     int fcode = knob_at(ui.focus), fresh = ui.focus_t && ui.now - ui.focus_t < 2500 && fcode != NONE;
     value_cell();
+    rule_v(GX, STAGE_Y, STEPS_R - STAGE_Y, 0);          /* the stage's two cells apart, from the knobs' rule to the steps' */
     if (ui.grid && ui.nheld && !fresh) step_card();
     else if (ui.page == PG_SYN && (!fresh || (ui.card_t && ui.now - ui.card_t < 1500))) machine_card();
     else if (fresh) focus_left(fcode, ui.focus);

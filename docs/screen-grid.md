@@ -30,7 +30,7 @@ values short forms.
 ```
 y 0-15    header  ink bar: [A01] CIRCUIT            (GRID) [HOLD] o 126 >
 y 16-60   knobs   four cells of 60, solid rules at x 60 120 180; label / value / bar, 5 px in; solid rule 60
-y 61-201  stage   value column [4, 101)  |  picture [108, 237) x [64, 198)
+y 61-201  stage   value column [4, 101)  | solid rule x 104 |  picture [108, 237) x [64, 198)
 y 202-223 steps   dotted rule 202; 16 boxes 11 x 11 at rows 205-215; a beat mark under each group's first, 219-220
 y 224-239 footer  ink bar: [bars] T2 > DRM-SNAR > AMP                 1/2
 ```
@@ -49,9 +49,11 @@ y 224-239 footer  ink bar: [bars] T2 > DRM-SNAR > AMP                 1/2
   easing to it, from the middle for a two-sided value (a tick there, rows 50-54); for a few choices (8 or fewer) a
   segment each, the chosen solid, the others a line; nothing for an action. Turning, the solid part's end (or the
   chosen segment) stands up 3 rows for 0.2 s. Solid rule on row 60.
-- **Stage** (rows 61-201): the value's column `[4, 101)` and the picture `[108, 237)` x rows 64-197 (129 x 134); no
-  rule between them. Lines: a tag or label on y 64 (a tag's box rows 63-73), the big name or value from y 80 (F_L,
-  rows 80-97), then lines of the small type 8 under it, 13 to 15 apart; a picture's names on y 188.
+- **Stage** (rows 61-201): the value's column `[4, 101)` and the picture `[108, 237)` x rows 64-197 (129 x 134); a
+  solid rule on x 104 between them, rows 61-201 (the knobs' rule to the steps'; the owner's, 1.4.1). Lines: a tag or label on y 64 (a tag's box rows 63-73), the big name or value from y 80 (F_L,
+  rows 80-97), then lines of the small type 8 under it, 13 to 15 apart; a picture's names on y 188. FILT draws one curve, never two:
+  the knobs' band, and while the track sounds where its envelope has it (page 2: while B-OF or W-OF turns, where the
+  envelope takes it, its reach dotted; the envelope under it, where it is now a disc).
 - **Steps** (rows 202-223): a dotted rule on 202; 16 boxes 11 x 11 at rows 205-215, a beat's four in each knob cell at
   `60k + 4 + 14i`; a 3 x 2 mark under each beat's first (rows 219-220). HOME shows its four bars there instead.
 - **Footer** (rows 224-239, ink; F_B paper, capitals rows 228-235): the pattern's four bars at x 4 (9 x 8 boxes 11
