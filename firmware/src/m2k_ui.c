@@ -20,7 +20,7 @@ enum {
     K_LSPD, K_LDPT,                                                        /* the LFOs' speed and depth */
     K_DCAY, K_DAMP,                                                        /* the reverb's */
     K_PCT, K_GRES, K_LANE,                                                 /* GRIDS' */
-    K_MUTQ                                                                 /* GLO > PLAY's */
+    K_MUTQ, K_MOTN                                                         /* GLO > PLAY's, the screen's motion */
 };
 typedef struct { const char *s4, *name; uint8_t kind; } pi_t;
 
@@ -57,7 +57,7 @@ static const pi_t PI_GLOB[G_COUNT] = {
     {"LANE", "T5 LANE", K_LANE}, {"LANE", "T6 LANE", K_LANE},
 };
 
-static const pi_t PI_SET[16] = {
+static const pi_t PI_SET[17] = {
     {"SCRN", "SCREEN", K_SCRN},
     {"PROJ", "PROJECT", K_PROJ},
     {"LOAD", "LOAD PROJECT", K_LOAD},
@@ -74,6 +74,7 @@ static const pi_t PI_SET[16] = {
     {"NOTE", "NOTES IN", K_NTIN},      /* GLO > IN */
     {"THRU", "MIDI THRU", K_THRU},
     {"MUTE", "MUTES", K_MUTQ},         /* GLO > PLAY */
+    {"MOTN", "MOTION", K_MOTN},        /* GLO > SET on the FM-1, PLAY with projects */
 };
 
 typedef struct {
@@ -187,7 +188,7 @@ static const pi_t *pinfo(int t, int id)
 {
     if (id == 0xFF) return &PI_NONE;
     if (id >= 0xC0) { int s = id & 0x3F; return &PI_SET[s == 16 ? 1 : s == 17 ? 2 : s >= 18 && s <= 23 ? 7 + s - 18 : s >= S_MCH && s <= S_NOTO ? 3 + s - S_MCH
-                                            : s == S_NTIN ? 13 : s == S_THRU ? 14 : s == S_MUTQ ? 15 : 0]; }
+                                            : s == S_NTIN ? 13 : s == S_THRU ? 14 : s == S_MUTQ ? 15 : s == S_MOTN ? 16 : 0]; }
     if (id >= 0x80) return &PI_GLOB[id & 0x7F];
     if (id < 8) return &MI[PAT(cur_pat)->machine[t]].syn[id];
     if (id < P_LFO) return &PI_COMMON[id - 8];
@@ -210,7 +211,7 @@ static int kind_choices(int k)
     case K_RATIO: case K_WAVE: return 32;
     case K_FR24: return 24;
     case K_SIDW: return 5;
-    case K_ONOFF: case K_MSRC: case K_THRU: case K_GRES: case K_MUTQ: return 2;
+    case K_ONOFF: case K_MSRC: case K_THRU: case K_GRES: case K_MUTQ: case K_MOTN: return 2;
     case K_SIDM: case K_ALGO: case K_ASPD: case K_ARNG: case K_SYIN: case K_NTIN: case K_LANE: return 4;
     case K_SCRN: return 2;
     case K_MCH: return 16;
@@ -482,6 +483,7 @@ static void fmt(const pi_t *pi, int t, int v, char *out, const char **unit)
     case K_LANE: { static const char *const N[4] = {"OFF", "BD", "SD", "HH"}, *const U[4] = {"", "KICK", "SNARE", "HATS"};
                    s_cpy(out, N[c]); *unit = U[c]; break; }
     case K_MUTQ: s_cpy(out, c ? "NOW" : "BAR"); *unit = c ? "AT ONCE" : "NEXT BAR"; break;
+    case K_MOTN: s_cpy(out, c ? "GLTCH" : "CALM"); *unit = c ? "GLITCHES" : "CLEAN CUTS"; break;
     case K_SSEL: { int i = snd_sel_get(); out[0] = 'S'; s_num3(out + 1, i + 1);
                    *unit = snd[i].name[0] ? snd[i].name : "INIT"; break; }
     case K_SLOAD: s_cpy(out, "TURN"); *unit = "TO LOAD"; break;
@@ -518,10 +520,10 @@ static int knob_param(int page, int sub, int k)
     case PG_FX: return sub < 3 ? P_EQF + sub * 4 + k : P_MODT + k;
     case PG_LFO: return P_LFO + (sub >> 1) * 8 + (sub & 1) * 4 + k;
     case PG_ARP: return sub == 0 ? P_AMOD + k : sub == 1 ? GL(G_GRX + k) : k < 3 ? GL(G_GRBD + k) : GL(G_LANE1 + view_trk());
-    case PG_GLO: return sub == 6 ? (k == 0 ? SETTING(S_MUTQ) : NONE)                              /* PLAY */
+    case PG_GLO: return sub == 6 ? (k == 0 ? SETTING(S_MUTQ) : k == 1 && M2K_PROJECTS > 1 ? SETTING(S_MOTN) : NONE)   /* PLAY */
                         : sub == 5 ? (k == 0 ? SETTING(S_NTIN) : k == 1 ? SETTING(S_THRU) : NONE)   /* IN */
                         : sub < 3 ? GL(sub * 4 + k) : sub == 4 ? SETTING(S_MCH + k)      /* PROJ and LOAD only with */
-                        : k == 0 ? SETTING(S_SCREEN) : M2K_PROJECTS < 2 ? (k == 1 ? SETTING(22) : k == 2 ? SETTING(23) : NONE)
+                        : k == 0 ? SETTING(S_SCREEN) : M2K_PROJECTS < 2 ? (k == 1 ? SETTING(22) : k == 2 ? SETTING(23) : SETTING(S_MOTN))
                         : k == 1 ? SETTING(16) : k == 2 ? SETTING(17) : k == 3 ? SETTING(22) : NONE;   /* projects to choose */
     default: return NONE;
     }
@@ -666,7 +668,12 @@ static void ui_init(void)
 
 static void start_glitch(int amt);
 
-static void start_trans_dir(int len, int down)
+/* the screen's motion (SET > MOTN, S_MOTN): CALM, the default, cuts pages and values clean and flashes nothing on an
+ * action (a player found every glitch a moment's refocusing, on a firmware this full of pages); GLITCH is the
+ * first redesign's. The splash and its wipe are the same either way */
+static int calm(void) { return store_.set[S_MOTN] < 64; }
+
+static void start_trans_any(int len, int down)
 {
     ui.trans_down = (uint8_t)down;
     ui.trans_wipe = 0;
@@ -676,9 +683,11 @@ static void start_trans_dir(int len, int down)
     ui.in_trans = 1;
 }
 
+static void start_trans_dir(int len, int down) { if (!calm()) start_trans_any(len, down); }
 static void start_trans(int len) { start_trans_dir(len, 0); }
 static void start_glitch(int amt)
 {
+    if (calm()) return;
     if (ui.glitch_t && ui.now - ui.glitch_t < 120 && amt <= ui.glitch_amt) return;
     ui.glitch_t = ui.now | 1u;
     ui.glitch_amt = (uint8_t)amt;
@@ -2318,7 +2327,7 @@ static int big_value(int x, int y, int w, const char *s, const m2k_font_t *f, ui
     const m2k_font_t *g = fit_font(f, &c, 0, w, &tr);
     if (!g) g = &F_S;                                   /* (cut: the audit says so) */
     text(g, x, y, c, TX_INK, tr);
-    if (roll < 90) {
+    if (roll < 90 && !calm()) {
         row_slip(x, y + g->base / 3, w, 2 * (g->base / 7), roll < 45 ? 4 : 2);
         row_slip(x, y + (2 * g->base) / 3, w, g->base / 7, roll < 45 ? -3 : -1);
     }
@@ -4067,7 +4076,7 @@ const uint8_t *m2k_frame(uint32_t ms)
         m_cpy(fb_out, fb, sizeof fb_out);
         return present();
     }
-    if (!ui.splashed) { ui.splashed = 1; start_trans(WIPE_MS); ui.trans_wipe = 1; }   /* out of the splash */
+    if (!ui.splashed) { ui.splashed = 1; start_trans_any(WIPE_MS, 0); ui.trans_wipe = 1; }   /* out of the splash */
 
     cls();
     if (ui.page == PG_HOME) { header(); home(); }

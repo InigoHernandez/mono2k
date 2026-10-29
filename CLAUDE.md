@@ -64,7 +64,9 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   host's text audit (`M2K_TEXT_AUDIT`: every text's ink box; the cells and rules as drawn, `CELL`, `rule_h` /
   `rule_v`; a paper fill hides what it covers) fails the tour and `m2k_host --text-sweep` (every page, machine and
   knob value) on any two texts that touch, one cut, one past its cell or within 2 px of a rule: run it after any
-  change to the screen, and fit text with `text_fit` / `fit_font` rather than guessing widths. The splash (2.1 s,
+  change to the screen, and fit text with `text_fit` / `fit_font` rather than guessing widths. The screen's motion is calm by default (S_MOTN, SET > MOTN on the FM-1, GLO > PLAY with projects: below 64 no
+  transitions, no glitch on an action, no slip of a changing value; GLTCH brings them back), after a player found the
+  glitches tiring (the owner's pick). The splash (2.1 s,
   then a 0.4 s wipe; a press skips it and is swallowed; `w_skip_splash` for the site's scripted cores):
   `m2k_host DIR --splash`, `tools/splash.py DIR`; a frame's instructions, `host/m2k_draw.c` (built as the FM-1 builds).
 - Checks: `sh tools/check.sh` (~6 min): clang (and GCC, when installed) -Wall -Wextra with no warnings; the core built
@@ -108,11 +110,15 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   runs on one core; count MONO2K's the same way, built as the FM-1 builds it (`cc -O2 -fno-builtin -fno-vectorize
   -fno-slp-vectorize -DM2K_MUL_OUT`, the 64-bit products out of line; `proc_pid_rusage` ri_instructions). The core's
   byte loops (m_set, m_cpy) are word-wise for it.
-  Two cores: the render hands the second tracks [split, 6) of each block through `m2k_par_begin` / `m2k_par_end` (the
-  FM-1's glue fills them with CS-1's audio worker; elsewhere they are unset and the core does it all), the split keeping
-  every FX machine with the track it hears; the self-test renders bank A with the second core's tracks first and last
-  and holds both to the one-core render, sample for sample. `--diag` packages show CPU (the first core's render, the
-  waits included), W (the second's) and F (drawing) in % over the screen's top.
+  Two cores: the render hands the second any set of the tracks (`par_mask`) through `m2k_par_begin` / `m2k_par_end`
+  (the FM-1's glue fills them with CS-1's audio worker; elsewhere they are unset and the core does it all), chosen on
+  the tracks' own costs (the sequencer, LFOs and bus run before and after them, the second core waiting: they weigh
+  nothing), every FX machine kept with the track it hears; the self-test renders bank A with the second core's tracks
+  first and last, and bank A and six FX-chained tracks with every set there (`par_force`), each held to the one-core
+  render sample for sample. The glue paces the screen by the sound (a frame waits while the ring is under half full,
+  frames further apart while the render is busy). `--diag` packages show CPU (the first core's render, the waits
+  included), W (the second's) and F (drawing) in % over the screen's top. The 2026-10-29 owner: "dont make the sound
+  engine worst": CPU savings must keep the sound bit for bit.
 - MIDI (GLO > MIDI, settings S_MCH S_SYNI S_SYNO S_NOTO; GLO > IN, S_NTIN S_THRU): `m2k_midi_out(msg, played)` hands
   out what is due once the sound has reached sample `played` (`m2k_samples`); the FM-1 sends it as the ISR takes the
   ring, the worklet as it renders (the page stamps it with the audio latency). In: `m2k_midi_from(src, ...)`, USB or

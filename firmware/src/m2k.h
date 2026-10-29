@@ -121,8 +121,10 @@ typedef struct {
  * syin_choice: an old OFF stays OFF, an old ON is BOTH), S_SYNO the clock out, S_NOTO the notes out (from 64 on).
  * GLO > IN: S_NTIN where notes and CCs come from (BOTH USB TRS OFF, (v * 4) >> 7: an old store's 0 is BOTH), S_THRU
  * the TRS jack's MIDI out over USB (from 64 on). GLO > PLAY: S_MUTQ when a mute made while playing comes: at the next
- * bar below 64 (the default, an old store's 0), at once from 64 */
-enum { S_SCREEN, S_MCH, S_SYNI, S_SYNO, S_NOTO, S_NTIN, S_THRU, S_MUTQ, S_COUNT = 16 };
+ * bar below 64 (the default, an old store's 0), at once from 64. S_MOTN the screen's motion (GLO > SET on the FM-1,
+ * GLO > PLAY where SET has projects): below 64 CALM (the default, an old store's 0: pages and values cut clean, no
+ * glitch on an action), from 64 GLITCH (the transitions, the glitches and the values' slip) */
+enum { S_SCREEN, S_MCH, S_SYNI, S_SYNO, S_NOTO, S_NTIN, S_THRU, S_MUTQ, S_MOTN, S_COUNT = 16 };
 /* where a message came in (m2k_midi_from): the FM-1's USB or its TRS jack */
 enum { M2K_USB, M2K_TRS };
 

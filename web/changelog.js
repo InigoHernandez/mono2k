@@ -7,8 +7,11 @@ window.M2K_KINDS = {
 };
 window.M2K_CHANGES = [
   {
-    date: "2026-10-29", title: "MONO2K 1.4.1: a cleaner stage, FILT's one curve",
+    date: "2026-10-29", title: "MONO2K 1.4.1 and 1.4.2: a calm screen, a cleaner stage, the two cores shared evenly",
     items: [
+      ["screen", "1.4.2: The screen is calm by default: pages and values change at once, nothing flashes on an action. MOTN GLTCH brings the glitches back (GLO > SET on the FM-1, GLO > PLAY in the browser)."],
+      ["fixes", "1.4.2: On the FM-1 the two processors share the tracks evenly: the heaviest patterns need about a tenth less time. The sound is the same, bit for bit."],
+      ["fixes", "1.4.2: On the FM-1 the screen waits for the sound when the processor is busy, so the sound keeps going."],
       ["screen", "1.4.1: A line now divides the stage's two halves, the value on the left and the picture on the right."],
       ["screen", "1.4.1: FILT draws one curve, not two: the band your knobs set, moving with the envelope while the track plays."],
       ["screen", "1.4.1: FILT's second page on even gaps: the curve with the envelope's reach dotted, BO and WO under it, then the envelope with a dot riding it as it plays."],
