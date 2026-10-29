@@ -342,7 +342,7 @@ def main():
     a = ap.parse_args()
     name = "mono2k.fwsc"
     if a.diag:
-        CORE.extend(["-DM2K_FM1_DIAG=1"])
+        CORE.extend(["-DM2K_FM1_DIAG=1", "-DM2K_PROF"])   # (the bench's parts: the core's profile)
         name = "mono2k-test.fwsc"
     if a.release:
         if not re.fullmatch(r"\d+\.\d+(\.\d+)?", a.release):

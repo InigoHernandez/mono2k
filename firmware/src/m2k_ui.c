@@ -595,6 +595,7 @@ static struct {
     char roll_old[12];
     uint32_t roll_t;
     int32_t ease[4];                   /* Q8 */
+    uint16_t fdt;                      /* ms since the last frame (its motions go by the time) */
     /* animations */
     uint32_t trans_t, glitch_t, card_t, save_t, toast_t;
     uint16_t trans_len;                /* ms; the boot's is longer than a byte */
@@ -2491,7 +2492,8 @@ static void knobs(void)
         if (action(pi->kind)) continue;
         int n = kind_choices(pi->kind), mx = kind_max(pi->kind), mn = kind_min(pi->kind);
         int target = CLAMP(((v - mn) * 256) / (mx - mn ? mx - mn : 1), 0, 256);
-        ui.ease[k] += (target * 256 - ui.ease[k]) / 3;      /* (Q8: the bar eases to the value) */
+        int32_t ef = ui.fdt >= 99 ? 256 : (int32_t)ui.fdt * 256 / 99;   /* a third of the way each 33 ms, whatever */
+        ui.ease[k] += ((target * 256 - ui.ease[k]) * ef) >> 8;            /* the frame rate (Q8: the bar eases to it) */
         knob_bar(cx, K_BAR, KW, n && n <= 8 ? n : 0, choice_of(pi->kind, v), ui.ease[k] >> 8, bipolar(pi->kind),
                  focus && ui.now - ui.focus_t < 200);
     }
@@ -4025,6 +4027,7 @@ void m2k_render_ui_tick(void);
 const uint8_t *m2k_frame(uint32_t ms)
 {
     uint32_t dt = ui.now ? ms - ui.now : 16;
+    ui.fdt = (uint16_t)(dt > 1000u ? 1000u : dt);   /* (the motions by the time gone, not the frames drawn) */
     if (ui.boot_t0 == 0xFFFFFFFFu) ui.boot_t0 = ms;
     ui.now = ms;
     if (sq.full) { sq.full = 0; toast("PATTERNS FULL", "THE NEXT DID NOT OPEN"); }
@@ -4038,7 +4041,8 @@ const uint8_t *m2k_frame(uint32_t ms)
         }
         int32_t pk = mon.peak[t] * 2;
         mon.peak[t] = 0;
-        ui.meter[t] = pk > ui.meter[t] ? CLAMP(pk, 0, 32767) : (ui.meter[t] * 7) >> 3;
+        ui.meter[t] = pk > ui.meter[t] ? CLAMP(pk, 0, 32767)
+                    : ui.meter[t] - ui.meter[t] * (ui.fdt > 132 ? 132 : ui.fdt) / 264;   /* an eighth a 33 ms (2^15 by 132: a word) */
     }
     /* the mark: in time with the music while it plays (a loop a bar), kicked on by each of the track's trigs; slow
      * when stopped */

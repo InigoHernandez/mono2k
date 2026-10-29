@@ -52,7 +52,7 @@ static void app_audio(int32_t *out, uint32_t n)
  * watchdog (the sound would stutter, the FM-1 would not reset) */
 static uint32_t load_ticks, load_frames;        /* render time against the frames rendered, the meter's */
 static uint32_t busy_ticks, busy_t0;            /* and the same over each quarter second, for the screen's pace */
-static uint32_t frame_gap = 33u;                /* ms between frames: 25 to 66, by how busy the render is */
+static uint32_t frame_gap = 33u;                /* ms between frames: 33 (30 a second) to 100, as the first core has room */
 
 static void render_ahead(void)
 {
@@ -68,9 +68,10 @@ static void render_ahead(void)
         ring_w++;
     }
     uint32_t span = fm1_ticks() - busy_t0;
-    if (span >= 250u * 1000u * FM1_TICKS_PER_US) {       /* the render's share: under 50 % 40 frames a second, to 70 % 30, */
-        uint32_t pct = busy_ticks / (span / 100u);         /* to 85 % 20, over it 15 */
-        frame_gap = pct < 50u ? 25u : pct < 70u ? 33u : pct < 85u ? 50u : 66u;
+    if (span >= 250u * 1000u * FM1_TICKS_PER_US) {       /* the first core's share (the sound, the frames, the strips): */
+        uint32_t pct = busy_ticks / (span / 100u);         /* over 85 % the frames come further apart, under 70 % closer */
+        if (pct > 85u) frame_gap = frame_gap + 8u > 100u ? 100u : frame_gap + 8u;
+        else if (pct < 70u) frame_gap = frame_gap < 37u ? 33u : frame_gap - 4u;
         busy_ticks = 0;
         busy_t0 += span;
     }
@@ -199,6 +200,7 @@ static void screen_frame(void)
     frame_ms = fm1_ms;
     frame = m2k_frame(fm1_ms);
     frame_ticks += fm1_ticks() - t0;
+    busy_ticks += fm1_ticks() - t0;
     for (s = 0; s < NSTRIP; s++) {             /* each strip's span of changed columns: only it goes out */
         const uint8_t *a = frame + s * ROWS * 30u, *b = shown + s * ROWS * 30u;
         uint32_t lo = 30u, hi = 0u, y;
@@ -226,7 +228,7 @@ static void screen_init(void)
 
 static void screen_send(void)                   /* one strip, if the last has gone out */
 {
-    uint32_t s, x, y, i;
+    uint32_t s, x, y, i, t0 = fm1_ticks();
     if (!pending || !lcd_idle())
         return;
     for (s = 0; s < NSTRIP && !todo[s]; s++)
@@ -263,6 +265,7 @@ static void screen_send(void)                   /* one strip, if the last has go
         shown[s * ROWS * 30u] ^= 0x01u;         /* so the next frame sends this strip again */
     }
     lcd_blit(c0 * 8u, s * ROWS, n * 8u, ROWS, px);
+    busy_ticks += fm1_ticks() - t0;
     sbuf ^= 1u;
     todo[s] = 0;
     pending--;
@@ -279,12 +282,122 @@ static void lights(void)
 
 #include "m2k_link.c"                          /* the store and the Patch Editor's link */
 
+#if M2K_FM1_DIAG
+/* ---- a test build's bench, at power-on before the store loads: bank A's four played as fast as they render, on one
+ * core and on two, each a share of real time; the first core's parts on one (the core's profile, M2K_PROF); a frame
+ * of each page while A01 plays, in 0.1 ms. On the screen until a key or button, so the owner can photograph it: the
+ * device's own numbers to set the yardstick by (the Mac's instructions say little of this chip's) */
+extern uint32_t m2k_prof[8];
+uint32_t m2k_prof_now(void) { return fm1_ticks(); }
+
+static void bench_wait(void) { fm1_wdt_feed(); platform_poll(); }
+
+static void bench_start(int p)
+{
+    uint32_t ms;
+    m2k_init(1);
+    for (ms = 0; ms <= 3000u; ms += 500u) m2k_frame(ms);     /* (past the splash and its wipe: PLAY not swallowed) */
+    m2k_pattern(p);
+    m2k_button(B_PLAY, 1);
+    m2k_button(B_PLAY, 0);
+}
+
+static uint32_t bench_render(void)          /* 2 s of sound: its time as a share of 2 s, % */
+{
+    static int16_t b[BLK * 2u];
+    uint32_t f, t = 0, t0;
+    for (f = 0; f < 2u * 44100u; f += BLK) {
+        t0 = fm1_ticks();
+        m2k_render(b, (int)BLK);
+        t += fm1_ticks() - t0;
+        if (!(f & 4095u)) bench_wait();
+    }
+    return t / (2u * 1000u * 10u * FM1_TICKS_PER_US);    /* (2 s in ticks / 100) */
+}
+
+static void bench_line(uint32_t y, const char *t) { draw_text_box(4, y, 232, &FONT_S, t, C_WHITE, 0); }
+
+static char *bench_num(char *o, uint32_t v) { diag_num(o, v); while (*o) o++; return o; }
+
+static void bench(void)
+{
+    static const char *const PG[5] = {"HOME", "SYN", "AMP", "FILT", "LFO"};
+    static const int PB[5] = {-1, B_EDIT, B_ENV, B_SEL, B_LFO};
+    uint32_t one[4], two[4], part[5], fr[5], i, k, y;
+    char o[40], *e;
+    lcd_fill(0, 0, 240, 240, C_BLACK);
+    bench_line(100, "BENCH: A01-A04 ...");
+    for (i = 0; i < 4u; i++) {
+        int (*pb)(void (*)(void)) = m2k_par_begin;
+        m2k_par_begin = 0;                       /* one core */
+        bench_start((int)i);
+        if (i == 3u) for (k = 0; k < 8u; k++) m2k_prof[k] = 0;
+        one[i] = bench_render();
+        if (i == 3u) for (k = 0; k < 5u; k++) part[k] = m2k_prof[k] / (2u * 1000u * 10u * FM1_TICKS_PER_US);
+        m2k_par_begin = pb;                      /* two, as it plays */
+        bench_start((int)i);
+        two[i] = m2k_par_begin ? bench_render() : 0;
+    }
+    bench_start(0);                              /* the frames, A01 playing */
+    for (i = 0; i < 5u; i++) {
+        uint32_t t0, best = 0xFFFFFFFFu, ms = 4000u + i * 400u;
+        if (PB[i] >= 0) { m2k_button(PB[i], 1); m2k_button(PB[i], 0); }
+        for (k = 0; k < 6u; k++) {
+            static int16_t b[BLK * 2u];
+            m2k_render(b, (int)BLK); m2k_render(b, (int)BLK);
+            ms += 40u;
+            t0 = fm1_ticks();
+            m2k_frame(ms);
+            t0 = fm1_ticks() - t0;
+            if (k && t0 < best) best = t0;       /* (the first after a page turn measures its knobs) */
+        }
+        fr[i] = best / (100u * FM1_TICKS_PER_US);  /* 0.1 ms */
+        bench_wait();
+    }
+    lcd_fill(0, 0, 240, 240, C_BLACK);
+    y = 4;
+    bench_line(y, "BENCH  1 CORE / 2 CORES"); y += 22;
+    for (i = 0; i < 4u; i++) {
+        e = o; *e++ = 'A'; *e++ = '0'; *e++ = (char)('1' + i); *e++ = ' '; *e++ = ' ';
+        e = bench_num(e, one[i]); *e++ = '%'; *e++ = ' '; *e++ = '/'; *e++ = ' ';
+        e = bench_num(e, two[i]); *e++ = '%'; *e = 0;
+        bench_line(y, o); y += 20;
+    }
+    e = o; static const char PL[5] = {'S', 'M', 'C', 'D', 'B'};   /* A04 on one core: seq, machines, chain, delays, bus */
+    *e++ = 'A'; *e++ = '0'; *e++ = '4'; *e++ = ' ';
+    for (k = 0; k < 5u; k++) { *e++ = PL[k]; e = bench_num(e, part[k]); *e++ = ' '; }
+    *e = 0; bench_line(y, o); y += 22;
+    bench_line(y, "FRAME, 0.1 MS:"); y += 20;
+    for (i = 0; i < 5u; i += 2u) {
+        e = o;
+        for (k = i; k < i + 2u && k < 5u; k++) {
+            const char *n = PG[k];
+            while (*n) *e++ = *n++;
+            *e++ = ' '; e = bench_num(e, fr[k]); *e++ = ' '; *e++ = ' ';
+        }
+        *e = 0; bench_line(y, o); y += 20;
+    }
+    bench_line(y + 6, "A KEY: ON");
+    notes_prev = fm1_in.notes;
+    for (;;) {                                   /* until a key or a button */
+        uint32_t rel, pr = fm1_input_edges(&rel);
+        bench_wait();
+        if (pr || fm1_in.notes != notes_prev) break;
+    }
+    notes_prev = fm1_in.notes;
+    lcd_fill(0, 0, 240, 240, 0xFFFFu);
+}
+#endif
+
 static void app_init(void)
 {
 #if DINGHY_DUAL_CORE
     if (audio_worker_online) { m2k_par_begin = par_begin; m2k_par_end = par_end; }
 #endif
     screen_init();
+#if M2K_FM1_DIAG
+    bench();
+#endif
     m2k_init(fm1_ticks());
     store_load();                               /* the factory's bank stays when there is none */
     lcd_fill(0, 0, 240, 240, 0xFFFFu);
@@ -300,7 +413,7 @@ static void app_loop(void)
     midi_drain();
     render_ahead();
     midi_drain();
-    /* a frame once the last has gone out, 40 a second at most; the sound first: while
+    /* a frame once the last has gone out, 30 a second at most; the sound first: while
      * the ring is under half full the frame waits for the render to catch up (a frame is drawn whole, the sound not
      * rendered meanwhile), and while the render is busy (frame_gap) they come further apart; never more than 150 ms */
     uint32_t since = fm1_ms - frame_ms;
