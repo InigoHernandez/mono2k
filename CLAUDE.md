@@ -163,6 +163,18 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   pages with `part()` in `factory()` (their kits as `SET`, their steps and locks as tables, from `cdump`), their amp,
   LFO and bus values on format 15's and 16's laws, as the owner approved them, turned at build (`feel_v15`, then
   `fx_v16`; revision 13's bytes).
+  The sound library's factory is `firmware/src/m2k_lib.c` (factory revision 15): 96 sounds, twelve a category in
+  CAT_N's order (S001..S096; S097..S128 INIT), each a machine's blank kit (kit_default on format 16's laws) and its
+  changes, its note and its character in a few words (host only); within a category different characters, not
+  variations, none on the bus's TAPE HISS GLCH or the reverb. Made by measurement, the owner's ears still to come:
+  `sh tools/lib_audition.sh` renders each in a phrase for its category at 120 BPM (`m2k_host DIR --library`,
+  `host/m2k_lib_play.c`), counts its cost (`m2k_draw --library`) and measures it (`tools/lib_audition.py`: loudness
+  to its category's, one distance over the spectrum, decay, flatness, clarity, width, sustain and brightness; `--level`
+  sets VOL and LEVL) into `build/lib_audition/index.json`, for the owner's keep / redo page. A store from before
+  (revision under `LIB_REV`) has each slot still holding a factory sound of before (`LIB_OLD`, every commit's since the
+  library came in: `tools/lib_old.py`) or nothing take the library's, the owner's kept (the library's for that slot to
+  S097 on); `LIB_HASH` holds the library's bytes in the self-test: a library changed is a new LIB_REV and FACTORY_REV,
+  its sounds of before into LIB_OLD. LOAD sets a sound's LFOs to the track it goes on.
   The bank before it (MAMMOTH .. SPLICE, written on the old pages and turned at build) is kept only as a test fixture,
   `host/m2k_bank_rev9.c` (`factory_rev9()`), so the format tests and the conversions' mutants still run on real old
   parts; it is never built into the instrument. A batch that replaces demos bumps `FACTORY_REV`, adds the names it

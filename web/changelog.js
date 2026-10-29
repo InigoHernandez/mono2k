@@ -7,6 +7,14 @@ window.M2K_KINDS = {
 };
 window.M2K_CHANGES = [
   {
+    date: "2026-10-29", title: "MONO2K 1.5: a sound library of 96",
+    items: [
+      ["patterns", "1.5: The sound library starts with 96 sounds of its own, twelve in each category: kicks, snares, hats, percussion, basses, leads, pads and FX, each a different character (SYN > SND; CAT shows one category)."],
+      ["patterns", "1.5: A library saved by an older MONO2K keeps every sound you saved or changed; only the factory's old sounds are replaced (where yours stands, its new sound goes to S097 on)."],
+      ["fixes", "1.5: A sound loaded onto another track than the one it was saved from: its LFOs now move the track it is on."],
+    ],
+  },
+  {
     date: "2026-10-29", title: "MONO2K 1.4.1 and 1.4.2: a calm screen, a cleaner stage, the two cores shared evenly",
     items: [
       ["screen", "1.4.2: The screen is calm by default: pages and values change at once, nothing flashes on an action. MOTN GLTCH brings the glitches back (GLO > SET on the FM-1, GLO > PLAY in the browser)."],

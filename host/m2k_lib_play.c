@@ -3,7 +3,7 @@
  * library sound i alone on T1 of B01 (INIT, its other tracks muted, the bus as INIT leaves it: no drive, no tape, no
  * hiss, no glitch, the sounds send nothing to the reverb), 120 BPM, a phrase for its category at the sound's note */
 
-enum { PH_KICK, PH_SNARE, PH_HATS, PH_OPEN, PH_CRASH, PH_PERC, PH_BASS, PH_LEAD, PH_PAD, PH_FX, PH_HITS, PH_ONE,
+enum { PH_KICK, PH_SNARE, PH_HATS, PH_OPEN, PH_CRASH, PH_PERC, PH_BASS, PH_LEAD, PH_SLOW, PH_PAD, PH_FX, PH_HITS, PH_ONE,
        PH_COUNT };
 typedef struct { uint8_t step; int8_t note; uint8_t flags; } ph_t;   /* note: semitones over the sound's; 0xFF ends */
 #define PH_END {0xFF, 0, 0}
@@ -15,28 +15,30 @@ static const ph_t PH_O[] = {{2, 0, 0}, {6, 0, 0}, {10, 0, 0}, {14, 0, 0}, {18, 0
 static const ph_t PH_C[] = {{0, 0, 0}, {16, 0, 0}, PH_END};
 static const ph_t PH_P[] = {{0, 0, 0}, {3, 0, 0}, {6, 0, 0}, {10, 0, 0}, {12, 0, 0}, {16, 0, 0}, {19, 0, 0}, {22, 0, 0},
                             PH_END};                                                           /* a syncopated bar */
-static const ph_t PH_B[] = {{0, 0, ST_ACC}, {3, 0, 0}, {6, 12, 0}, {8, 10, ST_SLD}, {10, 7, 0}, {12, 0, 0}, {14, 3, 0},
-                            {16, 0, ST_ACC}, {19, 0, 0}, {22, 12, 0}, PH_END};                 /* a riff, one slide */
+static const ph_t PH_B[] = {{0, 0, 0}, {3, 0, 0}, {6, 12, 0}, {8, 10, ST_SLD}, {10, 7, 0}, {12, 0, 0}, {14, 3, 0},
+                            {16, 0, 0}, {19, 0, 0}, {22, 12, 0}, PH_END};                 /* a riff, one slide (no accent: on a held note it steps VOL) */
 static const ph_t PH_L[] = {{0, 7, 0}, {2, 10, 0}, {4, 12, 0}, {7, 10, 0}, {8, 7, 0}, {10, 5, 0}, {12, 3, 0}, {14, 5, 0},
                             {16, 0, 0}, PH_END};                                               /* a minor phrase */
+static const ph_t PH_W[] = {{0, 7, 0}, {4, 10, 0}, {8, 12, 0}, {12, 10, 0}, {16, 7, 0}, {20, 5, 0}, PH_END};   /* sung */
 static const ph_t PH_D[] = {{0, 0, 0}, {16, 5, 0}, PH_END};                                    /* i, then iv */
 static const ph_t PH_F[] = {{0, 0, 0}, {16, 0, 0}, PH_END};                                    /* two gestures */
 static const ph_t PH_X[] = {{0, 0, 0}, {6, 0, 0}, {12, 0, 0}, {16, 0, 0}, {22, 0, 0}, PH_END}; /* scattered hits */
 static const ph_t PH_1[] = {{0, 0, 0}, PH_END};                                                /* one, held on */
-static const ph_t *const PHRASE[PH_COUNT] = {PH_K, PH_S, PH_H, PH_O, PH_C, PH_P, PH_B, PH_L, PH_D, PH_F, PH_X, PH_1};
+static const ph_t *const PHRASE[PH_COUNT] = {PH_K, PH_S, PH_H, PH_O, PH_C, PH_P, PH_B, PH_L, PH_W, PH_D, PH_F, PH_X, PH_1};
 static const char *const PH_NAME[PH_COUNT] = {"kick", "snare", "hats", "offbeats", "crash", "perc", "riff", "phrase",
-                                              "chords", "gestures", "hits", "one"};
-static const uint8_t PH_SECS[PH_COUNT] = {3, 3, 3, 3, 4, 3, 3, 3, 4, 4, 4, 4};
+                                              "slow phrase", "chords", "gestures", "hits", "one"};
+static const uint8_t PH_SECS[PH_COUNT] = {3, 3, 3, 3, 4, 3, 3, 3, 3, 4, 4, 4, 4};
 
 /* by its category, a few by their character */
 static int lib_phrase(int i)
 {
     static const struct { const char *name; uint8_t ph; } OWN[] = {
         {"OPENHAT", PH_OPEN}, {"SIZZLE", PH_OPEN}, {"CRASH", PH_CRASH}, {"GLITCH", PH_HITS}, {"LASER", PH_HITS},
-        {"RINGHIT", PH_HITS}, {"DRONE", PH_ONE}, {"STATIC", PH_ONE}, {"SCRAPE", PH_ONE}, {"ROBOT", PH_ONE},
+        {"RINGHIT", PH_HITS}, {"VOXOOH", PH_SLOW}, {"DRONE", PH_ONE}, {"STATIC", PH_ONE}, {"SCRAPE", PH_ONE}, {"ROBOT", PH_ONE},
     };
     for (unsigned k = 0; k < sizeof OWN / sizeof OWN[0]; k++) if (!strcmp(LIB[i].name, OWN[k].name)) return OWN[k].ph;
     static const uint8_t BY_CAT[CAT_COUNT] = {PH_FX, PH_KICK, PH_SNARE, PH_HATS, PH_PERC, PH_BASS, PH_LEAD, PH_PAD, PH_FX};
+    /* (VO-6 fades in at every trig, as the Monomachine's: a voice sings quarters, apart) */
     return BY_CAT[LIB[i].cat];
 }
 

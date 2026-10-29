@@ -8,7 +8,7 @@
  * MOD, the EQ, unison) only where they are the sound. */
 
 #define LIB_N 96
-#define LIB_HASH 0x6d1ccfb7u              /* the library's bytes (FNV-1a over S001..S096, each its category and note), held by
+#define LIB_HASH 0xe0b24f46u              /* the library's bytes (FNV-1a over S001..S096, each its category and note), held by
                                          * the self-test: a library changed is a new LIB_REV, its sounds of before into LIB_OLD */
 typedef char lib_fits[LIB_N <= M2K_SOUNDS && LIB_REV <= FACTORY_REV ? 1 : -1];
 
@@ -129,7 +129,7 @@ static const lib_t LIB[LIB_N] = {
       P_DEC, 14, P_REL, 8, P_BASE, 62, P_WDTH, 24, P_HPQ, 30, P_EQF, 116, P_EQG, 80, P_VOL, 127, P_LEVL, 127),
     S("SIZZLE", CAT_HATS, M_DCYM, 60, "chattering sizzle, half open",
       SA, 100, SB, 92, SC, 90, SD, 120, SE, 120, SF, 117, SG, 4, SH, 40, P_DEC, 70, P_REL, 30, P_BASE, 36, P_WDTH, 40,
-      P_EQF, 108, P_EQG, 84, LFO(L1, P_LEVL, LW_SQR, LT_TRIG, 120, 110), P_VOL, 78, P_LEVL, 61),
+      P_EQF, 108, P_EQG, 84, LFO(L1, P_LEVL, LW_SQR, LT_TRIG, 120, 110), P_VOL, 78, P_LEVL, 73),
     S("CRUSHHT", CAT_HATS, M_DHAT, 60, "bit-crushed hat, aliased fizz",
       SA, 110, SB, 70, SC, 50, SD, 84, SE, 100, SF, 117, SG, 10, P_DEC, 60, P_REL, 20, P_BASE, 40, P_SRR, 76,
       P_BITS, 80, P_DIST, 64, P_EQF, 112, P_EQG, 88, P_VOL, 127, P_LEVL, 127),
@@ -186,39 +186,39 @@ static const lib_t LIB[LIB_N] = {
     /* BASS: a riff on A1 / A2 */
     S("ACID", CAT_BASS, M_SAW, 33, "squelchy resonant acid line",
       SA, 0, P_HOLD, 127, P_DEC, 127, P_REL, 18, P_GATE, 22, P_WDTH, 22, P_LPQ, 104, P_FDEC, 26, P_WOF, 104,
-      P_DIST, 84, P_VOL, 112, P_LEVL, 126),
+      P_DIST, 84, P_VOL, 116, P_LEVL, 127),
     S("CHIPSQR", CAT_BASS, M_SID, 33, "raw gated chip pulse",
-      SA, 16, SD, SIDW(2), P_HOLD, 127, P_DEC, 127, P_REL, 14, P_GATE, 20, P_VOL, 63, P_LEVL, 112),
+      SA, 16, SD, SIDW(2), P_HOLD, 127, P_DEC, 127, P_REL, 14, P_GATE, 20, P_VOL, 63, P_LEVL, 116),
     S("DXBASS", CAT_BASS, M_FMS, 33, "punchy FM slap bass",
-      SA, R24(15), SB, 64, SC, 98, SD, 24, SE, R24(19), SF, 24, SG, 80, P_HOLD, 4, P_DEC, 58, P_REL, 26, P_VOL, 97,
+      SA, R24(15), SB, 64, SC, 98, SD, 24, SE, R24(19), SF, 24, SG, 80, P_HOLD, 4, P_DEC, 58, P_REL, 26, P_VOL, 100,
       P_LEVL, 127),
     S("SUB", CAT_BASS, M_GSIN, 33, "clean sine sub, felt",
-      SG, 8, P_HOLD, 127, P_DEC, 127, P_REL, 20, P_GATE, 24, P_ATK, 2, P_VOL, 84, P_LEVL, 91),
+      SG, 8, P_HOLD, 127, P_DEC, 127, P_REL, 20, P_GATE, 24, P_ATK, 2, P_VOL, 84, P_LEVL, 94),
     S("PWMBASS", CAT_BASS, M_PUL, 33, "warm wobbling PWM bass",
       SA, 70, SB, 40, SC, 60, SE, 64, SF, 40, P_HOLD, 127, P_DEC, 127, P_REL, 30, P_GATE, 20, P_WDTH, 24, P_LPQ, 20,
-      P_FDEC, 30, P_WOF, 92, P_VOL, 95, P_LEVL, 127),
+      P_FDEC, 30, P_WOF, 92, P_VOL, 102, P_LEVL, 127),
     S("GROWL", CAT_BASS, M_FMD, 33, "growling FM bass, phased",
       SA, 64, SC, 60, SE, 90, SF, 40, SG, 70, LFO(L1, SC, LW_SIN, LT_TRIG, 96, 100), P_HOLD, 127, P_DEC, 127,
       P_REL, 20, P_GATE, 26, P_DIST, 100, P_WDTH, 40, P_LPQ, 40, P_MODT, MODTY(2), P_MODR, 70, P_MODD, 90, P_MODM, 70,
-      P_VOL, 63, P_LEVL, 95),
+      P_VOL, 63, P_LEVL, 99),
     S("PLUCKBS", CAT_BASS, M_WAV, 45, "plucky wavetable bass",
       P_WBNK, 127, SA, OS(41), SB, 64, SF, 64, SG, 0, P_DEC, 46, P_REL, 20, P_WDTH, 26, P_LPQ, 30, P_FDEC, 22,
-      P_WOF, 100, P_DIST, 80, P_VOL, 116, P_LEVL, 127),
+      P_WOF, 100, P_DIST, 80, P_VOL, 127, P_LEVL, 127),
     S("REESE", CAT_BASS, M_SAW, 33, "detuned reese, beating saws",
       SA, 127, SB, 46, SC, 0, SD, 20, SF, 40, P_HOLD, 127, P_DEC, 127, P_REL, 30, P_GATE, 56, P_WDTH, 28, P_LPQ, 24,
-      P_VOL, 110, P_LEVL, 126),
+      P_ATK, 1, P_VOL, 114, P_LEVL, 127),
     S("FOLDBS", CAT_BASS, M_GSIN, 33, "wavefolded pluck, west coast",
       SA, 60, SG, 20, LFO(L1, SA, LW_EXP, LT_ONE, 96, 112), P_HOLD, 127, P_DEC, 127, P_REL, 22, P_GATE, 24, P_VOL, 75,
-      P_LEVL, 92),
+      P_LEVL, 97),
     S("DUBTRI", CAT_BASS, M_SID, 40, "deep round dub triangle",
       SA, 0, SC, 127, SD, SIDW(0), P_ATK, 4, P_HOLD, 127, P_DEC, 127, P_REL, 50, P_GATE, 30, P_WDTH, 24, P_VOL, 110,
-      P_LEVL, 79),
+      P_LEVL, 83),
     S("SYNCBS", CAT_BASS, M_SID, 33, "tearing sync bass",
       SD, SIDW(1), SE, SIDMOD(2), SF, 0, SG, 30, LFO(L1, SG, LW_EXP, LT_ONE, 96, 100), P_HOLD, 127, P_DEC, 127,
-      P_REL, 20, P_GATE, 24, P_WDTH, 40, P_DIST, 80, P_VOL, 90, P_LEVL, 87),
+      P_REL, 20, P_GATE, 24, P_WDTH, 40, P_DIST, 80, P_VOL, 90, P_LEVL, 92),
     S("MOOG", CAT_BASS, M_SAW, 33, "fat saw and sub, filter punch",
-      SA, 0, SE, 70, SF, 90, P_DEC, 70, P_REL, 28, P_WDTH, 30, P_LPQ, 24, P_FDEC, 36, P_WOF, 92, P_DIST, 84, P_HOLD, 4,
-      P_VOL, 126, P_LEVL, 127),
+      SA, 0, SE, 70, SF, 90, P_DEC, 70, P_REL, 28, P_WDTH, 30, P_LPQ, 24, P_FDEC, 36, P_WOF, 92, P_DIST, 90, P_HOLD, 4,
+      P_VOL, 127, P_LEVL, 127),
 
     /* LEAD: a phrase on A3 / A4 */
     S("SIDLEAD", CAT_LEAD, M_SID, 69, "C64 pulse lead, vibrato",
@@ -231,7 +231,7 @@ static const lib_t LIB[LIB_N] = {
       P_VOL, 127, P_LEVL, 107),
     S("VOXOOH", CAT_LEAD, M_VOX, 69, "sung ooh, vibrato",
       SA, 40, SB, 34, SC, 127, SD, 16, SE, 0, LFO(L1, SH, LW_SIN, LT_FREE, 104, 80), P_ATK, 10, P_HOLD, 127,
-      P_DEC, 127, P_REL, 40, P_GATE, 30, P_VOL, 127, P_LEVL, 127),
+      P_DEC, 127, P_REL, 10, P_GATE, 44, P_VOL, 127, P_LEVL, 123),
     S("SUPERLD", CAT_LEAD, M_SAW, 69, "wide supersaw, ping-pong echo",
       SA, 90, SB, 40, SC, 40, SD, 10, P_HOLD, 127, P_DEC, 127, P_REL, 40, P_GATE, 28, P_BASE, 8, P_WDTH, 36, P_LPQ, 16,
       P_DTIM, 48, P_DSND, 90, P_DFB, 36, P_DBAS, 40, P_DWID, 36, P_VOL, 116, P_LEVL, 126),
@@ -241,9 +241,9 @@ static const lib_t LIB[LIB_N] = {
     S("SYNCLD", CAT_LEAD, M_SID, 57, "screaming swept sync",
       SD, SIDW(1), SE, SIDMOD(2), SG, 40, LFO(L1, SG, LW_EXP, LT_ONE, 84, 104), P_HOLD, 127, P_DEC, 127, P_REL, 30,
       P_GATE, 26, P_DIST, 90, P_VOL, 78, P_LEVL, 71),
-    S("WHISTLE", CAT_LEAD, M_GSIN, 81, "glassy sine whistle, glide",
-      SG, 6, LFO(L1, SH, LW_SIN, LT_FREE, 102, 82), P_ATK, 10, P_HOLD, 127, P_DEC, 127, P_REL, 36, P_GATE, 30,
-      P_PORT, 40, P_VOL, 100, P_LEVL, 50),
+    S("WHISTLE", CAT_LEAD, M_SID, 81, "soft gliding whistle, vibrato",
+      SD, SIDW(0), LFO(L1, SH, LW_SIN, LT_FREE, 102, 82), P_ATK, 10, P_HOLD, 127, P_DEC, 127, P_REL, 36, P_GATE, 30,
+      P_PORT, 40, P_BASE, 8, P_WDTH, 14, P_VOL, 100, P_LEVL, 76),
     S("ORGAN", CAT_LEAD, M_WAV, 57, "hollow lofi organ, turning",
       P_WBNK, 127, SA, OS(39), SF, 66, SG, 90, LFO(L1, P_PAN, LW_SIN, LT_FREE, 96, 96), P_HOLD, 127, P_DEC, 127,
       P_REL, 20, P_GATE, 30, P_WDTH, 44, P_VOL, 92, P_LEVL, 91),
@@ -254,8 +254,8 @@ static const lib_t LIB[LIB_N] = {
       SA, 64, SC, 24, SD, 96, SE, 127, SF, 100, SG, 0, LFO(L1, P_PAN, LW_TRI, LT_FREE, 92, 92), P_DEC, 74, P_REL, 60,
       P_VOL, 110, P_LEVL, 72),
     S("BRASS", CAT_LEAD, M_SAW, 57, "brassy saw, swelling filter",
-      SA, 50, SB, 20, P_ATK, 30, P_HOLD, 127, P_DEC, 127, P_REL, 30, P_GATE, 28, P_WDTH, 18, P_LPQ, 20, P_FATK, 64,
-      P_FDEC, 40, P_WOF, 100, P_DIST, 76, P_VOL, 127, P_LEVL, 127),
+      SA, 70, SB, 20, P_ATK, 30, P_HOLD, 127, P_DEC, 127, P_REL, 14, P_GATE, 20, P_WDTH, 18, P_LPQ, 20, P_FATK, 64,
+      P_FDEC, 40, P_WOF, 92, P_DIST, 84, P_VOL, 127, P_LEVL, 116),
 
     /* PAD: two chords held (a mono machine: two notes) on A3 */
     S("WARMENS", CAT_PAD, M_ENS, 57, "warm chorused minor-7 chords",
@@ -337,6 +337,7 @@ static const lib_t LIB[LIB_N] = {
       SA, 64, SB, 60, SC, 127, SD, 60, LFO(L1, SD, LW_TRI, LT_FREE, 72, 110), LFO(L2, P_BASE, LW_SIN, LT_FREE, 66, 96),
       P_ATK, 40, P_HOLD, 126, P_DEC, 127, P_REL, 50, P_GATE, 127, P_BASE, 24, P_WDTH, 20, P_LPQ, 80, P_VOL, 65,
       P_LEVL, 68),
+
 
 };
 #undef S
