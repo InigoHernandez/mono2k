@@ -2360,11 +2360,12 @@ void m2k_encoder(int e, int d)
 
 /* ---------------------------------------------------------------------------------------------- drawing */
 
-/* the grid (docs/screen-grid.md): every position, size and text baseline on 4 px. MONO2K's Orbitron, a light face and
- * three bold sizes: F_B (11 px at 700, capitals 8 rows) the light one, for labels, units, hints and the names in
- * pictures; F_S (12 px at 800, 9) the primary lines; F_M (16, 12) the knobs' values; F_L (24, 18) a page's one big
- * word. The header and the footer ink bars (0-15, 224-239); the knobs 16-55 under the FM-1's four, frameless in
- * columns of 60 (label, value, a thin bar, 4 px in); a dotted rule on 56; the stage [4, 236) x [60, 200), the page's
+/* the grid (docs/screen-grid.md): every position, size and text baseline on 4 px. Silkscreen, a pixel font drawn at
+ * whole scales (crisp on the FM-1): F_B (Regular x2, capitals 10 rows) the light face, for labels, units, hints and
+ * the names in pictures, a value's fallback; F_S (Bold x2, 10) the primary lines and the knobs' values; F_M (Regular
+ * x3, 15) a size up; F_L (Bold x3, 15) a page's one big word. The header and the footer ink bars (0-15, 224-239); the
+ * knobs 16-59 under the FM-1's four, frameless in columns of 60 (label, value, a thin bar, 4 px in); a dotted rule on
+ * 60; the stage [4, 236) x [64, 200), the page's
  * picture its hero, its info line on baseline 196 (what turns and its value, a held step, else the picture's names);
  * the steps 204-223, 16 cells 8 x 8 12 apart, a beat's four under each knob. One language for every picture: areas
  * in bars (two columns on, one off; the other state one in three) from dotted floors and zero lines, editable points
@@ -2373,9 +2374,9 @@ void m2k_encoder(int e, int d)
  * a rule or a frame (the audit) */
 #define HEAD_H 16                       /* the header's bar */
 #define KNOB_Y 16
-#define KNOB_R 56                       /* the knobs' dotted rule */
-#define STAGE_Y 60                      /* the stage: [SX0, SX1) x [STAGE_Y, STAGE_Y + STAGE_H) */
-#define STAGE_H 140
+#define KNOB_R 60                       /* the knobs' dotted rule */
+#define STAGE_Y 64                      /* the stage: [SX0, SX1) x [STAGE_Y, STAGE_Y + STAGE_H) */
+#define STAGE_H 136
 #define STEPS_R 200                     /* the steps' band from here */
 #define STRIP_Y 204
 #define FOOT_Y 224                      /* the footer's bar: rows 224..239 */
@@ -2385,12 +2386,12 @@ void m2k_encoder(int e, int d)
 #define GX 124                          /* two columns' meeting (SYN: its name's [VX, VX + VW), its mark's past it) */
 #define VX 4
 #define VW 112
-#define INFO_B 196                      /* the stage's info line: its baseline (the light type's rows 188..195) */
-#define PIC_T 64                        /* a picture: [SX0, SX1) x [PIC_T, PIC_B) */
-#define PIC_B 184
-#define K_LB 28                         /* a knob's label's baseline (rows 20..27) */
-#define K_VB 44                         /* its value's (F_M rows 32..43, F_S 35..43) */
-#define K_BAR 48                        /* its bar: rows 48..49 */
+#define INFO_B 196                      /* the stage's info line: its baseline (the type's rows 186..195) */
+#define PIC_T 68                        /* a picture: [SX0, SX1) x [PIC_T, PIC_B) */
+#define PIC_B 180
+#define K_LB 32                         /* a knob's label's baseline (rows 22..31) */
+#define K_VB 48                         /* its value's (rows 38..47) */
+#define K_BAR 52                        /* its bar: rows 52..53 */
 #define KB_H 2
 #define KX 4                            /* a knob's column: [60 k + KX, 60 k + KX + KW) */
 #define KW 52
@@ -2398,12 +2399,13 @@ void m2k_encoder(int e, int d)
 #define STEP_N 8
 #define TY 1                            /* (a filled tag's type below its box's top: tag()) */
 
-/* a line in at most w px: in f, then the alternative s2, then each size under f to the small type. The font picked
- * (0: nothing fits), *s the text, *tr its tracking (0: every size keeps its own, a pixel of the design) */
-static const m2k_font_t *const SIZES[3] = {&F_S, &F_M, &F_L};
+/* a line in at most w px: in f, then the alternative s2, then each font under f on the ladder of widths (F_B the
+ * narrowest, the light face). The font picked (0: nothing fits), *s the text, *tr its tracking (0: every size keeps its
+ * own, a design pixel) */
+static const m2k_font_t *const SIZES[4] = {&F_B, &F_S, &F_M, &F_L};
 static const m2k_font_t *fit_font(const m2k_font_t *f, const char **s, const char *s2, int w, int *tr)
 {
-    int k = f == &F_L ? 2 : f == &F_M ? 1 : 0;
+    int k = f == &F_L ? 3 : f == &F_M ? 2 : f == &F_S ? 1 : 0;
     for (; k >= 0; k--)
         for (int a = 0; a < 2; a++) {
             const char *c = a ? s2 : *s;
@@ -2499,9 +2501,9 @@ static int hints(int x, int b, int xr, const char *const *kv, int n)
  * first (whole or not at all), then the modes from the last */
 static const uint8_t REC_ON[8] = {0x3C, 0x7E, 0xFF, 0xFF, 0xFF, 0xFF, 0x7E, 0x3C};
 static const uint8_t REC_OFF[8] = {0x3C, 0x42, 0x81, 0x81, 0x81, 0x81, 0x42, 0x3C};
-#define BAR_TY 4                        /* the bars' type: its capitals 4 px into the bar, 4 clear under them */
+#define BAR_TY 3                        /* the bars' type: its capitals 3 px into the bar, 3 clear under them */
 
-/* a tag on a bar: a paper box, its type ink (on); else a paper frame round paper type. 12 rows from the bar's third */
+/* a tag on a bar: a paper box, its type ink (on); else a paper frame round paper type. 14 rows from the bar's second */
 static int bar_tag(int x, int y, const char *s, int on)
 {
     int w = text_w(&F_B, s, 0) + 6;
@@ -2515,15 +2517,15 @@ static void header(void)
 {
     rect(0, 0, 240, HEAD_H, 1);
     CELL(0, 0, 240, HEAD_H, 2, 1, 238, HEAD_H - 1);
-    const int y = BAR_TY;                               /* the capitals' rows 4..11 */
+    const int y = BAR_TY;                               /* the capitals' rows 3..12 */
     int xr = 235;                                       /* the free space's last column */
-    if (sq.playing) for (int j = 0; j < 8; j++) hline(xr - 4, y + j, j < 4 ? j + 2 : 9 - j, 0);
-    else rect(xr - 7, y, 8, 8, 0);
+    if (sq.playing) for (int j = 0; j < 8; j++) hline(xr - 4, y + 1 + j, j < 4 ? j + 2 : 9 - j, 0);
+    else rect(xr - 7, y + 1, 8, 8, 0);
     xr -= 8 + 6;
     char t[8];
     s_int(t, (int)seq_bpm());
     xr -= text_r(&F_B, xr + 1, y, t, 0, 0) + 6;
-    if (sq.rec) { blit((ui.now >> 8) & 1 ? REC_ON : REC_OFF, 8, 8, xr - 7, y, 4); xr -= 8 + 6; }   /* (paper) */
+    if (sq.rec) { blit((ui.now >> 8) & 1 ? REC_ON : REC_OFF, 8, 8, xr - 7, y + 1, 4); xr -= 8 + 6; }   /* (paper) */
     char a[8];
     s_pat(a, cur_pat);
     int pw = 2 + bar_tag(2, 0, a, 1);
@@ -2543,7 +2545,7 @@ static void header(void)
 }
 
 /* ---- the knobs, along the top as on the panel, frameless (the S4's): each its label in the light type (solid while
- * turned: pressed is filled), its value under it (F_M where the row's every value fits, else F_S; locked, solid), and
+ * turned: pressed is filled), its value under it (F_S where its every value fits, else F_B, one height; locked, solid), and
  * a thin bar easing to where the value sits in its range: a dotted track and the part up to it solid (from the middle
  * for a two-sided one), segments for a few choices, nothing for an action; a free knob its track alone */
 static int bipolar(int kind) { return kind == K_BI || kind == K_PAN || kind == K_SEMI || kind == K_FINE || kind == K_TUN2 || kind == K_SEMI24; }
@@ -2575,8 +2577,8 @@ static void knob_bar(int x, int y, int w, int n, int c, int q, int bip, int pop)
     if (pop) rect(CLAMP(e, x, x + w - 2), y - 3, 2, h + 3, 1);
 }
 
-/* the value's size a knob's parameter allows: F_M if its every value fits the column, else F_S. Kept per knob while
- * its parameter stays */
+/* the value's face a knob's parameter allows: F_S (bold) if its every value fits the column, else F_B (the same
+ * height, narrower). Kept per knob while its parameter stays */
 static const m2k_font_t *knob_font(int k, const pi_t *pi, int code)
 {
     static int key[4] = {-1, -1, -1, -1};
@@ -2589,10 +2591,10 @@ static const m2k_font_t *knob_font(int k, const pi_t *pi, int code)
         char o[16];
         const char *u;
         fmt(pi, ui.trk, n ? enc(i, n) : mn + i, o, &u);
-        int ow = text_w(&F_M, o, 0);
+        int ow = text_w(&F_S, o, 0);
         w = ow > w ? ow : w;
     }
-    f[k] = w <= KW ? &F_M : &F_S;
+    f[k] = w <= KW ? &F_S : &F_B;
     return f[k];
 }
 
@@ -2600,14 +2602,7 @@ static int knob_turned(int k) { return ui.focus_t && ui.focus == k && ui.now - u
 
 static void knobs(void)
 {
-    /* the row's values in one size: F_M where all four allow it, else F_S (turning one never changes it) */
-    const m2k_font_t *rf = &F_M;
-    for (int k = 0; k < 4; k++) {
-        int code = knob_at(k);
-        if (code == NONE) continue;
-        const pi_t *pi = pinfo(ui.trk, code);
-        if (pi->s4[0] != '-' && knob_font(k, pi, code) != &F_M) rf = &F_S;
-    }
+    /* each knob's value in its face (both one height: turning one never changes the row) */
     for (int k = 0; k < 4; k++) {
         int x = k * 60, cx = x + KX, code = knob_at(k);
         CELL(x, KNOB_Y, x + 60, KNOB_R, cx, KNOB_Y + 2, cx + KW, KNOB_R - 2);
@@ -2620,7 +2615,7 @@ static void knobs(void)
         fmt(pi, ui.trk, v, o, &u);
         int tr;
         const char *c = o;
-        const m2k_font_t *vf = fit_font(rf, &c, 0, KW, &tr), *g = vf ? vf : &F_S;   /* (a size down where one is wider) */
+        const m2k_font_t *vf = fit_font(knob_font(k, pi, code), &c, 0, KW, &tr), *g = vf ? vf : &F_B;
         int vy = K_VB - g->base;
         if (lk) rect(cx - 2, vy - 2, (vf ? text_w(g, c, tr) : KW) + 4, g->base + 4, 1);   /* (locked: solid) */
         if (vf) text(vf, cx, vy, c, !lk, tr);
@@ -2709,7 +2704,7 @@ static int crumb_w(const char *const *it, int n)
 
 static void foot(void)
 {
-    const int y = FOOT_Y + BAR_TY;                      /* the capitals' rows 228..235 */
+    const int y = FOOT_Y + BAR_TY;                      /* the capitals' rows 227..236 */
     rect(0, FOOT_Y, 240, 240 - FOOT_Y, 1);
     CELL(0, FOOT_Y, 240, 240, 2, FOOT_Y + 1, 238, 239);
     for (int pg = 0; pg < 4; pg++) {
@@ -2717,11 +2712,11 @@ static void foot(void)
         if (!used) {                                    /* past the end: dotted, in step with the checker */
             for (int i = 0; i < 8; i++)
                 for (int j = 0; j < 8; j++)
-                    if ((i == 0 || i == 7 || j == 0 || j == 7) && !((x + i + y + j) & 1)) px(x + i, y + j, 0);
+                    if ((i == 0 || i == 7 || j == 0 || j == 7) && !((x + i + y + 1 + j) & 1)) px(x + i, y + 1 + j, 0);
             continue;
         }
-        if (on) rect(x, y, 8, 8, 0); else frame(x, y, 8, 8, 0);
-        if (sq.playing && play_step() / 16 == pg) rect(x + 3, y + 3, 2, 2, on);
+        if (on) rect(x, y + 1, 8, 8, 0); else frame(x, y + 1, 8, 8, 0);
+        if (sq.playing && play_step() / 16 == pg) rect(x + 3, y + 4, 2, 2, on);
     }
     char pl[12], cnt[8];
     page_label(ui.page, ui.sub, pl);
@@ -2743,7 +2738,7 @@ static void foot(void)
     if (k == 3 && crumb_w(it, k) > room) it[1] = mi->badge;       /* the machine's badge, else none */
     if (k == 3 && crumb_w(it, k) > room) { it[1] = it[2]; k = 2; }
     for (int i = 0, x = x0; i < k; i++) {
-        if (i) { for (int j = 0; j < 5; j++) hline(x + 4, y + 2 + j, j < 3 ? j + 1 : 5 - j, 0); x += 11; }
+        if (i) { for (int j = 0; j < 5; j++) hline(x + 4, y + 3 + j, j < 3 ? j + 1 : 5 - j, 0); x += 11; }
         x += text(&F_B, x, y, it[i], 0, 0);
     }
 }
@@ -3065,13 +3060,13 @@ static void syn_picture(int busy)
 {
     const int m = PAT(cur_pat)->machine[ui.trk];
     const mi_t *mi = &MI[m];
-    int x = SX0 + tx_b(&F_B, SX0, 72, mi->cls, 1) + 8;
-    lite_fit(x, 72, mi->style, 0, GX + 24 - x);              /* (short of the mark) */
-    big_value(VX, 100 - F_L.base, VW, model_of(mi), &F_L, 1000);
+    int x = SX0 + tx_b(&F_B, SX0, 80, mi->cls, 1) + 8;
+    lite_fit(x, 80, mi->style, 0, GX + 24 - x);              /* (short of the mark) */
+    big_value(VX, 104 - F_L.base, VW, model_of(mi), &F_L, 1000);
     static const char *const ST[3] = {"PNCH", "METL", "PLST"};
     uint32_t age = ui.card_t ? ui.now - ui.card_t : 1000;
     for (int r = 0; r < 3; r++) {
-        int b = 132 + r * 16;
+        int b = 136 + r * 16;
         tx_b(&F_B, SX0, b, ST[r], 1);
         for (int sg = 0; sg < 5; sg++) {
             if (age <= (uint32_t)(60 + (r * 5 + sg) * 25)) continue;
@@ -3079,8 +3074,8 @@ static void syn_picture(int busy)
             if (sg < mi->stat[r]) rect(sx, b - 8, 8, 8, 1); else frame(sx, b - 8, 8, 8, 1);
         }
     }
-    mark_3d(GX + 4 + (SX1 - GX - 4 - ICON_N) / 2, 72, m);
-    machine_dots((GX + SX1) / 2, 168, m);
+    mark_3d(GX + 4 + (SX1 - GX - 4 - ICON_N) / 2, 76, m);
+    machine_dots((GX + SX1) / 2, 172, m);
     if (busy) return;
     char o[16], *e = s_cpy(o, mi->badge);
     int i = m_place(m) + 1;
@@ -3091,25 +3086,25 @@ static void syn_picture(int busy)
     hints(SX1 - 2 - text_w(&F_B, H[0], 0) - 7 - text_w(&F_B, H[1], 0), INFO_B, SX1, H, 1);
 }
 
-/* the library's rows (SND, the catalogue): the slots shown, rows of 12 from baseline b0 in [x0, x1): the slot in the
+/* the library's rows (SND, the catalogue): the slots shown, rows of 16 from baseline b0 in [x0, x1): the slot in the
  * light type, the name primary, the machine light at the right; the one picked a solid bar (the menu's); an INIT slot
  * light; the scroll past x1 (the rows shown solid on a dotted track) */
 static void snd_rows(int x0, int x1, int b0, int rows)
 {
     int n = 0, at = snd_list(ui.snd_sel, &n), first = CLAMP(at - rows / 2, 0, n > rows ? n - rows : 0);
     for (int r = 0; r < rows && first + r < n; r++) {
-        int i = snd_nth(first + r), b = b0 + r * 12, on = i == ui.snd_sel;
+        int i = snd_nth(first + r), b = b0 + r * 16, on = i == ui.snd_sel;
         char o[4];
         s_num3(o, i + 1);
-        if (on) rect(x0, b - 11, x1 - x0, 13, 1);
+        if (on) rect(x0, b - 12, x1 - x0, 14, 1);
         tx_b(&F_B, x0 + 4, b, o, !on);
-        if (!snd[i].name[0]) { tx_b(&F_B, x0 + 40, b, "INIT", !on); continue; }
-        int e = x0 + 40 + text_fit(x0 + 40, b - F_S.base, snd[i].name, 0, x1 - x0 - 44, !on) + 8;
+        if (!snd[i].name[0]) { tx_b(&F_B, x0 + 36, b, "INIT", !on); continue; }
+        int e = x0 + 36 + text_fit(x0 + 36, b - F_S.base, snd[i].name, 0, x1 - x0 - 40, !on) + 8;
         const mi_t *mi = &MI[snd[i].machine < M_COUNT ? snd[i].machine : 0];
         const char *mn = text_w(&F_B, mi->name, 0) <= x1 - 4 - e ? mi->name : mi->badge;
         if (text_w(&F_B, mn, 0) <= x1 - 4 - e) tx_br(&F_B, x1 - 4, b, mn, !on);
     }
-    const int top = b0 - 11, h = rows * 12;
+    const int top = b0 - 12, h = rows * 16;
     int sh = n > rows ? rows * h / n : h, sy = n > rows ? first * (h - sh) / (n - rows) : 0;
     dots_v(x1 + 3, top, h);
     rect(x1 + 2, top + sy, 3, sh < 4 ? 4 : sh, 1);
@@ -3131,7 +3126,7 @@ static void snd_meta(int x0, int x1, int b)
 /* SYN > SND, the library as a menu: its rows, the one picked's machine, note and category at the foot */
 static void snd_picture(int busy)
 {
-    snd_rows(SX0, SX1 - 8, 72, 10);
+    snd_rows(SX0, SX1 - 8, 80, 7);
     if (!busy) snd_meta(SX0, SX1, INFO_B);
 }
 
@@ -3360,16 +3355,16 @@ static void fx_picture(int busy, const uint8_t *k, int fk)
  * sends now; its rate at the foot. (A scope of its past would alias: a 1/16 LFO turns faster than the FM-1 draws) */
 static void lfo_page(int busy, const uint8_t *k)
 {
-    const int el = ui.sub >> 1, w = 72, mid = 124, A = 40;
+    const int el = ui.sub >> 1, w = 72, mid = 128, A = 36;
     const trk_t *tk = &trk[ui.trk];
     for (int l = 0; l < 3; l++) {
         const uint8_t *b = &k[P_LFO + 8 * l];
         const int x0 = SX0 + 80 * l, on = l == el;
         char n[2] = {(char)('1' + l), 0}, d[12], r[20];
-        int tw = on ? inv_tag(&F_S, x0 + 2, 72, n) + 4 : tx_b(&F_S, x0, 72, n, 1);
+        int tw = on ? inv_tag(&F_S, x0 + 2, 80, n) + 4 : tx_b(&F_S, x0, 80, n, 1);
         const char *u;
         fmt(&PI_LFO[8 * l + L_DEST], ui.trk, b[L_DEST], d, &u);
-        lite_fit(x0 + tw + 6, 72, d, 0, w - tw - 6);
+        lite_fit(x0 + tw + 6, 80, d, 0, w - tw - 6);
         dots_h(x0, mid, w);
         if (!busy) {
             s_lfo_cycle(r, &u, b[L_SPD], choice_of(K_MULT, b[L_MULT]));
@@ -3401,7 +3396,7 @@ static void lfo_page(int busy, const uint8_t *k)
 static void arp_picture(const uint8_t *k)
 {
     int n = sq.nheld, rng = 1 + ((k[P_ARNG] * 4) >> 7), tot = n * rng;
-    if (sq.arp_hold) inv_tag(&F_B, SX0 + 2, 72, "HOLD");
+    if (sq.arp_hold) inv_tag(&F_B, SX0 + 2, 80, "HOLD");
     if (!n) {
         tx_bc(&F_S, 120, 124, sq.arp_hold ? "PLAY" : "HOLD", 1);
         tx_bc(&F_B, 120, 140, "SOME KEYS", 1);
@@ -3444,12 +3439,12 @@ static void grids_picture(void)
     static const char *const N[3] = {"BD", "SD", "HH"};
     if (ui.sub == 2) {
         for (int l = 0; l < 3; l++) {
-            int b = 76 + l * 40, m = 0;
+            int b = 80 + l * 36, m = 0;
             for (int t = 0; t < M2K_TRACKS; t++) if (lane_of(p, t) == l + 1) m |= 1 << t;
             int x = SX0 + (lane_of(p, ui.trk) == l + 1 ? inv_tag(&F_S, SX0 + 2, b, N[l]) + 2 : tx_b(&F_S, SX0, b, N[l], 1)) + 8;
             char o[24];
             if (m) { s_tracks(o, m); tx_b(&F_B, x, b, o + 1, 1); }
-            grids_lane(SX0, b + 28, STW, 20, l);
+            grids_lane(SX0, b + 22, STW, 14, l);
         }
         return;
     }
@@ -3479,7 +3474,7 @@ static void play_picture(int busy)
     const m2k_pattern_t *p = PAT(cur_pat);
     const int fast = (ui.now >> 7) & 1;
     for (int i = 0; i < M2K_TRACKS; i++) {
-        int x = SX0 + (i % 3) * 80, y = 68 + (i / 3) * 32, w = 72, b = 1 << i;
+        int x = SX0 + (i % 3) * 80, y = 72 + (i / 3) * 32, w = 72, b = 1 << i;
         int muted = p->mute & b, solo = sq.solo;
         if (fast && (sq.mq_m & b)) muted = sq.mq_v & b;
         if (fast && (sq.sq_m & b)) solo = (solo & ~b) | (sq.sq_v & b);
@@ -3554,7 +3549,7 @@ static void glo_picture(int busy)
     } else if (ui.sub == GS_MIDI) {
         int ch = (store_.set[S_MCH] * 16) >> 7;
         for (int i = 0; i < M2K_TRACKS; i++) {
-            int x = SX0 + (i % 3) * 80, y = 68 + (i / 3) * 32, w = 72, on = i == ui.trk;
+            int x = SX0 + (i % 3) * 80, y = 72 + (i / 3) * 32, w = 72, on = i == ui.trk;
             char o[4];
             s_int(o, (ch + i) % 16 + 1);
             if (on) rect(x, y, w, 24, 1); else frame(x, y, w, 24, 1);
@@ -3578,13 +3573,13 @@ static void glo_picture(int busy)
     } else if (ui.sub == GS_IN) {
         const int clk = clk_from(), nts = notes_from();
         for (int s = 0; s < 2; s++) {
-            int x = SX0 + s * 120, b = 1 << s, w = tx_b(&F_S, x, 76, s ? "TRS" : "USB", 1);
-            if ((mx.in_seen & b) && mx.now - mx.in_at[s] < M2K_SR / 8u) rect(x + w + 8, 68, 8, 8, 1);
-            else frame(x + w + 8, 68, 8, 8, 1);
+            int x = SX0 + s * 120, b = 1 << s, w = tx_b(&F_S, x, 80, s ? "TRS" : "USB", 1);
+            if ((mx.in_seen & b) && mx.now - mx.in_at[s] < M2K_SR / 8u) rect(x + w + 8, 71, 8, 8, 1);
+            else frame(x + w + 8, 71, 8, 8, 1);
             static const char *const R[3] = {"CLOCK", "NOTES", "THRU"};
             const int ron[3] = {clk & b, nts & b, set_on(S_THRU)};
             for (int r = 0; r < (s ? 3 : 2); r++) {
-                int rb = 100 + r * 16;
+                int rb = 104 + r * 16;
                 if (ron[r]) inv_tag(&F_B, x + 2, rb, R[r]); else tx_b(&F_B, x, rb, R[r], 1);
             }
         }
@@ -3878,10 +3873,10 @@ static void wipe(int p)
  * menu's); rows 16 apart from baseline P_B0, the keys' hints on the foot's baseline P_FB. Nothing within 2 px of it */
 #define P_X SX0                         /* a layer's: x 4..235, rows 68..203 */
 #define P_W STW
-#define P_TOP 68
-#define P_H 136
+#define P_TOP 72
+#define P_H 132
 #define P_IN 4                          /* its content 4 px in from its frame (its text 7) */
-#define P_B0 88
+#define P_B0 96
 #define P_ROW 16
 #define P_FB 196
 
@@ -3891,13 +3886,13 @@ static int panel(int x, int y, int w, int h, const char *title, int full)
     else rect(x - 2, y - 2, w + 4, h + 4, 0);
     frame(x, y, w, h, 1);
     int tw = text_w(&F_B, title, 0), tx = x + (w - tw) / 2;
-    inv_tag(&F_B, tx, y + 4, title);
+    inv_tag(&F_B, tx, y + 5, title);
 #ifdef M2K_TEXT_AUDIT
     ta_rule_add(x, y, tx - 6, y); ta_rule_add(tx + tw + 5, y, x + w - 1, y);   /* (its top line each side of the title) */
     ta_rule_add(x, y + h - 1, x + w - 1, y + h - 1);
     ta_rule_add(x, y, x, y + h - 1); ta_rule_add(x + w - 1, y, x + w - 1, y + h - 1);
 #endif
-    return y + 20;
+    return y + 24;
 }
 
 /* a table of n key -> action pairs (kv: key, action, ...) in cols columns, filled row by row, from baseline b over
@@ -3912,11 +3907,13 @@ static int pair_key_w(const char *const *kv, int n)
 static int pairs(int x, int b, int w, const char *const *kv, int n, int cols)
 {
     const int kt = pair_key_w(kv, n), cw = cols > 1 ? (w - 8 * (cols - 1)) / cols : w;
+    const m2k_font_t *f = &F_S;                        /* (the table's actions in one face: bold where all fit) */
+    for (int i = 0; i < n; i++) if (text_w(&F_S, kv[2 * i + 1], 0) > cw - kt - 10) f = &F_B;
     for (int i = 0; i < n; i++) {
         int cx = x + (i % cols) * (cw + 8), cb = b + (i / cols) * P_ROW;
         frame(cx, cb - F_B.base - 2, kt + 6, F_B.base + 4, 1);
         tx_b(&F_B, cx + 3 + (kt - text_w(&F_B, kv[2 * i], 0) + 1) / 2, cb, kv[2 * i], 1);
-        text_fit(cx + kt + 10, cb - F_S.base, kv[2 * i + 1], 0, cw - kt - 10, 1);
+        text_fit_f(f, cx + kt + 10, cb - f->base, kv[2 * i + 1], cw - kt - 10, 1);
     }
     return (n + cols - 1) / cols;
 }
@@ -3960,7 +3957,7 @@ static void glo_help(void)
     if (ring.t0 && !ring.done) return;                 /* the ring has the stage */
     if (ui.latch == B_GLO + 1) {                       /* latched: its keys (the combos want it held) */
         panel(P_X, P_TOP, P_W, P_H, "GLO LATCHED", 1);
-        white_keys(32, 104);
+        white_keys(32, 112);
         static const char *const H[2] = {"GLO", "LET GO"};
         hints(P_X + P_IN + 3, P_FB, SX1 - P_IN, H, 1);
         return;
@@ -3969,9 +3966,7 @@ static void glo_help(void)
                                       "OCT-", "UNDO", "OCT+", "REDO", "EDIT", "SOUNDS", "HOME", "KEYS"};
     int b = panel(P_X, P_TOP, P_W, P_H, "GLO HELD", 1);
     pairs(P_X + P_IN, b, P_W - 2 * P_IN, L, 8, 2);
-    white_keys(32, 152);
-    static const char *const H[2] = {"SELECT", "TEMPO"};
-    hints(P_X + P_IN + 3, P_FB, SX1 - P_IN, H, 1);
+    white_keys(32, 160);                               /* (GLO + SELECT's tempo: the help's, no room here) */
 }
 
 /* HOME held a moment: the bank's 16 patterns as the white keys pick them (the open one solid, those picked a square
@@ -4129,7 +4124,7 @@ static void cat_draw(void)
     char t[16] = {'T', (char)('1' + cat.trk), ' ', 0};
     s_cpy(t + 3, "SOUNDS");
     panel(P_X, P_TOP, P_W, P_H, t, 1);
-    snd_rows(P_X + P_IN, SX1 - P_IN - 8, P_B0, 7);
+    snd_rows(P_X + P_IN, SX1 - P_IN - 8, P_B0, 5);
     static const char *const H[4] = {"OCT+", "LOAD", "OCT-", "BACK"};
     static const char *const E[8] = {"SEQ", "INIT", "REC", "COPY", "PLAY", "PASTE", "SAVE", "KEEP"};
     if (ui.btn[B_EDIT]) {                              /* (EDIT still held: its own, on the track's sound) */
@@ -4153,7 +4148,7 @@ static void overlays(void)
     rect(0, 0, w, hgt, 0);
     CELL(0, 0, 240, hgt, 3, 0, 237, hgt - 1);
     clip(0, 0, w, hgt);
-    int x = 4 + text(&F_S, 4, 3, ui.toast, 1, 0) + 8;   /* (the capitals 3..11, a comma's foot 3 clear of the rule) */
+    int x = 4 + text(&F_S, 4, 3, ui.toast, 1, 0) + 8;   /* (the capitals 3..12, 3 clear above and below) */
     if (two) text(&F_S, 4, 18, ui.toast2, 1, 0);
     else if (ui.toast2[0]) x += text(&F_S, x, 3, ui.toast2, 1, 0) + 8;
     noclip();

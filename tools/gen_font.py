@@ -1,64 +1,84 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
-# MONO2K's 1-bit fonts: Orbitron (The League of Moveable Type, SIL OFL 1.1), MONO2K's type since 0.1, rendered
-# without anti-aliasing (FreeType mono hinting) at four sizes, each glyph cropped to its ink and set a whole tracking
-# apart, every capital and digit between the same two rows (no overshoot: the line stays straight); plus the
-# logotype, rasterized from the brand's paths. Writes firmware/gen/m2k_fonts.h.
+# MONO2K's 1-bit fonts: Silkscreen (Jason Kottke, The Silkscreen Project Authors, SIL OFL 1.1), a pixel font on a 1 px
+# grid, the owner's pick (2026-10-30: "better resolution of the font on the display"): every glyph rendered at its
+# native size (8 px: a design pixel a screen pixel, capitals 5 rows), cropped to its ink and scaled a whole number of
+# times by nearest neighbour, so every stroke is whole pixels (held: each glyph at its native size times z is the
+# font rendered at z times the size, pixel for pixel); set a whole design pixel apart. Plus the logotype, rasterized
+# from the brand's paths (Orbitron's, the wordmark: unchanged). Writes firmware/gen/m2k_fonts.h.
 #   .venv/bin/python tools/gen_font.py [--sheet build/fonts.png]
 import os, sys
 from PIL import Image, ImageDraw, ImageFont
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.join(HERE, "..")
-TTF = os.path.join(ROOT, "assets", "fonts", "orbitron", "Orbitron[wght].ttf")
+SILK = {"R": os.path.join(ROOT, "assets", "fonts", "silkscreen", "Silkscreen-Regular.ttf"),
+        "B": os.path.join(ROOT, "assets", "fonts", "silkscreen", "Silkscreen-Bold.ttf")}
 OUT = os.path.join(ROOT, "firmware", "gen", "m2k_fonts.h")
+NATIVE = 8                     # Silkscreen's own size: a design pixel to a screen pixel
 
-# name, pixel size, weight, tracking (the columns between two glyphs' ink)
+# name, face, scale: a ladder by width (fit_font steps down it), two weights at each height
 FONTS = [
-    ("F_B", 11, 700, 2),       # the header's and the footer's: the first redesign's small type (its advances and a
-                               # pixel: two columns between letters), paper on their bars
-    ("F_S", 12, 800, 2),       # every label, value and line: strokes two pixels, capitals 9 rows, as Hortator's chunky
-    ("F_M", 16, 800, 2),       # the big type a size down
-    ("F_L", 24, 800, 3),       # the stage's names and big values
+    ("F_B", "R", 2),           # the light face: labels, units, hints, names, the bars' type (capitals 10 rows, 12 px a
+                               # character); the narrowest, where a value does not fit in F_S
+    ("F_S", "B", 2),           # the primary: lines, list names, the knobs' values (10 rows, 14 px a character)
+    ("F_M", "R", 3),           # a size up (15 rows)
+    ("F_L", "B", 3),           # a page's one big word (15 rows)
 ]
 FIRST, LAST = 32, 95
+SPACE = 2                      # a space's design pixels (with the tracking each side: 4 between two words' ink)
 
 
-def load(size, wght):
-    f = ImageFont.truetype(TTF, size)
-    f.set_variation_by_axes([wght])
-    return f
+def load(face, size):
+    return ImageFont.truetype(SILK[face], size)
 
 
-def glyph(font, ch, cap_top, cap, desc):
-    """a glyph cropped to its ink sideways, its rows from the capitals' top (0) to the descenders (cap + desc): a
-    capital or digit set between rows 0 and cap - 1 whatever the hinting did (a round one cut to them)"""
-    adv = round(font.getlength(ch))
+def native(font, ch, cap_top, cap, desc):
+    """a glyph at the native size, cropped to its ink sideways, its rows from the capitals' top (0) down to the
+    descenders (cap + desc)"""
     pad = 8
-    im = Image.new("1", (adv + 2 * pad, cap + desc + 2 * pad), 0)
+    im = Image.new("1", (NATIVE * 2 + 2 * pad, cap + desc + 2 * pad), 0)
     d = ImageDraw.Draw(im)
     d.fontmode = "1"
     d.text((pad, pad - cap_top), ch, font=font, fill=1)
     px = im.load()
     W, H = im.size
     cols = [x for x in range(W) if any(px[x, y] for y in range(H))]
+    if not cols:                                         # the space: blank, SPACE wide
+        return Image.new("1", (SPACE, cap + desc), 0)
     rows = [y for y in range(H) if any(px[x, y] for x in range(W))]
-    if not cols:                                         # the space: its advance, no ink
-        return Image.new("1", (max(1, adv), cap + desc), 0)
-    dy = 0
-    if (ch.isdigit() or "A" <= ch <= "Z") and ch not in "QJ":
-        t, b = rows[0], rows[-1] + 1
-        dy = (pad + cap - b) if b - t <= cap else (pad - t)
+    dy = cap - 1 - (rows[-1] - pad) if ch == "." else 0   # the full stop on the baseline: its outline floats half a
+                                                         # design pixel, rounded up at 8 px it read as a dash (1-0)
     out = Image.new("1", (cols[-1] - cols[0] + 1, cap + desc), 0)
     q = out.load()
     for y in range(cap + desc):
-        sy = y + pad - dy
         for x in range(out.size[0]):
-            if 0 <= sy < H and px[cols[0] + x, sy]:
-                if (ch.isdigit() or "A" <= ch <= "Z") and ch not in "QJ" and y >= cap:
-                    continue
+            if 0 <= y - dy < H - pad and px[cols[0] + x, y - dy + pad]:
                 q[x, y] = 1
     return out
+
+
+def crisp(face, z, ch, g):
+    """the glyph g (native, scaled z times) against the font rendered at z times the size: the same pixels, as far
+    below the capitals' top (FreeType may set the whole line a row apart at another size: the shape is what counts)"""
+    def ink(f, c, pad):
+        im = Image.new("1", (NATIVE * 2 * z + 2 * pad, NATIVE * 3 * z + 2 * pad), 0)
+        d = ImageDraw.Draw(im)
+        d.fontmode = "1"
+        d.text((pad, pad), c, font=f, fill=1)
+        return im
+    n = load(face, NATIVE)
+    if ink(n, ch, 8).getbbox()[1] < ink(n, "H", 8).getbbox()[1]:
+        return True                                      # (above the capitals, cut to the line: $ ^, no UI text)
+    f = load(face, NATIVE * z)
+    big, hb = ink(f, ch, 8 * z), ink(f, "H", 8 * z).getbbox()
+    big = big.crop((0, hb[1], big.size[0], hb[1] + g.size[1]))   # (the line's rows: a glyph above them is cut alike)
+    bb, gb = big.getbbox(), g.getbbox()
+    if not bb or not gb:
+        return not bb and not gb
+    # the same shape, set within a design pixel of the same place (a comma's outline sits half a pixel low: rounded at
+    # the native size, it keeps whole design pixels)
+    return list(big.crop(bb).getdata()) == list(g.crop(gb).getdata()) and (abs(bb[1] - gb[1]) < z or ch == ".")
 
 
 def logo_paths():
@@ -156,25 +176,37 @@ def main():
     sheet = None
     if "--sheet" in sys.argv:
         sheet = sys.argv[sys.argv.index("--sheet") + 1]
-    lines = ["/* generated by tools/gen_font.py from Orbitron (SIL OFL 1.1) at four sizes, and the logotype: do not "
+    lines = ["/* generated by tools/gen_font.py from Silkscreen (SIL OFL 1.1) at whole scales, and the logotype: do not "
              "edit */\n",
-             "typedef struct { uint8_t h, base, first, last; int8_t track; const uint16_t *off; const uint8_t *w;"
-             " const uint8_t *bits; } m2k_font_t;\n"]
+             "/* h, base, w in screen pixels; bits a glyph at its native size (rows h / z, (w / z + 7) / 8 bytes "
+             "each), drawn z times over */\n",
+             "typedef struct { uint8_t h, base, first, last; int8_t track; uint8_t z; const uint16_t *off; "
+             "const uint8_t *w; const uint8_t *bits; } m2k_font_t;\n"]
+    # a native row's byte widened z times (its bits doubled or tripled, MSB first): drawn a row a byte
+    lines.append("static const uint16_t FONT_Z2[256] = {%s};\n" %
+                 ",".join("0x%04x" % sum(3 << (14 - 2 * i) for i in range(8) if b >> (7 - i) & 1) for b in range(256)))
+    lines.append("static const uint32_t FONT_Z3[256] = {%s};\n" %
+                 ",".join("0x%06x" % sum(7 << (21 - 3 * i) for i in range(8) if b >> (7 - i) & 1) for b in range(256)))
     previews = []
-    for name, size, wght, track in FONTS:
-        font = load(size, wght)
+    for name, face, z in FONTS:
+        font = load(face, NATIVE)
         hb = font.getbbox("H")
         cap_top, cap = hb[1], hb[3] - hb[1]
-        desc = max(2, round(size * 0.18))
-        h = cap + desc
+        desc = max(font.getbbox(chr(c))[3] for c in range(FIRST, LAST + 1) if font.getbbox(chr(c))) - hb[3]
+        desc = max(desc, 1)
+        track = z                                        # (a design pixel between two glyphs' ink)
+        h = (cap + desc) * z
         offs, widths, bits = [], [], []
-        prev = Image.new("1", (16 * (size + 4), ((LAST - FIRST) // 16 + 1) * (h + 4)), 0)
+        prev = Image.new("1", (16 * (8 * z + 4), ((LAST - FIRST) // 16 + 1) * (h + 4)), 0)
         for i, c in enumerate(range(FIRST, LAST + 1)):
-            im = glyph(font, chr(c), cap_top, cap, desc)
+            n = native(font, chr(c), cap_top, cap, desc)
+            im = n.resize((n.size[0] * z, n.size[1] * z), Image.NEAREST)
+            if c != 32 and not crisp(face, z, chr(c), im):
+                raise SystemExit("%s: %r is not whole pixels at x%d" % (name, chr(c), z))
             offs.append(len(bits))
             widths.append(im.size[0])
-            bits.extend(pack(im))
-            prev.paste(im, ((i % 16) * (size + 4), (i // 16) * (h + 4)))
+            bits.extend(pack(n))                         # (native: the draw widens it, FONT_Z2 / FONT_Z3)
+            prev.paste(im, ((i % 16) * (8 * z + 4), (i // 16) * (h + 4)))
         previews.append(prev)
         lines.append("static const uint16_t %s_OFF[%d] = {%s};\n" % (name, len(offs), ",".join(map(str, offs))))
         lines.append("static const uint8_t %s_W[%d] = {%s};\n" % (name, len(widths), ",".join(map(str, widths))))
@@ -183,9 +215,10 @@ def main():
             lines.append("    " + ",".join("0x%02x" % b for b in bits[j:j + 24]) + ",\n")
         lines.append("};\n")
         # h: the capitals and the descenders; base: the capitals' rows (y .. y + base - 1), what every layout plans on
-        lines.append("static const m2k_font_t %s = {%d, %d, %d, %d, %d, %s_OFF, %s_W, %s_BITS};\n" %
-                     (name, h, cap, FIRST, LAST, track, name, name, name))
-        print("%s: %d px w%d, capitals %d, line %d, %d bytes" % (name, size, wght, cap, h, len(bits)))
+        lines.append("static const m2k_font_t %s = {%d, %d, %d, %d, %d, %d, %s_OFF, %s_W, %s_BITS};\n" %
+                     (name, h, cap * z, FIRST, LAST, track, z, name, name, name))
+        print("%s: Silkscreen %s x%d, capitals %d, line %d, %d bytes" % (name, "Regular" if face == "R" else "Bold", z,
+                                                                       cap * z, h, len(bits)))
 
     # the logotype: the brand's (web/panel.js, LOGO), 232 px wide, rasterized from its paths (each its own fill rule,
     # sampled 4 x 4 a pixel). LOGO_BITS its fill, LOGO_EDGE its outline (a fill pixel with an empty neighbour), as the

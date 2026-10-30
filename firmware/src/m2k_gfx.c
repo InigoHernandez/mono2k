@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
-/* MONO2K's 1-bit drawing: a 240 x 240 framebuffer (7.2 KB, 1 = ink), dither patterns, text in Inter Tight with
- * solid, dithered or outlined-and-dithered fills, the machine marks, and the transitions (dissolve, glitch). */
+/* MONO2K's 1-bit drawing: a 240 x 240 framebuffer (7.2 KB, 1 = ink), dither patterns, text in Silkscreen (a pixel font,
+ * drawn 2 or 3 times its size) in solid, dithered or outlined-and-dithered fills, the machine marks, and the
+ * transitions (dissolve, glitch). */
 
 static uint8_t fb[M2K_FB_BYTES];       /* the frame being drawn */
 static uint8_t fb_prev[M2K_FB_BYTES];  /* the last frame shown before a transition */
@@ -340,8 +341,9 @@ static inline int glyph_bit(const m2k_font_t *f, int g, int gx, int gy)
 {
     int w = f->w[g];
     if (gx < 0 || gy < 0 || gx >= w || gy >= f->h) return 0;
-    const uint8_t *b = f->bits + f->off[g] + gy * ((w + 7) >> 3);
-    return (b[gx >> 3] >> (7 - (gx & 7))) & 1;
+    const int z = f->z, nx = gx / z;                     /* (the native glyph's pixel under it) */
+    const uint8_t *b = f->bits + f->off[g] + (gy / z) * ((w / z + 7) >> 3);
+    return (b[nx >> 3] >> (7 - (nx & 7))) & 1;
 }
 
 static inline int glyph_of(const m2k_font_t *f, int c)
@@ -358,11 +360,11 @@ static int text_w(const m2k_font_t *f, const char *s, int track)
     return n ? w - f->track - track : 0;
 }
 
-/* a glyph in one fill (1 ink, 0 paper, else inverted), a screen byte at a time: each byte's eight pixels gathered from
- * the glyph's row, masked to the clip (a line of the small type was 30 000 instructions a pixel at a time) */
+/* a glyph in one fill (1 ink, 0 paper, else inverted): its native rows widened z times by a table, a screen byte at a
+ * time and z rows a native row (a line of the small type was 30 000 instructions a pixel at a time) */
 static void glyph_solid(const m2k_font_t *f, int g, int x, int y, int fill)
 {
-    int w = f->w[g], bpr = (w + 7) >> 3;
+    const int w = f->w[g], z = f->z, bpr = (w / z + 7) >> 3;
     int vx0 = x > clip_x0 ? x : clip_x0, vx1 = x + w < clip_x1 ? x + w : clip_x1;
     int vy0 = y > clip_y0 ? y : clip_y0, vy1 = y + f->h < clip_y1 ? y + f->h : clip_y1;
     if (vx0 < 0) vx0 = 0;
@@ -370,41 +372,64 @@ static void glyph_solid(const m2k_font_t *f, int g, int x, int y, int fill)
     if (vx1 > M2K_W) vx1 = M2K_W;
     if (vy1 > M2K_H) vy1 = M2K_H;
     if (vx0 >= vx1 || vy0 >= vy1) return;
-    const uint8_t *src = f->bits + f->off[g] + (vy0 - y) * bpr;
-    if (x >= 0 && bpr <= 4) {
-        /* a row's bytes as one word, shifted once into the screen's (up to five), the first and last masked to the
-         * clip: half the work of a byte gathered at a time (the type is most of a frame) */
-        const int bx = x >> 3, sh = x & 7, k0 = (vx0 >> 3) - bx, k1 = ((vx1 - 1) >> 3) - bx;
-        const uint8_t mlo = (uint8_t)(0xFFu >> (vx0 & 7)), mhi = (uint8_t)(0xFF00u >> (((vx1 - 1) & 7) + 1));
-        for (int j = vy0; j < vy1; j++, src += bpr) {
-            uint32_t r = (uint32_t)src[0] << 24;
-            if (bpr > 1) r |= (uint32_t)src[1] << 16;
-            if (bpr > 2) r |= (uint32_t)src[2] << 8;
-            if (bpr > 3) r |= src[3];
-            uint8_t *row = &fb[j * ROWB + bx];
-            for (int k = k0; k <= k1; k++) {
-                uint8_t v = k < 4 ? (uint8_t)(r >> (24 - 8 * k + sh)) : (uint8_t)(r << (8 - sh));
-                if (k == k0) v &= mlo;
-                if (k == k1) v &= mhi;
-                if (fill == 1) row[k] |= v;
-                else if (fill == 0) row[k] &= (uint8_t)~v;
-                else row[k] ^= v;
+    const uint8_t *src = f->bits + f->off[g];
+    if (x >= 0 && bpr == 1 && (z == 2 || z == 3) && vx0 == x && vx1 == x + w && vy0 == y && vy1 == y + f->h) {
+        /* whole on the screen (nearly every glyph): a native row widened into one word, written to its z rows
+         * straight, an empty row (the descenders', a gap) skipped. Its bytes past the first only where they have ink,
+         * so none past the glyph's last pixel is touched */
+        const int sh = x & 7, nr = f->h / z;
+        uint8_t *row = &fb[y * ROWB + (x >> 3)];
+        for (int jn = 0; jn < nr; jn++, row += z * ROWB) {
+            const uint8_t nb = src[jn];
+            if (!nb) continue;
+            const uint32_t r = (z == 2 ? (uint32_t)FONT_Z2[nb] << 16 : FONT_Z3[nb] << 8) >> sh;
+            const uint8_t a = (uint8_t)(r >> 24), b = (uint8_t)(r >> 16), c = (uint8_t)(r >> 8), d = (uint8_t)r;
+            for (uint8_t *q = row, *e = row + z * ROWB; q < e; q += ROWB) {
+                if (fill == 1) { q[0] |= a; if (b) q[1] |= b; if (c) q[2] |= c; if (d) q[3] |= d; }
+                else if (fill == 0) {
+                    q[0] &= (uint8_t)~a;
+                    if (b) q[1] &= (uint8_t)~b;
+                    if (c) q[2] &= (uint8_t)~c;
+                    if (d) q[3] &= (uint8_t)~d;
+                } else { q[0] ^= a; if (b) q[1] ^= b; if (c) q[2] ^= c; if (d) q[3] ^= d; }
             }
         }
         return;
     }
-    for (int j = vy0; j < vy1; j++, src += bpr) {
-        uint8_t *row = &fb[j * ROWB];
-        for (int d = vx0 >> 3; d <= (vx1 - 1) >> 3; d++) {
-            int p = 8 * d - x, s = p & 7, q = (p - s) / 8;     /* the glyph's column under the byte's first pixel */
-            unsigned a = q >= 0 && q < bpr ? src[q] : 0u, b = q + 1 >= 0 && q + 1 < bpr ? src[q + 1] : 0u;
-            int lo = vx0 > 8 * d ? vx0 - 8 * d : 0, hi = vx1 < 8 * d + 8 ? vx1 - 8 * d : 8;
-            uint8_t v = (uint8_t)(((a << s) | (b >> (8 - s))) & (0xFFu >> lo) & (0xFF00u >> hi));
-            if (fill == 1) row[d] |= v;
-            else if (fill == 0) row[d] &= (uint8_t)~v;
-            else row[d] ^= v;
+    if (x >= 0 && bpr == 1 && z >= 1 && z <= 3) {
+        /* a native row's byte widened z times by a table into one word, shifted once into the screen's bytes (the
+         * first and last masked to the clip) and laid on its z rows: the type is most of a frame */
+        const int bx = x >> 3, sh = x & 7, k0 = (vx0 >> 3) - bx, k1 = ((vx1 - 1) >> 3) - bx;
+        const uint8_t mlo = (uint8_t)(0xFFu >> (vx0 & 7)), mhi = (uint8_t)(0xFF00u >> (((vx1 - 1) & 7) + 1));
+        for (int j = vy0; j < vy1;) {
+            const int jn = (j - y) / z, je = y + (jn + 1) * z < vy1 ? y + (jn + 1) * z : vy1;
+            const uint8_t nb = src[jn];
+            const uint32_t r = z == 2 ? (uint32_t)FONT_Z2[nb] << 16 : z == 3 ? FONT_Z3[nb] << 8 : (uint32_t)nb << 24;
+            uint8_t v[5];
+            for (int k = k0; k <= k1; k++) {
+                v[k] = k < 4 ? (uint8_t)(r >> (24 - 8 * k + sh)) : (uint8_t)(r << (8 - sh));
+                if (k == k0) v[k] &= mlo;
+                if (k == k1) v[k] &= mhi;
+            }
+            for (; j < je; j++) {
+                uint8_t *row = &fb[j * ROWB + bx];
+                for (int k = k0; k <= k1; k++) {
+                    if (fill == 1) row[k] |= v[k];
+                    else if (fill == 0) row[k] &= (uint8_t)~v[k];
+                    else row[k] ^= v[k];
+                }
+            }
         }
+        return;
     }
+    for (int j = vy0; j < vy1; j++)                      /* (off the screen's left, or wider: a pixel at a time) */
+        for (int i = vx0; i < vx1; i++)
+            if (glyph_bit(f, g, i - x, j - y)) {
+                uint8_t *b = &fb[j * ROWB + (i >> 3)], m = (uint8_t)(0x80u >> (i & 7));
+                if (fill == 1) *b |= m;
+                else if (fill == 0) *b &= (uint8_t)~m;
+                else *b ^= m;
+            }
 }
 
 /* fill: 1 ink, 0 paper, 2 invert, or 100 + pattern: an outline in ink, the inside in that pattern */

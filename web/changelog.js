@@ -23,6 +23,7 @@ window.M2K_CHANGES = [
       ["fixes", "1.5: A sound loaded onto another track than the one it was saved from: its LFOs now move the track it is on."],
       ["screen", "1.5: On the FM-1 the screen goes out four times faster and only where it changed; frames come as the processor has room, and the knob bars and meters glide by the time, so the motion is even."],
       ["screen", "1.5: A new screen, after the sound library page, Torso's S4 and Hortator: everything on a 4-pixel grid, no boxes, each page's picture across the whole screen, the knobs frameless with a thin bar, one light face for labels and one bold for what matters."],
+      ["screen", "1.5: The screen's type is Silkscreen, a pixel font drawn at whole sizes (every pixel of its design a 2 \u00d7 2 or 3 \u00d7 3 block), so every letter is crisp on the FM-1; MONO2K's wordmark stays. Bold says what matters, regular what is about it."],
       ["screen", "1.5: The line under the picture says what you turn (its name, value and unit, LOCK or REC) or the step you hold; at rest, the picture's own names. HOME's knob popup is gone: that line says it."],
       ["screen", "1.5: HOME shows the six tracks as lanes: a short line a rest, a block a trig (an accent taller, a condition shorter, locks dotted), the playing step underlined, each track's level live at the right."],
       ["screen", "1.5: One picture language on every page: areas in bars from a dotted floor, points you move as handles, what moves live as a marker. LFO shows its three side by side; GRIDS its map as dots."],

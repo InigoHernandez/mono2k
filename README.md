@@ -56,7 +56,7 @@ cc -O2 -Wall -Wno-unused-function -Ifirmware/src -Ifirmware/gen -o build/host/m2
 | Sequencer | 6 × 64 steps, note / accent / slide, parameter locks, the Monomachine's trig types (each step trigs the amp, the filter's envelope and the LFOs independently: step + VOL, ALL ... NONE, a trigless lock), trig conditions (chance, A:B, 1ST, PRE, FILL), ratchets, Grids' lanes (Mutable Instruments' map), each track's own length (polymeter, 1-64 steps) and speed, mutes on the bar, swing, live recording and step entry (REC while stopped), pages held to set the length, patterns queued at the bar |
 | Bus | GLO > BUS: a feedback-delay-network reverb at 22 kHz (DCAY, RT60 0.3–24 s; DAMP, the top's decay 1/1–1/30), a 4-bit ADPCM crunch (ADPC) and a drive into the soft clip (DRIV), each on a law measured over its whole range; PERFORM's 22 effects over them (repeats, reverse, stop, stutter, crush, wow, freeze, scatter, octaves, filters, dub, shimmer, spin), every change crossfaded |
 | MIDI | tracks 1–6 on six channels from GLO > MIDI's CHAN (1–6 at first), the others play the track in view: notes and the Monomachine's CC map (SYN 48–55, AMP 56–63, FILT 72–79, FX 80–87, LFO 1/2/3 on 88/104/112, level 7, mute 3). SYNC IN follows a MIDI clock (its tempo, a step every sixth pulse, the swing kept; start, continue, stop) from USB, the TRS jack or both, SYNC OUT sends one (24 a beat, start, stop), NOTES OUT each track's trigs on its channel. GLO > IN: where notes and CCs come from (both, USB, TRS, none), and a thru of the jack's MIDI out over USB. The emulator picks a MIDI device in (as USB) and one out |
-| Screen | 240 × 240 at 1 bit (a 7.2 KB framebuffer): Orbitron in solid ink (one size for every big value), Model:Cycles-style machine cards, machine marks as one family of isotypes on a 12-unit grid, each moving in its own way in time with the pattern, dissolves, glitches, live envelopes, filters, LFOs and scopes; light or dark (GLO > SET > SCRN; on the web it follows the page's theme) |
+| Screen | 240 × 240 at 1 bit (a 7.2 KB framebuffer): Silkscreen, a pixel font, at whole scales (2x and 3x: crisp on the FM-1), the Orbitron wordmark, Model:Cycles-style machine cards, machine marks as one family of isotypes on a 12-unit grid, each moving in its own way in time with the pattern, dissolves, glitches, live envelopes, filters, LFOs and scopes; light or dark (GLO > SET > SCRN; on the web it follows the page's theme) |
 
 ## Where things are
 
@@ -345,8 +345,9 @@ DigiPro waves and BeatBox samples are the OS's data and are not copied: DIGI-WAV
 ## Credits and licence
 
 GPL-3.0-only. Built on the open FM-1 work: Felucca by Leo Kuroshita (Hügelton Instruments), CS-1, X0X, FoMni, zp12
-and the others. Orbitron by The League of Moveable Type: SIL OFL 1.1 (`assets/fonts/orbitron/OFL.txt`); the firmware
-carries 1-bit renderings of it. The FM-1's panel geometry as measured for
+and the others. Silkscreen by Jason Kottke, Copyright 2001 The Silkscreen Project Authors: SIL OFL 1.1
+(`assets/fonts/silkscreen/OFL.txt`), the screen's type; the firmware carries 1-bit renderings of it. Orbitron by The
+League of Moveable Type: SIL OFL 1.1 (`assets/fonts/orbitron/OFL.txt`), the wordmark's and the site's. The FM-1's panel geometry as measured for
 CoralFlower's emulator. The machines were measured against a Monomachine running in Joe Landers' Monomachine
 emulator, [gearmulator-md-mm](https://github.com/joelanders/gearmulator-md-mm) (a fork of Gearmulator by The Usual
 Suspects), with the owner's own OS image: measurements only, none of the emulator's code or data is in MONO2K.

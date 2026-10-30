@@ -2,7 +2,7 @@
 
 MONO2K's 240 x 240 1-bit screen, after the sound library page the owner loved, Torso's S4, Hortator and the MNM-1's
 menu: every page one picture as its hero, its parameters quiet and aligned under the four knobs, very few lines and no
-boxes for their own sake. MONO2K's own stays: Orbitron, the wordmark and the splash, the machines' marks and badges,
+boxes for their own sake. MONO2K's own stays: the Orbitron wordmark and the splash, the machines' marks and badges,
 the ink header and footer bars, the bar under each knob's value. Code: the constants at the top of `m2k_ui.c`'s
 drawing section, `m2k_gfx.c` (rules, cells, bars, handles, markers); `tools/gen_font.py` (the fonts). The host's text
 audit enforces the rules below.
@@ -14,37 +14,45 @@ capitals): `tx_b` draws it there. The content keeps 4 px from the screen's sides
 
 ```
 y 0-15    header   ink bar: [A01] CIRCUIT            (GRID) [HOLD] o 126 >
-y 16-55   knobs    four columns of 60, frameless: label (baseline 28), value (44), a thin bar (48-49), 4 px in
-y 56      rule     dotted, the only line between bands
-y 60-199  stage    the page's picture across [4, 236) x [64, 184); its info line on baseline 196
+y 16-59   knobs    four columns of 60, frameless: label (baseline 32), value (48), a thin bar (52-53), 4 px in
+y 60      rule     dotted, the only line between bands
+y 64-199  stage    the page's picture across [4, 236) x [68, 180); its info line on baseline 196
 y 204-223 steps    16 cells 8 x 8, 12 apart, a beat's four under each knob (x 60k + 8)
 y 224-239 footer   ink bar: [bars] T2 > DRM-SNAR > AMP                 1/2
 ```
 
 ## Type
 
-Orbitron (SIL OFL 1.1), 1-bit, each glyph cropped to its ink; four sizes, one light and three bold:
+Silkscreen (Jason Kottke, The Silkscreen Project Authors; SIL OFL 1.1), the owner's pick for its resolution on the
+FM-1: a pixel font on a 1 px grid, its capitals 5 rows at its native 8 px. `tools/gen_font.py` renders each glyph at
+that size and the firmware draws it a whole number of times larger (2 or 3: every design pixel a 2 x 2 or 3 x 3
+block, never a half pixel; the generator holds each glyph to the font rendered at that size, pixel for pixel). The
+glyphs are kept at their native size (a byte a row) and widened as they are drawn (`FONT_Z2`, `FONT_Z3`). Four
+fonts, a ladder by width that `fit_font` steps down:
 
-| font | size, weight | capitals | for |
-|---|---|---|---|
-| **F_B** | 11 px, 700 | 8 rows, 1 px strokes | the light face: labels, units, hints, names in pictures, the bars' type |
-| **F_S** | 12 px, 800 | 9 rows, 2 px strokes | the primary lines: list names, values in the info line, actions |
-| **F_M** | 16 px, 800 | 12 rows | the knobs' values |
-| **F_L** | 24 px, 800 | 18 rows | a page's one big word (SYN's model, TIME's tempo, SET's project) |
+| font | face, scale | capitals | a character | for |
+|---|---|---|---|---|
+| **F_B** | Regular x2 | 10 rows | ~10 px | the light face: labels, units, hints, names in pictures, the bars' type; a value's fallback |
+| **F_S** | Bold x2 | 10 rows | ~12 px | the primary: list names, the knobs' values, values in the info line, actions |
+| **F_M** | Regular x3 | 15 rows | ~15 px | a size up (the MIDI page's channels) |
+| **F_L** | Bold x3 | 15 rows | ~18 px | a page's one big word (SYN's model, TIME's tempo, SET's project) |
 
-One weight says what is primary; the light face what is about it. Nothing is dithered in type.
+The weight says what is primary (bold) and what is about it (regular), both one height, so a knob's value in either
+never moves the row. x1 (5-row capitals) is too small to read on the 1.54-inch screen and is not used. The full stop
+sits on the baseline (its outline floats half a design pixel, which at 8 px rounded up into a dash). Nothing is
+dithered in type.
 
 ## The bands
 
 - **Header** (ink, rows 0-15): the pattern's slot a paper tag and its name, the modes as tags (GRID, PADS; HOLD,
   READY, FILL solid; MUTE blinking while a mute waits for the bar), REC, the tempo, the transport (to x 235). A
   message takes it a moment (its inverse, a gradient tail).
-- **Knobs** (rows 16-55): column k is `[60k, 60k + 60)`, its content `[60k + 4, 60k + 56)`. The label in the light
-  face, solid (a box 2 px round it) while its knob turns; the value in F_M where all four knobs' every value fits 52
-  px, else F_S, solid while locked; the bar 2 rows, a dotted track and the part up to the value solid (from the middle
-  for a two-sided value, a tick there; a segment a choice for 8 or fewer), its end standing up a moment as it turns.
-  A free knob shows its track alone. A dotted rule on row 56.
-- **Stage** (rows 60-199): the picture `[4, 236) x [64, 184)`, the info line on baseline 196. The info line says what
+- **Knobs** (rows 16-59): column k is `[60k, 60k + 60)`, its content `[60k + 4, 60k + 56)`. The label in the light
+  face, solid (a box 2 px round it) while its knob turns; the value in F_S where the knob's every value fits 52 px,
+  else in F_B (one height either way), solid while locked; the bar 2 rows, a dotted track and the part up to the value
+  solid (from the middle for a two-sided value, a tick there; a segment a choice for 8 or fewer), its end standing up a
+  moment as it turns. A free knob shows its track alone. A dotted rule on row 60.
+- **Stage** (rows 64-199): the picture `[4, 236) x [68, 180)`, the info line on baseline 196. The info line says what
   turns (the knob's full name at the left, its value and unit at the right, LOCK solid or REC blinking before them),
   a held step (its number, its condition, ratchet, trig type, accent, slide solid, its note at the right), else the
   picture's own names (AMP's A H D R under their segments, FILT's decades, LFO's rates, GLO's times ...).
@@ -92,17 +100,18 @@ message's tail. Dark mode inverts the whole screen.
 
 ## Lists
 
-The menu's (the MNM-1's): a row 12 px apart, the slot in the light face, the name primary from 40 px in, the machine
-at the right; the one picked a solid bar across the row (rows b - 11 .. b + 1); no boxes, no rules; a scroll at the
+The menu's (the MNM-1's): a row 16 px apart, the slot in the light face, the name primary from 36 px in, the machine
+at the right; the one picked a solid bar across the row (rows b - 12 .. b + 1); no boxes, no rules; a scroll at the
 right edge (the rows shown solid on a dotted track).
 
 ## Panels
 
 Only where a layer covers the page: GLO held and latched, HOME held, SEQ held, PERFORM, the button cards, the
 catalogue, a question, the clear's ring (and LFO held, compact, the page moving on under it). One frame, the stage
-cleared round it; the title in the light face solid on its top line, centred; rows 16 apart from baseline 88
+cleared round it; the title in the light face solid on its top line, centred; rows 16 apart from baseline 96
 (`pairs`: a key an outlined tag, its action primary, aligned); the keys' hints on the foot's baseline 196 (`hints`:
-`[KEY] ACTION`, as many as fit). A layer's panel is x 4-235, rows 68-203. No shadow.
+`[KEY] ACTION`, as many as fit). A layer's panel is x 4-235, rows 72-203. No shadow. A table's actions in F_S
+where they all fit, else F_B.
 
 ## What the audit enforces
 
@@ -126,5 +135,6 @@ once and rising as it resolves into the crisp wordmark, then the type. `m2k_host
 `host/m2k_draw.c` counts a frame's instructions as the FM-1 builds the core:
 `cc -O2 -fno-builtin -fno-vectorize -fno-slp-vectorize -DM2K_MUL_OUT -Ifirmware/src -Ifirmware/gen -o
 build/host/m2k_draw host/m2k_draw.c && build/host/m2k_draw [--splash [-v]]`. The drawing's primitives work a byte at a
-time (a one-byte-wide rect a byte a row, dotted lines a byte at a time, a glyph's row one shifted word): the 2026-10
-restyle's frames cost 5-40 % less than the boxed ones before it.
+time (a one-byte-wide rect a byte a row, dotted lines a byte at a time, a glyph's native row widened once and laid on
+its 2 or 3 rows, empty rows skipped): the 2026-10 restyle's frames cost 5-40 % less than the boxed ones before it, and
+Silkscreen's 4-38 % less again than Orbitron's.
