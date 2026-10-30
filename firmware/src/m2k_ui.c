@@ -3608,6 +3608,14 @@ static void grids_picture(void)
 
 /* GLO > PLAY: the six tracks heard (solid) or muted (framed), soloed away dotted, one waiting for the bar blinking to
  * what it will be; the bar in play, its steps gone solid; when a mute comes */
+/* track t's measured load, % of real time (-1: no clock) */
+static int track_load(int t)
+{
+    if (!m2k_clock || !m2k_clock_per_ms || !par_meas[t]) return -1;
+    uint32_t tpb = m2k_clock_per_ms * 160u / 441u;       /* ticks a block of real time (16 samples) */
+    return (int)((uint32_t)(par_meas[t] >> 4) * 100u / (tpb ? tpb : 1u));
+}
+
 static void play_picture(int busy)
 {
     const m2k_pattern_t *p = PAT(cur_pat);
@@ -3621,6 +3629,11 @@ static void play_picture(int busy)
         int heard = !muted && (!solo || (solo & b));
         if (heard) rect(x, y, w, 24, 1); else if (muted) frame(x, y, w, 24, 1); else dots_frame(x, y, w, 24);
         tx_b(&F_S, x + 4, y + 16, (const char[]){'T', (char)('1' + i), 0}, !heard);
+        /* its load (the FM-1's measure: m2k_clock): its share of real time, full at 50 %, on a dotted track (the track
+         * alone where nothing measures: the browser, the host) */
+        int lc = !heard, lx = x + 28, ly = y + 16, ld = track_load(i);
+        for (int j = 0; j < 40; j += 2) px(lx + j, ly + 1, lc);
+        if (ld > 0) rect(lx, ly, (ld > 50 ? 50 : ld) * 40 / 50, 2, lc);
     }
     const int len = seq_len(), ps = sq.playing ? play_step() : -1, bar = ps < 0 ? 0 : ps / 16, bl = CLAMP(len - bar * 16, 1, 16);
     for (int i = 0; i < 16; i++) {

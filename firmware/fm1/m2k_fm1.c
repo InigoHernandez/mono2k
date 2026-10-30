@@ -404,11 +404,15 @@ static void bench(void)
 }
 #endif
 
+static uint32_t clock_ticks(void) { return fm1_ticks(); }   /* (the core's clock: each track timed where it runs) */
+
 static void app_init(void)
 {
 #if DINGHY_DUAL_CORE
     if (audio_worker_online) { m2k_par_begin = par_begin; m2k_par_end = par_end; }
 #endif
+    m2k_clock = clock_ticks;
+    m2k_clock_per_ms = FM1_TICKS_PER_US * 1000u;
     screen_init();
 #if M2K_FM1_DIAG
     bench();

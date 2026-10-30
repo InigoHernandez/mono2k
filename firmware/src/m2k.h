@@ -172,6 +172,11 @@ extern void (*m2k_par_end)(void);                              /* 1 while the se
  * audio interrupt found the ring empty). GLO > PLAY shows them (a dash where none came: the browser, the host); a short
  * one more says CPU FULL, at most every few seconds */
 void m2k_cpu(int core1_pct, int core2_pct, int shorts);
+/* the platform's clock (the FM-1's ticks; unset elsewhere): the render times each track, the bus and its own part where
+ * they run, and shares the tracks between the cores by what they took (the host's and the browser's split stays the
+ * estimates': the same every time); its ticks a millisecond, for the tracks' loads on GLO > PLAY */
+extern uint32_t (*m2k_clock)(void);
+extern uint32_t m2k_clock_per_ms;
 void m2k_setting(int i, int v);                     /* e.g. the web page's theme sets S_SCREEN */
 void m2k_pattern(int n);                            /* select a pattern, as PRESETS does */
 void m2k_track(int t);                              /* select a track, as SELECT does (the web's track cells) */

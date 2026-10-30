@@ -6,8 +6,9 @@
  *   cc -O2 -fno-builtin -fno-vectorize -fno-slp-vectorize -DM2K_MUL_OUT -Ifirmware/src -Ifirmware/gen \
  *      -o build/host/m2k_draw host/m2k_draw.c && build/host/m2k_draw [--splash | --perform]
  * (--perform: the sound's cost with each PERFORM effect held, perform_cpu; --library [DIR]: each library sound's,
- * library_cpu; --cpu: the render's yardstick, bank A's four and DENSE on one core and two; --hash: their renders'
- * FNV-1a, on one core and two, to hold a change of the engine to the same sound bit for bit) */
+ * library_cpu; --cpu: the render's yardstick, bank A's four and DENSE on one core and two; --hash [SKIP]: their renders'
+ * FNV-1a, on one core and two, to hold a change of the engine to the same sound bit for bit; SKIP samples left out
+ * first, 16 against an engine from before 1.6.1, whose bus played in the block) */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -205,6 +206,52 @@ static int cpu_yard(void)
     return 0;
 }
 
+/* --split: the split by measure, as the FM-1's clock gives it, on this computer: the instruction counter as the
+ * clock (m2k_clock) learns what each track and the bus take, the split it picks recorded a block at a time, then the
+ * same render played on that split (par_force, no clock) and its wall counted as --cpu counts it; against the
+ * estimates' split */
+static uint64_t clk_off;                 /* (each read's own cost taken out of what follows it) */
+static uint32_t instr_clock(void) { uint64_t v = instr() - clk_off; clk_off += base_cost; return (uint32_t)v; }
+static int par_now(void (*job)(void));
+static void par_none(void);
+static uint8_t split_rec[4 * 44100 / M2K_SUB + 8];
+static double split_wall(int p, int measured)
+{
+    static int16_t b[2 * M2K_SUB], w[256];
+    const int warm = 2 * 44100, len = 4 * 44100, nb = len / M2K_SUB;
+    if (measured) {                                       /* the split the measure picks, recorded */
+        m2k_par_begin = par_now; m2k_par_end = par_none; m2k_clock = instr_clock;
+        play_from(p);
+        for (int f = 0; f < warm; f += 128) m2k_render(w, 128);
+        for (int k = 0; k < nb; k++) { m2k_render(b, M2K_SUB); split_rec[k] = par_mask; }
+        m2k_clock = 0;
+    }
+    m2k_par_begin = cpu_begin; m2k_par_end = cpu_end;
+    play_from(p);
+    for (int f = 0; f < warm; f += 128) m2k_render(w, 128);
+    uint64_t tot = 0;
+    wall_x = 0;
+    for (int k = 0; k < nb; k++) {
+        if (measured) par_force = split_rec[k];
+        job_i = 0;
+        uint64_t s0 = instr();
+        m2k_render(b, M2K_SUB);
+        uint64_t c = instr() - s0 - base_cost;
+        if (job_i) c -= job_i + 4 * base_cost;
+        tot += c;
+    }
+    par_force = -1;
+    m2k_par_begin = 0; m2k_par_end = 0;
+    return (double)(tot + wall_x) / len;
+}
+static int split_cmp(void)
+{
+    static const char *const N[5] = {"A01", "A02", "A03", "A04", "DENSE"};
+    printf("the wall (the slower core), Mac instructions a sample: the estimates' split, the split by measure\n");
+    for (int p = 0; p < 5; p++) printf("  %-6s %6.0f %6.0f\n", N[p], split_wall(p, 0), split_wall(p, 1));
+    return 0;
+}
+
 static uint32_t fnv_pcm(uint32_t h, const int16_t *s, int n)
 {
     const uint8_t *b = (const uint8_t *)s;
@@ -213,17 +260,19 @@ static uint32_t fnv_pcm(uint32_t h, const int16_t *s, int n)
 }
 static int par_now(void (*job)(void)) { job(); return 1; }
 static void par_none(void) {}
-static int render_hash(void)
+/* skip: the samples left out first (16: the bus a block behind since 1.6.1, against an older engine's from 0) */
+static int render_hash(int skip)
 {
     static const char *const N[6] = {"A01", "A02", "A03", "A04", "DENSE", "FXS"};
-    static int16_t b[2 * 128];
+    static int16_t b[2 * 10 * 44100 + 2 * 256];
     for (int p = 0; p < 6; p++) {
         uint32_t h[2];
         for (int two = 0; two < 2; two++) {
             m2k_par_begin = two ? par_now : 0; m2k_par_end = two ? par_none : 0;
             play_from(p);
-            h[two] = 2166136261u;
-            for (int f = 0; f < 10 * 44100; f += 128) { m2k_render(b, 128); h[two] = fnv_pcm(h[two], b, 128); }
+            int n = (10 * 44100 + skip + 127) / 128 * 128;
+            for (int f = 0; f < n; f += 128) m2k_render(b + 2 * f, 128);
+            h[two] = fnv_pcm(2166136261u, b + 2 * skip, 10 * 44100);
         }
         m2k_par_begin = 0; m2k_par_end = 0;
         printf("  %-6s %08x %08x%s\n", N[p], h[0], h[1], h[0] == h[1] ? "" : "  (two cores differ)");
@@ -237,7 +286,8 @@ int main(int argc, char **argv)
     if (argc > 1 && !strcmp(argv[1], "--perform")) return perform_cpu();
     if (argc > 1 && !strcmp(argv[1], "--library")) return library_cpu(argc > 2 ? argv[2] : 0);
     if (argc > 1 && !strcmp(argv[1], "--cpu")) return cpu_yard();
-    if (argc > 1 && !strcmp(argv[1], "--hash")) return render_hash();
+    if (argc > 1 && !strcmp(argv[1], "--split")) return split_cmp();
+    if (argc > 1 && !strcmp(argv[1], "--hash")) return render_hash(argc > 2 ? atoi(argv[2]) : 0);
     if (argc > 1 && !strcmp(argv[1], "--splash")) {
         /* every splash frame at 60 a second, as the host draws them */
         m2k_init(2000);

@@ -78,7 +78,8 @@ static void mx_out(int n, int a, int b, int c)
 {
     if ((uint8_t)(mx.qw - mx.qr) >= 64) return;
     mxq_t *q = &mx.q[mx.qw++ & 63];
-    q->at = mx.now; q->m[0] = (uint8_t)a; q->m[1] = (uint8_t)b; q->m[2] = (uint8_t)c; q->n = (uint8_t)n;
+    q->at = mx.now + M2K_SUB;          /* (the sound it belongs to comes out a block later: the bus's, m2k_render) */
+    q->m[0] = (uint8_t)a; q->m[1] = (uint8_t)b; q->m[2] = (uint8_t)c; q->n = (uint8_t)n;
 }
 
 int m2k_midi_out(uint8_t msg[3], uint32_t played)
@@ -343,7 +344,7 @@ static void fire_step(int s)
         }
         fire_track(t, ts, step_len(s), sq.n1x);
     }
-    bus_step(s);
+    bus_step_q(s);
 }
 
 /* the tracks start over with the pattern, every one from its first step with its first */
@@ -1114,6 +1115,10 @@ void m2k_init(uint32_t seed)
         trk[t].dt_q8 = 400 << 8;
     }
     bus.grng = 0x6C078965u ^ seed;
+    m_set(brec, 0, sizeof brec);                 /* the bus has no block before the first */
+    bcur = 0;
+    dub_snap = 0;
+    m_set(par_meas, 0, sizeof par_meas);
     for (int i = 0; i < M2K_TRACKS; i++) { sq.rec_skip[i] = -1; sq.prng[i] = ((0x2545F491u ^ seed) + (uint32_t)i * 0x9E3779B9u) | 1u; }
     m_set(store_.set, 0, sizeof store_.set);
     projects_factory();

@@ -46,11 +46,15 @@ static void wav(const char *path, const int16_t *s, uint32_t frames)
 static void run(int16_t *out, uint32_t frames, uint32_t *ms)
 {
     for (uint32_t i = 0; i < frames; i += 128) {
-        m2k_render(out + i * 2, 128);
+        m2k_render(out + i * 2, (int)(frames - i < 128 ? frames - i : 128));
         *ms += 3;                                   /* about 128 frames */
         m2k_frame(*ms);
     }
 }
+
+/* the bus plays a block behind the tracks (since 1.6.1: the sound out 16 samples later, nothing else): a render is
+ * written from M2K_SUB on, a block more rendered after its end, so every measure stays on the references' timeline */
+#define LAT M2K_SUB
 
 /* a line's "cc=v" controllers for track t, as main() reads them ("m2k:" MONO2K's alone, "mm:" skipped, "m2k:pN=v" a
  * kit parameter as it is) */
@@ -110,7 +114,7 @@ static int loop(const char *dir, int drive)
     for (int i = 0; i < 4; i++) m2k_frame(ms += 16);
     const double step_frames = M2K_SR * 15.0 / tempo;
     const uint32_t total = (uint32_t)(seconds * M2K_SR) & ~15u;
-    int16_t *s = calloc((size_t)total * 2, sizeof *s);
+    int16_t *s = calloc((size_t)(total + LAT) * 2, sizeof *s);
     uint32_t off_at[64];
     int off_ch[64], off_note[64], noff = 0;
     for (uint32_t f = 0, step = 0; f < total; f += 16) {
@@ -134,9 +138,10 @@ static int loop(const char *dir, int drive)
         m2k_render(s + f * 2, 16);
         if ((f & 2047) == 0) m2k_frame(ms += 46);
     }
+    m2k_render(s + total * 2, LAT);
     char path[512];
     snprintf(path, sizeof path, "%s/loop_m2k_driv%d.wav", dir, drive);
-    wav(path, s, total);
+    wav(path, s + LAT * 2, total);
     free(s);
     printf("loop_m2k_driv%d\n", drive);
     return 0;
@@ -207,7 +212,7 @@ int main(int argc, char **argv)
             run(pre, M2K_SR / 2 & ~127u, &ms);
         }
         uint32_t g = (uint32_t)(gate * M2K_SR) & ~127u, tl = (uint32_t)(tail * M2K_SR) & ~127u;
-        int16_t *s = calloc((size_t)(g + tl) * 2, sizeof *s);
+        int16_t *s = calloc((size_t)(g + tl + LAT) * 2, sizeof *s);
         if (pre) {
             uint32_t pg = ((uint32_t)pre * (M2K_SR / 1000)) & ~127u, pr = (M2K_SR * 3 / 10) & ~127u;
             int16_t *b = calloc((size_t)(pg > pr ? pg : pr) * 2, sizeof *b);
@@ -220,10 +225,10 @@ int main(int argc, char **argv)
         m2k_midi(0x90, note, vel);
         run(s, g, &ms);
         m2k_midi(0x80, note, 0);
-        run(s + g * 2, tl, &ms);
+        run(s + g * 2, tl + LAT, &ms);
         char path[512];
         snprintf(path, sizeof path, "%s/%s.wav", argv[1], name);
-        wav(path, s, g + tl);
+        wav(path, s + LAT * 2, g + tl);
         free(s);
         puts(name);
     }

@@ -851,7 +851,11 @@ static void verb_at(int dc, int dm, double sec, double *out)
             if (!pass && f < cut)
                 for (int i = 0; i < M2K_SUB; i++) { nz ^= nz << 13; nz ^= nz >> 17; nz ^= nz << 5; rs[i] = (int32_t)(nz % 24001) - 12000; }
             if (pass && !f) rs[0] = 30000;
-            bus_block(L, R, rs, o);
+            static brec_t vb;                            /* (the bus alone, on this block's controls) */
+            brec_take(&vb);
+            m_cpy(vb.L, L, sizeof vb.L); m_cpy(vb.R, R, sizeof vb.R); m_cpy(vb.rs, rs, sizeof vb.rs);
+            bsps = vb.sps; brun = vb.run;
+            bus_block(&vb, o);
             for (int i = 0; i < M2K_SUB; i++) {
                 double l = o[2 * i], r = o[2 * i + 1];
                 if (!pass) {
@@ -988,6 +992,38 @@ static void trig_probe(unsigned skip, double *amp_db, double *bright_db, int *lf
     }
     free(b);
 }
+
+/* the measured split's test clock: each timing (run_track's, bus_run's, the render's own part) a pair of reads, the
+ * second a cost later: a track its estimate (fake_x's three times), the bus C_BUS, the rest 40, x8 ticks */
+static int fake_x = -1, fake_n;
+static uint32_t fake_t;
+static uint8_t fake_mask0, fake_mask1;
+static int32_t fake_est(int t)
+{
+    return (trk[t].sounding ? trk[t].ccost : C_IDLE) + (trk[t].dsleep ? 0 : trk[t].dmode ? C_DLY2 : C_DLY);
+}
+static uint32_t fake_clock(void)
+{
+    if (fake_n++ & 1) {
+        int k = clk_k;
+        fake_t += 8u * (uint32_t)(k < M2K_TRACKS ? fake_est(k) * (k == fake_x ? 3 : 1) : k == M2K_TRACKS ? C_BUS : 40);
+    }
+    return fake_t;
+}
+/* the slower side of a split by those costs: the first core's tracks, or the bus and the second's */
+static int fake_wall(uint8_t m)
+{
+    int a = 0, b = C_BUS + C_PAR;
+    for (int t = 0; t < M2K_TRACKS; t++) {
+        int c = fake_est(t) * (t == fake_x ? 3 : 1);
+        if (m >> t & 1) b += c; else a += c;
+    }
+    return a > b ? a : b;
+}
+
+/* MIDI out is stamped a block on (the bus plays a block behind the tracks since 1.6.1: the sound it belongs to comes
+ * out then): what is queued now is due then */
+#define MIDI_DUE (m2k_samples() + M2K_SUB)
 
 /* the second core, played in turn: its job run when started (1) or when waited for (2); par_queued: a job that put
  * MIDI in the queue (the first core's alone) */
@@ -2440,7 +2476,7 @@ static int selftest(void)
         }
         seq_play(0);
         int stop = 0, k;
-        while ((k = m2k_midi_out(m, m2k_samples())) > 0) stop += m[0] == 0xFC;
+        while ((k = m2k_midi_out(m, MIDI_DUE)) > 0) stop += m[0] == 0xFC;
         CHECK(first == 0xFA && start == 1 && pulses >= 23 && pulses <= 25 && stop == 1,
               "MIDI: the clock out, 24 pulses a beat at the tempo, start first and stop at the end");
         CHECK(ons == 2 && offs >= 1, "MIDI: the notes out, each track's trigs on its channel, and their ends");
@@ -2608,39 +2644,39 @@ static int selftest(void)
         m2k_setting(S_NTIN, enc(0, 4));
         m2k_setting(S_SYNI, enc(0, 4));
         m2k_setting(S_SYNO, 0);
-        while (m2k_midi_out(m, m2k_samples()) > 0) {}
+        while (m2k_midi_out(m, MIDI_DUE) > 0) {}
         m2k_midi_from(T, 0x93, 60, 100);
-        int thru = m2k_midi_out(m, m2k_samples()) == 0;
+        int thru = m2k_midi_out(m, MIDI_DUE) == 0;
         m2k_midi_from(T, 0x83, 60, 0);
         m2k_setting(S_THRU, 127);
         m2k_render(mb, 128);
         m2k_midi_from(T, 0x93, 60, 100);
-        thru &= m2k_midi_out(m, m2k_samples() - 1) == 0;
-        thru &= m2k_midi_out(m, m2k_samples()) == 3 && m[0] == 0x93 && m[1] == 60 && m[2] == 100;
+        thru &= m2k_midi_out(m, MIDI_DUE - 1) == 0;
+        thru &= m2k_midi_out(m, MIDI_DUE) == 3 && m[0] == 0x93 && m[1] == 60 && m[2] == 100;
         m2k_midi_from(T, 0x83, 60, 0);
-        thru &= m2k_midi_out(m, m2k_samples()) == 3 && m[0] == 0x83 && m[1] == 60 && m[2] == 0;
+        thru &= m2k_midi_out(m, MIDI_DUE) == 3 && m[0] == 0x83 && m[1] == 60 && m[2] == 0;
         m2k_midi_from(T, 0xC5, 7, 0);
-        thru &= m2k_midi_out(m, m2k_samples()) == 2 && m[0] == 0xC5 && m[1] == 7;
+        thru &= m2k_midi_out(m, MIDI_DUE) == 2 && m[0] == 0xC5 && m[1] == 7;
         m2k_midi_from(T, 0xF2, 3, 1);
-        thru &= m2k_midi_out(m, m2k_samples()) == 3 && m[0] == 0xF2 && m[1] == 3 && m[2] == 1;
+        thru &= m2k_midi_out(m, MIDI_DUE) == 3 && m[0] == 0xF2 && m[1] == 3 && m[2] == 1;
         m2k_midi_from(T, 0xF8, 0, 0);
-        thru &= m2k_midi_out(m, m2k_samples()) == 1 && m[0] == 0xF8;
+        thru &= m2k_midi_out(m, MIDI_DUE) == 1 && m[0] == 0xF8;
         m2k_midi_from(U, 0x93, 62, 100);
         m2k_midi_from(U, 0x83, 62, 0);
         m2k_midi_from(U, 0xF8, 0, 0);
-        thru &= m2k_midi_out(m, m2k_samples()) == 0;
+        thru &= m2k_midi_out(m, MIDI_DUE) == 0;
         m2k_setting(S_SYNO, 127);
         m2k_setting(S_SYNI, enc(2, 4));
         m2k_midi_from(T, 0xFA, 0, 0);
         for (int i = 0; i < 3; i++) m2k_midi_from(T, 0xF8, 0, 0);
         m2k_midi_from(T, 0xFC, 0, 0);
         int fa = 0, f8 = 0, fc = 0, k;
-        while ((k = m2k_midi_out(m, m2k_samples())) > 0) { fa += m[0] == 0xFA; f8 += m[0] == 0xF8; fc += m[0] == 0xFC; }
+        while ((k = m2k_midi_out(m, MIDI_DUE)) > 0) { fa += m[0] == 0xFA; f8 += m[0] == 0xF8; fc += m[0] == 0xFC; }
         int one = fa == 1 && f8 == 3 && fc == 1;
         m2k_setting(S_SYNI, enc(1, 4));
         m2k_midi_from(T, 0xFA, 0, 0);
         m2k_midi_from(T, 0xF8, 0, 0);
-        one &= !sq.playing && m2k_midi_out(m, m2k_samples()) == 0;
+        one &= !sq.playing && m2k_midi_out(m, MIDI_DUE) == 0;
         CHECK(thru && one, "MIDI in: THRU passes the TRS jack's notes, programs, position and clock on over USB as they "
                            "came, stamped as the core's own, never USB's; with SYNC OUT on, one clock");
         CHECK(mx.in_seen == 3 && mx.in_at[1] == m2k_samples(), "MIDI in: each port's last message kept, for GLO > IN");
@@ -4163,6 +4199,34 @@ static int selftest(void)
         CHECK(same && sets == 6 * 62 * 2, "two cores: any set of tracks on the second (FX machines kept with what they hear), "
               "bank A, DENSE and six FX-chained tracks the same sample for sample");
     }
+    /* the measured split (1.6.1, the FM-1's clock): a fake clock that says one track takes three times its estimate.
+     * The split moves the tracks round it (the slower side quicker by what the clock says), and the render on two cores
+     * is still the one core's, sample for sample; with no clock (the host's, the browser's) the estimates' split */
+    {
+        static int16_t a[2 * 22050], b[2 * 22050];
+        for (int run = 0; run < 3; run++) {               /* one core; two on the estimates; two on the fake clock */
+            par_mode = run ? 1 : 0; m2k_par_begin = run ? par_test_begin : 0; m2k_par_end = run ? par_test_end : 0;
+            par_force = -1;
+            m2k_clock = run == 2 ? fake_clock : 0;
+            m2k_init(21); m2k_pattern(3); seq_play(1);
+            int16_t *o = run ? b : a;
+            for (int f = 0; f < 22050; f += 128) m2k_render(o + 2 * f, 128 < 22050 - f ? 128 : (22050 - f) & ~15);
+            if (run == 1) {                               /* the heaviest of the first core's on the estimates: three times */
+                fake_mask0 = par_mask;
+                int best = -1;
+                for (int t = 0; t < M2K_TRACKS; t++)
+                    if (!(par_mask >> t & 1) && (best < 0 || fake_est(t) > fake_est(best))) best = t;
+                fake_x = best;
+            }
+            if (run == 2) fake_mask1 = par_mask;
+        }
+        int same = !memcmp(a, b, sizeof a), w0 = fake_wall(fake_mask0), w1 = fake_wall(fake_mask1);
+        m2k_clock = 0; m2k_par_begin = 0; m2k_par_end = 0; par_force = -1;
+        printf("     measured split: T%d at 3x its estimate, the second core's tracks %02x -> %02x, the slower side %d -> %d\n",
+               fake_x + 1, fake_mask0, fake_mask1, w0, w1);
+        CHECK(same && fake_x >= 0 && fake_mask1 != fake_mask0 && w1 < w0,
+              "two cores: the split weighs what a clock measured (a track at 3x moves it), the render the same sample for sample");
+    }
     /* NOTES OUT on two cores: six tracks' gates end in the same blocks on both; the second core's job queues no MIDI
      * (a gate's end is marked on its core, its note-off sent by the first after both) and the notes come out as on
      * one core, the same messages in the same order on the same samples */
@@ -5033,7 +5097,7 @@ static int selftest(void)
         m2k_midi(0xFC, 0, 0);
         int fa = 0, f8 = 0, fc = 0, k;
         uint8_t m[3];
-        while (m2k_midi_out(m, m2k_samples()) > 0) { fa += m[0] == 0xFA; f8 += m[0] == 0xF8; fc += m[0] == 0xFC; }
+        while (m2k_midi_out(m, MIDI_DUE) > 0) { fa += m[0] == 0xFA; f8 += m[0] == 0xF8; fc += m[0] == 0xFC; }
         m2k_init(32);
         m2k_pattern_t *q = bare(16);
         int v = 255;

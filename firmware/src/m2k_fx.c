@@ -34,6 +34,25 @@ static int32_t (*dub_io(int ti))[M2K_SUB];   /* track ti's DUB send, echoes left
 static int dub_on(void);
 static void dub_end(void);
 
+/* the bus's record of a block (the render's, below: the bus plays a block behind the tracks) */
+typedef struct { uint8_t kd, dtim, dfb, dbas, dwid, pan, levl; } dl_par_t;
+typedef struct {
+    int32_t L[M2K_SUB], R[M2K_SUB], rs[M2K_SUB];   /* the tracks' sums */
+    int32_t dds[M2K_SUB];                          /* DUB's track's own send, its line run with the bus */
+    dl_par_t dp;                                   /* and that line's settings as the block had them */
+    uint32_t sps;                                  /* the tempo (sps_q8) */
+    uint8_t glob[G_COUNT];                         /* the pattern's controls */
+    uint8_t step[2], nstep;                        /* the pattern's steps that fell in it (bus_step's) */
+    uint8_t run, mvol, valid, dt, dsent;           /* playing; the master; filled; DUB's track + 1; its line sent to */
+} brec_t;
+static brec_t brec[2] POOL;
+static uint8_t bcur;                   /* the record this block fills */
+static uint8_t dub_snap;               /* DUB's track + 1 as the block began: its line runs with the bus */
+
+/* the tempo and the running the bus plays its block at (the record's; a PERFORM key's, the sequencer's now) */
+static uint32_t bsps = 1411200;
+static uint8_t brun;
+
 /* one line's sample at a fractional position, Q8 of a line sample (unsigned: it wraps, after minutes) */
 static inline int32_t dl_read(const uint8_t *b, uint32_t mask, uint32_t pos)
 {
@@ -59,13 +78,24 @@ static inline uint8_t mulaw_line(int32_t x, int32_t gate)
  * echoes through a one-pole HP at DBAS and a one-pole LP at DBAS + DWID. The line runs at half rate in 8-bit mu-law;
  * a time longer than the line slows its clock instead, the echoes darker, as a tape or a BBD would. Ping-pong
  * keeps a sum and a difference line, each half the memory */
-static void delay_block(int ti, const int32_t *restrict in, int32_t *restrict L, int32_t *restrict R)
+/* a delay's settings as its track has them now */
+static void dl_par(int ti, dl_par_t *p)
+{
+    const trk_t *t = &trk[ti];
+    p->kd = PAT(cur_pat)->kit[ti][P_DSND];
+    p->dtim = (uint8_t)P7(t, P_DTIM); p->dfb = (uint8_t)P7(t, P_DFB); p->dbas = (uint8_t)P7(t, P_DBAS);
+    p->dwid = (uint8_t)P7(t, P_DWID); p->pan = (uint8_t)P7(t, P_PAN); p->levl = (uint8_t)P7(t, P_LEVL);
+}
+
+/* a block of track ti's line: its settings p (0: the track's now), sent to this block or not, at tempo sps; DUB's (dub:
+ * the bus's side, where it may be DUB's line) */
+static void delay_run(int ti, const dl_par_t *p, int sent, uint32_t sps, int dub, const int32_t *restrict in,
+                      int32_t *restrict L, int32_t *restrict R)
 {
     trk_t *t = &trk[ti];
-    int sent = t->dsent;
-    t->dsent = 0;
+    dl_par_t now;
     /* DUB's line: the bus's send with the track's own, DUB's values, its echoes apart (its own sum) */
-    int32_t (*dio)[M2K_SUB] = dub_io(ti), din[M2K_SUB];
+    int32_t (*dio)[M2K_SUB] = dub ? dub_io(ti) : 0, din[M2K_SUB];
     if (dio) {
         for (int i = 0; i < M2K_SUB; i++) din[i] = in[i] + dio[0][i];
         in = din;
@@ -79,7 +109,8 @@ static void delay_block(int ti, const int32_t *restrict in, int32_t *restrict L,
     }
     /* the layout from the kit's DSND, not its locks' or LFOs' (each crossing of 64 wiped the lines), and only past 64
      * by a step (a kit turned to 64 keeps the echoes it has) */
-    int kd = PAT(cur_pat)->kit[ti][P_DSND], dual = dio ? 1 : t->dmode ? kd >= 64 : kd > 64;
+    if (!p) { dl_par(ti, &now); p = &now; }          /* (a line asleep reads none) */
+    int kd = p->kd, dual = dio ? 1 : t->dmode ? kd >= 64 : kd > 64;
     if (dual != t->dmode) {            /* the lines change their layout: start them empty */
         m_set(t->dl, 0x7F, DL_LEN);
         t->dmode = (uint8_t)dual;
@@ -110,21 +141,21 @@ static void delay_block(int ti, const int32_t *restrict in, int32_t *restrict L,
     }
     t->dsleep = 0;
     /* the time, half-rate samples Q8: whole samples once it settles (a read between two samples dulls the top) */
-    int32_t target = dio ? (int32_t)(((uint32_t)DUB_TIM * (sps_q8 >> 5) + 128) & ~255u)
-                         : ((int32_t)((uint32_t)P7(t, P_DTIM) * (sps_q8 >> 5)) + (167 << 8) + 128) & ~255;
+    int32_t target = dio ? (int32_t)(((uint32_t)DUB_TIM * (sps >> 5) + 128) & ~255u)
+                         : ((int32_t)((uint32_t)p->dtim * (sps >> 5)) + (167 << 8) + 128) & ~255;
     int32_t dd = target - t->dt_q8;
     t->dt_q8 = dd > -64 && dd < 64 ? target : t->dt_q8 + (dd >> 5);
     uint32_t th = (uint32_t)t->dt_q8 >> 8, room = n - 4;
     uint32_t rate = th <= room ? 65536u : (room << 16) / th;                  /* the line's clock, Q16 */
     int32_t back = th <= room ? t->dt_q8 : (int32_t)(room << 8);               /* the delay in line samples, Q8 */
-    int dfb = dio ? DUB_FB : P7(t, P_DFB);
+    int dfb = dio ? DUB_FB : p->dfb;
     /* mulaw_line's gate: the dead band of mu-law's first segment is 256 / (64 - DFB), the next ones' to 4 x that (DFB 62
      * and 63, a band wide open, can still hold an echo a little over it) */
     int32_t fb = dfb * 512, gate = dfb < 64 ? 1024 / (64 - dfb) : 0;
-    int dbas = dio ? DUB_BAS : P7(t, P_DBAS);
-    int32_t ahp = T_DLY_HP[dbas], alp = T_DLY_LP[CLAMP(dbas + (dio ? DUB_WID : P7(t, P_DWID)), 0, 127)];
-    int pan = dio ? DUB_PAN : P7(t, P_PAN);
-    int32_t gl = T_PAN[pan], gr = T_PAN[127 - pan], lev = T_VOL[dio ? DUB_LEV : P7(t, P_LEVL)];
+    int dbas = dio ? DUB_BAS : p->dbas;
+    int32_t ahp = T_DLY_HP[dbas], alp = T_DLY_LP[CLAMP(dbas + (dio ? DUB_WID : p->dwid), 0, 127)];
+    int pan = dio ? DUB_PAN : p->pan;
+    int32_t gl = T_PAN[pan], gr = T_PAN[127 - pan], lev = T_VOL[dio ? DUB_LEV : p->levl];
     uint8_t *b = t->dl;
     int32_t pk = 0;
     for (int i = 0; i < M2K_SUB; i += 2) {
@@ -182,6 +213,14 @@ static void delay_block(int ti, const int32_t *restrict in, int32_t *restrict L,
         if (a > pk) pk = a;
     }
     if (!dio) mon.dly[ti] = pk;
+}
+
+/* a track's line in its own block (DUB's is the bus's: run_track) */
+static void delay_block(int ti, const int32_t *restrict in, int32_t *restrict L, int32_t *restrict R)
+{
+    int sent = trk[ti].dsent;
+    trk[ti].dsent = 0;
+    delay_run(ti, 0, sent, sps_q8, 0, in, L, R);
 }
 
 /* ------------------------------------------------------------------------------------------------ the bus */
@@ -351,7 +390,7 @@ static void gl_grains_init(uint32_t g)
 #define PS_DMIN 2u                     /* (the read a sample and its neighbour behind the write) */
 static void gl_perform(int k)
 {
-    uint32_t six = sps_q8 >> 9;                           /* a sixteenth in half-rate samples */
+    uint32_t six = bsps >> 9;                             /* a sixteenth in half-rate samples */
     if (k == PF_FRZ) {                                    /* the last eighth, its grains a half of it each */
         uint32_t r = CLAMP(six * 2, FRZ_MIN, FRZ_MAX);
         gl_start(bus.gw - r - 4, r, 0, GM_FRZ, 32768);
@@ -414,7 +453,7 @@ static void gl_perform(int k)
     while (len > GL_MAX) { len >>= 1; if (res) res--; }   /* (slower than 85 BPM a quarter is too long: an eighth) */
     if (len < 32) len = 32;
     uint32_t space = six << res, e = bus.gw - bus.g_grid[res];
-    if (!seq_running() || e >= space + (six >> 1)) e = 0, bus.g_grid[res] = bus.gw;   /* no grid: from now */
+    if (!brun || e >= space + (six >> 1)) e = 0, bus.g_grid[res] = bus.gw;   /* no grid: from now */
     /* a repeat's slice begins on the grid (its first time round the live sound coming in, so it starts on the
      * attack); the reverse plays the beat that ended there */
     uint32_t at = bus.g_grid[res] - (k == PF_REV ? len : 0);
@@ -480,6 +519,8 @@ static int bus_perform(int k, int down)
         bus.g_held = 0;
         return 1;
     }
+    bsps = sps_q8;                                        /* (a key's: at the tempo now) */
+    brun = (uint8_t)seq_running();
     gl_perform(k);
     return 1;
 }
@@ -545,7 +586,7 @@ static void gl_grains(int32_t *pl, int32_t *pr)
  * the sound plays it, and fades into it over 12 ms */
 static void gl_stop_land(void)
 {
-    uint32_t t = (sps_q8 >> 8) > 64 ? (sps_q8 >> 8) : 64, back = (sps_q8 >> 9) * 4;
+    uint32_t t = (bsps >> 8) > 64 ? (bsps >> 8) : 64, back = (bsps >> 9) * 4;
     while (back > GL_MAX - t) back >>= 1;
     bus.g_start = bus.gw - (back - t / 2);
     bus.g_pos = 0;
@@ -641,7 +682,7 @@ static void gl_tick(void)
         l = (l * a) >> 15;
         r = (r * a) >> 15;
         if (bus.g_spin == 1) {                              /* let go: back up to speed over an eighth, then out */
-            uint32_t up = G_UNITY / ((sps_q8 >> 8) > 64 ? (sps_q8 >> 8) : 64);
+            uint32_t up = G_UNITY / ((bsps >> 8) > 64 ? (bsps >> 8) : 64);
             bus.g_rate = bus.g_rate + up >= G_UNITY ? G_UNITY : bus.g_rate + up;
             if (bus.g_rate == G_UNITY) { bus.g_spin = 3; bus.g_held = 0; }   /* (3: landed, at speed) */
         } else if (!bus.g_spin) bus.g_rate = bus.g_rate > bus.g_dec ? bus.g_rate - bus.g_dec : 0;   /* slowing in a straight line */
@@ -672,7 +713,7 @@ static void gl_tick(void)
     if (mode != GM_STOP && (bus.g_pos >> 12) >= len) {
         bus.g_pos -= len << 12;
         /* ROLL: halved once its laps make a beat (a quarter, two eighths, four sixteenths), to a 1/32 */
-        if (mode == GM_PROLL && ++bus.g_rl >= (sps_q8 >> 9) * 4 / len && len > (sps_q8 >> 10)) { bus.g_len = len >> 1; bus.g_rl = 0; }
+        if (mode == GM_PROLL && ++bus.g_rl >= (bsps >> 9) * 4 / len && len > (bsps >> 10)) { bus.g_len = len >> 1; bus.g_rl = 0; }
     }
 }
 
@@ -926,7 +967,7 @@ static int bus_filters(void)
         }
         int32_t d = bus.fpos[f] > open ? bus.fpos[f] - open : open - bus.fpos[f];
         if (held) {
-            int32_t bar = (int32_t)((sps_q8 >> 8) * 16u / M2K_SUB), st = span / (bar > 0 ? bar : 1) + 1;   /* blocks a bar */
+            int32_t bar = (int32_t)((bsps >> 8) * 16u / M2K_SUB), st = span / (bar > 0 ? bar : 1) + 1;   /* blocks a bar */
             d = d + st > span ? span : d + st;
         } else {
             int32_t st = span / 413 + 1;                  /* (150 ms of blocks) */
@@ -948,9 +989,11 @@ static int bus_filters(void)
     return run;
 }
 
-static void bus_block(int32_t *L, int32_t *R, const int32_t *rsend, int16_t *out)
+static void bus_block(brec_t *b, int16_t *out)
 {
-    const uint8_t *g = PAT(cur_pat)->glob;
+    int32_t *L = b->L, *R = b->R;
+    const int32_t *rsend = b->rs;
+    const uint8_t *g = b->glob;
     /* DUB: its echoes into the mix; the mix, the send gliding in and out over 12 ms, to its line next block */
     if (bus.dub_t) {
         int32_t s0 = bus.dub_snd;
@@ -1043,13 +1086,13 @@ static void bus_block(int32_t *L, int32_t *R, const int32_t *rsend, int16_t *out
     if (perf.on[PF_GATE]) bus.gtd = bus.gtd + 2048 > 32767 ? 32767 : bus.gtd + 2048;
     else bus.gtd = bus.gtd > 2048 ? bus.gtd - 2048 : 0;
     int gate = bus.gtd > 0 || gtd0 > 0;
-    uint32_t gsix = (sps_q8 >> 8) > 512 ? (sps_q8 >> 8) : 512, gph = 0;
+    uint32_t gsix = (bsps >> 8) > 512 ? (bsps >> 8) : 512, gph = 0;
     if (gate) {
-        gph = seq_running() ? (bus.gw - bus.g_grid[0]) * 2u + bus.g_phase : bus.gt_ph;
+        gph = brun ? (bus.gw - bus.g_grid[0]) * 2u + bus.g_phase : bus.gt_ph;
         gph %= gsix;
         bus.gt_ph = gph + M2K_SUB;
     }
-    int32_t mvol = T_MVOL[master_vol];
+    int32_t mvol = T_MVOL[b->mvol];
     uint32_t wow_inc = 54000, flut_inc = 620000;    /* 0.55 Hz, 6.3 Hz */
     uint8_t g_phase = bus.g_phase;                  /* (a block's in locals: no byte stored a sample) */
     uint32_t e0 = 0, e1 = 0;
@@ -1207,37 +1250,105 @@ static void seq_block(void);
 static int seq_running(void);
 static void mx_gates_out(void);
 
-/* the second core's share of a block: the tracks in par_mask, into their own sums (par_L ...); it touches no MIDI (a
- * gate's end only marked, its note-off sent by the first core after both) */
+/* the bus a block behind (1.6.1, the owner's: their FM-1's first core had no room): block n's tracks sum into its
+ * record (brec), and block n - 1's bus plays from the record before, on the second core beside block n's tracks (on
+ * one core, before them), so the sound comes out a block (16 samples, 0.36 ms) later and otherwise as it was. What the
+ * bus reads of the sequencer's block goes into the record as the block runs (its tempo, its step for the grid, the
+ * pattern's controls, the master, running or not), and DUB's line (a borrowed track's delay, the bus feeding it and fed
+ * by it) runs on the bus's side, its track's send and settings recorded. A PERFORM key pressed between two renders
+ * reaches the bus a block early (the bus of the block before plays it): the owner's accepted edge */
+/* what the bus reads of the block, as it stands now */
+static void brec_take(brec_t *b)
+{
+    b->sps = sps_q8;
+    m_cpy(b->glob, PAT(cur_pat)->glob, G_COUNT);
+    b->run = (uint8_t)seq_running();
+    b->mvol = master_vol;
+}
+
+/* the sequencer's step, for the bus of its block (the grid PERFORM's repeats lock to) */
+static void bus_step_q(int s)
+{
+    brec_t *b = &brec[bcur];
+    if (b->nstep < 2) b->step[b->nstep++] = (uint8_t)s;
+}
+
+/* the platform's clock (the FM-1's ticks), unset elsewhere: each track's time a block, the bus's and the first core's
+ * own (the sequencer, the LFOs), measured where it runs and smoothed, Q4 ticks (0: none yet); the split weighs them */
+uint32_t (*m2k_clock)(void);
+uint32_t m2k_clock_per_ms;
+static int32_t par_meas[M2K_TRACKS + 2];   /* the tracks', the bus's (M2K_TRACKS), the first core's own (+1) */
+static uint16_t par_mcc[M2K_TRACKS];       /* the estimate a track's measure began at (another: measured again) */
+static int8_t clk_k;                       /* what is being timed (the self-test's clock reads it) */
+static inline uint32_t clk_now(int k) { clk_k = (int8_t)k; return m2k_clock(); }
+static inline void par_note(int k, uint32_t dt)
+{
+    int32_t v = (int32_t)(dt > 0x3FFFFFu ? 0x3FFFFFu : dt) << 4;
+    par_meas[k] = par_meas[k] ? par_meas[k] + ((v - par_meas[k]) >> 3) : v | 1;
+}
+
+/* a track's block: its voice and chain, then its delay (DUB's track's with the bus) */
+static void run_track(int t, int32_t *L, int32_t *R, int32_t *rs, int32_t *ds)
+{
+    uint32_t c0 = m2k_clock ? clk_now(t) : 0;
+    m_set(ds, 0, M2K_SUB * sizeof *ds);
+    track_block(t, L, R, ds, rs);
+    if (t + 1 == dub_snap) {
+        brec_t *b = &brec[bcur];
+        m_cpy(b->dds, ds, sizeof b->dds);
+        dl_par(t, &b->dp);
+        b->dsent = trk[t].dsent;
+        trk[t].dsent = 0;
+        b->dt = (uint8_t)(t + 1);
+    } else delay_block(t, ds, L, R);
+    if (m2k_clock) { par_note(t, m2k_clock() - c0); par_mcc[t] = trk[t].ccost; }
+}
+
+/* the bus of the record's block into out: its steps for the grid, DUB's line, then the bus (the first block after
+ * init has none before it: silence) */
+static void bus_run(brec_t *b, int16_t *out)
+{
+    if (!b->valid) { m_set(out, 0, 2 * M2K_SUB * sizeof *out); return; }
+    uint32_t c0 = m2k_clock ? clk_now(M2K_TRACKS) : 0;
+    bsps = b->sps;
+    brun = b->run;
+    for (int i = 0; i < b->nstep; i++) bus_step(b->step[i]);
+    if (b->dt) delay_run(b->dt - 1, &b->dp, b->dsent, b->sps, 1, b->dds, b->L, b->R);
+    bus_block(b, out);
+    if (m2k_clock) par_note(M2K_TRACKS, m2k_clock() - c0);
+}
+
+/* the second core's share of a block: the bus of the block before, then the tracks in par_mask into their own sums
+ * (par_L ...); it touches no MIDI (a gate's end only marked, its note-off sent by the first core after both) */
 int (*m2k_par_begin)(void (*job)(void));
 void (*m2k_par_end)(void);
 static uint8_t par_mask;
 static int32_t par_L[M2K_SUB], par_R[M2K_SUB], par_rs[M2K_SUB], par_ds[M2K_SUB];
+static int16_t *par_out;
 
 static void par_job(void)
 {
+    bus_run(&brec[bcur ^ 1], par_out);
     m_set(par_L, 0, sizeof par_L);
     m_set(par_R, 0, sizeof par_R);
     m_set(par_rs, 0, sizeof par_rs);
-    for (int t = 0; t < M2K_TRACKS; t++) {
-        if (!(par_mask >> t & 1)) continue;
-        m_set(par_ds, 0, sizeof par_ds);
-        track_block(t, par_L, par_R, par_ds, par_rs);
-        delay_block(t, par_ds, par_L, par_R);
-    }
+    for (int t = 0; t < M2K_TRACKS; t++) if (par_mask >> t & 1) run_track(t, par_L, par_R, par_rs, par_ds);
 }
 
-/* which tracks the second core takes: any set of them, as the tracks' sums are plain adds (the same whoever adds
- * them); an FX machine stays with the track it hears (the one before it, FX-RING's EXT the one before that), so the
- * tracks go in groups of those. The work is shared out as each track's last block weighed it (T_MCOST: its machine,
- * chain and stages, its delay while it rings) for the slower core to be as quick as it can: the sequencer, the LFOs
- * and the bus run before and after the tracks on the first core alone, the second waiting, so they weigh nothing
- * here. Worked out again every eighth block, and at once when the groups change (a machine assigned). In Mac
- * instructions a sample, measured as T_MCOST is */
+/* which tracks the second core takes beside the bus: any set of them, as the tracks' sums are plain adds (the same
+ * whoever adds them); an FX machine stays with the track it hears (the one before it, FX-RING's EXT the one before
+ * that), so the tracks go in groups of those. The work is shared out for the slower core to be as quick as it can: the
+ * first core's tracks against the bus and the second's (the sequencer and the LFOs run before, the second core idle:
+ * they weigh nothing here). Each track weighs what it measured where a clock is (the FM-1's: par_meas, the others'
+ * estimates scaled to it until they have one, or after their machine or stages changed), else its last block's
+ * estimate (T_MCOST: its machine, chain and stages, its delay while it rings; in Mac instructions a sample, measured
+ * as T_MCOST is: the host and the browser, no clock, the same split every time). Worked out again every eighth block,
+ * and at once when the groups change (a machine assigned) */
 #define C_IDLE 12                      /* a track that does not sound */
 #define C_DLY 92                       /* a delay that rings: one line, ping-pong */
 #define C_DLY2 116
 #define C_PAR 10                       /* the second core's sums */
+#define C_BUS 360                      /* the bus (its reverb, the crunch, the drive, the glitch's ring) */
 static int par_force = -1;             /* (the self-test: a set of its own, its groups kept) */
 static uint8_t par_tie_last = 0xFF, par_age;
 static uint8_t par_split(void)
@@ -1254,19 +1365,29 @@ static uint8_t par_split(void)
     if (tie == par_tie_last && (++par_age & 7)) return par_mask;
     par_tie_last = tie;
     par_age = 0;
+    int32_t est[M2K_TRACKS], es = 0, ms = 0;
+    for (int t = 0; t < M2K_TRACKS; t++) {
+        est[t] = (trk[t].sounding ? trk[t].ccost : C_IDLE) + (trk[t].dsleep ? 0 : trk[t].dmode ? C_DLY2 : C_DLY);
+        if (par_meas[t] && par_mcc[t] != trk[t].ccost) par_meas[t] = 0;   /* (its machine or stages changed) */
+        if (m2k_clock && par_meas[t]) { es += est[t]; ms += par_meas[t] >> 4; }
+    }
+    const int32_t sc = es ? (int32_t)(((uint32_t)ms << 8) / (uint32_t)es) : 0;   /* ticks an estimate's unit, Q8 */
+    int32_t bc = sc ? (par_meas[M2K_TRACKS] ? par_meas[M2K_TRACKS] >> 4 : (C_BUS * sc) >> 8) : C_BUS;
+    const int32_t cp = sc ? (C_PAR * sc) >> 8 : C_PAR;
+    bc += cp;
     int32_t u[M2K_TRACKS], all = 0;    /* the groups' costs */
     uint8_t ub[M2K_TRACKS];            /* and their tracks */
     int n = 0;
     for (int t = 0; t < M2K_TRACKS; t++) {
-        int32_t c = (trk[t].sounding ? trk[t].ccost : C_IDLE) + (trk[t].dsleep ? 0 : trk[t].dmode ? C_DLY2 : C_DLY);
+        int32_t c = !sc ? est[t] : par_meas[t] ? par_meas[t] >> 4 : (est[t] * sc) >> 8;
         if (!(tie >> t & 1) || !n) { u[n] = 0; ub[n] = 0; n++; }
         u[n - 1] += c;
         ub[n - 1] |= (uint8_t)(1u << t);
         all += c;
     }
-    if (n < 2) return 0;
-    /* every set of groups for the second core but none and all, in Gray code order (one group in or out a step) */
-    int32_t b = 0, best = INT32_MAX;
+    /* none of the tracks there (the bus alone), then every set of groups but all, in Gray code order (one group in or
+     * out a step); all of them there is never quicker than none */
+    int32_t b = 0, best = all > bc ? all : bc;
     uint32_t g = 0, pick = 0;
     for (uint32_t i = 1; i < 1u << n; i++) {
         int k = 0;
@@ -1274,7 +1395,7 @@ static uint8_t par_split(void)
         g ^= 1u << k;
         b += g >> k & 1 ? u[k] : -u[k];
         if (g == (1u << n) - 1) continue;
-        int32_t a = all - b, w = a > b + C_PAR ? a : b + C_PAR;
+        int32_t a = all - b, w = a > b + bc ? a : b + bc;
         if (w < best) { best = w; pick = g; }
     }
     uint8_t m = 0;
@@ -1284,35 +1405,45 @@ static uint8_t par_split(void)
 
 void m2k_render(int16_t *lr, int frames)
 {
-    static int32_t L[M2K_SUB], R[M2K_SUB], rs[M2K_SUB], ds[M2K_SUB];
+    static int32_t ds[M2K_SUB];
     for (int f = 0; f + M2K_SUB <= frames; f += M2K_SUB) {
         PROF_START();
+        brec_t *rc = &brec[bcur];
+        uint32_t c0 = m2k_clock ? clk_now(M2K_TRACKS + 1) : 0;
+        rc->nstep = 0;
+        rc->dt = 0;
         seq_block();
         for (int t = 0; t < M2K_TRACKS; t++) lfo_block(t);
         mod_apply();
-        m_set(L, 0, sizeof L);
-        m_set(R, 0, sizeof R);
-        m_set(rs, 0, sizeof rs);
+        brec_take(rc);
+        m_set(rc->L, 0, sizeof rc->L);
+        m_set(rc->R, 0, sizeof rc->R);
+        m_set(rc->rs, 0, sizeof rc->rs);
         hold_bpm = ext_bpm ? ext_bpm : 30u + PAT(cur_pat)->glob[G_TMPO];
+        dub_snap = bus.dub_t;
+        if (m2k_clock) par_note(M2K_TRACKS + 1, m2k_clock() - c0);
         PROF(0);
-        uint8_t two = 0;               /* the second core's tracks this block */
+        /* the second core: the bus of the block before and its share of this one's tracks; else this core, the bus
+         * first */
+        int two = 0;
         if (m2k_par_begin) {
             par_mask = par_split();
-            if (par_mask && m2k_par_begin(par_job)) two = par_mask;
+            par_out = lr + 2 * f;
+            two = m2k_par_begin(par_job);
         }
+        if (!two) bus_run(&brec[bcur ^ 1], lr + 2 * f);
+        PROF(4);
         for (int t = 0; t < M2K_TRACKS; t++) {
-            if (two >> t & 1) continue;
-            m_set(ds, 0, sizeof ds);
-            track_block(t, L, R, ds, rs);
-            delay_block(t, ds, L, R);
+            if (two && (par_mask >> t & 1)) continue;
+            run_track(t, rc->L, rc->R, rc->rs, ds);
             PROF(3);
         }
         if (two) {
             m2k_par_end();
-            for (int i = 0; i < M2K_SUB; i++) { L[i] += par_L[i]; R[i] += par_R[i]; rs[i] += par_rs[i]; }
+            for (int i = 0; i < M2K_SUB; i++) { rc->L[i] += par_L[i]; rc->R[i] += par_R[i]; rc->rs[i] += par_rs[i]; }
         }
         mx_gates_out();                /* the gates ended on either core: their notes out, in track order */
-        bus_block(L, R, rs, lr + 2 * f);
-        PROF(4);
+        rc->valid = 1;
+        bcur ^= 1;
     }
 }
