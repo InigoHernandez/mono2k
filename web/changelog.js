@@ -7,7 +7,7 @@ window.M2K_KINDS = {
 };
 window.M2K_CHANGES = [
   {
-    date: "2026-10-29", title: "MONO2K 1.5: tracks of their own length, a sound library of 96, a lighter bus",
+    date: "2026-10-30", title: "MONO2K 1.5: a new screen, tracks of their own length, a sound library of 96, a lighter bus",
     items: [
       ["sequencer", "1.5: Each track can loop over its own length: hold SEQ and turn KNOB 2 (TLEN), 1 to 64 steps, or PAT for the pattern's. 16 against 12 against 7 drift apart, then start together again at PLAY and at the next pattern."],
       ["sequencer", "1.5: The pattern's LEN still decides when the next pattern comes in, the bars, mutes on the bar and fills. Conditions like 1:2 count each track's own loops; recording lands on the track's own step."],
