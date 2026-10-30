@@ -52,7 +52,7 @@ window.M2K_HELP = (() => {
         case 3: return `${k}: three LFOs. Held: the knobs spring back.`;
         case 4: return `${k}: SYN, the machine's knobs. Held: its sound's tools.`;
         case 5: return `${k}: tempo, bus, settings. Held: copy, paste, mutes.`;
-        case 6: return `${k}: six lanes. Held: the keys pick patterns.`;
+        case 6: return `${k}: six lanes; again, the track's TLEN SPD PROB LANE. Held: pick patterns.`;
         case 7: return `${k}: keeps the pattern; held, the project.`;
         case 8: return `${k}: the arpeggiator. Twice: HOLD. GLO + ARP: PADS.`;
         case 9: return `${k}: ${c.grid ? "back to notes" : "GRID, the keys become steps"}. Held: step tools.`;
@@ -105,9 +105,9 @@ window.M2K_HELP = (() => {
     { g: "Buttons", id: "b8", tag: "ARP", hi: ["b8"], short: "The track's arpeggiator.", screen: "b ARP; w 400",
       long: "Hold keys and it plays them in turn. Tap twice: HOLD, the notes keep going.", where: "K or F9" },
     { g: "Buttons", id: "b5", tag: "GLO", hi: ["b5"], short: "Tempo, the bus, settings; held, FUNC.", screen: "b GLO; w 400",
-      long: "TIME, BUS, SET, MIDI, IN, PLAY. Held: copy, paste, clear, undo; the white keys mute, fill, tap, solo.", where: "G or F6" },
+      long: "TIME, BUS, SET, MIDI, IN, PLAY (the mutes, and the FM-1's CPU meter). Held: copy, paste, clear, undo; the white keys mute, fill, tap, solo.", where: "G or F6" },
     { g: "Buttons", id: "b6", tag: "HOME", hi: ["b6"], short: "The pattern in six lanes; held, pick patterns.", screen: "b PLAY; w 1500",
-      long: "Six lanes, the playing step framed; level, pitch, tempo, swing. Held: the keys pick patterns and banks.", where: "1 or F7" },
+      long: "Six lanes, the playing step framed; level, pitch, tempo, swing. Again: HOME 2, the track's own length, speed, chance (PROB) and Grids lane. Held: the keys pick patterns and banks.", where: "1 or F7" },
     { g: "Buttons", id: "b9", tag: "SEQ", hi: ["b9"], short: "GRID: the keys are the steps; held, the step tools.", screen: "b SEQ; w 400",
       long: "GRID: the white keys are sixteen steps; tap one for a trig. Held: eight step tools on the white keys.", where: "A or F10" },
     { g: "Buttons", id: "b10", tag: "PLAY", hi: ["b10"], short: "Start and stop.", screen: "b PLAY; w 1000",

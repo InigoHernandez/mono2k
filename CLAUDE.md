@@ -91,6 +91,9 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   SLOT or SELECT puts each sound landed on on the track and plays it (a step's note at its note), CAT filters, OCT+
   keeps it (undoable), OCT- / EDIT / a page / PRESET put the track's own sound back byte for byte, ALGO does nothing
   meanwhile; the EDIT + SEQ REC PLAY SAVE combos act on the track's own sound. The self-test holds all of it.
+  HOME has two pages (1.6, the owner's): HOME 1 LEVL PTCH BPM SWNG, HOME 2 the track in view's sequencing, TLEN SPD
+  PROB LANE (the same globals as SEQ held's TLEN and SPD and ARP > LANES' LANE); its picture the six lanes, a trig on
+  a track under 100 % framed and filled to its chance.
 - Checks: `sh tools/check.sh` (~6 min): clang (and GCC, when installed) -Wall -Wextra with no warnings; the core built
   for armv7m soft float calls no float helper and no 64-bit division (flash / RAM printed); the self-test, every
   screen, bank A and every reference spec under ASan + UBSan, clean; the format's conversions mutated
@@ -139,9 +142,21 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   nothing), every FX machine kept with the track it hears; the self-test renders bank A with the second core's tracks
   first and last, and bank A and six FX-chained tracks with every set there (`par_force`), each held to the one-core
   render sample for sample. The glue paces the screen by the sound (a frame waits while the ring is under half full,
-  frames further apart while the render is busy). `--diag` packages show CPU (the first core's render, the waits
-  included), W (the second's) and F (drawing) in % over the screen's top. The 2026-10-29 owner: "dont make the sound
-  engine worst": CPU savings must keep the sound bit for bit.
+  frames further apart while the render is busy). The meter, always (1.6): every half second the glue
+  (`meter_tick`, m2k_fm1.c) hands the core `m2k_cpu(first core %, second's or -1, the ring's shorts since power-on)`;
+  GLO > PLAY shows CPU, CPU2 and DROP (dashes where none came: the browser, the host), and a short more than the last
+  toasts CPU FULL (at most every 5 s). `--diag` packages show the same CPU, W (the second's) and F (drawing) in %
+  over the screen's top. The 2026-10-29 owner: "dont make the sound engine worst": CPU savings must keep the sound
+  bit for bit; 1.6's owner (a pattern of every track's effects, LFOs, chances and locks overloaded the FM-1): nothing
+  cut from the engine (the Ableton Move port will have the power), FM-1-only measures fine. The yardstick:
+  `host/m2k_dense.c`'s DENSE (six tracks, every stage of the chain, the MOD effect, both delay layouts, three LFOs
+  each, chances, 192 locks), `m2k_draw --cpu` (bank A's four and DENSE: one core, the first core's work, the second's,
+  the wall) and `m2k_draw --hash` (their renders' FNV-1a on one core and two, and FXS, the FX machines hearing a full
+  chain: a change to the engine holds them the same); the self-test holds DENSE on every set of the second core's
+  tracks. 1.6's pass (the chain's coefficients and an LFO's rate kept while their inputs stand, the MOD effect a block
+  at a time, tout / tvol only where an FX machine listens, the general case's loop without the machine's side): one
+  core 1984 -> 1944 (A01), 4058 -> 3942 (A04), 5507 -> 5333 (DENSE) Mac instructions a sample; the wall 2358 ->
+  2284 (A04), 3181 -> 3062 (DENSE).
 - The bus (1.5, for the FM-1's time; the owner: "the important are: ADPC, reverb, drive"): GLO's pages TIME BUS SET
   MIDI IN PLAY (`GS_*` in m2k_ui.c: name them, never their numbers), BUS's knobs DCAY DAMP ADPC DRIV (`BUS_K`, PERFORM's
   knobs too), its picture the reverb's tail lifted by DRIV and stepped by ADPC. HISS, TAPE, GLCH and SIZE were cut: the
@@ -182,7 +197,12 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   knobs LEN TLEN SPD SWNG, the tempo on HOME and GLO > TIME): a pattern with none packs as 18, byte for byte (`pat_pack`),
   so bank A's bytes, the blanks, OLD_PACKED and 1.4's reads stay, and no FACTORY_REV. A track runs free on its length
   (`tlen_of`: at 1x its step the pattern's count `n1x` round it, off 1x `k % tlen`; its loops at its own wrap), all
-  start together at PLAY and a pattern coming in; a track on a Grids lane keeps Grids' cycle. Older ones are
+  start together at PLAY and a pattern coming in; a track on a Grids lane keeps Grids' cycle. 20 the tracks' chances
+  (`G_TPRB1`+t after the lengths; PROB, HOME 2's KNOB 3: its step 0..15, `PROB_PCT` 100 95 90 85 80 75 66 60 50 40
+  33 25 20 10 5 0 %, 0 every trig): `prob_pass` after the step's condition (and a lane's hit), a draw of 256 from the
+  track's own generator (`sq.prng`, the sequencer's, first core: the same order everywhere, the conditions', LFOs'
+  and arp's draws untouched; none at 100 % or 0 %); a pattern with every track at 100 % packs as 19 or 18, byte for
+  byte; the blob's head is 60 (BLOB_MAX 3608, editor.js's too). Older ones are
   converted on load. The
   Monomachine's tempo is set on its panel (TEMPO, the LEVEL knob a BPM a detent; `chain_hold46.panel`): the loop and
   spec modes leave it at 120.

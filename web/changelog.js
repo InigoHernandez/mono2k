@@ -7,13 +7,18 @@ window.M2K_KINDS = {
 };
 window.M2K_CHANGES = [
   {
-    date: "2026-10-30", title: "MONO2K 1.6: a pixel font of its own, and every knob a picture",
+    date: "2026-10-30", title: "MONO2K 1.6: a pixel font of its own, every knob a picture, a track's chance, the FM-1's load",
     items: [
       ["screen", "1.6: The screen's type is a new pixel font, Elektron Pixel Font by savingaurora, adapted: one weight, drawn at whole sizes, so every letter is crisp on the FM-1. No bold anywhere."],
       ["screen", "1.6: Each knob's value is now a little picture with its name under it, after Elektron's parameter pages: a dial for an amount, a slider for a level, the number over a ruler, a choice in a box, the wave, the envelope's segment, the filter's curve, the pan."],
       ["screen", "1.6: Turn a knob and its value takes its name's place; a locked value shows its name solid. A knob a page leaves free is a dotted square."],
       ["screen", "1.6: The header and footer bars, the tags and the panels' title bars have rounded ends; a held layer's title sits in a solid bar across its top."],
       ["screen", "1.6: Every page draws in less time than before, leaving the FM-1 more for the sound."],
+      ["sequencer", "1.6: HOME has a second page (press HOME again): the track in view's TLEN, SPD, PROB and LANE."],
+      ["sequencer", "1.6: PROB, a track's chance: each trig it would play (its condition passed) plays with it, 100 % to 0 % in 16 steps. On HOME a trig under 100 % fills to its chance."],
+      ["patterns", "1.6: Pattern format 20 keeps the tracks' chances; a pattern with every track at 100 % saves as before, and older ones load at 100 %."],
+      ["workflow", "1.6: GLO > PLAY shows the FM-1's load: CPU, CPU2 (the second core) and DROP, the times the sound ran short. When it runs short, CPU FULL says so."],
+      ["sound", "1.6: The engine does the same sound with 2 to 3 % less work: a still filter's or EQ's coefficients and an LFO's rate kept, the MOD effect a block at a time, FX taps only where an FX machine listens."],
     ],
   },
   {

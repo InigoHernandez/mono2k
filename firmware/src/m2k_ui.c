@@ -21,7 +21,8 @@ enum {
     K_DCAY, K_DAMP,                                                        /* the reverb's */
     K_PCT, K_GRES, K_LANE,                                                 /* GRIDS' */
     K_MUTQ, K_MOTN,                                                        /* GLO > PLAY's, the screen's motion */
-    K_TLEN                                                                 /* a track's own length (SEQ held) */
+    K_TLEN,                                                                /* a track's own length (SEQ held) */
+    K_PROB                                                                 /* its chance (HOME 2: 16 steps, 100 % first) */
 };
 typedef struct { const char *s4, *name; uint8_t kind; } pi_t;
 
@@ -59,6 +60,8 @@ static const pi_t PI_GLOB[G_COUNT] = {
     {"LANE", "T5 LANE", K_LANE}, {"LANE", "T6 LANE", K_LANE},
     {"TLEN", "T1 LENGTH", K_TLEN}, {"TLEN", "T2 LENGTH", K_TLEN}, {"TLEN", "T3 LENGTH", K_TLEN}, {"TLEN", "T4 LENGTH", K_TLEN},
     {"TLEN", "T5 LENGTH", K_TLEN}, {"TLEN", "T6 LENGTH", K_TLEN},
+    {"PROB", "T1 CHANCE", K_PROB}, {"PROB", "T2 CHANCE", K_PROB}, {"PROB", "T3 CHANCE", K_PROB},
+    {"PROB", "T4 CHANCE", K_PROB}, {"PROB", "T5 CHANCE", K_PROB}, {"PROB", "T6 CHANCE", K_PROB},
 };
 
 static const pi_t PI_SET[17] = {
@@ -236,7 +239,7 @@ static int kind_choices(int k)
     }
 }
 
-static int kind_max(int k) { return k == K_BPM ? 255 : k == K_LEN || k == K_TLEN ? 64 : k == K_DEST ? P_COUNT : 127; }
+static int kind_max(int k) { return k == K_BPM ? 255 : k == K_LEN || k == K_TLEN ? 64 : k == K_DEST ? P_COUNT : k == K_PROB ? 15 : 127; }
 static int kind_min(int k) { return k == K_LEN ? 1 : 0; }
 
 /* ------------------------------------------------------------------------------------------------ strings */
@@ -483,6 +486,7 @@ static void fmt(const pi_t *pi, int t, int v, char *out, const char **unit)
     }
     case K_THRU: s_cpy(out, c ? "ON" : "OFF"); *unit = "TRS TO USB"; break;
     case K_PCT: s_int(out, (v * 100 + 63) / 127); *unit = "%"; break;
+    case K_PROB: { int c = PROB_PCT[v & 15]; s_cpy(s_int(out, c), "%"); *unit = !v ? "EVERY TRIG" : c ? "OF ITS TRIGS" : "NONE PLAYS"; break; }
     case K_GRES: s_cpy(out, c ? "32" : "16"); *unit = c ? "TWO BARS" : "A BAR"; break;   /* Grids' cycle */
     case K_LANE: { static const char *const N[4] = {"OFF", "BD", "SD", "HH"}, *const U[4] = {"", "KICK", "SNARE", "HATS"};
                    s_cpy(out, N[c]); *unit = U[c]; break; }
@@ -507,7 +511,8 @@ static void fmt(const pi_t *pi, int t, int v, char *out, const char **unit)
 
 enum { PG_HOME, PG_SYN, PG_AMP, PG_FILT, PG_FX, PG_LFO, PG_ARP, PG_GLO, PG_COUNT };
 enum { GS_TIME, GS_BUS, GS_SET, GS_MIDI, GS_IN, GS_PLAY, GS_COUNT };   /* GLO's (1.5: GLITCH and VERB one page, BUS) */
-static const uint8_t NSUB[PG_COUNT] = {1, 3, 2, 2, 4, 6, 3, GS_COUNT};   /* SYN: its two, then SND (BANK before it); ARP, GRIDS */
+static const uint8_t NSUB[PG_COUNT] = {2, 3, 2, 2, 4, 6, 3, GS_COUNT};   /* HOME: the pattern's, the track's sequencing; SYN:
+                                                                             * its two, then SND (BANK before it); ARP, GRIDS */
 static int nsub(int page);                     /* SYN has a third page, the bank, where the machine plays waves */
 #define SETTING(i) (0xC0 | (i))
 #define GL(g) (0x80 | (g))
@@ -519,7 +524,8 @@ static const uint8_t BUS_K[4] = {GL(G_VERB), GL(G_DAMP), GL(G_ADPC), GL(G_DRIV)}
 static int knob_param(int page, int sub, int k)
 {
     switch (page) {
-    case PG_HOME: { static const uint8_t m[4] = {P_LEVL, P_PTCH, GL(G_TMPO), GL(G_SWNG)}; return m[k]; }
+    case PG_HOME: { static const uint8_t m[4] = {P_LEVL, P_PTCH, GL(G_TMPO), GL(G_SWNG)}, g[4] = {G_TLEN1, G_SPD1, G_TPRB1, G_LANE1};
+                    return sub ? GL(g[k] + view_trk()) : m[k]; }   /* (HOME 2: the track in view's sequencing) */
     case PG_SYN: return sub < 2 ? P_SYN + sub * 4 + k : sub == nsub(PG_SYN) - 1 ? SETTING(18 + k)
                         : k == 0 ? P_WBNK : NONE;
     case PG_AMP: return P_ATK + sub * 4 + k;
@@ -658,9 +664,22 @@ static void keys_home(void)
  * plays the note new trigs take */
 static int track_root(const m2k_pattern_t *p, int t) { int r = pat_root(p, t); return r < 0 ? ui.note[t] : r; }
 
+/* the platform's meter (m2k_cpu, the FM-1's every half second): GLO > PLAY shows it; a short more than the last asks
+ * for CPU FULL (m2k_frame: at most every 5 s) */
+static struct { int16_t c1, c2; uint32_t shorts, short_t, full_t; uint8_t on, full; } cpu;
+void m2k_cpu(int core1_pct, int core2_pct, int shorts)
+{
+    cpu.c1 = (int16_t)CLAMP(core1_pct, 0, 999);
+    cpu.c2 = (int16_t)(core2_pct < 0 ? -1 : CLAMP(core2_pct, 0, 999));
+    if (cpu.on && (uint32_t)shorts != cpu.shorts) cpu.full = 1;     /* (one at power-on, before the first: none) */
+    cpu.shorts = (uint32_t)shorts;
+    cpu.on = 1;
+}
+
 static void ui_init(void)
 {
     m_set(&ui, 0, sizeof ui);
+    m_set(&cpu, 0, sizeof cpu);
     ui_forget();
     for (int k = 0, w = 0, b = 0; k < M2K_KEYS; k++) {
         int black = (0x54a >> ((k + 5) % 12)) & 1;
@@ -2736,7 +2755,7 @@ static void knobs(void)
         const char *u;
         fmt(pi, ui.trk, v, o, &u);
         int mx = kind_max(pi->kind), mn = kind_min(pi->kind);
-        int target = CLAMP(((v - mn) * 256) / (mx - mn ? mx - mn : 1), 0, 256);
+        int target = pi->kind == K_PROB ? PROB_PCT[v & 15] * 256 / 100 : CLAMP(((v - mn) * 256) / (mx - mn ? mx - mn : 1), 0, 256);
         int32_t ef = ui.fdt >= 99 ? 256 : (int32_t)ui.fdt * 256 / 99;   /* a third of the way each 33 ms, whatever */
         ui.ease[k] += ((target * 256 - ui.ease[k]) * ef) >> 8;            /* the frame rate (Q8: it eases to it) */
         icon(ic, pi, cx, K_IY, v, ui.ease[k] >> 8, o);
@@ -2940,13 +2959,14 @@ static const char *model_of(const mi_t *mi)
 }
 
 /* a lane's step on baseline b: nothing past the track's end; a rest a short line on the baseline; a trig a block 6
- * wide, 8 tall (an accent 10, one on a condition 4: what it may be), with locks a frame round a checker; muted, every
- * trig dotted round and the rests dotted; the playing step a bar under it; held in GRID, or toggled, inverted */
+ * wide, 8 tall (an accent 10, one on a condition 4: what it may be), with locks a frame round a checker, on a track
+ * under 100 % (PROB) framed and filled from its foot to its chance; muted, every trig dotted round and the rests
+ * dotted; the playing step a bar under it; held in GRID, or toggled, inverted */
 static void lane_step(int x, int b, int t, int s)
 {
     const m2k_pattern_t *p = PAT(cur_pat);
     if (s >= tlen_of(t)) return;
-    int muted = (p->mute >> t) & 1, h = 0, lk = 0;
+    int muted = (p->mute >> t) & 1, h = 0, lk = 0, pr = PROB_PCT[p->glob[G_TPRB1 + t] & 15];
     if (lane_of(p, t)) {
         uint32_t len = (uint32_t)seq_len(), n = !sq.playing ? 0 : spd_of(t) == 4 ? sq.n1x : sq.tk[t];
         int hit = grids_hit(p, lane_of(p, t) - 1, (n ? (n - 1) / len * len : 0) + (uint32_t)s, 0);
@@ -2958,6 +2978,7 @@ static void lane_step(int x, int b, int t, int s)
     if (!h) { if (muted) dots_h(x, b - 1, 6); else hline(x, b - 1, 6, 1); }
     else if (muted) dots_frame(x, b - h, 6, h);
     else if (lk) { frame(x, b - h, 6, h, 1); for (int j = 1; j < h - 1; j++) dots_h(x + 1, b - h + j, 4); }
+    else if (pr < 100) { int f = (h * pr + 50) / 100; frame(x, b - h, 6, h, 1); if (f) rect(x, b - f, 6, f, 1); }   /* PROB */
     else rect(x, b - h, 6, h, 1);
     if (sq.playing && track_pos(t) == s) rect(x, b + 2, 6, 2, 1);
     int blink = (step_held(t, s) && ((ui.now >> 7) & 1)) || (step_entry() && t == ui.trk && s == ui.cursor && ((ui.now >> 8) & 1)) ||
@@ -3608,14 +3629,30 @@ static void play_picture(int busy)
         else if (ps >= 0 && i <= ps % 16) rect(x, y, 8, 8, 1);
         else frame(x, y, 8, 8, 1);
     }
-    if (mute_pending() && sq.playing) {
+    /* the meter (the FM-1's, m2k_cpu): the first core's share of real time, the second's, the times the sound ran short
+     * since power-on (DROP solid a second after one); a dash where none came (the browser, the host) */
+    static const char *const CN[3] = {"CPU", "CPU2", "DROP"};
+    for (int i = 0; i < 3; i++) {
+        int x = SX0 + i * 80, w = 72, v = i == 0 ? cpu.c1 : i == 1 ? cpu.c2 : (int)(cpu.shorts > 9999u ? 9999u : cpu.shorts);
+        char o[8];
+        if (!cpu.on || v < 0) s_cpy(o, "--"); else if (i < 2) s_cpy(s_int(o, v), "%"); else s_int(o, v);
+        if (i == 2 && cpu.short_t && ui.now - cpu.short_t < 1000) inv_tag(&F_S, x + 2, 168, CN[i]);
+        else tx_b(&F_S, x, 168, CN[i], 1);
+        tx_br(&F_S, x + w, 168, o, 1);
+        if (i < 2) {
+            int f = cpu.on && v > 0 ? CLAMP(v, 0, 100) * w / 100 : 0;
+            dots_h(x, 173, w);
+            if (f) rect(x, 172, f, 2, 1);
+        }
+    }
+    if (busy) return;
+    if (mute_pending() && sq.playing) {                /* (a mute waiting: when it comes, on the info line) */
         int nx = sq.step >= len ? 0 : sq.step, left = !(nx & 15) ? 0 : CLAMP(16 - (nx & 15), 0, len - nx);
         char o[20];
         if (left) s_cpy(s_int(s_cpy(o, "IN "), left), left == 1 ? " STEP" : " STEPS"); else s_cpy(o, "AT THE NEXT STEP");
-        int x = SX0 + (fast ? inv_tag(&F_S, SX0 + 2, 172, "WAITS") + 2 : tx_b(&F_S, SX0, 172, "WAITS", 1)) + 8;
-        tx_b(&F_S, x, 172, o, 1);
-    }
-    if (!busy) tx_b(&F_S, SX0, INFO_B, set_on(S_MUTQ) ? "AT ONCE" : "AT THE BAR", 1);
+        int x = SX0 + (fast ? inv_tag(&F_S, SX0 + 2, INFO_B, "WAITS") + 2 : tx_b(&F_S, SX0, INFO_B, "WAITS", 1)) + 8;
+        tx_b(&F_S, x, INFO_B, o, 1);
+    } else tx_b(&F_S, SX0, INFO_B, set_on(S_MUTQ) ? "AT ONCE" : "AT THE BAR", 1);
 }
 
 /* GLO's pages: TIME the tempo big and its four beats under the knobs; BUS the reverb's tail in bars over time (0.1 ..
@@ -4294,6 +4331,11 @@ const uint8_t *m2k_frame(uint32_t ms)
     if (ui.boot_t0 == 0xFFFFFFFFu) ui.boot_t0 = ms;
     ui.now = ms;
     if (sq.full) { sq.full = 0; toast("PATTERNS FULL", "THE NEXT DID NOT OPEN"); }
+    if (cpu.full) {                     /* the sound ran short: never a mystery, never a nag */
+        cpu.full = 0;
+        cpu.short_t = ms | 1u;
+        if (!cpu.full_t || ms - cpu.full_t >= 5000) { cpu.full_t = ms | 1u; toast("CPU FULL", "SOUND DROPPED"); }
+    }
     /* what the audio did */
     int boost = 0;
     for (int t = 0; t < M2K_TRACKS; t++) {

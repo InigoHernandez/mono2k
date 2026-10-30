@@ -410,7 +410,7 @@
       <tr><td>LFO</td><td>LFO</td><td>Three LFOs, two pages each. Held: the knobs come back when let go.</td></tr>
       <tr><td>ARP</td><td>ARP</td><td>The track's arpeggiator.</td></tr>
       <tr><td>GLO</td><td>GLO</td><td>Tempo, the lofi bus, the reverb, settings. Held: the editing functions (copy, paste, clear, reload, mute).</td></tr>
-      <tr><td>HOME</td><td>HOME</td><td>The pattern in six lanes; level, pitch, tempo and swing. Held: pick patterns and banks.</td></tr>
+      <tr><td>HOME</td><td>HOME</td><td>The pattern in six lanes; level, pitch, tempo and swing. Again: HOME 2, the track's TLEN, SPD, PROB and LANE. Held: pick patterns and banks.</td></tr>
       <tr><td>SEQ</td><td>GRID</td><td>The keys play notes, or set the steps, sixteen at a time. Held: the step tools and the sequencer's knobs.</td></tr>
       <tr><td>PLAY</td><td></td><td>Starts and stops the sequencer.</td></tr>
       <tr><td>REC</td><td></td><td>A tap arms recording (live while playing, step entry while stopped). Held: FILL.</td></tr>
@@ -556,6 +556,11 @@
   <p>A page past the end says so when you tap its key, and which length holding it makes.</p>
   <h2>Tracks of their own length</h2>
   <p>Hold SEQ and turn KNOB 2: the track in view loops over its own length, PAT for the pattern's. 16 against 12 against 7 drift apart and all start together again at PLAY and at the next pattern; the pattern's LEN still sets the bars.</p>
+  <h2>HOME 2: a track's length, speed, chance and lane</h2>
+  <p>Press HOME again: the four knobs are the track in view's TLEN, SPD, PROB and LANE. PROB plays each of its trigs with that chance, after the step's own condition: 100 % (every trig) down to 0 % in 16 steps, 95 90 85 80 75 66 60 50 40 33 25 20 10 5. A 1:2 trig at 50 % plays one loop in four. On the lanes a trig under 100 % fills to its chance.</p>
+  <div class="figs">
+    <figure class="fig"><canvas data-scr="35_home2"></canvas><figcaption>HOME 2 on T2: its length 12, 1×, 50 %, no lane; the tracks under 100 % filled to their chance.</figcaption></figure>
+  </div>
   <div class="figs">
     <figure class="fig"><canvas data-scr="33_home_lengths"></canvas><figcaption>Six lengths: 16, 12, 7, 5, 10, 3. Past each one's end, dots; each playhead its own.</figcaption></figure>
   </div>
@@ -651,6 +656,11 @@
   </div>
   <h2>Mutes on the bar</h2>
   <p>GLO &gt; PLAY's MUTE: BAR (the default) holds a mute made while playing to the next bar's first step (steps 1, 17, 33, 49); NOW mutes at once. Stopped, always at once. The key blinks while it waits.</p>
+  <h2>The FM-1's load</h2>
+  <p>GLO &gt; PLAY shows it, every half second: CPU, the first core's share of real time making the sound; CPU2, the second core's; DROP, the times the sound ran short since power-on. Near 100 % the sound drops out: CPU FULL says so in the header (at most every 5 seconds). In the browser, dashes.</p>
+  <div class="figs">
+    <figure class="fig"><canvas data-scr="36_glo_meter"></canvas><figcaption>GLO &gt; PLAY on the FM-1: the mutes, the bar, the load.</figcaption></figure>
+  </div>
 </article>
 
 <article id="recording" data-group="Sequencer">
@@ -836,7 +846,7 @@
 </footer>
 <script src="site.js?v=3"></script>
 <script src="panel.js?v=2"></script>
-<script src="changelog.js?v=46"></script>
-<script src="manual.js?v=50"></script>
+<script src="changelog.js?v=47"></script>
+<script src="manual.js?v=51"></script>
 </body>
 </html>

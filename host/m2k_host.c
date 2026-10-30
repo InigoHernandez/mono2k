@@ -12,6 +12,7 @@
 #include "../firmware/src/m2k_core.c"
 #include "m2k_bank_rev9.c"                /* the bank before, for the tests */
 #include "m2k_lib_play.c"                 /* the sound library's audition */
+#include "m2k_dense.c"                    /* DENSE: every track's effects, LFOs, chances and locks (1.6's yardstick) */
 
 static void wav_write(const char *path, const int16_t *s, int frames)
 {
@@ -40,7 +41,8 @@ static void pbm_write(const char *path, const uint8_t *fbuf)
 typedef struct { int ms; char kind; int a, b; const char *shot; } ev_t;
 
 /* the tour: kind b button (a, b = down), e encoder (a, delta), k key (a, down), m MIDI in (a from, b status), s
- * screenshot */
+ * screenshot, c the platform's meter (m2k_cpu: a the first core's %, b the second's in its low 12 bits, the shorts
+ * over them) */
 static const ev_t TOUR[] = {
     {1200, 's', 0, 0, "00_boot"},             /* (the splash's waterfall) */
     {2520, 's', 0, 0, "01_home_stopped"},     /* (the splash 2.1 s, its wipe into HOME 0.4 s) */
@@ -171,6 +173,42 @@ static const ev_t LENGTHS_TOUR[] = {
     {9300, 's', 0, 0, "33_home_lengths"},
     {9400, 'x', 0, 0, 0},
 };
+
+/* HOME's second page on B01, the lengths' scene with chances (T2 50 %, T4 25 %, T6 75 %; T5 at 2x): HOME 1 (34),
+ * HOME again: HOME 2 on T2 (35), PROB turned (35b); GLO > PLAY with the FM-1's meter (36), then the sound short: CPU
+ * FULL (37) */
+static const ev_t HOME2_TOUR[] = {
+    {2600, 'b', B_PLAY, 1, 0}, {2620, 'b', B_PLAY, 0, 0},
+    {4300, 's', 0, 0, "34_home1_prob"},
+    {4400, 'e', E_SELECT, 1, 0}, {4500, 'b', B_HOME, 1, 0}, {4520, 'b', B_HOME, 0, 0},
+    {5200, 's', 0, 0, "35_home2"},
+    {5300, 'e', E_K3, 1, 0}, {5600, 's', 0, 0, "35b_home2_prob"},
+    {8000, 'b', B_GLO, 1, 0}, {8020, 'b', B_GLO, 0, 0}, {8350, 'b', B_GLO, 1, 0}, {8370, 'b', B_GLO, 0, 0},
+    {8700, 'b', B_GLO, 1, 0}, {8720, 'b', B_GLO, 0, 0}, {9050, 'b', B_GLO, 1, 0}, {9070, 'b', B_GLO, 0, 0},
+    {9400, 'b', B_GLO, 1, 0}, {9420, 'b', B_GLO, 0, 0}, {9750, 'b', B_GLO, 1, 0}, {9770, 'b', B_GLO, 0, 0},
+    {9800, 'c', 58, 41, 0}, {10300, 'c', 61, 44, 0}, {10500, 's', 0, 0, "36_glo_meter"},
+    {10800, 'c', 97, 52, 0}, {11300, 'c', 102, 55, 0}, {11300, 'c', 102, 55 | 3 << 12, 0},
+    {11600, 's', 0, 0, "37_cpu_full"},
+    {11700, 'x', 0, 0, 0},
+};
+
+static void home2_scene(void)
+{
+    static const uint8_t TL[M2K_TRACKS] = {0, 12, 7, 5, 10, 3}, PB[M2K_TRACKS] = {0, 8, 0, 11, 0, 5};
+    static const uint16_t ON[M2K_TRACKS] = {0x1111, 0x0249, 0x0015, 0x0009, 0x0021, 0x0003};
+    m2k_init(2000);
+    m2k_pattern_t *q = &pat[16];
+    for (int t = 0; t < M2K_TRACKS; t++) {
+        q->glob[G_TLEN1 + t] = TL[t];
+        q->glob[G_TPRB1 + t] = PB[t];
+        for (int s = 0; s < 16; s++) if (ON[t] >> s & 1) q->step[t][s] = (m2k_step_t){.note = 60, .flags = ST_TRIG};
+    }
+    q->glob[G_SPD1 + 4] = enc(6, 7);
+    cur_pat = 16;
+    sq.queued = 16;
+    lockmap_build();
+    for (int t = 0; t < M2K_TRACKS; t++) m_cpy(trk[t].eff, pat[16].kit[t], P_COUNT);
+}
 
 static void lengths_scene(void)
 {
@@ -376,6 +414,7 @@ static void run_events(const ev_t *E, const char *out)
             if (e->kind == 'e') m2k_encoder(e->a, e->b);
             if (e->kind == 'k') m2k_key(e->a, e->b);
             if (e->kind == 'm') m2k_midi_from(e->a, e->b, 0, 0);
+            if (e->kind == 'c') m2k_cpu(e->a, e->b & 0xFFF, e->b >> 12);
             if (e->kind == 's') {
                 snprintf(path, sizeof path, "%s/%s.pbm", out, e->shot);
                 pbm_write(path, m2k_frame((uint32_t)now));
@@ -1180,7 +1219,7 @@ static int eng_dly_quiet(void)
     }
     return 1;
 }
-/* the MOD effect's phaser (mod_tick, type 2) in 64 bits throughout, to hold it to */
+/* the MOD effect's phaser (mod_block, type 2) in 64 bits throughout, to hold it to */
 static int32_t eng_phaser(uint32_t *mph, int32_t *map, int32_t *mfb, int32_t x, uint32_t inc, int32_t dep, int32_t mix)
 {
     *mph += inc;
@@ -4079,21 +4118,21 @@ static int selftest(void)
         m2k_par_begin = 0; m2k_par_end = 0;
         CHECK(same && split_seen, "two cores: bank A the same sample for sample, the second core's tracks first or last");
     }
-    /* and whichever tracks the second core takes: bank A's four demos with every set of tracks there (an FX machine's
-     * kept with what it hears), its tracks first and last, each the same as on one core */
+    /* and whichever tracks the second core takes: bank A's four demos and DENSE (m2k_dense.c) with every set of tracks
+     * there (an FX machine's kept with what it hears), its tracks first and last, each the same as on one core */
     {
         static int16_t a[2 * 22050], b[2 * 22050];
         int same = 1, sets = 0;
-        for (int p = 0; p < 4; p++) {
+        for (int p = 0; p < 5; p++) {
             par_mode = 0; m2k_par_begin = 0; m2k_par_end = 0; par_force = -1;
-            m2k_init(21); m2k_pattern(p); seq_play(1);
+            m2k_init(21); if (p == 4) dense_pattern(&pat[46]); m2k_pattern(p == 4 ? 46 : p); seq_play(1);
             for (int f = 0; f < 22050; f += 128) m2k_render(a + 2 * f, 128 < 22050 - f ? 128 : (22050 - f) & ~15);
             for (int m = 1; m < (1 << M2K_TRACKS) - 1; m++)
                 for (int mode = 1; mode < 3; mode++) {
                     par_mode = mode; m2k_par_begin = par_test_begin; m2k_par_end = par_test_end; par_force = m;
-                    m2k_init(21); m2k_pattern(p); seq_play(1);
+                    m2k_init(21); if (p == 4) dense_pattern(&pat[46]); m2k_pattern(p == 4 ? 46 : p); seq_play(1);
                     for (int f = 0; f < 22050; f += 128) m2k_render(b + 2 * f, 128 < 22050 - f ? 128 : (22050 - f) & ~15);
-                    if (memcmp(a, b, sizeof a)) { if (same) printf("     A%02d differs with tracks %02x on the second core (%s)\n", p + 1, m, mode == 1 ? "first" : "last"); same = 0; }
+                    if (memcmp(a, b, sizeof a)) { if (same) printf("     %s%02d differs with tracks %02x on the second core (%s)\n", p == 4 ? "DENSE " : "A", p + 1, m, mode == 1 ? "first" : "last"); same = 0; }
                     sets++;
                 }
         }
@@ -4121,8 +4160,8 @@ static int selftest(void)
                 if (mode) sets++;
             }
         m2k_par_begin = 0; m2k_par_end = 0; par_force = -1;
-        CHECK(same && sets == 5 * 62 * 2, "two cores: any set of tracks on the second (FX machines kept with what they hear), "
-              "bank A and six FX-chained tracks the same sample for sample");
+        CHECK(same && sets == 6 * 62 * 2, "two cores: any set of tracks on the second (FX machines kept with what they hear), "
+              "bank A, DENSE and six FX-chained tracks the same sample for sample");
     }
     /* NOTES OUT on two cores: six tracks' gates end in the same blocks on both; the second core's job queues no MIDI
      * (a gate's end is marked on its core, its note-off sent by the first after both) and the notes come out as on
@@ -4484,7 +4523,7 @@ static int selftest(void)
     }
     /* format 19: a pattern with no track of its own length packs as 18, byte for byte (bank A's bytes kept); one with, as
      * 19, six bytes more, read back the same; a version-18 pattern loads with every track on the pattern's length (0); a
-     * length past 64 reads 64; version 20 is refused; a store keeps the lengths. Every length set to the pattern's own
+     * length past 64 reads 64; version 21 is refused; a store keeps the lengths. Every length set to the pattern's own
      * plays as none set (A01, two seconds) */
     {
         static m2k_pattern_t w, w2;
@@ -4502,7 +4541,7 @@ static int selftest(void)
         m_cpy(bx, b19, (size_t)n19);
         bx[2 + 8 + M2K_TRACKS + G_TLEN1 + 1] = 200;
         int clamp = pat_unpack(&w2, bx, n19) && w2.glob[G_TLEN1 + 1] == 64;
-        bx[1] = 20;
+        bx[1] = 21;
         int refused = !pat_unpack(&w2, bx, n19);
         pat[5].glob[G_TLEN1 + 2] = 7;
         int sn = m2k_store_pack();
@@ -4520,6 +4559,105 @@ static int selftest(void)
         int same = !memcmp(ra, rb, sizeof ra);
         CHECK(ok18 && ok19 && old && clamp && refused && kept && same,
               "format: 19 the tracks' lengths (none: packed as 18, byte for byte), 18 loads with none, past 64 is 64; lengths set to the pattern's play as none");
+    }
+    /* format 20, the tracks' chances (PROB): a pattern with every track at 100 % packs as before (19 with a length of
+     * its own, bank A's as 18), byte for byte; one with a chance as 20, six bytes more, read back the same; a version-19
+     * pattern loads with every track at 100 % (0); a step past 15 reads 15 (0 %); version 21 is refused; a store keeps
+     * the chances; HOME's second page is the track's TLEN SPD PROB LANE */
+    {
+        static m2k_pattern_t w, w2;
+        static uint8_t b19[BLOB_MAX], b20[BLOB_MAX], bx[BLOB_MAX];
+        m2k_init(41);
+        int ok18 = pat_pack(&pat[0], bx) > 0 && bx[1] == 18;
+        m_cpy(&w, &pat[0], sizeof w);
+        w.glob[G_TLEN1 + 1] = 12;
+        int n19 = pat_pack(&w, b19), ok19 = b19[1] == 19 && n19 == pat_pack_v(&w, bx, 19) && !memcmp(b19, bx, (size_t)n19);
+        static const uint8_t PB[M2K_TRACKS] = {0, 8, 15, 0, 3, 1};
+        for (int t = 0; t < M2K_TRACKS; t++) w.glob[G_TPRB1 + t] = PB[t];
+        int n20 = pat_pack(&w, b20);
+        int ok20 = b20[1] == 20 && n20 == n19 + 6 && pat_unpack(&w2, b20, n20) && !memcmp(w2.glob, w.glob, G_COUNT) &&
+                   pat_pack(&w2, bx) == n20 && !memcmp(bx, b20, (size_t)n20);
+        int nv = pat_pack_v(&w, bx, 19), old = pat_unpack(&w2, bx, nv) && !memcmp(w2.glob, w.glob, G_COUNT_V19);
+        for (int t = 0; t < M2K_TRACKS; t++) old &= w2.glob[G_TPRB1 + t] == 0;
+        m_cpy(bx, b20, (size_t)n20);
+        bx[2 + 8 + M2K_TRACKS + G_TPRB1 + 2] = 200;
+        int clamp = pat_unpack(&w2, bx, n20) && w2.glob[G_TPRB1 + 2] == 15;
+        bx[1] = 21;
+        int refused = !pat_unpack(&w2, bx, n20);
+        pat[5].glob[G_TPRB1 + 3] = 8;
+        int sn = m2k_store_pack();
+        m2k_init(42);
+        int kept = sn > 0 && m2k_store_unpack(sn) == 1 && pat[5].glob[G_TPRB1 + 3] == 8 && pat[5].glob[G_TPRB1] == 0;
+        ui.trk = 2; ui.page = PG_HOME; ui.sub = 1;
+        int home2 = nsub(PG_HOME) == 2 && knob_at(0) == GL(G_TLEN1 + 2) && knob_at(1) == GL(G_SPD1 + 2) &&
+                    knob_at(2) == GL(G_TPRB1 + 2) && knob_at(3) == GL(G_LANE1 + 2);
+        char o[16];
+        const char *u;
+        fmt(pinfo(2, GL(G_TPRB1 + 2)), 2, 0, o, &u); home2 &= !strcmp(o, "100%") && !strcmp(u, "EVERY TRIG");
+        fmt(pinfo(2, GL(G_TPRB1 + 2)), 2, 8, o, &u); home2 &= !strcmp(o, "50%");
+        fmt(pinfo(2, GL(G_TPRB1 + 2)), 2, 15, o, &u); home2 &= !strcmp(o, "0%");
+        pat[cur_pat].glob[G_TPRB1 + 2] = 0;
+        for (int i = 0; i < 20; i++) edit(2, 1);           /* (turned right: down the chances, to 0 % at the end) */
+        home2 &= pat[cur_pat].glob[G_TPRB1 + 2] == 15;
+        for (int i = 0; i < 20; i++) edit(2, -1);
+        home2 &= pat[cur_pat].glob[G_TPRB1 + 2] == 0;
+        ui.sub = 0;
+        printf("     packed 18 %d, 19 %d, 20 %d, 19 read %d, clamp %d, 21 refused %d, store %d, HOME 2 %d\n", ok18, ok19, ok20,
+               old, clamp, refused, kept, home2);
+        CHECK(ok18 && ok19 && ok20 && old && clamp && refused && kept && home2,
+              "format: 20 the tracks' chances (all 100 %: packed as before, byte for byte), 19 loads at 100 %; HOME 2: TLEN SPD PROB LANE");
+    }
+    /* PROB: every trig a track would play, its own condition passed, plays with the chance: 100 % every trig and no
+     * draw (its generator untouched), 0 % none, 50 % about half of 512 (a fixed seed), a 1:2 trig at 50 % a quarter, a
+     * track without trigs nothing whatever its chance; a track following a lane takes it too; the same on two cores,
+     * sample for sample, and on another seed other draws */
+    {
+        int cnt[2][M2K_TRACKS], rnd_kept = 0, same2 = 1;
+        static int16_t ra[2 * 44100], rb[2 * 44100];
+        for (int run = 0; run < 2; run++) {
+            m2k_init(run ? 77 : 51);
+            m2k_pattern_t *q = bare(0);
+            q->glob[G_TMPO] = 255;                          /* (285 BPM: 512 steps in 1.2 M samples) */
+            static const uint8_t PB[M2K_TRACKS] = {0, 8, 15, 8, 1, 8};
+            for (int t = 0; t < M2K_TRACKS; t++) {
+                q->glob[G_TPRB1 + t] = PB[t];
+                for (int s = 0; s < 16; s++)
+                    q->step[t][s] = (m2k_step_t){.note = 48, .flags = (uint8_t)(t == 4 ? 0 : ST_TRIG), .cond = (uint8_t)(t == 3 ? C_1_2 : C_ALWAYS)};
+            }
+            q->glob[G_LANE1 + 5] = enc(1, 4);               /* T6 on the kick's lane at 50 % */
+            q->glob[G_GRBD] = 127;                           /* (every step a kick: the lane's densest) */
+            seq_tempo();
+            uint32_t g0 = sq.prng[0];
+            sblk_sync();
+            for (int t = 0; t < M2K_TRACKS; t++) cnt[run][t] = 0;
+            seq_play(1);
+            int32_t step = (int32_t)(sps_q8 >> 8);
+            for (int32_t f = 0; f < step * 512 - M2K_SUB * 8; f += M2K_SUB) {
+                int m = sblk();
+                for (int t = 0; t < M2K_TRACKS; t++) cnt[run][t] += m >> t & 1;
+            }
+            seq_play(0);
+            if (!run) rnd_kept = sq.prng[0] == g0;
+        }
+        /* two cores: the chances drawn on the first, the same sound */
+        for (int mode = 0; mode < 2; mode++) {
+            par_mode = mode; m2k_par_begin = mode ? par_test_begin : 0; m2k_par_end = mode ? par_test_end : 0;
+            m2k_init(52);
+            m2k_pattern_t *q = &pat[0];
+            for (int t = 0; t < M2K_TRACKS; t++) q->glob[G_TPRB1 + t] = (uint8_t)(t * 2 + 3);
+            m2k_pattern(0);
+            seq_play(1);
+            int16_t *o = mode ? rb : ra;
+            for (int f = 0; f < 44100; f += 128) m2k_render(o + 2 * f, 128 < 44100 - f ? 128 : (44100 - f) & ~15);
+        }
+        m2k_par_begin = 0; m2k_par_end = 0;
+        same2 = !memcmp(ra, rb, sizeof ra);
+        int *c = cnt[0];
+        printf("     trigs of 512: 100 %% %d, 50 %% %d, 0 %% %d, 1:2 at 50 %% %d, none at 95 %% %d, a lane at 50 %% %d; "
+               "another seed's 50 %% %d\n", c[0], c[1], c[2], c[3], c[4], c[5], cnt[1][1]);
+        CHECK(c[0] == 512 && c[1] > 216 && c[1] < 296 && c[2] == 0 && c[3] > 98 && c[3] < 158 && c[4] == 0 && c[5] > 216 &&
+              c[5] < 296 && rnd_kept && cnt[1][1] != c[1] && cnt[1][0] == 512 && same2,
+              "PROB: 100 % every trig (no draw), 50 % about half, 0 % none, with 1:2 a quarter, a lane's too; two cores the same");
     }
     /* SYNC IN: the tracks off 1x keep to the pattern's steps on the clock's tempo, through a tempo change (a step of
      * theirs that starts with one of the pattern's plays with it); a start sets them going again, a continue from a
@@ -5313,12 +5451,16 @@ static int selftest(void)
         m2k_init(67);
         trk_t *t = &trk[0];
         uint32_t mph = 0;
-        int32_t map[4] = {0}, mfb = 0, side;
+        int32_t map[4] = {0}, mfb = 0;
         int ph_same = 1;
-        for (int i = 0; i < M2K_SR; i++) {
-            int32_t x = ((i & 1) ? 90000 : -90000) * (((i / 3) & 1) ? -1 : 1);      /* near Nyquist, a driven track's 2.7 x full */
-            int32_t y = mod_tick(t, line, x, 2, T_MOD_INC[64], 127 * 206, 254, &side);   /* (MODD 127, the phaser's scale) */
-            ph_same &= y == eng_phaser(&mph, map, &mfb, x, T_MOD_INC[64], 127, 254);
+        for (int i = 0; i < M2K_SR; i += M2K_SUB) {
+            int32_t xb[M2K_SUB], sb[M2K_SUB];
+            for (int j = 0; j < M2K_SUB; j++)                                       /* near Nyquist, a driven track's */
+                xb[j] = (((i + j) & 1) ? 90000 : -90000) * ((((i + j) / 3) & 1) ? -1 : 1);   /* 2.7 x full */
+            int32_t xo[M2K_SUB];
+            m_cpy(xo, xb, sizeof xo);
+            mod_block(t, line, xb, sb, 2, T_MOD_INC[64], 127 * 206, 254);     /* (MODD 127, the phaser's scale) */
+            for (int j = 0; j < M2K_SUB; j++) ph_same &= xb[j] == eng_phaser(&mph, map, &mfb, xo[j], T_MOD_INC[64], 127, 254) && !sb[j];
         }
         CHECK(gp <= 32401 && !flips && ph_same, "64-bit products: GND-PERC's METAL, DRM-SNAR's gain, the phaser's allpasses, on loud signals");
     }
@@ -6227,6 +6369,8 @@ int main(int argc, char **argv)
     run_events(GRIDS_TOUR, out);
     lengths_scene();
     run_events(LENGTHS_TOUR, out);
+    home2_scene();
+    run_events(HOME2_TOUR, out);
     printf("tour done%s\n", ta_found ? ": TEXT TOUCHES OR IS CUT (above)" : ", every text clear");
     return ta_found != 0;
 }

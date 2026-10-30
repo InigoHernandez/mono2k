@@ -6,7 +6,8 @@
  *   cc -O2 -fno-builtin -fno-vectorize -fno-slp-vectorize -DM2K_MUL_OUT -Ifirmware/src -Ifirmware/gen \
  *      -o build/host/m2k_draw host/m2k_draw.c && build/host/m2k_draw [--splash | --perform]
  * (--perform: the sound's cost with each PERFORM effect held, perform_cpu; --library [DIR]: each library sound's,
- * library_cpu) */
+ * library_cpu; --cpu: the render's yardstick, bank A's four and DENSE on one core and two; --hash: their renders'
+ * FNV-1a, on one core and two, to hold a change of the engine to the same sound bit for bit) */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -15,6 +16,7 @@
 #include <unistd.h>
 #include "m2k_core.c"
 #include "m2k_lib_play.c"
+#include "m2k_dense.c"
 
 static uint64_t instr(void)
 {
@@ -128,11 +130,114 @@ static int library_cpu(const char *dir)
     return 0;
 }
 
+/* --cpu and --hash: bank A's demo p (0..3), or DENSE (4, m2k_dense.c), from its start */
+static void play_from(int p)
+{
+    m2k_init(2000);
+    if (p == 4) { dense_pattern(&pat[46]); p = 46; }
+    if (p == 5) {                      /* FXS: the FX machines each hearing a track with the chain's every stage on */
+        static const uint8_t MS[M2K_TRACKS] = {M_SAW, M_FXC, M_GSIN, M_GSIN, M_FXR, M_FXD};
+        dense_pattern(&pat[47]);
+        m2k_pattern_t *q = &pat[47];
+        for (int t = 0; t < M2K_TRACKS; t++) {
+            uint8_t keep[P_COUNT];
+            m_cpy(keep, q->kit[t], P_COUNT);
+            kit_default(q, t, MS[t]);
+            for (int k = 8; k < P_COUNT; k++) q->kit[t][k] = keep[k];
+            q->kit[t][P_HOLD] = 127;
+        }
+        q->kit[1][P_SYN + 3] = 127; q->kit[4][P_SYN + 1] = 127; q->kit[4][P_SYN + 3] = 127;
+        p = 47;
+    }
+    m2k_pattern(p);
+    seq_play(1);
+}
+
+/* two cores in turn, as the self-test plays them: the job run as it is started, its instructions (j) and the first
+ * core's own tracks' meanwhile (o) counted a block at a time; the slower of the two is the block's wall */
+static uint64_t job_i, own_i, own_t0, wall_x;
+static int cpu_begin(void (*job)(void))
+{
+    uint64_t a = instr();
+    job();
+    job_i = instr() - a - base_cost;
+    own_t0 = instr();
+    return 1;
+}
+static void cpu_end(void)
+{
+    own_i = instr() - own_t0 - base_cost;
+    wall_x += (job_i > own_i ? job_i - own_i : 0);      /* (the first core waits for the second this long) */
+}
+
+static int cpu_yard(void)
+{
+    static const char *const N[5] = {"A01", "A02", "A03", "A04", "DENSE"};
+    static int16_t b[2 * M2K_SUB];
+    const int warm = 2 * 44100, len = 4 * 44100;
+    printf("Mac instructions a sample, built as the FM-1 builds the core, 4 s after 2 s: one core; two cores: the "
+           "first's work, the second's, the wall (the slower core's)\n");
+    for (int p = 0; p < 5; p++) {
+        m2k_par_begin = 0; m2k_par_end = 0;
+        play_from(p);
+        for (int f = 0; f < warm; f += 128) { static int16_t w[256]; m2k_render(w, 128); }
+        uint64_t a = instr();
+        for (int f = 0; f < len; f += M2K_SUB) m2k_render(b, M2K_SUB);
+        uint64_t one = instr() - a - base_cost;
+        m2k_par_begin = cpu_begin; m2k_par_end = cpu_end;
+        play_from(p);
+        for (int f = 0; f < warm; f += 128) { static int16_t w[256]; m2k_render(w, 128); }
+        uint64_t tot = 0, job = 0;
+        wall_x = 0;
+        for (int f = 0; f < len; f += M2K_SUB) {
+            job_i = 0;
+            uint64_t s = instr();
+            m2k_render(b, M2K_SUB);
+            uint64_t c = instr() - s - base_cost;
+            if (job_i) c -= job_i + 4 * base_cost;      /* (the hooks' four counts out: a call each) */
+            tot += c;
+            job += job_i;
+        }
+        m2k_par_begin = 0; m2k_par_end = 0;
+        printf("  %-6s %6.0f   %6.0f %6.0f %6.0f\n", N[p], (double)one / len, (double)tot / len, (double)job / len,
+               (double)(tot + wall_x) / len);
+    }
+    return 0;
+}
+
+static uint32_t fnv_pcm(uint32_t h, const int16_t *s, int n)
+{
+    const uint8_t *b = (const uint8_t *)s;
+    for (int i = 0; i < 4 * n; i++) h = (h ^ b[i]) * 16777619u;
+    return h;
+}
+static int par_now(void (*job)(void)) { job(); return 1; }
+static void par_none(void) {}
+static int render_hash(void)
+{
+    static const char *const N[6] = {"A01", "A02", "A03", "A04", "DENSE", "FXS"};
+    static int16_t b[2 * 128];
+    for (int p = 0; p < 6; p++) {
+        uint32_t h[2];
+        for (int two = 0; two < 2; two++) {
+            m2k_par_begin = two ? par_now : 0; m2k_par_end = two ? par_none : 0;
+            play_from(p);
+            h[two] = 2166136261u;
+            for (int f = 0; f < 10 * 44100; f += 128) { m2k_render(b, 128); h[two] = fnv_pcm(h[two], b, 128); }
+        }
+        m2k_par_begin = 0; m2k_par_end = 0;
+        printf("  %-6s %08x %08x%s\n", N[p], h[0], h[1], h[0] == h[1] ? "" : "  (two cores differ)");
+    }
+    return 0;
+}
+
 int main(int argc, char **argv)
 {
     for (int r = 0; r < 20; r++) { uint64_t a = instr(); uint64_t b = instr() - a; if (!base_cost || b < base_cost) base_cost = b; }
     if (argc > 1 && !strcmp(argv[1], "--perform")) return perform_cpu();
     if (argc > 1 && !strcmp(argv[1], "--library")) return library_cpu(argc > 2 ? argv[2] : 0);
+    if (argc > 1 && !strcmp(argv[1], "--cpu")) return cpu_yard();
+    if (argc > 1 && !strcmp(argv[1], "--hash")) return render_hash();
     if (argc > 1 && !strcmp(argv[1], "--splash")) {
         /* every splash frame at 60 a second, as the host draws them */
         m2k_init(2000);

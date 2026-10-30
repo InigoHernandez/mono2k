@@ -31,6 +31,7 @@ static struct {
     uint8_t ktrk;                      /* the track the keys play */
     int8_t rec_skip[M2K_TRACKS];       /* a step just recorded ahead: do not play it twice */
     /* trig conditions and ratchets */
+    uint32_t prng[M2K_TRACKS];         /* each track's own draws for its PROB (prob_pass) */
     uint16_t loops[M2K_TRACKS];        /* each track's loops over its steps since play, or since its pattern came in */
     uint8_t fill, pre[M2K_TRACKS];
     uint8_t rt_left[M2K_TRACKS], rt_note[M2K_TRACKS], rt_skip[M2K_TRACKS];
@@ -222,6 +223,23 @@ static int cond_pass(int t, int c)
     return r;
 }
 
+/* PROB (format 20; HOME 2, KNOB 3): every trig a track would play, its own condition passed, plays with this chance:
+ * 16 steps, 100 % (0, every trig: no draw, as before) down to 0 %. A draw of 256 under its share from the track's own
+ * generator (sq.prng: the sequencer's, on the first core, the same order on the FM-1, the browser and the host; the
+ * conditions', the LFOs' and the arp's draws stay where they were, so a PROB turned changes no other track) */
+static const uint8_t PROB_PCT[16] = {100, 95, 90, 85, 80, 75, 66, 60, 50, 40, 33, 25, 20, 10, 5, 0};
+static const uint8_t PROB_256[16] = {0, 243, 230, 218, 205, 192, 169, 154, 128, 102, 85, 64, 51, 26, 13, 0};
+static int prob_pass(int t)
+{
+    int i = PAT(cur_pat)->glob[G_TPRB1 + t];
+    if (!i) return 1;
+    if (i >= 15) return 0;
+    uint32_t x = sq.prng[t];
+    x ^= x << 13; x ^= x >> 17; x ^= x << 5;
+    sq.prng[t] = x;
+    return (int)(x >> 24) < PROB_256[i];
+}
+
 /* a track's speed: 1/8x 1/4x 1/2x 3/4x 1x 3/2x 2x, its step that many times the pattern's (as a fraction, exact) */
 static const uint8_t SPD_NUM[7] = {8, 4, 2, 4, 1, 2, 1}, SPD_DEN[7] = {1, 1, 1, 3, 1, 3, 2};
 static inline int spd_of(int t) { return (G()[G_SPD1 + t] * 7) >> 7; }
@@ -269,7 +287,7 @@ static void lane_fire(int t, uint32_t k)
 {
     m2k_pattern_t *p = PAT(cur_pat);
     int hit = grids_hit(p, lane_of(p, t) - 1, k, 0);
-    if (!hit) return;
+    if (!hit || !prob_pass(t)) return;
     int note = lane_note(p, t), vel = hit == 2 ? 127 : 100, c = spd_of(t);
     m_cpy(trk[t].eff, p->kit[t], P_COUNT);
     voice_trig(t, note, vel, 0, 0);
@@ -291,7 +309,7 @@ static void fire_track(int t, int s, int32_t len, uint32_t k)
         if (!(st.flags & ST_TRIG) || (p->mute >> t & 1) || (sq.solo && !(sq.solo >> t & 1))) return;
         if (sq.rec_skip[t] == s) { sq.rec_skip[t] = -1; return; }
         if (sq.nheld && t == sq.ktrk) return;       /* the player has the track */
-        if (!cond_pass(t, st.cond)) return;
+        if (!cond_pass(t, st.cond) || !prob_pass(t)) return;
         apply_locks(t, s);
         unsigned skip = st.flags & ST_TTYPE;
         voice_trig(t, st.note, (st.flags & ST_ACC) ? 127 : 100, st.flags & ST_SLD, skip);
@@ -1096,7 +1114,7 @@ void m2k_init(uint32_t seed)
         trk[t].dt_q8 = 400 << 8;
     }
     bus.grng = 0x6C078965u ^ seed;
-    for (int i = 0; i < M2K_TRACKS; i++) sq.rec_skip[i] = -1;
+    for (int i = 0; i < M2K_TRACKS; i++) { sq.rec_skip[i] = -1; sq.prng[i] = ((0x2545F491u ^ seed) + (uint32_t)i * 0x9E3779B9u) | 1u; }
     m_set(store_.set, 0, sizeof store_.set);
     projects_factory();
     cur_pat = 0;

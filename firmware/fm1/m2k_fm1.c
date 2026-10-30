@@ -126,10 +126,31 @@ static void take_panel(void)
 #define M2K_FM1_DIAG 0
 #endif
 static uint32_t diag_short_ms, diag_last_short, frame_ticks;
-#if M2K_FM1_DIAG
-static uint32_t diag_t0;
-#endif
 static char diag_txt[40];
+
+/* ---- the meter, always (the core shows it on GLO > PLAY, m2k_cpu; a short more says CPU FULL): every half second the
+ * first core's share of real time rendering the sound (its waits for the second included: what must stay under
+ * 100), the second's (-1 without it), and the times the interrupt found the ring short since power-on; F, the
+ * frames' share, for the test build's line */
+static uint32_t meter_t0, meter_c1, meter_f;
+static int meter_c2 = -1;
+static int meter_tick(void)
+{
+    uint32_t now = fm1_ticks(), span = now - meter_t0, q;
+    if (span < 500u * 1000u * FM1_TICKS_PER_US) return 0;
+    q = span / 100u;
+    meter_c1 = load_ticks / q;
+    meter_f = frame_ticks / q;
+    meter_c2 = -1;
+#if DINGHY_DUAL_CORE
+    if (m2k_par_end) meter_c2 = (int)(job_ticks / q);
+    job_ticks = 0;
+#endif
+    load_ticks = load_frames = frame_ticks = 0;
+    meter_t0 = now;
+    m2k_cpu((int)meter_c1, meter_c2, (int)ring_short);
+    return 1;
+}
 
 static void diag_num(char *o, uint32_t v)
 {
@@ -140,26 +161,20 @@ static void diag_num(char *o, uint32_t v)
     *o = 0;
 }
 
-static void diag_tick(void)
+static void diag_tick(int fresh)                 /* (the meter's numbers, as they come) */
 {
 #if M2K_FM1_DIAG
-    uint32_t now = fm1_ticks(), span = now - diag_t0;
-    if (span >= 500u * 1000u * FM1_TICKS_PER_US) {      /* every half second */
-        uint32_t w = 0;
-#if DINGHY_DUAL_CORE
-        w = job_ticks;
-        job_ticks = 0;
-#endif
+    if (fresh) {
         char *o = diag_txt;
         *o++ = 'C'; *o++ = 'P'; *o++ = 'U'; *o++ = ' ';
-        diag_num(o, load_ticks / (span / 100u)); while (*o) o++;
+        diag_num(o, meter_c1); while (*o) o++;
         *o++ = ' '; *o++ = ' '; *o++ = 'W'; *o++ = ' ';
-        diag_num(o, w / (span / 100u)); while (*o) o++;
+        diag_num(o, meter_c2 < 0 ? 0u : (uint32_t)meter_c2); while (*o) o++;
         *o++ = ' '; *o++ = ' '; *o++ = 'F'; *o++ = ' ';
-        diag_num(o, frame_ticks / (span / 100u)); while (*o) o++;
-        load_ticks = load_frames = frame_ticks = 0;
-        diag_t0 = now;
+        diag_num(o, meter_f); while (*o) o++;
     }
+#else
+    (void)fresh;
 #endif
     if (ring_short != diag_last_short) { diag_last_short = ring_short; diag_short_ms = fm1_ms; }
 }
@@ -407,7 +422,8 @@ static void app_init(void)
 
 static void app_loop(void)
 {
-    if (M2K_FM1_DIAG) diag_tick();
+    int fresh = meter_tick();
+    if (M2K_FM1_DIAG) diag_tick(fresh);
     render_ahead();
     take_panel();
     midi_drain();

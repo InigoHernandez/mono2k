@@ -64,11 +64,14 @@ enum {
     G_GRBD, G_GRSD, G_GRHH,                  /* the kick's, the snare's, the hats' density */
     G_LANE1,                                 /* + t: the lane track t follows: OFF BD SD HH, (v * 4) >> 7 */
     G_TLEN1 = G_LANE1 + 6,                   /* + t: track t's own length, 1..64 steps; 0 the pattern's (format 19) */
-    G_COUNT = G_TLEN1 + 6
+    G_TPRB1 = G_TLEN1 + 6,                   /* + t: track t's chance, PROB's step 0..15 (100 % .. 0 %): 0 every trig
+                                              * (format 20) */
+    G_COUNT = G_TPRB1 + 6
 };
 #define G_COUNT_V14 G_SPD1                   /* the globals before the speeds */
 #define G_COUNT_V17 G_GRX                    /* and before Grids */
 #define G_COUNT_V18 G_TLEN1                  /* and before the tracks' lengths */
+#define G_COUNT_V19 G_TPRB1                  /* and before their chances */
 #define SPD_1X 82                            /* a speed's value at 1x (the fifth of seven) */
 
 /* machines */
@@ -164,6 +167,11 @@ int m2k_playing(void);
  * m2k_par_begin(job) starts job on it (0: it could not, the core does it in place), m2k_par_end waits for it */
 extern int (*m2k_par_begin)(void (*job)(void));
 extern void (*m2k_par_end)(void);                              /* 1 while the sequencer plays (the FM-1 writes its flash when it stops) */
+/* the platform's meter (the FM-1's, every half second): the first core's share of real time rendering the sound (its
+ * waits for the second included), the second core's (-1: none), and the times the sound ran short since power-on (the
+ * audio interrupt found the ring empty). GLO > PLAY shows them (a dash where none came: the browser, the host); a short
+ * one more says CPU FULL, at most every few seconds */
+void m2k_cpu(int core1_pct, int core2_pct, int shorts);
 void m2k_setting(int i, int v);                     /* e.g. the web page's theme sets S_SCREEN */
 void m2k_pattern(int n);                            /* select a pattern, as PRESETS does */
 void m2k_track(int t);                              /* select a track, as SELECT does (the web's track cells) */

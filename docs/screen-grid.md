@@ -105,7 +105,8 @@ message's tail. Dark mode inverts the whole screen.
   for the track in view, or a moment as it trigs), the 16 steps of the page in view from x 68, 8 apart (a beat 40): a
   rest a short line, a trig a block 6 wide and 8 tall (an accent 10, one on a condition 4), locks a frame round a
   checker, muted tracks dotted, the playing step a bar under it; the level live at the right. Turning a knob: the info
-  line.
+  line. HOME 2 (HOME again) the same lanes under the track in view's TLEN SPD PROB LANE; on either, a trig on a track
+  under 100 % (PROB) framed and filled from its foot to its chance.
 - **SYN**: the class and style, the model in F_L, punch, metal, plastic five cells each; the mark at the right, a cell
   a machine under it; at the foot which machine and `[ALGO] MACHINE`. SND: the library as a menu.
 - **AMP**: the envelope on the voice's curves; page 2 a picture under each knob (drive, level, pan, glide).
@@ -117,7 +118,9 @@ message's tail. Dark mode inverts the whole screen.
 - **ARP**: the notes as a staircase, the sounding one solid; GRIDS Hortator's map (a dot a node, the four read solid,
   the place a marker) and the three lanes; LANES the three, each its followers.
 - **GLO**: TIME the tempo in F_L and the four beats under the knobs; BUS the reverb's tail; SET the project and the
-  disc; MIDI the channels and clocks; IN the ports; PLAY the mutes.
+  disc; MIDI the channels and clocks; IN the ports; PLAY the mutes, the bar and the FM-1's meter (CPU, CPU2, DROP on
+  baseline 168, a 2-row bar under each share; DROP solid a second after a short; dashes where the platform says
+  nothing), a mute's wait on the info line.
 
 ## Lists
 

@@ -126,6 +126,11 @@ typedef struct {
     zsvf_t eq, lp1, hp2;
     zop_t hp1, lp2a, lp2b;
     int32_t eqc;                       /* the EQ band's mix, Q24 */
+    /* what the chain's coefficients were worked out from (k_ok: they were): the same, they are the same, and the
+     * division and the products a block are skipped (a still knob, most tracks, most of the time) */
+    int32_t k_lpc, k_hpc, k_pl, k_ph, k_eqv, k_eqf;
+    uint32_t k_lpk, k_hpk;
+    uint8_t k_ok, k_side, k_eq;
     uint32_t srr_acc;
     int32_t srr_hold, srr_prev;
     /* SWAV-ENS's side (its chorus across the stereo) through the same chain, linear: the clip's ceiling holds it, the
@@ -146,6 +151,7 @@ typedef struct {
     uint32_t lph[3];
     int32_t lval[3], lhold[3], lrnd[3];
     uint8_t ldone[3];
+    uint32_t linc[3], lkey[3], lkb[3];    /* each one's rate, and the speed, MULT and tempo it came from (lkb 0: none) */
     /* params: the kit with this trig's locks, and the modulation in 1/256 steps */
     uint8_t eff[P_COUNT];
     int32_t mod[P_COUNT];              /* the LFOs' modulation, set a block at a time (modq: only what they touch) */
@@ -1288,7 +1294,15 @@ static void lfo_block(int ti)
         int dest = P7(t, b + L_DEST);
         if (dest == 0 || dest > P_COUNT) { t->lval[l] = 0; mon.lfo[ti][l] = 0; continue; }
         int wave = PN(t, b + L_WAVE, 7), trig = PN(t, b + L_TRIG, 5);
-        uint32_t inc = lfo_inc(P8(t, b + L_SPD), PN(t, b + L_MULT, 8), bpm10);
+        int32_t spd8 = P8(t, b + L_SPD);
+        int mult = PN(t, b + L_MULT, 8);
+        uint32_t key = (uint32_t)spd8 << 3 | (uint32_t)mult;                /* (the same, the same rate) */
+        if (key != t->lkey[l] || bpm10 != t->lkb[l] || !t->lkb[l]) {
+            t->linc[l] = lfo_inc(spd8, mult, bpm10);
+            t->lkey[l] = key;
+            t->lkb[l] = bpm10;
+        }
+        uint32_t inc = t->linc[l];
         uint32_t p = t->lph[l];
         if (!t->ldone[l]) {
             t->lph[l] += inc;
@@ -1405,47 +1419,56 @@ static void voice_off(int ti)
     mx_note_off(ti);                   /* its note out ends with it (no gate end comes to send it) */
 }
 
-/* the modulation effect, one sample: a chorus (7..17 ms, swept), a flanger (0.5..5 ms, fed back) or a phaser (four
+/* the modulation effect over a block: a chorus (7..17 ms, swept), a flanger (0.5..5 ms, fed back) or a phaser (four
  * allpasses swept from 0.1 to 0.9, fed back), all on one triangle LFO; mix 0..254 of the wet. The chorus and the
  * flanger are stereo (MONO2K's own): two taps swept in opposite ways, the left hearing one and the right the other;
- * the mid (their mean) is returned, the side (half their difference) set in *side; the phaser stays in the middle */
-static inline int32_t mod_tick(trk_t *t, int16_t *buf, int32_t x, int type, uint32_t inc, int32_t dep, int32_t mix,
-                               int32_t *side)
+ * the mid (their mean) goes back into x, the side (half their difference) into side; the phaser stays in the middle.
+ * Its state in locals through the block (the line's 16-bit writes may alias its write place: through t it was read
+ * again after each), one type a loop, a sample at a time as before */
+static void mod_block(trk_t *t, int16_t *buf, int32_t *x, int32_t *side, int type, uint32_t inc, int32_t dep, int32_t mix)
 {
-    t->mph += inc;
-    int32_t tri = (int32_t)(t->mph >> 16);
-    tri = tri < 32768 ? tri : 65535 - tri;                       /* 0..32767 */
-    int32_t y;
+    uint32_t mph = t->mph;
     if (type == 2) {
-        int32_t a = 3277 + ((tri * dep) >> 15);                     /* dep: MODD x 206, under 2^30: 32 bits */
-        int32_t v = x + (t->mfb >> 1);
-        for (int k = 0; k < 4; k++) {
-            int32_t u = v - ((a * t->map[k]) >> 15);
-            v = (int32_t)mul_sh(a, u, 15) + t->map[k];               /* a loud track's u passes 2^16: 64 bits */
-            t->map[k] = CLAMP(u, -65536, 65536);
+        int32_t m0 = t->map[0], m1 = t->map[1], m2 = t->map[2], m3 = t->map[3], mfb = t->mfb;
+        for (int i = 0; i < M2K_SUB; i++) {
+            mph += inc;
+            int32_t tri = (int32_t)(mph >> 16);
+            tri = tri < 32768 ? tri : 65535 - tri;
+            int32_t a = 3277 + ((tri * dep) >> 15), v = x[i] + (mfb >> 1), u;
+            u = v - ((a * m0) >> 15); v = (int32_t)mul_sh(a, u, 15) + m0; m0 = CLAMP(u, -65536, 65536);
+            u = v - ((a * m1) >> 15); v = (int32_t)mul_sh(a, u, 15) + m1; m1 = CLAMP(u, -65536, 65536);
+            u = v - ((a * m2) >> 15); v = (int32_t)mul_sh(a, u, 15) + m2; m2 = CLAMP(u, -65536, 65536);
+            u = v - ((a * m3) >> 15); v = (int32_t)mul_sh(a, u, 15) + m3; m3 = CLAMP(u, -65536, 65536);
+            mfb = CLAMP(v, -65536, 65536);
+            side[i] = 0;
+            x[i] = x[i] + (((v - x[i]) * mix) >> 8);
         }
-        y = v;
-        t->mfb = CLAMP(y, -65536, 65536);
+        t->map[0] = m0; t->map[1] = m1; t->map[2] = m2; t->map[3] = m3; t->mfb = mfb;
     } else {
-        int32_t ys[2];
-        for (int c = 0; c < 2; c++) {                                /* the taps: the sweep and its mirror */
-            int32_t tr = c ? 32767 - tri : tri;
-            int32_t d8 = type == 0 ? (309 << 8) + ((tr * dep) >> 14)   /* Q8 samples, dep MODD x 441 or x 200 (under */
-                                   : (20 << 8) + ((tr * dep) >> 14);    /* 2^31: 32 bits) */
-            int32_t pos = ((int32_t)t->mw << 8) - d8;
-            uint32_t j = (uint32_t)(pos >> 8);
-            int32_t f = pos & 255;
-            ys[c] = (buf[j & (MOD_LEN - 1)] * (256 - f) + buf[(j + 1) & (MOD_LEN - 1)] * f) >> 8;
+        uint32_t mw = t->mw;
+        const int32_t base = type == 0 ? 309 << 8 : 20 << 8;
+        for (int i = 0; i < M2K_SUB; i++) {
+            mph += inc;
+            int32_t tri = (int32_t)(mph >> 16);
+            tri = tri < 32768 ? tri : 65535 - tri;
+            int32_t ys[2];
+            for (int c = 0; c < 2; c++) {
+                int32_t tr = c ? 32767 - tri : tri;
+                int32_t pos = ((int32_t)(uint16_t)mw << 8) - (base + ((tr * dep) >> 14));
+                uint32_t j = (uint32_t)(pos >> 8);
+                int32_t f = pos & 255;
+                ys[c] = (buf[j & (MOD_LEN - 1)] * (256 - f) + buf[(j + 1) & (MOD_LEN - 1)] * f) >> 8;
+            }
+            int32_t xi = x[i], w = type == 1 ? xi + ((ys[0] * 18000) >> 15) : xi;
+            buf[mw & (MOD_LEN - 1)] = (int16_t)sat16(w);
+            mw++;
+            int32_t y = (ys[0] + ys[1]) >> 1;
+            side[i] = (((ys[0] - ys[1]) >> 1) * mix) >> 8;
+            x[i] = xi + (((y - xi) * mix) >> 8);
         }
-        int32_t w = type == 1 ? x + ((ys[0] * 18000) >> 15) : x;
-        buf[t->mw & (MOD_LEN - 1)] = (int16_t)sat16(w);
-        t->mw++;
-        y = (ys[0] + ys[1]) >> 1;
-        *side = (((ys[0] - ys[1]) >> 1) * mix) >> 8;
-        return x + (((y - x) * mix) >> 8);
+        t->mw = (uint16_t)mw;
     }
-    *side = 0;
-    return x + (((y - x) * mix) >> 8);
+    t->mph = mph;
 }
 
 #define EQ_K 7626007                   /* 1 / 2.2, Q24: the EQ band's damping */
@@ -1523,8 +1546,15 @@ static void track_block(int ti, int32_t *restrict L, int32_t *restrict R, int32_
     if (t->gate_left > 0 && --t->gate_left == 0) { t->gate = 0; t->gate_left = -1; mx_gate_end(ti); }   /* the step's gate:
                                                           * hold and decay go on; its note out marked, sent after */
     env_block(t);
-    m_set(tout[ti], 0, sizeof tout[ti]);
-    m_set(tvol[ti], 0, sizeof tvol[ti]);
+    /* an FX machine hears this track (the next one; FX-RING two on, its EXT): only then its tout and tvol are kept (no
+     * one else reads them; the FX machine is with it on its core, after it) */
+    const uint8_t *mc = pp->machine;
+    const int heard = (ti + 1 < M2K_TRACKS && mc[ti + 1] >= M_FXC && mc[ti + 1] <= M_FXD) ||
+                      (ti + 2 < M2K_TRACKS && mc[ti + 2] == M_FXR);
+    if (heard) {
+        m_set(tout[ti], 0, sizeof tout[ti]);
+        m_set(tvol[ti], 0, sizeof tvol[ti]);
+    }
     if (!t->sounding && t->astage == 0) {
         t->amp0 = t->amp1 = 0;
         t->peak = 0;
@@ -1558,17 +1588,25 @@ static void track_block(int ti, int32_t *restrict L, int32_t *restrict R, int32_
     int32_t lq = P8(t, P_LPQ), hq = P8(t, P_HPQ);                        /* (an LFO glides the resonances too) */
     int32_t lpc = pl + tq_i16(T_LPC, lq), hpc = ph + tq_i16(T_HPC, hq);
     uint32_t lpk = tq_u32(T_LPK, lq), hpk = tq_u32(T_HPK, hq);
-    zsvf_set(&t->lp1, fg_at(T_FG, lpc), lpk);
-    zsvf_set(&t->hp2, fg_at(T_FG, hpc), hpk);
-    t->lp2a.G = t->lp2b.G = (int32_t)fg_at(T_FG1, pl + F_LP2 * 256);
-    t->hp1.G = (int32_t)fg_at(T_FG1, ph + F_HP1 * 256);
     int side = (m == M_ENS && P8(t, P_SYN + 5) && P8(t, P_SYN + 6))       /* SWAV-ENS's chorus across the stereo, */
                || (m == M_GNOI && P7(t, P_SYN + 2) >= 64 && P8(t, P_SYN + 0));    /* GND-NOIS's second noise */
-    if (side) {
-        zsvf_set(&t->lp1s, fg_at(T_FG, lpc), lpk);
-        zsvf_set(&t->hp2s, fg_at(T_FG, hpc), hpk);
+    int moved = !t->k_ok || lpc != t->k_lpc || hpc != t->k_hpc || pl != t->k_pl || ph != t->k_ph || lpk != t->k_lpk ||
+                hpk != t->k_hpk;
+    if (moved) {
+        zsvf_set(&t->lp1, fg_at(T_FG, lpc), lpk);
+        zsvf_set(&t->hp2, fg_at(T_FG, hpc), hpk);
+        t->lp2a.G = t->lp2b.G = (int32_t)fg_at(T_FG1, pl + F_LP2 * 256);
+        t->hp1.G = (int32_t)fg_at(T_FG1, ph + F_HP1 * 256);
+        t->k_lpc = lpc; t->k_hpc = hpc; t->k_pl = pl; t->k_ph = ph; t->k_lpk = lpk; t->k_hpk = hpk;
+        t->k_ok = 1;
+        t->k_side &= (uint8_t)~1u;
+    }
+    if (side && !(t->k_side & 1)) {    /* (the side's the same, set when it is on and they moved) */
+        t->lp1s.a1 = t->lp1.a1; t->lp1s.a2 = t->lp1.a2; t->lp1s.a3 = t->lp1.a3; t->lp1s.k = t->lp1.k;
+        t->hp2s.a1 = t->hp2.a1; t->hp2s.a2 = t->hp2.a2; t->hp2s.a3 = t->hp2.a3; t->hp2s.k = t->hp2.k;
         t->lp2as.G = t->lp2bs.G = t->lp2a.G;
         t->hp1s.G = t->hp1.G;
+        t->k_side |= 1;
     }
     mon.cut_hp[ti] = CLAMP(((ph >> 8) * 1087 >> 10) - 132, 0, 1016);       /* on the screen's 20 Hz .. 20 kHz */
     mon.cut_lp[ti] = CLAMP(((pl >> 8) * 1087 >> 10) - 132, 0, 1016);
@@ -1583,12 +1621,20 @@ static void track_block(int ti, int32_t *restrict L, int32_t *restrict R, int32_
     int32_t eqv = P8(t, P_EQG);
     int eq_on = eqv != 64 * 256;
     if (eq_on) {
-        uint32_t gb = tq_u32(T_EQGAIN, eqv), ef = tq_u32(T_EQG, P8(t, P_EQF));
-        uint32_t k = eqv > 64 * 256 ? EQ_K : mulu_hi(EQ_K, gb, 16);
-        zsvf_set(&t->eq, ef, k);
-        if (side) zsvf_set(&t->eqs, ef, k);
-        int32_t c = (int32_t)mul_sh((int32_t)(gb - 65536), EQ_K, 16);
-        t->eqc = eqv > 64 * 256 ? c : -c;
+        int32_t eqf = P8(t, P_EQF);
+        if (!t->k_eq || eqv != t->k_eqv || eqf != t->k_eqf) {
+            uint32_t gb = tq_u32(T_EQGAIN, eqv), ef = tq_u32(T_EQG, eqf);
+            uint32_t k = eqv > 64 * 256 ? EQ_K : mulu_hi(EQ_K, gb, 16);
+            zsvf_set(&t->eq, ef, k);
+            int32_t c = (int32_t)mul_sh((int32_t)(gb - 65536), EQ_K, 16);
+            t->eqc = eqv > 64 * 256 ? c : -c;
+            t->k_eqv = eqv; t->k_eqf = eqf; t->k_eq = 1;
+            t->k_side &= (uint8_t)~2u;
+        }
+        if (side && !(t->k_side & 2)) {
+            t->eqs.a1 = t->eq.a1; t->eqs.a2 = t->eq.a2; t->eqs.a3 = t->eq.a3; t->eqs.k = t->eq.k;
+            t->k_side |= 2;
+        }
     }
     /* amp */
     t->amp0 = t->amp1;
@@ -1644,14 +1690,12 @@ static void track_block(int ti, int32_t *restrict L, int32_t *restrict R, int32_
     }
     if (mmix) {
         int16_t *mb = mod_mem[ti];
-        for (int i = 0; i < M2K_SUB; i++) x[i] = mod_tick(t, mb, x[i], mtype, minc, mdep, mmix, &msd[i]);
+        mod_block(t, mb, x, msd, mtype, minc, mdep, mmix);
         t->mhp1.G = t->mhp2.G = MOD_SIDE_HP;
     }
     int16_t *to = tout[ti], *tv = tvol[ti];
     if (!srr && bits >= 16 && !side && !(mmix && mtype != 2) && m != M_FXC) {
-        const uint8_t *mc = pp->machine;
-        if (!ds && !rs && (ti + 1 >= M2K_TRACKS || mc[ti + 1] < M_FXC || mc[ti + 1] > M_FXD)
-            && (ti + 2 >= M2K_TRACKS || mc[ti + 2] != M_FXR)) {
+        if (!ds && !rs && !heard) {
             /* and nothing sent, no FX machine hearing it (its tout and tvol stand cleared, its sends at 0) */
             for (int i = 0; i < M2K_SUB; i++) {
                 int32_t s = (int32_t)mul_sh(x[i], vol, 15);
@@ -1670,7 +1714,7 @@ static void track_block(int ti, int32_t *restrict L, int32_t *restrict R, int32_
         }
         for (int i = 0; i < M2K_SUB; i++) {           /* the common case: no SRR, BITS or side, the same steps as below */
             int32_t s = x[i];
-            to[i] = (int16_t)sat16(s);
+            if (heard) to[i] = (int16_t)sat16(s);
             s = (int32_t)mul_sh(s, vol, 15);
             uint64_t lr = mul2_q15(s, gl, gr);
             int32_t l = CLAMP((int32_t)lr, -T_CLIP, T_CLIP), r = CLAMP((int32_t)(lr >> 32), -T_CLIP, T_CLIP);
@@ -1680,7 +1724,7 @@ static void track_block(int ti, int32_t *restrict L, int32_t *restrict R, int32_
             L[i] += (l * lev) >> 15;
             R[i] += (r * lev) >> 15;
             int32_t mm = CLAMP(s, -T_CLIP, T_CLIP);
-            tv[i] = (int16_t)((mm * lev) >> 15);
+            if (heard) tv[i] = (int16_t)((mm * lev) >> 15);
             dsend[i] = (mm * ds) >> 15;
             rsend[i] += (((mm * rs) >> 15) * lev) >> 15;
         }
@@ -1689,9 +1733,57 @@ static void track_block(int ti, int32_t *restrict L, int32_t *restrict R, int32_
         PROF(2);
         return;
     }
+    if (!side && m != M_FXC) {         /* (no side of the machine's: the same steps as below, their state in locals and
+                                        * the branches the block's: the dense patterns' case, SRR, BITS and MOD on) */
+        const int msd_on = mmix && mtype != 2, bs = bits < 16 ? 16 - bits : 0;
+        uint32_t sacc = t->srr_acc;
+        int32_t sh = t->srr_hold, sp = t->srr_prev, mh = t->msrr_hold, mp = t->msrr_prev;
+        zop_t h1 = t->mhp1, h2 = t->mhp2;
+        for (int i = 0; i < M2K_SUB; i++) {
+            int32_t s = x[i];
+            if (heard) to[i] = (int16_t)sat16(s);
+            s = (int32_t)mul_sh(s, vol, 15);
+            if (srr) {
+                sacc += sinc;
+                if (sacc >= 65536u) { sacc -= 65536u; sp = sh; sh = s; }
+                s = sp + (int32_t)mul_sh(sh - sp, (int32_t)sacc, 16);
+            }
+            if (bs) s = (sat16(s) >> bs) * (1 << bs);
+            int32_t sd = 0;
+            if (msd_on) {
+                int32_t ms = (int32_t)mul_sh(msd[i], vol, 15);
+                ms -= zop_lp(&h1, ms);
+                ms -= zop_lp(&h2, ms);
+                if (srr) {
+                    if (sacc < sinc) { mp = mh; mh = ms; }
+                    ms = mp + (int32_t)mul_sh(mh - mp, (int32_t)sacc, 16);
+                }
+                if (bs) ms = (sat16(ms) >> bs) * (1 << bs);
+                sd = (int32_t)mul_sh(ms, T_PAN[64], 15);
+            }
+            uint64_t lr = mul2_q15(s, gl, gr);
+            int32_t l = (int32_t)CLAMP((int64_t)(int32_t)lr + sd, -T_CLIP, T_CLIP);
+            int32_t r = (int32_t)CLAMP((int64_t)(int32_t)(lr >> 32) - sd, -T_CLIP, T_CLIP);
+            int32_t as = l < 0 ? -l : l, ar = r < 0 ? -r : r;
+            if (ar > as) as = ar;
+            if (as > pk) pk = as;
+            L[i] += (l * lev) >> 15;
+            R[i] += (r * lev) >> 15;
+            int32_t mm = CLAMP(s, -T_CLIP, T_CLIP);
+            if (heard) tv[i] = (int16_t)((mm * lev) >> 15);
+            dsend[i] = (mm * ds) >> 15;
+            rsend[i] += (((mm * rs) >> 15) * lev) >> 15;
+        }
+        t->srr_acc = sacc; t->srr_hold = sh; t->srr_prev = sp; t->msrr_hold = mh; t->msrr_prev = mp;
+        t->mhp1 = h1; t->mhp2 = h2;
+        t->peak = pk;
+        if (pk > mon.peak[ti]) mon.peak[ti] = pk;
+        PROF(2);
+        return;
+    }
     for (int i = 0; i < M2K_SUB; i++) {
         int32_t s = x[i];
-        to[i] = (int16_t)sat16(s);                                        /* an FX machine's input: before VOL, so VOL 0
+        if (heard) to[i] = (int16_t)sat16(s);                             /* an FX machine's input: before VOL, so VOL 0
                                                                            * keeps a track out of the mix and in the FX */
         s = (int32_t)mul_sh(s, vol, 15);
         /* the track clips here, a channel at a time after the pan: one ceiling for both while the pan holds the
@@ -1735,7 +1827,7 @@ static void track_block(int ti, int32_t *restrict L, int32_t *restrict R, int32_
         L[i] += (l * lev) >> 15;
         R[i] += (r * lev) >> 15;
         int32_t mm = CLAMP(s, -T_CLIP, T_CLIP);
-        tv[i] = (int16_t)((mm * lev) >> 15);
+        if (heard) tv[i] = (int16_t)((mm * lev) >> 15);
         dsend[i] = (mm * ds) >> 15;
         rsend[i] += (((mm * rs) >> 15) * lev) >> 15;
     }
