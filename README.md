@@ -348,7 +348,8 @@ GPL-3.0-only. Built on the open FM-1 work: Felucca by Leo Kuroshita (Hügelton I
 and the others. Type: Elektron Pixel Font by savingaurora (FontStruct), CC BY-SA 3.0, adapted
 (fontstruct.com/fontstructions/show/70152; `assets/fonts/mono2k-pixel`, the owner's `mono2k-font.otf` with its
 `license.txt` and `readme.txt`, which travel together), the screen's type; the firmware carries 1-bit renderings of it
-(`firmware/gen/m2k_fonts.h`, under CC BY-SA 3.0 as the font). Orbitron by The League of Moveable Type: SIL OFL 1.1
+(`firmware/gen/m2k_fonts.h`), an adaptation licensed CC BY-SA 4.0, as the 3.0 licence's section 4(b) allows (4.0 is
+one-way compatible with GPL-3.0; see `assets/fonts/mono2k-pixel/ADAPTATION.md`). Orbitron by The League of Moveable Type: SIL OFL 1.1
 (`assets/fonts/orbitron/OFL.txt`), the wordmark's and the site's. The FM-1's panel geometry as measured for
 CoralFlower's emulator. The machines were measured against a Monomachine running in Joe Landers' Monomachine
 emulator, [gearmulator-md-mm](https://github.com/joelanders/gearmulator-md-mm) (a fork of Gearmulator by The Usual
