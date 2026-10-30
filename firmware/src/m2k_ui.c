@@ -732,20 +732,6 @@ static void go(int page)
     start_trans(250);
 }
 
-/* SELECT: the next page or the one before, every section's pages in the panel's order round (HOME, SYN, AMP, FILT, FX,
- * LFO, ARP, GLO, HOME ...): any page a few detents away (Demake's rows, DUELL's pages) */
-static void page_turn(int d)
-{
-    int pg = ui.page, sub = ui.sub + d;
-    if (sub < 0 || sub >= nsub(pg)) {
-        pg = (pg + PG_COUNT + d) % PG_COUNT;
-        sub = d > 0 ? 0 : nsub(pg) - 1;
-    }
-    ui.page = (uint8_t)pg; ui.sub = (uint8_t)sub;
-    ui.focus_t = 0;
-    start_trans(150);
-}
-
 /* the verbs' nouns and verbs (below), and the undo's copy, for the knobs' own takings-away */
 enum { N_PAT, N_TRK, N_PICK, N_SND, N_STEP };
 enum { V_COPY, V_PASTE, V_CLEAR };
@@ -806,10 +792,11 @@ static void sound_load(m2k_pattern_t *p)
     start_glitch(2);
 }
 
-/* the catalogue (EDIT held alone 400 ms, Hortator's): the library over the page, its knobs SOUND and CAT. Each sound
- * landed on is put on the track and heard at once, a step's note at the note it was made at (the pattern plays on
- * under it); OCT+ keeps it, OCT- (EDIT, HOME, a page, SELECT, PRESET) puts the track's own back, byte for byte, as an
- * empty slot does. The track's own: its machine, kit, its effective values, its keys' note and octave, in its pattern */
+/* the catalogue (EDIT held alone 400 ms, Hortator's): the library over the page, its knobs SLOT and CAT (SELECT scrolls
+ * it too). Each sound landed on is put on the track and heard at once, a step's note at the note it was made at (the
+ * pattern plays on under it); OCT+ keeps it, OCT- (EDIT, HOME, a page, PRESET) puts the track's own back, byte for
+ * byte, as an empty slot does; ALGO nothing meanwhile. The track's own: its machine, kit, its effective values, its
+ * keys' note and octave, in its pattern */
 static struct {
     uint8_t open, trk, pn, machine, heard, note;
     int8_t oct;
@@ -1090,6 +1077,11 @@ static void set_machine(int m)
     ui.card_t = ui.now | 1u;
     ui.focus_t = 0;
     syn_sub_check();
+    if (ui.page != PG_SYN) {                       /* (ALGO off SYN: its card is not in view, a message says it) */
+        char tn[16] = {'T', (char)('1' + ui.trk), ' ', 0};
+        s_cpy(tn + 3, "MACHINE");
+        toast(tn, MI[m].name);
+    }
 }
 
 /* the keys let go of every note they hold: the keys' track changes, or the keys become steps or pads (a note left
@@ -2304,8 +2296,8 @@ void m2k_encoder(int e, int d)
             toast("TEMPO", o);
             break;
         }
-        if (cat.open) cat_back();                      /* (the catalogue left: the track's own sound back) */
-        page_turn(d > 0 ? 1 : -1);
+        if (cat.open) { edit(0, d); break; }          /* the catalogue: SELECT scrolls it as KNOB 1 does, heard */
+        track_to((ui.trk + M2K_TRACKS + (d > 0 ? 1 : -1)) % M2K_TRACKS);   /* the track (Demake's synth) */
         break;
     case E_ALGO:
         if (seq_layer()) {                             /* SEQ held: the accent's amount */
@@ -2325,14 +2317,9 @@ void m2k_encoder(int e, int d)
             ui.held_edit = 1;
             break;
         }
-        /* ALGORITHM: the track (SELECT turns the pages); on EDIT's (SYN) the machine, its name (the owner's); in the
-         * catalogue the track too, the one left given its own sound back and the sound shown heard on the next */
-        if (ui.page != PG_SYN || cat.open) {
-            int t = (ui.trk + M2K_TRACKS + (d > 0 ? 1 : -1)) % M2K_TRACKS;
-            if (cat.open) { cat_put_back(); track_to(t); cat_take(); cat_hear(ui.snd_sel); }
-            else track_to(t);
-            break;
-        }
+        /* ALGORITHM: the track's machine, its name, on every page (the owner's: "ALGO always changes the synth engine");
+         * in the catalogue nothing (the sound shown is the track's while it is open) */
+        if (cat.open) break;
         set_machine(M_ORDER[(m_place(p->machine[ui.trk]) + M_COUNT + (d > 0 ? 1 : -1)) % M_COUNT]);
         break;
     case E_PRESET: {
@@ -4135,7 +4122,7 @@ static void ask_draw(void)
 }
 
 /* the catalogue: the library's rows over the page (the knobs SLOT and CAT), the sound shown's machine, note and
- * category, and at the foot OCT+ LOAD, OCT- BACK, ALGO another track (while EDIT is still held, its own combos) */
+ * category, and at the foot OCT+ LOAD, OCT- BACK (while EDIT is still held, its own combos); SELECT scrolls it too */
 static void cat_draw(void)
 {
     if (!cat.open) return;
@@ -4143,7 +4130,7 @@ static void cat_draw(void)
     s_cpy(t + 3, "SOUNDS");
     panel(P_X, P_TOP, P_W, P_H, t, 1);
     snd_rows(P_X + P_IN, SX1 - P_IN - 8, P_B0, 7);
-    static const char *const H[6] = {"OCT+", "LOAD", "OCT-", "BACK", "ALGO", "TRACK"};
+    static const char *const H[4] = {"OCT+", "LOAD", "OCT-", "BACK"};
     static const char *const E[8] = {"SEQ", "INIT", "REC", "COPY", "PLAY", "PASTE", "SAVE", "KEEP"};
     if (ui.btn[B_EDIT]) {                              /* (EDIT still held: its own, on the track's sound) */
         hints(P_X + P_IN + 3, 180, SX1 - P_IN, E, 2);
@@ -4151,7 +4138,7 @@ static void cat_draw(void)
         return;
     }
     snd_meta(P_X + P_IN, SX1 - P_IN, 176);
-    hints(P_X + P_IN + 3, P_FB, SX1 - P_IN, H, 3);
+    hints(P_X + P_IN + 3, P_FB, SX1 - P_IN, H, 2);
 }
 
 /* a message takes the header for a moment: inverted, its text, a gradient tail (a long one the line under it too) */

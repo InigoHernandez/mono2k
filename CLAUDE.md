@@ -75,12 +75,13 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   glitches tiring (the owner's pick). The splash (2.1 s,
   then a 0.4 s wipe; a press skips it and is swallowed; `w_skip_splash` for the site's scripted cores):
   `m2k_host DIR --splash`, `tools/splash.py DIR`; a frame's instructions, `host/m2k_draw.c` (built as the FM-1 builds).
-- The controls (the 2026-10 workflow, the owner's, after Demake and Hortator): SELECT turns every section's pages round
-  (`page_turn`; GLO + SELECT the tempo, a held step's note); ALGORITHM the track (on SYN the machine, as the owner chose;
-  GRID's black keys too); EDIT held alone 400 ms opens the sound catalogue (`cat_*` in m2k_ui.c): SLOT puts each sound
-  landed on on the track and plays it (a step's note at its note), CAT filters, OCT+ keeps it (undoable), OCT- / EDIT /
-  a page / SELECT / PRESET put the track's own sound back byte for byte, ALGO moves the preview to the next track; the
-  EDIT + SEQ REC PLAY SAVE combos act on the track's own sound. The self-test holds all of it.
+- The controls (the owner's, 2026-10-30: "to pick the track is the select knob, and the ALGO always changes the synth
+  engine"): SELECT picks the track (Demake's synth; GLO + SELECT the tempo, a held step's note; GRID's black keys pick
+  tracks too); ALGORITHM the track's machine on every page (`set_machine`: off SYN a message names it); each section's
+  button turns its own pages (`go`). EDIT held alone 400 ms opens the sound catalogue (`cat_*` in m2k_ui.c, Hortator's):
+  SLOT or SELECT puts each sound landed on on the track and plays it (a step's note at its note), CAT filters, OCT+
+  keeps it (undoable), OCT- / EDIT / a page / PRESET put the track's own sound back byte for byte, ALGO does nothing
+  meanwhile; the EDIT + SEQ REC PLAY SAVE combos act on the track's own sound. The self-test holds all of it.
 - Checks: `sh tools/check.sh` (~6 min): clang (and GCC, when installed) -Wall -Wextra with no warnings; the core built
   for armv7m soft float calls no float helper and no 64-bit division (flash / RAM printed); the self-test, every
   screen, bank A and every reference spec under ASan + UBSan, clean; the format's conversions mutated

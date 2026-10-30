@@ -82,10 +82,10 @@ window.M2K_HELP = (() => {
    * white key held, "k i" / "K i" a white / black key tapped) */
   const ALLW = WHITE.map((k) => "k" + k), ALLB = BLACK.map((k) => "k" + k);
   const G = [
-    { g: "Knobs", id: "e0", tag: "SELECT", hi: ["e0"], short: "The pages, round: any page a few clicks away.", screen: "e 0 1; w 400",
-      long: "Turns through every page and its pages in the panel's order, round. With GLO held, the tempo; with a step held, its note.", where: "; '" },
-    { g: "Knobs", id: "e1", tag: "ALGORITHM", hi: ["e1"], short: "The track, T1 to T6; on SYN the machine.", screen: "e 1 1; w 400",
-      long: "Picks the track the keys play. On SYN, the track's machine instead. With a step held, accent and slide.", where: ", ." },
+    { g: "Knobs", id: "e0", tag: "SELECT", hi: ["e0"], short: "The track, T1 to T6.", screen: "e 0 1; w 400",
+      long: "Picks the track the keys play. With GLO held, the tempo; with a step held, its note; in the catalogue, the sound.", where: "; '" },
+    { g: "Knobs", id: "e1", tag: "ALGORITHM", hi: ["e1"], short: "The track's machine, on any page.", screen: "b EDIT; w 300; e 1 1; w 500",
+      long: "Changes the track's machine, on any page (on SYN its card shows). With a step held, accent and slide.", where: ", ." },
     { g: "Knobs", id: "e2", tag: "PRESETS", hi: ["e2"], short: "The pattern: queued to the bar's end while playing.", screen: "e 2 1; w 400",
       long: "Picks the pattern, at once when stopped, at the bar's end while playing. With a step held, its condition.", where: "[ ]" },
     { g: "Knobs", id: "eK", tag: "KNOB 1–4", hi: ["e3", "e4", "e5", "e6"], short: "The four parameters of the page in view.", screen: "b ENV; w 200; e 3 4; w 300",
@@ -128,8 +128,8 @@ window.M2K_HELP = (() => {
       long: "REC copies, PLAY pastes, SEQ clears, OCT− OCT+ undo and redo. White 1–6 mute, 9–14 solo.", where: "Hold GLO" },
     { g: "Held", id: "hHOME", tag: "HOME held", hi: ["b6", ...ALLW, "k1", "k3", "k5", "k8"], short: "Pick patterns and banks.", screen: "B HOME; w 900",
       long: "White keys open the bank's patterns, queued while playing. Black 1–4 pick the bank.", where: "Hold HOME" },
-    { g: "Held", id: "hEDIT", tag: "EDIT held", hi: ["b4", "e3", "e4", "b13", "b12", "b9", "b7", "b11", "b10"], short: "The sound catalogue: KNOB 1 plays each sound.", screen: "B EDIT; w 600; e 3 2; w 400",
-      long: "Held a moment, the library opens: KNOB 1 puts each sound on the track and plays it, KNOB 2 the category. OCT+ keeps it, OCT− gives the track its own back. + SEQ, SAVE, REC, PLAY: INIT, keep, copy, paste the sound.", where: "Hold EDIT" },
+    { g: "Held", id: "hEDIT", tag: "EDIT held", hi: ["b4", "e3", "e0", "e4", "b13", "b12", "b9", "b7", "b11", "b10"], short: "The sound catalogue: KNOB 1 or SELECT plays each sound.", screen: "B EDIT; w 600; e 3 2; w 400",
+      long: "Held a moment, the library opens: KNOB 1 or SELECT puts each sound on the track and plays it, KNOB 2 the category. OCT+ keeps it, OCT− gives the track its own back. + SEQ, SAVE, REC, PLAY: INIT, keep, copy, paste the sound.", where: "Hold EDIT" },
     { g: "Held", id: "hSEQ", tag: "SEQ held", hi: ["b9", ...WHITE.slice(0, 8).map((k) => "k" + k), "e3", "e4", "e5", "e6", "e1"], short: "The step tools; LEN, the track's LEN and SPEED, SWING.", screen: "B SEQ; w 900",
       long: "White 1–8: clear, reverse, shift, random, ×2, cook, half. The knobs: LEN, the track's own length (PAT: the pattern's) and speed, SWING.", where: "Hold SEQ" },
     { g: "Held", id: "hPERF", tag: "PERFORM", hi: ["b0", ...ALLB, "e3", "e4", "e5", "e6"], short: "FX held: the bus's effects on the black keys.", screen: "b PLAY; w 600; B FX; w 900",
@@ -156,7 +156,7 @@ window.M2K_HELP = (() => {
       long: "Nothing moves until you play: the first note starts the pattern and is recorded.", where: "REC, PLAY" },
     { g: "Recording", id: "rFILL", tag: "FILL", hi: ["b11", "b5"], short: "REC held while playing.", screen: "b PLAY; w 500; B REC; w 600",
       long: "FILL steps play, !FIL steps rest. GLO + white 7: a fill on the next loop.", where: "Hold REC" },
-    { g: "Recording", id: "rASK", tag: "Questions", hi: ["b13", "b12"], short: "OCT+ YES, OCT− NO.", screen: "b GLO; w 400; e 0 1; e 0 1; w 400; e 6 1; w 500",
+    { g: "Recording", id: "rASK", tag: "Questions", hi: ["b13", "b12"], short: "OCT+ YES, OCT− NO.", screen: "b GLO; w 400; b GLO; w 400; b GLO; w 400; e 6 1; w 500",
       long: "Only what overwrites asks first. OCT+ is YES, anything else NO.", where: "OCT+ / OCT−" },
   ];
   /* a key on its own, every mode at once (the guide's drawing, where no state is in view): two short sentences */

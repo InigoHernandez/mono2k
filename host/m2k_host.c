@@ -47,7 +47,7 @@ static const ev_t TOUR[] = {
     {2560, 'b', B_PLAY, 1, 0}, {2580, 'b', B_PLAY, 0, 0},
     {3400, 's', 0, 0, "02_home_playing"},
     {3500, 'e', E_K3, 4, 0}, {3560, 's', 0, 0, "03_home_tempo_roll"}, {3900, 's', 0, 0, "04_home_tempo"},
-    {5600, 'e', E_ALGO, 1, 0},
+    {5600, 'e', E_SELECT, 1, 0},
     {5700, 'b', B_EDIT, 1, 0}, {5720, 'b', B_EDIT, 0, 0},
     {6300, 's', 0, 0, "05_syn_card"},
     {6400, 'e', E_K1, 3, 0}, {6460, 's', 0, 0, "06_syn_roll"}, {6800, 's', 0, 0, "07_syn_focus"},
@@ -148,18 +148,20 @@ static const ev_t GRIDS_TOUR[] = {
     {3200, 'b', B_ARP, 1, 0}, {3220, 'b', B_ARP, 0, 0},
     {3400, 'e', E_K1, 14, 0}, {3450, 'e', E_K2, -22, 0}, {3500, 'e', E_K3, 40, 0},
     {3800, 'b', B_ARP, 1, 0}, {3820, 'b', B_ARP, 0, 0},
-    {3900, 'e', E_ALGO, 1, 0}, {4000, 'e', E_K4, 1, 0}, {4050, 'e', E_K1, 16, 0},
-    {4100, 'e', E_ALGO, 1, 0}, {4200, 'e', E_K4, 2, 0},
-    {4300, 'e', E_ALGO, 1, 0}, {4400, 'e', E_K4, 3, 0}, {4450, 'e', E_K3, 20, 0},
-    {4500, 'e', E_ALGO, -2, 0}, {6200, 's', 0, 0, "20d_lanes"},
-    {6300, 'e', E_SELECT, -1, 0}, {7400, 's', 0, 0, "20c_grids"},
+    {3900, 'e', E_SELECT, 1, 0}, {4000, 'e', E_K4, 1, 0}, {4050, 'e', E_K1, 16, 0},
+    {4100, 'e', E_SELECT, 1, 0}, {4200, 'e', E_K4, 2, 0},
+    {4300, 'e', E_SELECT, 1, 0}, {4400, 'e', E_K4, 3, 0}, {4450, 'e', E_K3, 20, 0},
+    {4500, 'e', E_SELECT, -2, 0}, {6200, 's', 0, 0, "20d_lanes"},
+    {6300, 'b', B_ARP, 1, 0}, {6320, 'b', B_ARP, 0, 0}, {6700, 'b', B_ARP, 1, 0}, {6720, 'b', B_ARP, 0, 0},   /* LANES, ARP, GRIDS */
+    {7400, 's', 0, 0, "20c_grids"},
     {7500, 'b', B_HOME, 1, 0}, {7520, 'b', B_HOME, 0, 0},
     {8700, 'b', B_GLO, 1, 0}, {8720, 'k', 4, 1, 0}, {8740, 'k', 4, 0, 0}, {8900, 's', 0, 0, "29k_mute_map"},
     {9000, 'b', B_GLO, 0, 0}, {9100, 's', 0, 0, "29l_mute_pending"},
-    {9200, 'b', B_GLO, 1, 0}, {9220, 'b', B_GLO, 0, 0}, {9300, 'e', E_SELECT, 1, 0}, {9350, 'e', E_SELECT, 1, 0},
-    {9400, 'e', E_SELECT, 1, 0}, {9450, 'e', E_SELECT, 1, 0}, {9500, 'e', E_SELECT, 1, 0},
-    {10100, 's', 0, 0, "29m_glo_play"},
-    {10300, 'x', 0, 0, 0},
+    {9200, 'b', B_GLO, 1, 0}, {9220, 'b', B_GLO, 0, 0}, {9550, 'b', B_GLO, 1, 0}, {9570, 'b', B_GLO, 0, 0},   /* GLO's pages, */
+    {9900, 'b', B_GLO, 1, 0}, {9920, 'b', B_GLO, 0, 0}, {10250, 'b', B_GLO, 1, 0}, {10270, 'b', B_GLO, 0, 0},  /* a tap each, */
+    {10600, 'b', B_GLO, 1, 0}, {10620, 'b', B_GLO, 0, 0}, {10950, 'b', B_GLO, 1, 0}, {10970, 'b', B_GLO, 0, 0}, /* to PLAY */
+    {11300, 's', 0, 0, "29m_glo_play"},
+    {11500, 'x', 0, 0, 0},
 };
 
 /* tracks of their own length on B01 (INIT), playing on HOME: T1 the pattern's 16, T2 12, T3 7, T4 5, T5 10, T6 3, each
@@ -3079,40 +3081,36 @@ static int selftest(void)
             CHECK(entry && waits && still && started && rec0 && now && off && midi && ext,
                   "REC + PLAY stopped: Ready, the first note starts it on step 1, recorded; PLAY again now; REC off; MIDI; SYIN plays");
         }
-        /* SELECT: every section's pages round in the panel's order (LFO 3B on to ARP, GLO's last on to HOME and back,
-         * every page once round); ALGORITHM: the track, round, on every page but EDIT's (SYN), where it is the machine */
+        /* SELECT: the track, round, on every page, the page as it was; ALGORITHM: the track's machine on every page (the
+         * owner's: "ALGO always changes the synth engine"), the page and the track as they were; a section's button turns
+         * its pages */
         {
             m2k_init(41);
+            static const uint8_t PGS[5] = {PG_HOME, PG_AMP, PG_LFO, PG_GLO, PG_SYN};
+            int trk = 1, mach = 1;
+            for (int i = 0; i < 5; i++) {
+                ui.page = PGS[i]; ui.sub = 1 % nsub(PGS[i]); ui.trk = 5;
+                const int sub = ui.sub;
+                m2k_encoder(E_SELECT, 1);
+                trk &= ui.trk == 0 && ui.page == PGS[i] && ui.sub == sub;
+                m2k_encoder(E_SELECT, -1);
+                trk &= ui.trk == 5;
+                int m0 = PAT(cur_pat)->machine[5];
+                m2k_encoder(E_ALGO, 1);
+                mach &= PAT(cur_pat)->machine[5] == M_ORDER[(m_place(m0) + 1) % M_COUNT] && ui.page == PGS[i] &&
+                        ui.sub == sub && ui.trk == 5;
+                m2k_encoder(E_ALGO, -1);
+                mach &= PAT(cur_pat)->machine[5] == m0;
+            }
             ui.page = PG_LFO; ui.sub = 0;
-            for (int i = 0; i < 5; i++) m2k_encoder(E_SELECT, 1);
-            int lfo_end = ui.page == PG_LFO && ui.sub == 5;
-            m2k_encoder(E_SELECT, 1);
-            int arp = ui.page == PG_ARP && ui.sub == 0;
-            ui.page = PG_GLO; ui.sub = GS_COUNT - 1;
-            m2k_encoder(E_SELECT, 1);
-            int home = ui.page == PG_HOME && ui.sub == 0;
-            m2k_encoder(E_SELECT, -1);
-            int back = ui.page == PG_GLO && ui.sub == GS_COUNT - 1;
-            int n = 0, all = 0;
-            for (int pg = 0; pg < PG_COUNT; pg++) all += nsub(pg);
-            ui.page = PG_HOME; ui.sub = 0;
-            do { m2k_encoder(E_SELECT, 1); n++; } while ((ui.page != PG_HOME || ui.sub) && n < 99);
-            int m0 = PAT(cur_pat)->machine[0];
-            ui.page = PG_LFO; ui.sub = 2; ui.trk = 5;
-            m2k_encoder(E_ALGO, 1);
-            int trk = ui.trk == 0 && ui.page == PG_LFO && ui.sub == 2 && PAT(cur_pat)->machine[0] == m0;
-            m2k_encoder(E_ALGO, -1);
-            int round = ui.trk == 5;
-            ui.trk = 0; ui.page = PG_SYN; ui.sub = 0;
-            m2k_encoder(E_ALGO, 1);
-            int syn = PAT(cur_pat)->machine[0] != m0 && ui.trk == 0;
-            CHECK(lfo_end && arp && home && back && n == all && trk && round && syn,
-                  "SELECT: every page's pages round in the panel's order; ALGORITHM: the track, the machine on EDIT");
+            for (int i = 0; i < 2; i++) { m2k_button(B_LFO, 1); m2k_button(B_LFO, 0); }
+            int pages = ui.page == PG_LFO && ui.sub == 2;
+            CHECK(trk && mach && pages, "SELECT: the track on every page; ALGORITHM: the machine on every page; a section's button its pages");
         }
         /* the catalogue: EDIT held alone 400 ms opens it and it stays (its release no SYN); SLOT puts each sound landed on
          * on the track, heard; OCT- puts the track's own back byte for byte (its machine, kit, keys' note); OCT+ keeps the
-         * sound shown; a page button leaves it, the track's own back; ALGO in it gives the track left its own back; EDIT
-         * + SEQ still INITs the track's sound, no catalogue */
+         * sound shown; a page button leaves it, the track's own back; SELECT scrolls it too, ALGO changes nothing in it;
+         * EDIT + SEQ still INITs the track's sound, no catalogue */
         {
             ux_init(43);
             ui.trk = 1;
@@ -3141,24 +3139,22 @@ static int selftest(void)
             m2k_encoder(E_K1, 1);
             ux_tap(B_ENV);
             int page = !cat.open && ui.page == PG_AMP && q->machine[1] == m0 && !memcmp(q->kit[1], k0, P_COUNT);
-            uint8_t k2[P_COUNT];
-            memcpy(k2, q->kit[2], P_COUNT);
             m2k_button(B_EDIT, 1); ux_ms(500); m2k_button(B_EDIT, 0);
-            m2k_encoder(E_K1, 1);
-            int on1 = q->machine[1] == snd[ui.snd_sel].machine;
-            m2k_encoder(E_ALGO, 1);                               /* T3: T2 its own, T3 the sound shown */
-            int algo = on1 && ui.trk == 2 && cat.open && q->machine[1] == m0 && !memcmp(q->kit[1], k0, P_COUNT) &&
-                       q->machine[2] == snd[ui.snd_sel].machine;
+            int s0 = ui.snd_sel;
+            m2k_encoder(E_SELECT, 1);                             /* SELECT scrolls it, heard; ALGO changes nothing */
+            int algo = ui.snd_sel != s0 && cat.heard == ui.snd_sel && q->machine[1] == snd[ui.snd_sel].machine && ui.trk == 1;
+            int m1 = q->machine[1];
+            m2k_encoder(E_ALGO, 1);
+            algo &= cat.open && ui.trk == 1 && q->machine[1] == m1;
             m2k_button(B_OCTD, 1); m2k_button(B_OCTD, 0);
-            algo &= !memcmp(q->kit[2], k2, P_COUNT);
-            ui.trk = 1;
+            algo &= !cat.open && q->machine[1] == m0 && !memcmp(q->kit[1], k0, P_COUNT);
             kit_init(&pat_tmp, 1, q->machine[1]);
             m2k_button(B_EDIT, 1); ux_tap(B_SEQ); ux_ms(600);
             int combo = !cat.open && !memcmp(q->kit[1], pat_tmp.kit[1], P_COUNT);
             m2k_button(B_EDIT, 0); ux_ms(60);
             combo &= !cat.open && ui.page == PG_AMP;
             CHECK(early && opened && stays && heard && back && kept && page && algo && combo,
-                  "catalogue: EDIT held opens it, SLOT heard, OCT- the track's own back exactly, OCT+ kept, a page leaves");
+                  "catalogue: EDIT held opens it, SLOT and SELECT heard, OCT- the track's own back exactly, OCT+ kept, a page leaves");
         }
         /* SWAV-PUL's PW sweep (PWAD) bounces between 4 % and 96 %: no dropout through the silent ends every cycle
          * (the owner's "clip every few seconds, like looping": its level fell to a tenth); PWAD 0 as it was */
@@ -3802,7 +3798,7 @@ static int selftest(void)
         ux_init(7);
         int n1 = ux_trigs(0), n2 = ux_trigs(1);
         m2k_button(B_REC, 1); ux_tap(B_SEQ); m2k_button(B_REC, 0); ux_ms(200);
-        m2k_encoder(E_ALGO, 1); ux_ms(200);
+        m2k_encoder(E_SELECT, 1); ux_ms(200);
         m2k_button(B_REC, 1); ux_tap(B_SEQ); m2k_button(B_REC, 0);
         int recs = n1 > 0 && n2 > 0 && ux_trigs(0) == 0 && ux_trigs(1) == 0;
         ux_init(7);
@@ -3810,7 +3806,7 @@ static int selftest(void)
         uint8_t k1[P_COUNT], k2[P_COUNT];
         memcpy(k1, q->kit[0], P_COUNT); memcpy(k2, q->kit[1], P_COUNT);
         m2k_button(B_EDIT, 1); ux_tap(B_SEQ); m2k_button(B_EDIT, 0); ux_ms(200);
-        m2k_encoder(E_ALGO, 1); ux_ms(200);
+        m2k_encoder(E_SELECT, 1); ux_ms(200);
         m2k_button(B_EDIT, 1); ux_tap(B_SEQ); m2k_button(B_EDIT, 0);
         int snds = memcmp(k1, q->kit[0], P_COUNT) && memcmp(k2, q->kit[1], P_COUNT);
         CHECK(steps && tracks && recs && snds,
@@ -3971,7 +3967,7 @@ static int selftest(void)
         CHECK(tp != ps && lock_find(0, tp, P_ATK) >= 0 && lock_find(0, ps, P_ATK) < 0,
               "REC: a knob on a 1/2x track locks the track's own step");
     }
-    /* SYN's pages follow the machine: ALGO off DIGI-WAV on its SND page, another track from it without BANK, a
+    /* SYN's pages follow the machine: ALGO off DIGI-WAV on its SND page, SELECT from it onto a track without BANK, a
      * DIGI-WAV sound loaded on SND: the library stays in view, never a page past the last; one turn of SAVE into an
      * INIT slot saves once (its next detent does not ask to replace what it just saved) */
     {
@@ -3981,7 +3977,7 @@ static int selftest(void)
         int algo = PAT(cur_pat)->machine[0] != M_WAV && ui.sub < nsub(PG_SYN) && snd_page();
         PAT(cur_pat)->machine[1] = M_GSIN;
         set_machine(M_WAV); ui.page = PG_SYN; ui.sub = 3;
-        m2k_track(1);                                     /* (on SYN ALGO is the machine: the web's cell, a black key in GRID) */
+        m2k_encoder(E_SELECT, 1);
         int sel = ui.trk == 1 && ui.sub < nsub(PG_SYN) && snd_page();
         ux_init(7);
         ui.page = PG_SYN; ui.sub = (uint8_t)(nsub(PG_SYN) - 1); ui.snd_cat = 0; ui.snd_sel = M2K_SOUNDS - 1;
