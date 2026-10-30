@@ -94,7 +94,7 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   HOME has two pages (1.6, the owner's): HOME 1 LEVL PTCH BPM SWNG, HOME 2 the track in view's sequencing, TLEN SPD
   PROB LANE (the same globals as SEQ held's TLEN and SPD and ARP > LANES' LANE); its picture the six lanes, a trig on
   a track under 100 % framed and filled to its chance.
-- Checks: `sh tools/check.sh` (~6 min): clang (and GCC, when installed) -Wall -Wextra with no warnings; the core built
+- Checks: `sh tools/check.sh` (~25 min since 1.6's format-20 mutants): clang (and GCC, when installed) -Wall -Wextra with no warnings; the core built
   for armv7m soft float calls no float helper and no 64-bit division (flash / RAM printed); the self-test, every
   screen, bank A and every reference spec under ASan + UBSan, clean; the format's conversions mutated
   (`tools/ref/mutate_formats.py`: every mutant of `fm_v9` / `sid_v10` caught by the self-test but the one equivalent);
