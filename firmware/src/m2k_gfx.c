@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
-/* MONO2K's 1-bit drawing: a 240 x 240 framebuffer (7.2 KB, 1 = ink), dither patterns, text in Silkscreen (a pixel font,
- * drawn 2 or 3 times its size) in solid, dithered or outlined-and-dithered fills, the machine marks, and the
- * transitions (dissolve, glitch). */
+/* MONO2K's 1-bit drawing: a 240 x 240 framebuffer (7.2 KB, 1 = ink), dither patterns, text in the owner's pixel font
+ * (drawn 2 or 3 times its size) in solid, dithered or outlined-and-dithered fills, the rounded boxes and the 2 px
+ * strokes of the knobs' pictures, the machine marks, and the transitions (dissolve, glitch). */
 
 static uint8_t fb[M2K_FB_BYTES];       /* the frame being drawn */
 static uint8_t fb_prev[M2K_FB_BYTES];  /* the last frame shown before a transition */
@@ -318,6 +318,71 @@ static void rbox(int x, int y, int w, int h, int r, int p)
         }
 }
 
+/* the type's own corners, Elektron's boxes at twice their size: a 2 x 2 design pixel off each corner. rfill a solid
+ * box so (c 1 ink, 0 paper); rframe a frame t thick in c (1: the corner pixel off; 2: the 2 x 2 off) */
+static void rfill(int x, int y, int w, int h, int c)
+{
+    rect(x + 2, y, w - 4, 2, c);
+    rect(x, y + 2, w, h - 4, c);
+    rect(x + 2, y + h - 2, w - 4, 2, c);
+}
+static void rframe(int x, int y, int w, int h, int t, int c)
+{
+    const int k = t > 1 ? 2 : 1;
+    rect(x + k, y, w - 2 * k, t, c);
+    rect(x + k, y + h - t, w - 2 * k, t, c);
+    rect(x, y + k, t, h - 2 * k, c);
+    rect(x + w - t, y + k, t, h - 2 * k, c);
+}
+
+/* a 2 x 2 block of ink from (x, y): its two rows a byte each where it is inside the clip, else a pixel at a time */
+static inline void blk2(int x, int y)
+{
+    if (x < clip_x0 || y < clip_y0 || x + 2 > clip_x1 || y + 2 > clip_y1 || x < 0 || y < 0 || x + 2 > M2K_W ||
+        y + 2 > M2K_H) {
+        px(x, y, 1); px(x + 1, y, 1); px(x, y + 1, 1); px(x + 1, y + 1, 1);
+        return;
+    }
+    uint8_t *b = &fb[y * ROWB + (x >> 3)];
+    const int s = x & 7;
+    if (s < 7) { const uint8_t m = (uint8_t)(0xC0u >> s); b[0] |= m; b[ROWB] |= m; }
+    else { b[0] |= 1; b[1] |= 0x80; b[ROWB] |= 1; b[ROWB + 1] |= 0x80; }
+}
+
+/* a line drawn with a 2 x 2 brush (the type's stroke) from (x0, y0) to (x1, y1), the brush's top left on the line */
+static void line2(int x0, int y0, int x1, int y1)
+{
+    int dx = x1 > x0 ? x1 - x0 : x0 - x1, sx = x0 < x1 ? 1 : -1;
+    int dy = y1 > y0 ? y0 - y1 : y1 - y0, sy = y0 < y1 ? 1 : -1, e = dx + dy;
+    for (;;) {
+        blk2(x0, y0);
+        if (x0 == x1 && y0 == y1) break;
+        int e2 = 2 * e;
+        if (e2 >= dy) { e += dy; x0 += sx; }
+        if (e2 <= dx) { e += dx; y0 += sy; }
+    }
+}
+
+/* a sprite up to 24 px wide (rows of 3 bytes, MSB first) ORed in ink a row at a time; off the screen's edge a pixel at a
+ * time */
+static void spr24(const uint8_t *b, int h, int x, int y)
+{
+    if (x < clip_x0 || y < clip_y0 || x + 24 > clip_x1 || y + h > clip_y1 || x < 0 || y < 0 || x + 24 > M2K_W ||
+        y + h > M2K_H) {
+        for (int j = 0; j < h; j++)
+            for (int i = 0; i < 24; i++)
+                if ((b[3 * j + (i >> 3)] >> (7 - (i & 7))) & 1) px(x + i, y + j, 1);
+        return;
+    }
+    const int sh = x & 7;
+    for (int j = 0; j < h; j++, b += 3) {
+        uint32_t r = ((uint32_t)b[0] << 24 | (uint32_t)b[1] << 16 | (uint32_t)b[2] << 8) >> sh;
+        uint8_t *o = &fb[(y + j) * ROWB + (x >> 3)];
+        o[0] |= (uint8_t)(r >> 24); o[1] |= (uint8_t)(r >> 16); o[2] |= (uint8_t)(r >> 8);
+        if (sh) o[3] |= (uint8_t)r;
+    }
+}
+
 /* a diamond, 7 px: the stats */
 static void diamond(int cx, int cy, int full)
 {
@@ -373,18 +438,43 @@ static void glyph_solid(const m2k_font_t *f, int g, int x, int y, int fill)
     if (vy1 > M2K_H) vy1 = M2K_H;
     if (vx0 >= vx1 || vy0 >= vy1) return;
     const uint8_t *src = f->bits + f->off[g];
-    if (x >= 0 && bpr == 1 && (z == 2 || z == 3) && vx0 == x && vx1 == x + w && vy0 == y && vy1 == y + f->h) {
-        /* whole on the screen (nearly every glyph): a native row widened into one word, written to its z rows
-         * straight, an empty row (the descenders', a gap) skipped. Its bytes past the first only where they have ink,
-         * so none past the glyph's last pixel is touched */
-        const int sh = x & 7, nr = f->h / z;
+    if (x >= 0 && bpr == 1 && (z == 2 || z == 3) && vx0 == x && vx1 == x + w && vy0 == y) {
+        /* whole across (nearly every glyph; the footer's lose their descenders' last row to the screen's foot): a
+         * native row widened into one word, written to its z rows straight, an empty row (the descenders', a gap)
+         * skipped. Its bytes past the first only where they have ink, so none past the glyph's last pixel is touched */
+        const int sh = x & 7, nr = (vy1 - y) / z, part = (vy1 - y) - nr * z;
         uint8_t *row = &fb[y * ROWB + (x >> 3)];
-        for (int jn = 0; jn < nr; jn++, row += z * ROWB) {
-            const uint8_t nb = src[jn];
+        if (z == 2) {                                   /* (the small type, most of a frame's: its two rows written
+                                                           together, three bytes at most) */
+            for (int jn = 0; jn <= nr; jn++, row += 2 * ROWB) {
+                const uint8_t nb = jn < nr || part ? src[jn] : 0;
+                if (!nb) continue;
+                const uint32_t r = (uint32_t)FONT_Z2[nb] << (8 - sh);
+                const uint8_t a = (uint8_t)(r >> 16), b = (uint8_t)(r >> 8), c = (uint8_t)r;
+                uint8_t *q = row, *q2 = jn < nr ? row + ROWB : row;   /* (a last half row: written twice) */
+                if (fill == 1) {
+                    q[0] |= a; q2[0] |= a;
+                    if (b) { q[1] |= b; q2[1] |= b; }
+                    if (c) { q[2] |= c; q2[2] |= c; }
+                } else if (fill == 0) {
+                    q[0] &= (uint8_t)~a; q2[0] &= (uint8_t)~a;
+                    if (b) { q[1] &= (uint8_t)~b; q2[1] &= (uint8_t)~b; }
+                    if (c) { q[2] &= (uint8_t)~c; q2[2] &= (uint8_t)~c; }
+                } else {
+                    q[0] ^= a;
+                    if (b) q[1] ^= b;
+                    if (c) q[2] ^= c;
+                    if (q2 != q) { q2[0] ^= a; if (b) q2[1] ^= b; if (c) q2[2] ^= c; }
+                }
+            }
+            return;
+        }
+        for (int jn = 0; jn <= nr; jn++, row += z * ROWB) {
+            const uint8_t nb = jn < nr || part ? src[jn] : 0;
             if (!nb) continue;
             const uint32_t r = (z == 2 ? (uint32_t)FONT_Z2[nb] << 16 : FONT_Z3[nb] << 8) >> sh;
             const uint8_t a = (uint8_t)(r >> 24), b = (uint8_t)(r >> 16), c = (uint8_t)(r >> 8), d = (uint8_t)r;
-            for (uint8_t *q = row, *e = row + z * ROWB; q < e; q += ROWB) {
+            for (uint8_t *q = row, *e = row + (jn < nr ? z : part) * ROWB; q < e; q += ROWB) {
                 if (fill == 1) { q[0] |= a; if (b) q[1] |= b; if (c) q[2] |= c; if (d) q[3] |= d; }
                 else if (fill == 0) {
                     q[0] &= (uint8_t)~a;
@@ -495,7 +585,7 @@ static int text_c(const m2k_font_t *f, int cx, int y, const char *s, int fill, i
 static int tag(int x, int y, const char *s, int on)
 {
     int w = text_w(&F_S, s, 0) + 4;
-    if (on) rect(x, y, w, F_S.base + 2, 1);
+    if (on) rfill(x, y, w, F_S.base + 2, 1);
     text(&F_S, x + 2, y + 1, s, !on, 0);
     return w;
 }
@@ -507,7 +597,7 @@ static int otag_w(const m2k_font_t *f, const char *s) { return text_w(f, s, 0) +
 static int otag(const m2k_font_t *f, int x, int y, const char *s, int on)
 {
     int w = otag_w(f, s);
-    if (on) rect(x, y, w, OTAG_H(f), 1); else frame(x, y, w, OTAG_H(f), 1);
+    if (on) rfill(x, y, w, OTAG_H(f), 1); else rframe(x, y, w, OTAG_H(f), 1, 1);
     text(f, x + 3, y + 2, s, !on, 0);
     return w;
 }

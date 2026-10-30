@@ -255,9 +255,9 @@ BEGIN  WRITE (256 B a request)  END (the header written once length and CRC agre
 
 - One bit, 240 x 240, a 7.2 KB framebuffer, MSB first. Light or dark (a setting; the web follows the page's theme).
   Ink and paper become RGB565 on the FM-1.
-- **Fonts** from `tools/gen_font.py`: Silkscreen (SIL OFL), a pixel font, rendered at its native 8 px and drawn 2 or
-  3 times larger (every design pixel a whole block: no half pixels, crisp on the FM-1; the owner's pick, 2026-10-30),
-  Regular and Bold at each, every capital between the same two rows. Orbitron stays the wordmark's.
+- **Fonts** from `tools/gen_font.py`: the owner's pixel font (Elektron Pixel Font by savingaurora, CC BY-SA 3.0,
+  adapted), rendered at its native 8 px and drawn 2 or 3 times larger (every design pixel a whole block: no half
+  pixels, crisp on the FM-1), one weight, every capital between the same two rows. Orbitron stays the wordmark's.
 - **Marks** from `tools/gen_icons.py`: one isotype per machine on a 12-unit grid, flat (64 px) and extruded in 3D,
   ray-marched, sides dithered, 12 frames that move as the machine does.
 - **The grid (MONO2K's):** five bands, each on its own rule: header 0–15; knob row 16–57 (four cells under the

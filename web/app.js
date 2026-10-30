@@ -7,7 +7,7 @@
   "use strict";
   const $ = (id) => document.getElementById(id);
   /* the firmware, fetched and compiled once for every copy the page runs */
-  const wasmP = fetch("m2k.wasm?v=104").then((r) => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); });
+  const wasmP = fetch("m2k.wasm?v=105").then((r) => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); });
   window.M2K_CORE = { bytes: wasmP, module: wasmP.then((b) => WebAssembly.compile(b)) };
   const NS = "http://www.w3.org/2000/svg";
   const css = () => getComputedStyle(document.documentElement);

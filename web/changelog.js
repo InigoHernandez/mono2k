@@ -7,6 +7,16 @@ window.M2K_KINDS = {
 };
 window.M2K_CHANGES = [
   {
+    date: "2026-10-30", title: "MONO2K 1.6: a pixel font of its own, and every knob a picture",
+    items: [
+      ["screen", "1.6: The screen's type is a new pixel font, Elektron Pixel Font by savingaurora, adapted: one weight, drawn at whole sizes, so every letter is crisp on the FM-1. No bold anywhere."],
+      ["screen", "1.6: Each knob's value is now a little picture with its name under it, after Elektron's parameter pages: a dial for an amount, a slider for a level, the number over a ruler, a choice in a box, the wave, the envelope's segment, the filter's curve, the pan."],
+      ["screen", "1.6: Turn a knob and its value takes its name's place; a locked value shows its name solid. A knob a page leaves free is a dotted square."],
+      ["screen", "1.6: The header and footer bars, the tags and the panels' title bars have rounded ends; a held layer's title sits in a solid bar across its top."],
+      ["screen", "1.6: Every page draws in less time than before, leaving the FM-1 more for the sound."],
+    ],
+  },
+  {
     date: "2026-10-30", title: "MONO2K 1.5: a new screen, tracks of their own length, a sound library of 96, a lighter bus",
     items: [
       ["sequencer", "1.5: Each track can loop over its own length: hold SEQ and turn KNOB 2 (TLEN), 1 to 64 steps, or PAT for the pattern's. 16 against 12 against 7 drift apart, then start together again at PLAY and at the next pattern."],

@@ -1,36 +1,43 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
-# MONO2K's 1-bit fonts: Silkscreen (Jason Kottke, The Silkscreen Project Authors, SIL OFL 1.1), a pixel font on a 1 px
-# grid, the owner's pick (2026-10-30: "better resolution of the font on the display"): every glyph rendered at its
-# native size (8 px: a design pixel a screen pixel, capitals 5 rows), cropped to its ink and scaled a whole number of
-# times by nearest neighbour, so every stroke is whole pixels (held: each glyph at its native size times z is the
-# font rendered at z times the size, pixel for pixel); set a whole design pixel apart. Plus the logotype, rasterized
-# from the brand's paths (Orbitron's, the wordmark: unchanged). Writes firmware/gen/m2k_fonts.h.
+# MONO2K's 1-bit fonts: the owner's mono2k-font.otf, the FontStruction "Elektron Pixel Font" by savingaurora
+# (fontstruct.com/fontstructions/show/70152, CC BY-SA 3.0; assets/fonts/mono2k-pixel, its license and readme beside
+# it), adapted: one weight on a 1 px grid, capitals 5 rows at its native 8 px. Every glyph is rendered there, cropped
+# to its ink and scaled a whole number of times by nearest neighbour (x2, x3), so every stroke is whole pixels (held:
+# each glyph at its native size times z is the font rendered at z times the size, pixel for pixel); set a whole design
+# pixel apart. The bitmaps it writes are under CC BY-SA 3.0 like the font. Plus the logotype, rasterized from the
+# brand's paths (Orbitron's, the wordmark: unchanged). Writes firmware/gen/m2k_fonts.h.
 #   .venv/bin/python tools/gen_font.py [--sheet build/fonts.png]
 import os, sys
 from PIL import Image, ImageDraw, ImageFont
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.join(HERE, "..")
-SILK = {"R": os.path.join(ROOT, "assets", "fonts", "silkscreen", "Silkscreen-Regular.ttf"),
-        "B": os.path.join(ROOT, "assets", "fonts", "silkscreen", "Silkscreen-Bold.ttf")}
+FACE = os.path.join(ROOT, "assets", "fonts", "mono2k-pixel", "mono2k-font.otf")
 OUT = os.path.join(ROOT, "firmware", "gen", "m2k_fonts.h")
-NATIVE = 8                     # Silkscreen's own size: a design pixel to a screen pixel
+NATIVE = 8                     # the font's own size: a design pixel to a screen pixel
 
-# name, face, scale: a ladder by width (fit_font steps down it), two weights at each height
+# name, scale: one weight (the owner's: "don't use bold anymore"), a ladder by width (fit_font steps down it)
 FONTS = [
-    ("F_B", "R", 2),           # the light face: labels, units, hints, names, the bars' type (capitals 10 rows, 12 px a
-                               # character); the narrowest, where a value does not fit in F_S
-    ("F_S", "B", 2),           # the primary: lines, list names, the knobs' values (10 rows, 14 px a character)
-    ("F_M", "R", 3),           # a size up (15 rows)
-    ("F_L", "B", 3),           # a page's one big word (15 rows)
+    ("F_S", 2),                # every line: labels, values, names, hints, the bars' type (capitals 10 rows, ~10 px a
+                               # character)
+    ("F_L", 3),                # a page's one big word (capitals 15 rows)
 ]
 FIRST, LAST = 32, 95
 SPACE = 2                      # a space's design pixels (with the tracking each side: 4 between two words' ink)
 
 
-def load(face, size):
-    return ImageFont.truetype(SILK[face], size)
+def load(size):
+    return ImageFont.truetype(FACE, size)
+
+
+def ink_box(font, ch):
+    """a glyph's ink as rendered, from the pen's top (the font's own bounding box is a row too deep at 8 px)"""
+    im = Image.new("1", (NATIVE * 3, NATIVE * 3), 0)
+    d = ImageDraw.Draw(im)
+    d.fontmode = "1"
+    d.text((NATIVE, 0), ch, font=font, fill=1)
+    return im.getbbox()
 
 
 def native(font, ch, cap_top, cap, desc):
@@ -46,39 +53,36 @@ def native(font, ch, cap_top, cap, desc):
     cols = [x for x in range(W) if any(px[x, y] for y in range(H))]
     if not cols:                                         # the space: blank, SPACE wide
         return Image.new("1", (SPACE, cap + desc), 0)
-    rows = [y for y in range(H) if any(px[x, y] for x in range(W))]
-    dy = cap - 1 - (rows[-1] - pad) if ch == "." else 0   # the full stop on the baseline: its outline floats half a
-                                                         # design pixel, rounded up at 8 px it read as a dash (1-0)
+    rows = list(range(pad, pad + cap + desc))
+    if ch == "?":                                        # (it rises a row over the capitals: one of its stem's two
+        rows = [pad - 1, pad, pad + 1, pad + 3] + list(range(pad + 4, pad + cap + desc))   # rows goes, the arc stays)
     out = Image.new("1", (cols[-1] - cols[0] + 1, cap + desc), 0)
     q = out.load()
-    for y in range(cap + desc):
+    for y, r in enumerate(rows):
         for x in range(out.size[0]):
-            if 0 <= y - dy < H - pad and px[cols[0] + x, y - dy + pad]:
+            if px[cols[0] + x, r]:
                 q[x, y] = 1
     return out
 
 
-def crisp(face, z, ch, g):
-    """the glyph g (native, scaled z times) against the font rendered at z times the size: the same pixels, as far
-    below the capitals' top (FreeType may set the whole line a row apart at another size: the shape is what counts)"""
+def crisp(z, ch, g):
+    """the glyph g (native, scaled z times) against the font rendered at z times the size: the same pixels, in the
+    same place below the capitals' top (? alone is redrawn: it rose a row over them)"""
+    if ch == "?":
+        return True
     def ink(f, c, pad):
         im = Image.new("1", (NATIVE * 2 * z + 2 * pad, NATIVE * 3 * z + 2 * pad), 0)
         d = ImageDraw.Draw(im)
         d.fontmode = "1"
         d.text((pad, pad), c, font=f, fill=1)
         return im
-    n = load(face, NATIVE)
-    if ink(n, ch, 8).getbbox()[1] < ink(n, "H", 8).getbbox()[1]:
-        return True                                      # (above the capitals, cut to the line: $ ^, no UI text)
-    f = load(face, NATIVE * z)
+    f = load(NATIVE * z)
     big, hb = ink(f, ch, 8 * z), ink(f, "H", 8 * z).getbbox()
     big = big.crop((0, hb[1], big.size[0], hb[1] + g.size[1]))   # (the line's rows: a glyph above them is cut alike)
     bb, gb = big.getbbox(), g.getbbox()
     if not bb or not gb:
         return not bb and not gb
-    # the same shape, set within a design pixel of the same place (a comma's outline sits half a pixel low: rounded at
-    # the native size, it keeps whole design pixels)
-    return list(big.crop(bb).getdata()) == list(g.crop(gb).getdata()) and (abs(bb[1] - gb[1]) < z or ch == ".")
+    return list(big.crop(bb).getdata()) == list(g.crop(gb).getdata()) and bb[1] == gb[1]
 
 
 def logo_paths():
@@ -176,8 +180,10 @@ def main():
     sheet = None
     if "--sheet" in sys.argv:
         sheet = sys.argv[sys.argv.index("--sheet") + 1]
-    lines = ["/* generated by tools/gen_font.py from Silkscreen (SIL OFL 1.1) at whole scales, and the logotype: do not "
-             "edit */\n",
+    lines = ["/* generated by tools/gen_font.py: do not edit. The type's glyphs are adapted from \"Elektron Pixel Font\" "
+             "by savingaurora (FontStruct, fontstruct.com/fontstructions/show/70152), the owner's mono2k-font.otf, "
+             "and are licensed CC BY-SA 3.0 (creativecommons.org/licenses/by-sa/3.0; assets/fonts/mono2k-pixel); the "
+             "logotype is MONO2K's wordmark (Orbitron, SIL OFL 1.1) */\n",
              "/* h, base, w in screen pixels; bits a glyph at its native size (rows h / z, (w / z + 7) / 8 bytes "
              "each), drawn z times over */\n",
              "typedef struct { uint8_t h, base, first, last; int8_t track; uint8_t z; const uint16_t *off; "
@@ -188,11 +194,11 @@ def main():
     lines.append("static const uint32_t FONT_Z3[256] = {%s};\n" %
                  ",".join("0x%06x" % sum(7 << (21 - 3 * i) for i in range(8) if b >> (7 - i) & 1) for b in range(256)))
     previews = []
-    for name, face, z in FONTS:
-        font = load(face, NATIVE)
-        hb = font.getbbox("H")
+    for name, z in FONTS:
+        font = load(NATIVE)
+        hb = ink_box(font, "H")
         cap_top, cap = hb[1], hb[3] - hb[1]
-        desc = max(font.getbbox(chr(c))[3] for c in range(FIRST, LAST + 1) if font.getbbox(chr(c))) - hb[3]
+        desc = max(ink_box(font, chr(c))[3] for c in range(FIRST, LAST + 1) if ink_box(font, chr(c))) - hb[3]
         desc = max(desc, 1)
         track = z                                        # (a design pixel between two glyphs' ink)
         h = (cap + desc) * z
@@ -201,7 +207,7 @@ def main():
         for i, c in enumerate(range(FIRST, LAST + 1)):
             n = native(font, chr(c), cap_top, cap, desc)
             im = n.resize((n.size[0] * z, n.size[1] * z), Image.NEAREST)
-            if c != 32 and not crisp(face, z, chr(c), im):
+            if c != 32 and not crisp(z, chr(c), im):
                 raise SystemExit("%s: %r is not whole pixels at x%d" % (name, chr(c), z))
             offs.append(len(bits))
             widths.append(im.size[0])
@@ -217,8 +223,11 @@ def main():
         # h: the capitals and the descenders; base: the capitals' rows (y .. y + base - 1), what every layout plans on
         lines.append("static const m2k_font_t %s = {%d, %d, %d, %d, %d, %d, %s_OFF, %s_W, %s_BITS};\n" %
                      (name, h, cap * z, FIRST, LAST, track, z, name, name, name))
-        print("%s: Silkscreen %s x%d, capitals %d, line %d, %d bytes" % (name, "Regular" if face == "R" else "Bold", z,
-                                                                       cap * z, h, len(bits)))
+        # the full stop on the baseline, the comma from it down (the font's own: held, as at 8 px they sit)
+        dot, com = native(font, ".", cap_top, cap, desc), native(font, ",", cap_top, cap, desc)
+        if dot.getbbox()[3] != cap or com.getbbox()[1] != cap - 1 or com.getbbox()[3] <= cap:
+            raise SystemExit("%s: the full stop or the comma is off the baseline" % name)
+        print("%s: mono2k-font x%d, capitals %d, line %d, %d bytes" % (name, z, cap * z, h, len(bits)))
 
     # the logotype: the brand's (web/panel.js, LOGO), 232 px wide, rasterized from its paths (each its own fill rule,
     # sampled 4 x 4 a pixel). LOGO_BITS its fill, LOGO_EDGE its outline (a fill pixel with an empty neighbour), as the

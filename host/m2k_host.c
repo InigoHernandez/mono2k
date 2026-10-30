@@ -3898,7 +3898,7 @@ static int selftest(void)
         uint32_t r = 12345u;
         int same = 1;
         #define RN(n) ((int)(((r = r * 1103515245u + 12345u) >> 8) % (uint32_t)(n)))
-        static const m2k_font_t *const FT[4] = {&F_S, &F_M, &F_L, &F_S};
+        static const m2k_font_t *const FT[4] = {&F_S, &F_L, &F_L, &F_S};
         static const char *const TX[4] = {"WAVE 12", "S&H -3 X", "#%/;", "AW MQ"};
         for (int i = 0; i < 3000 && same; i++) {
             for (int b = 0; b < M2K_FB_BYTES; b++) fb[b] = ux_ref[b] = (uint8_t)RN(256);
@@ -5957,7 +5957,7 @@ static int selftest(void)
         cls();
         rule_v(GX, STAGE_Y + 2, STAGE_H - 4, 1);
         CELL(0, STAGE_Y, GX, STRIP_Y - 1, VX, STAGE_Y + 2, VX + VW, STRIP_Y - 2);
-        text(&F_M, VX, 100, "SWAV-", 1, 0);
+        text(&F_L, VX, 100, "SWAV-", 1, 0);
         ta_check((int)ux_now);
         int clear = ta_found - before == found;
         ta_quiet = 0;

@@ -56,20 +56,25 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   `app.js`, `manual.js` and `editor.js` alike (and `worklet.js?v=` in `app.js` and `editor.js` with the worklet).
 - The screen's grid (m2k_ui.c, `docs/screen-grid.md`; the 2026-10 restyle after the sound library page, Torso's S4,
   Hortator and the MNM-1's menu, the owner's): a 4 px grid for every position, size and text baseline (`tx_b` draws on
-  a baseline); Silkscreen, the screen's type since 2026-10-30 (the owner's pick: a pixel font, crisp at whole scales;
-  `assets/fonts/silkscreen`, OFL 1.1; Orbitron stays the wordmark's): `tools/gen_font.py` renders each glyph at its
-  native 8 px and the firmware draws it 2 or 3 times larger (kept native, a byte a row, widened by `FONT_Z2` /
-  `FONT_Z3` as drawn; the generator holds every glyph to the font rendered at that size), F_B Regular x2 the light face
-  (labels, units, hints, names; the bars' type; a value's fallback), F_S Bold x2 the primary (lines, the knobs'
-  values), F_M Regular x3, F_L Bold x3 a page's one big word; capitals 10 and 15 rows, a ladder by width for
-  `fit_font`. Bands: the header an ink bar 0-15 (the pattern's slot a paper tag and its name, the
-  modes, REC, tempo, transport), the knobs 16-59 frameless in columns of 60 (label, value, a thin bar, 4 px in; a
-  dotted rule on 60), the stage 64-199 (the page's picture across [4, 236) x [68, 180), its info line on baseline 196:
+  a baseline); the type since 1.6 (2026-10-30) the owner's `mono2k-font.otf`, the FontStruction "Elektron Pixel Font"
+  by savingaurora, CC BY-SA 3.0, adapted (`assets/fonts/mono2k-pixel`: the .otf, license.txt and readme.txt travel
+  together; the generated bitmaps are CC BY-SA 3.0 too; credited in README and the manual; Orbitron stays the
+  wordmark's): `tools/gen_font.py` renders each glyph at its native 8 px and the firmware draws it 2 or 3 times larger
+  (kept native, a byte a row, widened by `FONT_Z2` / `FONT_Z3` as drawn; the generator holds every glyph to the font
+  rendered at 16 and 24 px, and the full stop and comma to the baseline), one weight (the owner: "don't use bold
+  anymore"): F_S x2 every line, F_L x3 a page's one big word; capitals 10 and 15 rows, the ladder for `fit_font`. The
+  look after Elektron's parameter pages (the owner's, 1.6): each knob's value a picture of it (`icon_of`, `icon`:
+  dial, slider, number over a ruler, a choice's box, wave, envelope segment, filter curve, pan; a free knob a dotted
+  square), MONO2K's own drawings in the type's 2 px stroke, never Elektron's icons; title bars and tags with rounded
+  corners (`rfill`, `rframe`). Bands: the header an ink bar 0-15, its corners rounded (the pattern's slot a paper tag
+  and its name, the modes, REC, tempo, transport), the knobs 16-59 in columns of 60 (the picture rows 20-39, the label
+  on baseline 56, 4 px in; turning, the value in the label's place, solid; a lock the label solid; a dotted rule on
+  60), the stage 64-199 (the page's picture across [4, 236) x [68, 180), its info line on baseline 196:
   what turns and its value, a held step, else the picture's names), the steps 204-223 (16 cells 8 x 8, 12 apart, a
   beat's four under each knob), the footer an ink bar 224-239 (the bars, the breadcrumb, the page). One picture
   language: areas in bars (`bar_col`, `bar_bi`: two columns on, one off; the other state one in three) from dotted
-  floors and zero lines, handles, markers, cells. Panels only over the layers (`panel`: one frame, its title on its
-  top line, the keys' hints at its foot). The host's text audit (`M2K_TEXT_AUDIT`: every text's ink box; the cells and
+  floors and zero lines, handles, markers, cells. Panels only over the layers (`panel`: Elektron's title bar, solid,
+  over a 1 px frame, rows 64-203, the keys' hints at its foot). The host's text audit (`M2K_TEXT_AUDIT`: every text's ink box; the cells and
   rules as drawn, `CELL`, `rule_h` / `rule_v`, a card's or panel's edges; a paper fill hides what it covers) fails the
   tour and `m2k_host --text-sweep` (every page, machine and knob value) on any two texts that touch, one cut, one past
   its cell or within 2 px of a rule: run it after any change to the screen, and fit text with `text_fit` / `lite_fit`
