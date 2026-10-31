@@ -7,7 +7,7 @@ window.M2K_KINDS = {
 };
 window.M2K_CHANGES = [
   {
-    date: "2026-10-30", title: "MONO2K 1.6.1: the FM-1's two processors better shared, an arp on every track",
+    date: "2026-10-31", title: "MONO2K 1.6.1: the FM-1's two processors better shared, an arp on every track",
     items: [
       ["fixes", "1.6.1: the bus runs on the second processor: the first has room for the screen; the sound comes out 0.36 ms later"],
       ["fixes", "1.6.1: The FM-1 shares the tracks between its processors by what each takes there, measured as it plays, not by an estimate. GLO > PLAY shows each track's load."],
