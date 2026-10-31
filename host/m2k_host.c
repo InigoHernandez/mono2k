@@ -307,7 +307,7 @@ static int text_sweep(void)
     const char *dump = getenv("M2K_SWEEP_DIR");
     m2k_init(2000);
     ui.splash_end = 0; ui.splashed = 1;                  /* (past the splash and its wipe: the first page is audited too) */
-    sq.rec = 1; sq.ready = 1; ui.pads = 1; sq.fill = 1; sq.arp_hold = 1;   /* the header at its fullest: REC and the modes */
+    sq.rec = 1; sq.ready = 1; ui.pads = 1; sq.fill = 1; sq.arp_hold[sq.ktrk] = 1;   /* the header at its fullest: REC and the modes */
     uint32_t now = 4000;
     static int16_t b[256];
     for (int f = 0; f < 44100 * 3; f += 128) m2k_render(b, 128);
@@ -3734,20 +3734,20 @@ static int selftest(void)
         ux_init(7);
         int k0 = ux_white(0);
         m2k_key(k0, 1); ux_tap(B_OCTU); m2k_key(k0, 0);
-        int oct = sq.nheld == 0;
+        int oct = sq.nheld[sq.ktrk] == 0;
         ux_init(7); m2k_key(k0, 1); m2k_button(B_SEQ, 1); m2k_key(k0, 0); m2k_button(B_SEQ, 0);
-        int seq = sq.nheld == 0;
+        int seq = sq.nheld[sq.ktrk] == 0;
         ux_init(7); m2k_key(k0, 1); m2k_button(B_GLO, 1); m2k_key(k0, 0); m2k_button(B_GLO, 0);
-        int glo = sq.nheld == 0;
+        int glo = sq.nheld[sq.ktrk] == 0;
         ux_init(7); m2k_key(k0, 1); m2k_button(B_GLO, 1); ux_tap(B_ARP); m2k_button(B_GLO, 0); m2k_key(k0, 0);
-        int pads = ui.pads && sq.nheld == 0;
+        int pads = ui.pads && sq.nheld[sq.ktrk] == 0;
         ux_init(7); ux_tap(B_SEQ); m2k_midi(0x90, 60, 100); m2k_key(ux_black(2), 1); m2k_key(ux_black(2), 0);
         m2k_midi(0x80, 60, 0);
-        int trk3 = ui.grid && sq.ktrk == 2 && sq.nheld == 0;
+        int trk3 = ui.grid && sq.ktrk == 2 && sq.nheld[sq.ktrk] == 0;
         ux_init(7); m2k_key(k0, 1); ux_tap(B_SEQ);
         int grid = ui.grid;
         m2k_key(k0, 0);
-        grid &= sq.nheld == 0;
+        grid &= sq.nheld[sq.ktrk] == 0;
         uint8_t t0 = mon.trig[0];
         seq_play(1); ux_audio(44100 * 2); seq_play(0);
         CHECK(oct && seq && glo && pads && trk3 && grid && (uint8_t)(mon.trig[0] - t0) > 0,
@@ -5189,37 +5189,114 @@ static int selftest(void)
         q->kit[t][P_ASPD] = enc(0, 4);                    /* 1/32 */
         m_cpy(trk[t].eff, q->kit[t], P_COUNT);
         ux_tap(B_ARP);
-        int page = ui.page == PG_ARP && !sq.arp_hold;
+        int page = ui.page == PG_ARP && !sq.arp_hold[sq.ktrk];
         ux_ms(400);
         ux_tap(B_ARP); ux_tap(B_ARP);
-        int on = sq.arp_hold;
+        int on = sq.arp_hold[sq.ktrk];
         int k0 = ux_white(0), k1 = ux_white(2), k2 = ux_white(4);
         m2k_key(k0, 1); m2k_key(k1, 1); ux_audio(4096); m2k_key(k0, 0); m2k_key(k1, 0);
         int n0 = mon.trig[t];
         ux_audio(M2K_SR / 2);
-        int plays = (uint8_t)(mon.trig[t] - n0) >= 6 && sq.nheld == 2 && sq.nkeys == 0;
+        int plays = (uint8_t)(mon.trig[t] - n0) >= 6 && sq.nheld[sq.ktrk] == 2 && sq.nkeys[sq.ktrk] == 0;
         m2k_key(k2, 1);
-        int fresh = sq.nheld == 1;
+        int fresh = sq.nheld[sq.ktrk] == 1;
         m2k_key(k2, 0);
-        int kept = sq.nheld == 1;
+        int kept = sq.nheld[sq.ktrk] == 1;
         ux_ms(400);
         ux_tap(B_ARP); ux_tap(B_ARP);
-        int off = !sq.arp_hold && sq.nheld == 0;
+        int off = !sq.arp_hold[sq.ktrk] && sq.nheld[sq.ktrk] == 0;
         n0 = mon.trig[t];
         ux_audio(M2K_SR / 4);
         int stops = (uint8_t)(mon.trig[t] - n0) == 0;
         int ch = (midi_ch() + t) & 15;
         m2k_midi(0xB0 | ch, 64, 127);
         m2k_key(k0, 1); m2k_key(k0, 0);
-        int pedal = sq.arp_hold && sq.nheld == 1;
+        int pedal = sq.arp_hold[sq.ktrk] && sq.nheld[sq.ktrk] == 1;
         m2k_midi(0xB0 | ch, 64, 0);
-        int pedal_up = !sq.arp_hold && sq.nheld == 0;
+        int pedal_up = !sq.arp_hold[sq.ktrk] && sq.nheld[sq.ktrk] == 0;
         m2k_midi(0xB0 | ch, 64, 127);
         m2k_key(k0, 1); m2k_key(k0, 0);
         track_to((t + 1) % M2K_TRACKS);
-        int moved = sq.nheld == 0;
+        int moved = sq.nheld[sq.ktrk] == 0 && sq.nheld[t] == 1 && sq.arp_hold[t];   /* (1.6.1: it stays, holding) */
         CHECK(page && on && plays && fresh && kept && off && stops && pedal && pedal_up && moved,
-              "arp: ARP twice holds it (let go, it plays on; a new chord replaces it; twice again, it stops); CC 64 alike; another track stops it");
+              "arp: ARP twice holds it (let go, it plays on; a new chord replaces it; twice again, it stops); CC 64 alike; another track in view, it holds on");
+    }
+    /* an arp a track (1.6.1): T1 holding 60 64 UP at 1/32 and T2 holding 50 55 57 DOWN at 1/8, both after the keys went
+     * to another track, each on its own notes and rate; a track without HOLD lets go of its notes when the keys go (no
+     * note hangs); a sustain pedal on T3's channel holds T3's arp while T1 is in view, its MIDI notes its own */
+    {
+        m2k_init(81);
+        m2k_pattern_t *q = bare(16);
+        q->kit[0][P_AMOD] = enc(1, 6); q->kit[0][P_ASPD] = enc(0, 4);   /* UP, 1/32 */
+        q->kit[1][P_AMOD] = enc(2, 6); q->kit[1][P_ASPD] = enc(2, 4);   /* DOWN, 1/8 */
+        q->kit[2][P_AMOD] = enc(1, 6); q->kit[2][P_ASPD] = enc(1, 4);   /* UP, 1/16 */
+        q->kit[3][P_AMOD] = enc(1, 6); q->kit[3][P_ASPD] = enc(1, 4);
+        for (int t = 0; t < M2K_TRACKS; t++) m_cpy(trk[t].eff, q->kit[t], P_COUNT);
+        ui.trk = 0; sq.ktrk = 0;
+        arp_hold_set(0, 1); live_on(60, 100); live_on(64, 100); live_off(60); live_off(64);
+        track_to(1);
+        arp_hold_set(1, 1); live_on(50, 100); live_on(55, 100); live_on(57, 100); live_off(50); live_off(55); live_off(57);
+        track_to(2);
+        int held = sq.nheld[0] == 2 && sq.nheld[1] == 3 && sq.arp_hold[0] && sq.arp_hold[1] && sq.ktrk == 2;
+        sblk_sync();
+        int n[2] = {0, 0}, order = 1;
+        static const uint8_t W0[2] = {60, 64}, W1[3] = {57, 55, 50};
+        for (int f = 0; f < M2K_SR; f += M2K_SUB) {
+            int m = sblk();
+            if (m & 1) { order &= trk[0].note == W0[n[0] % 2]; n[0]++; }
+            if (m & 2) { order &= trk[1].note == W1[n[1] % 3]; n[1]++; }
+        }
+        /* T4 without HOLD, two keys down, then another track in view: its notes let go, its arp silent */
+        track_to(3);
+        live_on(48, 100); live_on(52, 100);
+        for (int f = 0; f < M2K_SR / 4; f += M2K_SUB) sblk();
+        track_to(0);
+        sblk_sync();
+        int t4 = 0;
+        for (int f = 0; f < M2K_SR / 4; f += M2K_SUB) t4 += sblk() >> 3 & 1;
+        int hang = sq.nheld[3] == 0 && sq.nkeys[3] == 0 && t4 == 0;
+        /* the pedal on T3's channel, T1 in view: T3 holds its MIDI notes, T1 untouched; up, T3 lets go */
+        int ch = (midi_ch() + 2) & 15;
+        m2k_midi(0xB0 | ch, 64, 127);
+        m2k_midi(0x90 | ch, 62, 100); m2k_midi(0x80 | ch, 62, 0);
+        int ped = sq.arp_hold[2] && sq.nheld[2] == 1 && sq.held[2][0] == 62 && sq.ktrk == 0 && sq.nheld[0] == 2;
+        sblk_sync();
+        int t3 = 0;
+        for (int f = 0; f < M2K_SR / 4; f += M2K_SUB) t3 += sblk() >> 2 & 1;
+        m2k_midi(0xB0 | ch, 64, 0);
+        ped &= t3 >= 2 && !sq.arp_hold[2] && sq.nheld[2] == 0 && sq.arp_hold[0];   /* (1/16 at 120: two in 0.25 s) */
+        printf("     arps a track: T1 %d notes in a second (1/32), T2 %d (1/8), in order %d; no hold, let go %d; the pedal on T3 %d\n",
+               n[0], n[1], order, hang, ped);
+        CHECK(held && n[0] >= 15 && n[0] <= 17 && n[1] >= 3 && n[1] <= 5 && order && hang && ped,
+              "arp: each track its own (two held after the keys went elsewhere, each its notes and rate); no hold, no hanging note; CC 64 its channel's track");
+    }
+    /* REC with an arp: T1 holding 60 62 65 UP at 1/16, PLAY with REC: its notes written a step each, step k the arp's
+     * k-th (PLAY starts every arp with the pattern); faster (1/32), a note a step still, the last that lands on it (the
+     * step's on-beat note, its 2k-th); a quarter into the last step, REC off */
+    {
+        int ok = 1;
+        for (int fast = 0; fast < 2; fast++) {
+            m2k_init(82);
+            m2k_pattern_t *q = bare(16);
+            q->kit[0][P_AMOD] = enc(1, 6); q->kit[0][P_ASPD] = enc(fast ? 0 : 1, 4);
+            m_cpy(trk[0].eff, q->kit[0], P_COUNT);
+            ui.trk = 0; sq.ktrk = 0;
+            arp_hold_set(0, 1); live_on(60, 100); live_on(62, 100); live_on(65, 100); live_off(60); live_off(62); live_off(65);
+            sq.rec = 1;
+            seq_tempo();                                  /* (the bare pattern's 120 BPM) */
+            seq_play(1);
+            int32_t step = (int32_t)(sps_q8 >> 8);
+            for (int32_t f = 0; f < step * 15 + step / 4; f += M2K_SUB) sblk();
+            seq_play(0);
+            sq.rec = 0;
+            static const uint8_t U[3] = {60, 62, 65};
+            for (int k = 0; k < 16; k++) {
+                const m2k_step_t *st = &q->step[0][k];
+                int want = fast ? U[(2 * k) % 3] : U[k % 3];      /* (1/32: two a step, the on-beat one kept) */
+                ok &= (st->flags & ST_TRIG) && st->note == want;
+            }
+        }
+        CHECK(ok, "arp: REC writes its notes into the track's steps, a note a step (the last landing on it: the on-beat)");
     }
     /* a speed turned while playing: the track goes on from where the pattern is (T2 turned from 1x to 2x on step 6:
      * its first step again on the pattern's 8, then with T1's 16) */
@@ -6126,7 +6203,7 @@ static int selftest(void)
         m2k_frame(500);
         int page = ui.page;
         m2k_key(kw, 1);
-        int skip = !splash_on() && sq.nheld == 0;
+        int skip = !splash_on() && sq.nheld[sq.ktrk] == 0;
         m2k_frame(520);
         m2k_key(kw, 0);
         m2k_button(B_PLAY, 1); m2k_button(B_PLAY, 0);                  /* (in the wipe: a press is a press) */
@@ -6144,7 +6221,7 @@ static int selftest(void)
         int still = ui.page == page && !sq.playing && PAT(cur_pat)->kit[ui.trk][P_LEVL] == lv && !splash_on();
         for (uint32_t ms = 560; ms < 1400; ms += 40) m2k_frame(ms);
         m2k_key(kw, 1);
-        int note = sq.nheld == 1;
+        int note = sq.nheld[sq.ktrk] == 1;
         m2k_key(kw, 0);
         CHECK(run && wiped && home && skip && plays && envp && still && note,
               "splash: 2.1 s at power-on, then the wipe into HOME; a key, a button, a knob skips it, swallowed with its release");

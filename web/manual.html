@@ -657,7 +657,7 @@
   <h2>Mutes on the bar</h2>
   <p>GLO &gt; PLAY's MUTE: BAR (the default) holds a mute made while playing to the next bar's first step (steps 1, 17, 33, 49); NOW mutes at once. Stopped, always at once. The key blinks while it waits.</p>
   <h2>The FM-1's load</h2>
-  <p>GLO &gt; PLAY shows it, every half second: CPU, the first core's share of real time making the sound; CPU2, the second core's; DROP, the times the sound ran short since power-on. Near 100 % the sound drops out: CPU FULL says so in the header (at most every 5 seconds). In the browser, dashes.</p>
+  <p>GLO &gt; PLAY shows it, every half second: CPU, the first core's share of real time making the sound; CPU2, the second core's; DROP, the times the sound ran short since power-on. Near 100 % the sound drops out: CPU FULL says so in the header (at most every 5 seconds). In the browser, dashes. Each track's cell has a bar of what that track takes (full at 50 %). The FM-1 shares the tracks between its two processors by what each takes there, measured as it plays, and the bus runs on the second a block behind, so the sound comes out 0.36 ms later.</p>
   <div class="figs">
     <figure class="fig"><canvas data-scr="36_glo_meter"></canvas><figcaption>GLO &gt; PLAY on the FM-1: the mutes, the bar, the load.</figcaption></figure>
   </div>
@@ -701,6 +701,8 @@
   <h2>Arpeggiator</h2>
   <p>On ARP: MODE (OFF, UP, DOWN, U/D, RND, ORDR, the order you played them), SPD (1/32 to 1/4), RNG (one to four octaves) and GATE. Hold keys and it plays them in turn.</p>
   <p>HOLD: tap ARP twice (or press a sustain pedal, CC 64) and the notes keep playing after you let go; a chord played after your hands leave the keys replaces them. ARP twice again stops it. Its LED pulses while it holds, and HOLD shows in the header and on the ARP page.</p>
+  <p>Each track has its own arp: pick another track and a held one plays on, on its own notes and speed; build a second there. ARP twice holds or releases the track in view's only; a pedal holds its channel's track. On HOME a small staircase marks each lane whose arp holds. PLAY starts every arp from its first note with the pattern; STOP and a new pattern leave the holds playing.</p>
+  <p>With REC on while playing, every playing arp writes its notes into its track's steps, as played notes are (to the nearest step): one a step, the last that lands on it (a 1/32's on-beat note).</p>
 </article>
 
 <article id="bus" data-group="Sound">
@@ -846,7 +848,7 @@
 </footer>
 <script src="site.js?v=3"></script>
 <script src="panel.js?v=2"></script>
-<script src="changelog.js?v=47"></script>
-<script src="manual.js?v=52"></script>
+<script src="changelog.js?v=48"></script>
+<script src="manual.js?v=53"></script>
 </body>
 </html>

@@ -1103,16 +1103,19 @@ static void set_machine(int m)
     }
 }
 
-/* the keys let go of every note they hold: the keys' track changes, or the keys become steps or pads (a note left
- * in sq.held drones, and the sequence skips its track) */
-static void keys_off(void) { for (int i = 0; i < 8 && sq.nkeys; i++) live_off(sq.keys[0]); }   /* (a HOLD keeps its) */
+/* the keys let go of every note they hold on the track in view: the keys' track changes, or the keys become steps or
+ * pads (a note left in sq.held drones, and the sequence skips its track); a HOLD keeps its own, and its arp plays on */
+static void keys_off(void)
+{
+    const int t = sq.ktrk;
+    for (int i = 0; i < 8 && sq.nkeys[t]; i++) live_off_t(t, sq.keys[t][0]);
+}
 
 /* the track in view (SELECT, a black key in GRID or PADS, the web's cells): the keys play it */
 static void track_to(int t)
 {
     if (t == ui.trk) return;
-    keys_off();
-    sq.nheld = 0;                      /* (a held arp stays with its track: it stops, and HOLD waits for new keys) */
+    keys_off();                        /* (a held arp stays with its track, playing on) */
     ui.trk = (uint8_t)t;
     sq.ktrk = ui.trk;
     start_trans_dir(190, 1);
@@ -1299,7 +1302,7 @@ static void key_release(int k)
     ui.kact[k] = KA_NONE;
     switch (a) {
     case KA_NOTE:                                  /* (unless SELECT, GRID or PADS let go of it already) */
-        for (int i = 0; i < sq.nkeys; i++) if (sq.keys[i] == arg) { live_off(arg); break; }
+        for (int i = 0; i < sq.nkeys[sq.ktrk]; i++) if (sq.keys[sq.ktrk][i] == arg) { live_off(arg); break; }
         break;
     case KA_SOLO: solo_key(arg, 0); break;
     case KA_PERF: if (perf.on[arg]) bus_perform(arg, 0); break;   /* (FX let go first has stopped it) */
@@ -2206,8 +2209,10 @@ static void button_event(int b, int down)
         if (ui.arp_tap && ui.now - ui.arp_tap < 300) {
             ui.arp_tap = 0;
             if (ui.arp_sub && ui.page == PG_ARP) ui.sub = (uint8_t)(ui.arp_sub - 1);
-            arp_hold_set(!sq.arp_hold);
-            toast(sq.arp_hold ? "ARP HOLD" : "ARP HOLD OFF", sq.arp_hold ? "ARP TWICE: LET GO" : 0);
+            arp_hold_set(ui.trk, !sq.arp_hold[ui.trk]);   /* (the track in view's alone) */
+            char ht[12] = {'T', (char)('1' + ui.trk), ' ', 0};
+            s_cpy(ht + 3, sq.arp_hold[ui.trk] ? "ARP HOLD" : "HOLD OFF");
+            toast(ht, sq.arp_hold[ui.trk] ? "ARP TWICE: LET GO" : 0);
             break;
         }
         ui.arp_tap = ui.now | 1u;
@@ -2548,7 +2553,7 @@ static void header(void)
     int pw = 2 + bar_tag(2, 0, a, 1);
     /* (HOLD: the arp's; MUTE: a mute waiting for the bar, its box blinking) */
     static const char *const MODE[6] = {"GRID", "PADS", "HOLD", "MUTE", "READY", "FILL"};
-    const int on[6] = {ui.grid, ui.pads, sq.arp_hold, mute_pending(), sq.ready, sq.fill};
+    const int on[6] = {ui.grid, ui.pads, sq.arp_hold[ui.trk], mute_pending(), sq.ready, sq.fill};
     for (int i = 0; i < 6; i++) {
         if (!on[i]) continue;
         int w = text_w(&F_S, MODE[i], 0) + 6;
@@ -2999,6 +3004,8 @@ static void home(void)
         tx_b(&F_S, SX0, b, n, !inv);
         const char *mn = model_of(&MI[p->machine[t]]);
         text_fit_f(&F_S, 20, b - F_S.base, text_w(&F_S, mn, 0) <= 40 ? mn : MI[p->machine[t]].badge, 40, !inv);
+        if (sq.arp_hold[t] && sq.nheld[t])           /* its arp holding: a little staircase (the arp's picture's) */
+            for (int j = 0; j < 3; j++) rect(61 + 2 * j, b - 2 - 3 * j, 2, 2, 2);
         for (int i = 0; i < 16; i++) lane_step(lane_x(i), b, t, ui.spage * 16 + i);
         int w = ui.meter[t] * 12 >> 15;                 /* the level, live: solid as loud, its track dotted */
         if (w) rect(224, b - 4, w, 4, 1);
@@ -3534,16 +3541,17 @@ static void lfo_page(int busy, const uint8_t *k)
  * solid; HOLD solid in the corner; no keys: what to do */
 static void arp_picture(const uint8_t *k)
 {
-    int n = sq.nheld, rng = 1 + ((k[P_ARNG] * 4) >> 7), tot = n * rng;
-    if (sq.arp_hold) inv_tag(&F_S, SX0 + 2, 80, "HOLD");
+    const int t = ui.trk;
+    int n = sq.nheld[t], rng = 1 + ((k[P_ARNG] * 4) >> 7), tot = n * rng;
+    if (sq.arp_hold[t]) inv_tag(&F_S, SX0 + 2, 80, "HOLD");
     if (!n) {
-        tx_bc(&F_S, 120, 124, sq.arp_hold ? "PLAY" : "HOLD", 1);
+        tx_bc(&F_S, 120, 124, sq.arp_hold[t] ? "PLAY" : "HOLD", 1);
         tx_bc(&F_S, 120, 140, "SOME KEYS", 1);
         return;
     }
     const int yb = 176, cnt = tot < 32 ? tot : 32, pitch = CLAMP(STW / cnt, 6, 32), bw = pitch * 2 / 3;
     const int x0 = SX0 + (STW - cnt * pitch + pitch - bw) / 2;   /* (the staircase centred) */
-    int on = sq.arp_i ? (int)((sq.arp_i - 1) % (uint32_t)tot) : -1;
+    int on = sq.arp_i[t] ? (int)((sq.arp_i[t] - 1) % (uint32_t)tot) : -1;
     for (int i = 0; i < cnt; i++) {
         int x = x0 + i * pitch, h = 24 + i * 72 / cnt;
         for (int c = 0; c < bw; c++) bar_col(x + c, x, yb - h, yb, i != on);
@@ -4502,7 +4510,7 @@ const uint8_t *m2k_leds(void)
     B[B_EDIT] = ui.page == PG_SYN ? 255 : 0;
     B[B_GLO] = ui.page == PG_GLO ? 255 : 0;
     B[B_HOME] = ui.page == PG_HOME ? 255 : 0;
-    B[B_ARP] = sq.arp_hold ? (blink ? 255 : 90) : ui.page == PG_ARP ? 255 : 0;   /* HOLD: it pulses */
+    B[B_ARP] = sq.arp_hold[ui.trk] ? (blink ? 255 : 90) : ui.page == PG_ARP ? 255 : 0;   /* HOLD: it pulses */
     B[B_SAVE] = ui.save_t && ui.now - ui.save_t < 300 ? 255 : 0;
     B[B_SEQ] = ui.grid ? 255 : 0;
     B[B_PLAY] = sq.playing ? ((play_step() & 3) == 0 ? 255 : 70) : sq.ready && blink ? 255 : 0;   /* Ready: blinks */

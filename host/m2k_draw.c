@@ -261,18 +261,18 @@ static uint32_t fnv_pcm(uint32_t h, const int16_t *s, int n)
 static int par_now(void (*job)(void)) { job(); return 1; }
 static void par_none(void) {}
 /* skip: the samples left out first (16: the bus a block behind since 1.6.1, against an older engine's from 0) */
-static int render_hash(int skip)
+static int render_hash(int skip, int len)
 {
     static const char *const N[6] = {"A01", "A02", "A03", "A04", "DENSE", "FXS"};
-    static int16_t b[2 * 10 * 44100 + 2 * 256];
+    static int16_t b[2 * 11 * 44100];
     for (int p = 0; p < 6; p++) {
         uint32_t h[2];
         for (int two = 0; two < 2; two++) {
             m2k_par_begin = two ? par_now : 0; m2k_par_end = two ? par_none : 0;
             play_from(p);
-            int n = (10 * 44100 + skip + 127) / 128 * 128;
+            int n = (len + skip + 127) / 128 * 128;
             for (int f = 0; f < n; f += 128) m2k_render(b + 2 * f, 128);
-            h[two] = fnv_pcm(2166136261u, b + 2 * skip, 10 * 44100);
+            h[two] = fnv_pcm(2166136261u, b + 2 * skip, len);
         }
         m2k_par_begin = 0; m2k_par_end = 0;
         printf("  %-6s %08x %08x%s\n", N[p], h[0], h[1], h[0] == h[1] ? "" : "  (two cores differ)");
@@ -287,7 +287,7 @@ int main(int argc, char **argv)
     if (argc > 1 && !strcmp(argv[1], "--library")) return library_cpu(argc > 2 ? argv[2] : 0);
     if (argc > 1 && !strcmp(argv[1], "--cpu")) return cpu_yard();
     if (argc > 1 && !strcmp(argv[1], "--split")) return split_cmp();
-    if (argc > 1 && !strcmp(argv[1], "--hash")) return render_hash(argc > 2 ? atoi(argv[2]) : 0);
+    if (argc > 1 && !strcmp(argv[1], "--hash")) return render_hash(argc > 2 ? atoi(argv[2]) : 0, argc > 3 ? atoi(argv[3]) : 10 * 44100);
     if (argc > 1 && !strcmp(argv[1], "--splash")) {
         /* every splash frame at 60 a second, as the host draws them */
         m2k_init(2000);

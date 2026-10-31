@@ -92,6 +92,13 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   SLOT or SELECT puts each sound landed on on the track and plays it (a step's note at its note), CAT filters, OCT+
   keeps it (undoable), OCT- / EDIT / a page / PRESET put the track's own sound back byte for byte, ALGO does nothing
   meanwhile; the EDIT + SEQ REC PLAY SAVE combos act on the track's own sound. The self-test holds all of it.
+  An arp a track (1.6.1, the owner's: "keep HOLD when switching to another track. So each arp per track"): each track
+  its own keys, held notes, HOLD and clock (`sq.keys[t]`, `held[t]`, `arp_hold[t]`, `arp_block`), the panel's keys the
+  track in view's, MIDI's their channel's; switching tracks lets go of the keys (a track without HOLD stops, nothing
+  hangs) and every held arp plays on; ARP twice the track in view's HOLD, CC 64 its channel's; PLAY starts every arp
+  with the pattern, STOP and a pattern coming in keep the holds; HOME a staircase on each lane whose arp holds. With
+  REC playing every playing arp writes its notes as played notes are (`rec_step`), the last landing on a step staying
+  (a 1/32's on-beat note).
   HOME has two pages (1.6, the owner's): HOME 1 LEVL PTCH BPM SWNG, HOME 2 the track in view's sequencing, TLEN SPD
   PROB LANE (the same globals as SEQ held's TLEN and SPD and ARP > LANES' LANE); its picture the six lanes, a trig on
   a track under 100 % framed and filled to its chance.
@@ -138,11 +145,23 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   -fno-slp-vectorize -DM2K_MUL_OUT`, the 64-bit products out of line; `proc_pid_rusage` ri_instructions). The core's
   byte loops (m_set, m_cpy) are word-wise for it.
   Two cores: the render hands the second any set of the tracks (`par_mask`) through `m2k_par_begin` / `m2k_par_end`
-  (the FM-1's glue fills them with CS-1's audio worker; elsewhere they are unset and the core does it all), chosen on
-  the tracks' own costs (the sequencer, LFOs and bus run before and after them, the second core waiting: they weigh
-  nothing), every FX machine kept with the track it hears; the self-test renders bank A with the second core's tracks
-  first and last, and bank A and six FX-chained tracks with every set there (`par_force`), each held to the one-core
-  render sample for sample. The glue paces the screen by the sound (a frame waits while the ring is under half full,
+  (the FM-1's glue fills them with CS-1's audio worker; elsewhere they are unset and the core does it all), every FX
+  machine kept with the track it hears; the self-test renders bank A with the second core's tracks first and last,
+  and bank A, DENSE and six FX-chained tracks with every set there (`par_force`), each held to the one-core render
+  sample for sample. Since 1.6.1 (the owner's: their dense pattern read CPU 97 % / CPU2 74 %, DROP climbing) the bus
+  plays a block behind (`brec`, m2k_fx.c): block n's tracks sum into its record, and block n - 1's bus plays from the
+  record before on the second core, before its share of block n's tracks (on one core, before them), so the sound comes
+  out 16 samples (0.36 ms) later and otherwise as it was (the owner's accepted edges: that, and a PERFORM key between
+  two renders reaching the bus a block early). What the bus reads of a block goes into its record (the tempo `bsps`,
+  its steps for the grid `bus_step_q`, the pattern's controls, the master, running), DUB's line runs on the bus's side
+  (`dub_snap`, its track's send and settings recorded, `delay_run`), MIDI out is stamped a block on (`mx_out`);
+  `m2k_draw --hash 16 441088` against an older build's `--hash` proves the renders the old ones 16 samples later, and
+  `host/m2k_ref` writes from sample 16 (a block more rendered), so `regress.py check` prints as before. The split
+  minimises the slower of the first core's tracks and the bus plus the second's, weighed by `m2k_clock` where the
+  platform sets it (the FM-1's ticks: each track's block and delay, the bus and the first core's own part timed where
+  they run, smoothed, `par_meas`; estimates scaled to it until a track is measured or after its machine or stages
+  change; the host and the browser, no clock, on the estimates: the same every time); GLO > PLAY a bar of each
+  track's load. `m2k_draw --split` simulates the split by measure with the instruction counter as the clock. The glue paces the screen by the sound (a frame waits while the ring is under half full,
   frames further apart while the render is busy). The meter, always (1.6): every half second the glue
   (`meter_tick`, m2k_fm1.c) hands the core `m2k_cpu(first core %, second's or -1, the ring's shorts since power-on)`;
   GLO > PLAY shows CPU, CPU2 and DROP (dashes where none came: the browser, the host), and a short more than the last

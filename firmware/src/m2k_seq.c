@@ -24,11 +24,13 @@ static struct {
     uint32_t n1x;                      /* the pattern's steps played since its start: theirs follow from it */
     int32_t ctr;                       /* Q8 samples to the next step (under the clock in, as expected: for REC) */
     uint32_t lockmap[M2K_TRACKS][2];   /* steps with locks, for the screen */
-    /* live play */
-    uint8_t held[8], nheld;            /* the notes the keys play on the current track, in order (the arp's) */
-    uint8_t keys[8], nkeys;            /* the keys down now: with the arp's HOLD the notes outlast them */
-    uint8_t arp_hold;                  /* ARP twice, or a sustain pedal (CC 64): the arp keeps its notes */
-    uint8_t ktrk;                      /* the track the keys play */
+    /* live play: an arp a track (1.6.1, the owner's: "keep HOLD when switching to another track. So each arp per
+     * track"), each its own keys, notes, HOLD and clock */
+    uint8_t keys[M2K_TRACKS][8], nkeys[M2K_TRACKS];   /* the keys down on each (the panel's the track in view's, MIDI's
+                                                       * its channel's): with HOLD the notes outlast them */
+    uint8_t held[M2K_TRACKS][8], nheld[M2K_TRACKS];   /* the notes each plays, in order (its arp's) */
+    uint8_t arp_hold[M2K_TRACKS];      /* ARP twice, or a sustain pedal (CC 64): the arp keeps its notes */
+    uint8_t ktrk;                      /* the track the panel's keys play */
     int8_t rec_skip[M2K_TRACKS];       /* a step just recorded ahead: do not play it twice */
     /* trig conditions and ratchets */
     uint32_t prng[M2K_TRACKS];         /* each track's own draws for its PROB (prob_pass) */
@@ -36,9 +38,9 @@ static struct {
     uint8_t fill, pre[M2K_TRACKS];
     uint8_t rt_left[M2K_TRACKS], rt_note[M2K_TRACKS], rt_skip[M2K_TRACKS];
     int32_t rt_ctr[M2K_TRACKS], rt_len[M2K_TRACKS];
-    /* arp */
-    int32_t arp_ctr;
-    uint8_t arp_i, arp_dir;
+    /* the arps' clocks and places in their cycles */
+    int32_t arp_ctr[M2K_TRACKS];
+    uint8_t arp_i[M2K_TRACKS];
     uint32_t tick;                     /* control blocks since start */
 } sq;
 
@@ -302,14 +304,14 @@ static void fire_track(int t, int s, int32_t len, uint32_t k)
 {
     m2k_pattern_t *p = PAT(cur_pat);
     if (lane_of(p, t)) {
-        if (!(p->mute >> t & 1) && !(sq.solo && !(sq.solo >> t & 1)) && !(sq.nheld && t == sq.ktrk)) lane_fire(t, k);
+        if (!(p->mute >> t & 1) && !(sq.solo && !(sq.solo >> t & 1)) && !sq.nheld[t]) lane_fire(t, k);
         return;
     }
     {
         m2k_step_t st = p->step[t][s];
         if (!(st.flags & ST_TRIG) || (p->mute >> t & 1) || (sq.solo && !(sq.solo >> t & 1))) return;
         if (sq.rec_skip[t] == s) { sq.rec_skip[t] = -1; return; }
-        if (sq.nheld && t == sq.ktrk) return;       /* the player has the track */
+        if (sq.nheld[t]) return;                    /* the player (or its arp) has the track */
         if (!cond_pass(t, st.cond) || !prob_pass(t)) return;
         apply_locks(t, s);
         unsigned skip = st.flags & ST_TTYPE;
@@ -554,6 +556,53 @@ static int step_fire(int32_t ph)
     return s;
 }
 
+/* track t's arp, on its own settings and clock: a note when its time comes, written into its steps while REC plays
+ * as a played note is (rec_step: the step it plays or the next if nearer). Faster than the steps, the last that lands
+ * on a step stays: a 1/32's on-beat note (its off-beat one, nearer the next step, lands there first) */
+static int rec_step(int t);
+static void arp_block(int t)
+{
+    const uint8_t *k = PAT(cur_pat)->kit[t];
+    int mode = (k[P_AMOD] * 6) >> 7, nh = sq.nheld[t];
+    uint8_t *held = sq.held[t];
+    if (!mode && nh > sq.nkeys[t]) { m_cpy(held, sq.keys[t], sq.nkeys[t]); sq.nheld[t] = sq.nkeys[t]; }   /* (MODE off: */
+    if (!mode || !nh) return;                                                      /* a held chord gives the track back) */
+    static const uint8_t div[4] = {4, 8, 16, 32};    /* in 1/8 of a sixteenth (a step): 1/32 1/16 1/8 1/4, as shown */
+    int32_t len = (int32_t)((sps_q8 * div[(k[P_ASPD] * 4) >> 7]) >> 3);
+    sq.arp_ctr[t] -= M2K_SUB << 8;
+    if (sq.arp_ctr[t] > 0) return;
+    sq.arp_ctr[t] += len;
+    int rng = 1 + ((k[P_ARNG] * 4) >> 7);
+    int n = nh * rng;
+    uint8_t sorted[8];
+    m_cpy(sorted, held, (uint32_t)nh);
+    if (mode != 5)
+        for (int i = 1; i < nh; i++)
+            for (int j = i; j > 0 && sorted[j - 1] > sorted[j]; j--) { uint8_t x = sorted[j]; sorted[j] = sorted[j - 1]; sorted[j - 1] = x; }
+    int i, ai = sq.arp_i[t];
+    switch (mode) {                 /* (the count kept within its cycle: a byte never wraps mid-cycle) */
+    case 2: i = ai % n; ai = (i + 1) % n; i = n - 1 - i; break;
+    case 3: {
+        int per = n > 1 ? 2 * n - 2 : 1, q = ai % per;
+        i = q < n ? q : per - q;
+        ai = (q + 1) % per;
+        break;
+    }
+    case 4: i = (int)(rnd32() % (uint32_t)n); break;
+    default: i = ai % n; ai = (i + 1) % n; break;
+    }
+    sq.arp_i[t] = (uint8_t)ai;
+    int note = sorted[i % nh] + 12 * (i / nh);
+    m_cpy(trk[t].eff, k, P_COUNT);
+    voice_on(t, note, 100, 0);
+    trk[t].gate_left = gate_blocks(t) / 2 + 1;
+    if (sq.rec && sq.playing) {
+        m2k_step_t *ps = &PAT(cur_pat)->step[t][rec_step(t)];
+        ps->note = (uint8_t)note;
+        ps->flags = ST_TRIG;
+    }
+}
+
 static void seq_block(void)
 {
     sq.tick++;
@@ -588,7 +637,7 @@ static void seq_block(void)
     const m2k_pattern_t *rp = PAT(cur_pat);
     for (int t = 0; t < M2K_TRACKS; t++) {
         if (!sq.rt_left[t]) continue;
-        if (!sq.playing || (rp->mute >> t & 1) || (sq.solo && !(sq.solo >> t & 1)) || (sq.nheld && t == sq.ktrk)) {
+        if (!sq.playing || (rp->mute >> t & 1) || (sq.solo && !(sq.solo >> t & 1)) || sq.nheld[t]) {
             sq.rt_left[t] = 0;
             continue;
         }
@@ -600,41 +649,7 @@ static void seq_block(void)
             if (!(sq.rt_skip[t] & ST_NOAMP)) trk[t].gate_left = sq.rt_len[t] / (M2K_SUB << 8) * 3 / 4 + 1;
         }
     }
-    /* the arp, on its own clock */
-    const uint8_t *k = PAT(cur_pat)->kit[sq.ktrk];
-    int mode = (k[P_AMOD] * 6) >> 7;
-    if (!mode && sq.nheld > sq.nkeys) { m_cpy(sq.held, sq.keys, sq.nkeys); sq.nheld = sq.nkeys; }   /* (MODE off: */
-    if (mode && sq.nheld) {                                                  /* a held chord gives the track back) */
-        static const uint8_t div[4] = {4, 8, 16, 32};    /* in 1/8 of a sixteenth (a step): 1/32 1/16 1/8 1/4, as shown */
-        int32_t len = (int32_t)((sps_q8 * div[(k[P_ASPD] * 4) >> 7]) >> 3);
-        sq.arp_ctr -= M2K_SUB << 8;
-        if (sq.arp_ctr <= 0) {
-            sq.arp_ctr += len;
-            int rng = 1 + ((k[P_ARNG] * 4) >> 7);
-            int n = sq.nheld * rng;
-            uint8_t sorted[8];
-            m_cpy(sorted, sq.held, sq.nheld);
-            if (mode != 5)
-                for (int i = 1; i < sq.nheld; i++)
-                    for (int j = i; j > 0 && sorted[j - 1] > sorted[j]; j--) { uint8_t x = sorted[j]; sorted[j] = sorted[j - 1]; sorted[j - 1] = x; }
-            int i;
-            switch (mode) {                 /* (the count kept within its cycle: a byte never wraps mid-cycle) */
-            case 2: i = sq.arp_i % n; sq.arp_i = (uint8_t)((i + 1) % n); i = n - 1 - i; break;
-            case 3: {
-                int per = n > 1 ? 2 * n - 2 : 1, q = sq.arp_i % per;
-                i = q < n ? q : per - q;
-                sq.arp_i = (uint8_t)((q + 1) % per);
-                break;
-            }
-            case 4: i = (int)(rnd32() % (uint32_t)n); break;
-            default: i = sq.arp_i % n; sq.arp_i = (uint8_t)((i + 1) % n); break;
-            }
-            int note = sorted[i % sq.nheld] + 12 * (i / sq.nheld);
-            m_cpy(trk[sq.ktrk].eff, PAT(cur_pat)->kit[sq.ktrk], P_COUNT);
-            voice_on(sq.ktrk, note, 100, 0);
-            trk[sq.ktrk].gate_left = gate_blocks(sq.ktrk) / 2 + 1;
-        }
-    }
+    for (int t = 0; t < M2K_TRACKS; t++) arp_block(t);
 }
 
 static int seq_running(void) { return sq.playing; }
@@ -660,6 +675,8 @@ static void seq_play(int on)
     sq.ready = 0;                      /* (started, by a note or PLAY, or stopped: no longer waiting) */
     if (on && !sq.playing) {
         seq_reset();
+        m_set(sq.arp_ctr, 0, sizeof sq.arp_ctr);       /* every arp from its first note, in time with the pattern */
+        m_set(sq.arp_i, 0, sizeof sq.arp_i);
         if (!mx.ext && set_on(S_SYNO)) {   /* a pulse with the first step */
             mx_out(1, 0xFA, 0, 0);
             mx.out_ctr = 0;
@@ -735,24 +752,24 @@ static int rec_step(int t)
 /* Ready: the first note (a key, a pad, MIDI in) starts the pattern from its first step, and is recorded there */
 static void ready_go(void) { if (sq.ready && !sq.playing) seq_play(1); }
 
-static void live_on(int note, int vel)
+/* a note on track t (the panel's keys: the track in view; MIDI: its channel's): its arp's when its MODE is on */
+static void live_on_t(int t, int note, int vel)
 {
     ready_go();
-    int t = sq.ktrk;
-    int mode = (PAT(cur_pat)->kit[t][P_AMOD] * 6) >> 7, fresh = sq.nkeys == 0;
+    int mode = (PAT(cur_pat)->kit[t][P_AMOD] * 6) >> 7, fresh = sq.nkeys[t] == 0;
     int down = 0;
-    for (int i = 0; i < sq.nkeys; i++) down |= sq.keys[i] == note;
-    if (!down && sq.nkeys < 8) sq.keys[sq.nkeys++] = (uint8_t)note;
-    if (mode && sq.arp_hold && fresh) sq.nheld = 0;   /* HOLD: a chord played after the hands left is the new one */
-    for (int i = 0; i < sq.nheld; i++) if (sq.held[i] == note) return;
-    if (sq.nheld < 8) sq.held[sq.nheld++] = (uint8_t)note;
+    for (int i = 0; i < sq.nkeys[t]; i++) down |= sq.keys[t][i] == note;
+    if (!down && sq.nkeys[t] < 8) sq.keys[t][sq.nkeys[t]++] = (uint8_t)note;
+    if (mode && sq.arp_hold[t] && fresh) sq.nheld[t] = 0;   /* HOLD: a chord played after the hands left is the new one */
+    for (int i = 0; i < sq.nheld[t]; i++) if (sq.held[t][i] == note) return;
+    if (sq.nheld[t] < 8) sq.held[t][sq.nheld[t]++] = (uint8_t)note;
     if (mode) {
-        if (sq.nheld == 1) { sq.arp_ctr = 0; sq.arp_i = 0; }
+        if (sq.nheld[t] == 1) { sq.arp_ctr[t] = 0; sq.arp_i[t] = 0; }
         return;
     }
     m_cpy(trk[t].eff, PAT(cur_pat)->kit[t], P_COUNT);
     /* heard alike at any velocity, as the Monomachine plays a note (chain_kick40); a hard key records an accent */
-    voice_on(t, note, 100, sq.nheld > 1 && PAT(cur_pat)->kit[t][P_PORT] > 0);
+    voice_on(t, note, 100, sq.nheld[t] > 1 && PAT(cur_pat)->kit[t][P_PORT] > 0);
     mx_note_off(t);                    /* the gate the player's now: a step's note out ends */
     trk[t].gate_left = -1;
     if (sq.rec && sq.playing) {
@@ -778,30 +795,33 @@ static void pad_hit(int t, int note)
     }
 }
 
-static void live_off(int note)
+static void live_off_t(int t, int note)
 {
-    int t = sq.ktrk, j = 0;
-    for (int i = 0; i < sq.nkeys; i++) if (sq.keys[i] != note) sq.keys[j++] = sq.keys[i];
-    sq.nkeys = (uint8_t)j;
+    int j = 0;
+    for (int i = 0; i < sq.nkeys[t]; i++) if (sq.keys[t][i] != note) sq.keys[t][j++] = sq.keys[t][i];
+    sq.nkeys[t] = (uint8_t)j;
     int mode = (PAT(cur_pat)->kit[t][P_AMOD] * 6) >> 7;
-    if (mode && sq.arp_hold) return;               /* HOLD: the arp keeps the note */
+    if (mode && sq.arp_hold[t]) return;            /* HOLD: the arp keeps the note */
     j = 0;
-    for (int i = 0; i < sq.nheld; i++) if (sq.held[i] != note) sq.held[j++] = sq.held[i];
-    sq.nheld = (uint8_t)j;
+    for (int i = 0; i < sq.nheld[t]; i++) if (sq.held[t][i] != note) sq.held[t][j++] = sq.held[t][i];
+    sq.nheld[t] = (uint8_t)j;
     if (mode) return;
     if (j && trk[t].note == note) {
-        voice_on(t, sq.held[j - 1], 100, 1);         /* back to the last key still held */
+        voice_on(t, sq.held[t][j - 1], 100, 1);      /* back to the last key still held */
         return;
     }
     if (!j || trk[t].note == note) voice_off(t);
 }
+static void live_on(int note, int vel) { live_on_t(sq.ktrk, note, vel); }   /* (the panel's keys: the track in view) */
+static void live_off(int note) { live_off_t(sq.ktrk, note); }
 
-/* the arp's HOLD (ARP twice, a sustain pedal): on, the notes played outlast the keys, a new chord after the hands left
- * replacing them; off, the arp keeps only the keys still down (none: it stops, its last note let ring out) */
-static void arp_hold_set(int on)
+/* track t's HOLD (ARP twice, the track in view's; a sustain pedal, its channel's track): on, the notes played outlast
+ * the keys, a new chord after the hands left replacing them, and stay with the track while another is in view; off,
+ * the arp keeps only the keys still down (none: it stops, its last note let ring out) */
+static void arp_hold_set(int t, int on)
 {
-    sq.arp_hold = (uint8_t)(on != 0);
-    if (!on) { m_cpy(sq.held, sq.keys, sq.nkeys); sq.nheld = sq.nkeys; }
+    sq.arp_hold[t] = (uint8_t)(on != 0);
+    if (!on) { m_cpy(sq.held[t], sq.keys[t], sq.nkeys[t]); sq.nheld[t] = sq.nkeys[t]; }
 }
 
 /* the Monomachine's CC map (its MIDI implementation, as the gearmulator emulator encodes it): a channel per track,
@@ -861,7 +881,7 @@ void m2k_midi_from(int src, int status, int d1, int d2)
     }
     if (!(notes_from() & from)) return;   /* notes, CCs and mutes only from NOTE IN's */
     if (cmd == 0xB0) {
-        if (d1 == 64) { if (t == sq.ktrk) arp_hold_set(d2 >= 64); return; }   /* a sustain pedal holds the arp */
+        if (d1 == 64) { arp_hold_set(t, d2 >= 64); return; }   /* a sustain pedal holds its channel's track's arp */
         if (d1 == 3) { mute_to(t, d2 != 0); return; }   /* (with BAR, while playing: at the next bar) */
         int prm = mm_cc_param(d1);
         if (prm < 0) return;
@@ -873,13 +893,13 @@ void m2k_midi_from(int src, int status, int d1, int d2)
     }
     if (cmd == 0x90 && d2) {
         ready_go();
-        if (t == sq.ktrk) { live_on(d1, d2); return; }
+        if (t == sq.ktrk || (PAT(cur_pat)->kit[t][P_AMOD] * 6) >> 7) { live_on_t(t, d1, d2); return; }   /* (its arp) */
         m_cpy(trk[t].eff, PAT(cur_pat)->kit[t], P_COUNT);
         voice_on(t, d1, 100, 0);                    /* any velocity alike, as the Monomachine's (no accent) */
         mx_note_off(t);                             /* (the gate the player's now: a step's note out ends) */
         trk[t].gate_left = -1;
     } else if (cmd == 0x80 || cmd == 0x90) {
-        if (t == sq.ktrk) { live_off(d1); return; }
+        if (t == sq.ktrk || (PAT(cur_pat)->kit[t][P_AMOD] * 6) >> 7 || sq.nkeys[t]) { live_off_t(t, d1); return; }
         if (trk[t].note == d1) voice_off(t);
     }
 }

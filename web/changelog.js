@@ -7,6 +7,15 @@ window.M2K_KINDS = {
 };
 window.M2K_CHANGES = [
   {
+    date: "2026-10-30", title: "MONO2K 1.6.1: the FM-1's two processors better shared, an arp on every track",
+    items: [
+      ["fixes", "1.6.1: the bus runs on the second processor: the first has room for the screen; the sound comes out 0.36 ms later"],
+      ["fixes", "1.6.1: The FM-1 shares the tracks between its processors by what each takes there, measured as it plays, not by an estimate. GLO > PLAY shows each track's load."],
+      ["sequencer", "1.6.1: Each track has its own arp. HOLD stays with its track when you pick another, and every held arp plays on its own notes and speed; ARP twice holds the track in view's."],
+      ["sequencer", "1.6.1: With REC on while playing, every playing arp writes its notes into its track's steps, one a step."],
+    ],
+  },
+  {
     date: "2026-10-30", title: "MONO2K 1.6: a pixel font of its own, every knob a picture, a track's chance, the FM-1's load",
     items: [
       ["screen", "1.6: The screen's type is a new pixel font, Elektron Pixel Font by savingaurora, adapted: one weight, drawn at whole sizes, so every letter is crisp on the FM-1. No bold anywhere."],
