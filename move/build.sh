@@ -40,7 +40,7 @@ docker run --rm --platform linux/arm64 -v "$ROOT":/w -w /w -e OPT="$OPT" -e MOD=
     # another module'"'"'s symbols or theirs to ours; -mtune keeps the ISA plain ARMv8-A. (gcc -Wextra notes two places
     # in the core that are meant: m2k_factory.c vox_v13'"'"'s unsigned compare with P_SYN 0, m2k_ui.c icon'"'"'s commented
     # fall-through)
-    gcc -std=gnu11 $OPT -mtune=cortex-a72 -fPIC -shared -fvisibility=hidden \
+    gcc -std=gnu11 $OPT -mtune=cortex-a72 -DM2K_TRACKS=8 -fPIC -shared -fvisibility=hidden \
         -Wall -Wextra -Wno-unused-function -Wno-type-limits -Wno-implicit-fallthrough -Ifirmware/src -Ifirmware/gen \
         -Wl,-z,defs -Wl,-z,now -Wl,--as-needed -s \
         -o "$MOD/dsp.so" move/m2k_move.c
