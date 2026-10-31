@@ -27,6 +27,8 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
 - Host: `cc -O2 -Wall -Wno-unused-function -Ifirmware/src -Ifirmware/gen -o build/host/m2k_host host/m2k_host.c -lm && build/host/m2k_host build/host`,
   then `.venv/bin/python tools/montage.py build/host build/screens.png 2` to see every page.
   `build/host/m2k_host --selftest` checks the projects (save, reload, store, export / import, full images);
+  `-DM2K_TRACKS=8 ... -o build/host/m2k_host8` is the eight-track host (the Move's; the FM-1 and the browser stay
+  six, bit for bit): its self-test, `--text-sweep`, and `--render-hash` (bank A, DENSE: the same as the six's).
   `build/host/m2k_host build/patterns --analyze` solos every track of bank A and writes each pattern's WAV.
   `build/host/m2k_host build/pitch --pitch` then `.venv/bin/python tools/demo_pitch.py build/pitch [--steps]`:
   each trig's pitch against its note, held notes, resonant rings against the key, semitone clashes; run it on
@@ -223,7 +225,11 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   33 25 20 10 5 0 %, 0 every trig): `prob_pass` after the step's condition (and a lane's hit), a draw of 256 from the
   track's own generator (`sq.prng`, the sequencer's, first core: the same order everywhere, the conditions', LFOs'
   and arp's draws untouched; none at 100 % or 0 %); a pattern with every track at 100 % packs as 19 or 18, byte for
-  byte; the blob's head is 60 (BLOB_MAX 3608, editor.js's too). Older ones are
+  byte; the blob's head is 60 (BLOB_MAX 3608, editor.js's too). 21 eight tracks (`M2K_TRACKS` 8, the Move's build):
+  20's layout eight wide, only for a pattern that uses T7 or T8 (`pat_wide`: anything not `track_blank`'s, or an LFO's
+  TRCK 128/129 aimed there); else it packs as 18-20, byte for byte. A build of six reads 21 as its first six (an LFO
+  aimed past them off, `trck_past`), a build of eight reads 18-20 with T7 T8 blank (SID, GND-PERC INIT, no trigs);
+  the self-test holds both ways on `FMT21`, the eight build's bytes. Older ones are
   converted on load. The
   Monomachine's tempo is set on its panel (TEMPO, the LEVEL knob a BPM a detent; `chain_hold46.panel`): the loop and
   spec modes leave it at 120.
