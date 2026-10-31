@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
-/* MONO2K's sequencer: six tracks of up to 64 steps, each step a trig with its note, accent and slide, and
+/* MONO2K's sequencer: six tracks (eight in a build of eight) of up to 64 steps, each step a trig with its note, accent and slide, and
  * parameter locks: any track parameter set for one step only, back to the kit on the next trig (as on the
  * Elektron machines). Swing, a pattern queued for the end of the bar, live recording, an arpeggiator per track, each
  * track on a speed and a length of its own. */
@@ -527,7 +527,7 @@ static void solo_key(int t, int down)
 static void mutes_all_on(void)         /* GLO + white 15: every track heard, none soloed */
 {
     if (!mute_waits()) { PAT(cur_pat)->mute = 0; sq.solo = 0; sq.mq_m = sq.sq_m = sq.solo_rel = 0; return; }
-    sq.mq_m = PAT(cur_pat)->mute & 0x3F; sq.mq_v = 0;
+    sq.mq_m = (uint8_t)(PAT(cur_pat)->mute & M2K_TMASK); sq.mq_v = 0;
     sq.sq_m = sq.solo; sq.sq_v = 0; sq.solo_rel = 0;
 }
 
@@ -909,6 +909,8 @@ void m2k_midi(int status, int d1, int d2) { m2k_midi_from(M2K_USB, status, d1, d
 /* ------------------------------------------------------------------------------------------ the factory */
 
 static inline uint8_t enc(int i, int n) { return (uint8_t)((i * 128 + 64) / n); }
+/* an LFO's TRCK for track t (trck_of's inverse): the first six as ever, those past them from TRCK_PAST */
+static inline uint8_t trck_enc(int t) { return t < M2K_TRACKS6 ? enc(t, M2K_TRACKS6) : (uint8_t)(TRCK_PAST + t - M2K_TRACKS6); }
 
 /* the machines' A..H by name, and the three LFOs' pages (the inits below, the factory's parts) */
 #define SA (P_SYN + 0)
@@ -1030,7 +1032,7 @@ static void kit_default(m2k_pattern_t *p, int t, int m)
     k[P_MODD] = 64;
     for (int l = 0; l < 3; l++) {
         uint8_t *b = &k[P_LFO + 8 * l];
-        b[L_TRCK] = enc(t, M2K_TRACKS);
+        b[L_TRCK] = trck_enc(t);
         b[L_DEST] = 0;
         b[L_WAVE] = 0;
         b[L_TRIG] = 0;
@@ -1060,12 +1062,31 @@ static int mach_home(int m) { return MACH_INIT[m].home; }
 
 static void grids_v17(m2k_pattern_t *p);   /* (m2k_factory.c) */
 
+#if M2K_TRACKS > M2K_TRACKS6
+/* a track past the sixth as a pattern of six leaves it (one of format 20 or before read here, a pattern made here): its
+ * machine's INIT (a lead and a perc, beside the blank's bass, kit, keys and pad; no LFO, so it draws nothing from the
+ * shared generator), no trigs, no locks, heard, on the pattern's speed and length, its chance 100 %. A pattern whose
+ * tracks past the sixth all stand so packs as six, byte for byte (pat_wide, m2k_proj.c) */
+static const uint8_t M_PAST[M2K_TRACKS - M2K_TRACKS6] = {M_SID, M_GPRC};
+static void track_blank(m2k_pattern_t *p, int t)
+{
+    kit_init(p, t, M_PAST[t - M2K_TRACKS6]);
+    for (int s = 0; s < M2K_STEPS; s++) p->step[t][s] = (m2k_step_t){60, 0, C_ALWAYS, 0};
+    p->glob[G_SPD1 + t] = SPD_1X;
+    p->glob[G_LANE1 + t] = 0;
+    p->glob[G_TLEN1 + t] = 0;
+    p->glob[G_TPRB1 + t] = 0;
+    p->mute &= (uint8_t)~(1u << t);
+    for (int i = 0; i < M2K_LOCKS; i++) if (p->lock[i].trk == t) p->lock[i].trk = 0xFF;
+}
+#endif
+
 static void pat_init(m2k_pattern_t *p, const char *name)
 {
     m_set(p, 0, sizeof *p);
     for (int i = 0; i < 7 && name[i]; i++) p->name[i] = name[i];
-    static const uint8_t M[M2K_TRACKS] = {M_GSIN, M_FMD, M_GPRC, M_SID, M_VOX, M_ENS};
-    for (int t = 0; t < M2K_TRACKS; t++) {
+    static const uint8_t M[M2K_TRACKS6] = {M_GSIN, M_FMD, M_GPRC, M_SID, M_VOX, M_ENS};
+    for (int t = 0; t < M2K_TRACKS6; t++) {
         kit_default(p, t, M[t]);
         for (int s = 0; s < M2K_STEPS; s++) p->step[t][s].note = 60;
     }
@@ -1077,6 +1098,9 @@ static void pat_init(m2k_pattern_t *p, const char *name)
     p->glob[G_DAMP] = 92;
     for (int t = 0; t < M2K_TRACKS; t++) p->glob[G_SPD1 + t] = SPD_1X;
     grids_v17(p);                            /* Grids' map as a pattern starts it, no lane followed */
+#if M2K_TRACKS > M2K_TRACKS6
+    for (int t = M2K_TRACKS6; t < M2K_TRACKS; t++) track_blank(p, t);
+#endif
 }
 
 #include "m2k_factory.c"

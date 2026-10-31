@@ -344,6 +344,21 @@ static int text_sweep(void)
                 }
             }
     }
+#if M2K_TRACKS > M2K_TRACKS6
+    /* a build of eight: every page with T8 in view (the pictures of six tracks from ui_tr0), its LFOs aimed at T8 and
+     * T7, each knob in focus */
+    ui.trk = M2K_TRACKS - 1;
+    for (int l = 0; l < 3; l++) PAT(cur_pat)->kit[ui.trk][P_LFO + 8 * l + L_TRCK] = trck_enc(M2K_TRACKS - 1 - (l & 1));
+    for (int pg = 0; pg < PG_COUNT; pg++)
+        for (int sub = 0; sub < nsub(pg); sub++)
+            for (int k = -1; k < 4; k++) {
+                ui.page = (uint8_t)pg; ui.sub = (uint8_t)sub;
+                now += k < 0 ? 3000 : 40; ui.trans_t = 0; ui.toast_t = 0; ui.card_t = 0;
+                ui.focus = (uint8_t)(k < 0 ? 0 : k); ui.focus_t = k < 0 ? 0 : now; ui.roll_t = now - 2000;
+                m2k_frame(now); ta_check((int)now);
+            }
+    ui.trk = 0; ui.focus_t = 0;
+#endif
     /* the layers' knobs (SEQ held: LEN TLEN SPD SWNG; PERFORM: the bus), each at its least, middle and most */
     static const uint8_t LAY[2] = {B_SEQ, B_FX};
     for (int l = 0; l < 2; l++) {
@@ -698,6 +713,8 @@ static int pitch_dump(const char *out)
 }
 
 #define CHECK(c, m) do { if (!(c)) { printf("FAIL: %s\n", m); fails++; } else printf("ok   %s\n", m); } while (0)
+/* a kit value's most: 127, an LFO's TRCK to the tracks past the sixth (128, 129 in a build of eight) */
+#define KIT_MAX(q) (is_trck(q) ? TRCK_PAST + M2K_TRACKS - M2K_TRACKS6 - 1 : 127)
 
 /* B01, the blank kit, opened as the panel opens a pattern: its locks and every track's settings (A01's would stay
  * otherwise, and an LFO of A01's reaching across tracks with them) */
@@ -1184,6 +1201,66 @@ static const char CIRCUIT_R11[] =
     "0503380a2c033b0905033b0a2c033e090c033e0a2c033c0905033c0a2c040600320406016404060278041d0032041d0164041d0278041f"
     "0032041f0164041f027804260017042601410426026c043900170439014504390270043d0017043d0145043d0270";
 
+/* format 21 (eight tracks, the Move's build): the pattern of its tests. K 0, six tracks: the INIT pattern with trigs, a
+ * lock, T2 at 50 %, T2's second LFO on its own pan. K 1, in a build of eight: T7 and T8 too (trigs, p-locks, an arp,
+ * their chances, T8 on 12 steps of its own and muted, T7 at 3/2x), T1's first LFO aimed at T8's filter and a step's lock aiming
+ * T2's second at T7. K 2: what a build of six reads of K 1 (its first six; T1's LFO aimed past them off, DEST 0, on its
+ * own track; the step's lock aiming T2's past them a DEST lock of 0) */
+static void x8_pattern(m2k_pattern_t *q, int k)
+{
+    pattern_init_blank(q);
+    m_set(q->name, 0, sizeof q->name);
+    s_cpy(q->name, "EIGHT");
+    for (int t = 0; t < M2K_TRACKS6; t++)
+        for (int s = t & 1; s < 16; s += 3) q->step[t][s] = (m2k_step_t){(uint8_t)(48 + 2 * t + (s & 3)), ST_TRIG, C_ALWAYS, 0};
+    lk(q, 0, 3, P_DEC, 30);
+    q->glob[G_TPRB1 + 1] = 8;
+    uint8_t *b1 = &q->kit[0][P_LFO], *b2 = &q->kit[1][P_LFO + 8];
+    b2[L_DEST] = P_PAN + 1; b2[L_DPTH] = 100;
+    if (k == 0) return;
+    b1[L_DEST] = P_BASE + 1; b1[L_DPTH] = 110;
+    if (k == 2) { b1[L_DEST] = 0; lk(q, 1, 4, P_LFO + 8 + L_DEST, 0); return; }
+#if M2K_TRACKS > M2K_TRACKS6
+    b1[L_TRCK] = trck_enc(7);
+    lk(q, 1, 4, P_LFO + 8 + L_TRCK, trck_enc(6));
+    uint8_t *k7 = q->kit[6];
+    k7[P_AMOD] = enc(1, 6); k7[P_ASPD] = 64; k7[P_ARNG] = 40;            /* T7's arp: UP, 1/8, two octaves */
+    for (int s = 0; s < 16; s += 4) q->step[6][s] = (m2k_step_t){(uint8_t)(60 + s), ST_TRIG, C_ALWAYS, 0};
+    for (int s = 1; s < 16; s += 2) q->step[7][s] = (m2k_step_t){40, (uint8_t)(ST_TRIG | (s & 2 ? ST_ACC : 0)), C_ALWAYS, (uint8_t)(s == 5 ? 3 : 0)};
+    lk(q, 6, 4, P_BASE, 90);
+    lk(q, 6, 8, P_SYN + 3, 100);
+    lk(q, 7, 3, P_DEC, 20);
+    q->glob[G_TPRB1 + 6] = 4;                                            /* T7 at 80 %, T8 at 50 % */
+    q->glob[G_TPRB1 + 7] = 8;
+    q->glob[G_TLEN1 + 7] = 12;
+    q->glob[G_SPD1 + 6] = enc(5, 7);
+    q->mute = 1u << 7;                                                   /* T8 muted (a build of six: none) */
+#endif
+}
+/* x8_pattern 1 packed by a build of eight (a build of eight packs it so, byte for byte, and prints it anew when the
+ * pattern or the kits change); x8_pattern 0's bytes from either build: their length and FNV-1a */
+static const char FMT21[] =
+    "50154549474854000000000f1011030602015a00103c000000001f560000525252525252645240400000404040000000000000000000"
+    "0000000000000c00080000000004088012000000280032400018712540404000007f000000204040404000404020007f000000004068"
+    "0040000e811100000030006e0a000000003000400a00000000300040002840000010120a0c00401e1e000a331a40444000007f000000"
+    "204040404000404020007f00000000407f0040000e2000000000300040200f0000003000642000000000300040002840000010000064"
+    "5040000600002314406940000834120900204040483500404020007f00000004407f0040000e35000000003000403500000000300040"
+    "350000000030004000284000007f460a5464750c0000074114407940002e281700151447406c5000404020007f00000000407f004000"
+    "0e4a000000003000404a000000003000404a000000003000400028400000623f69086d1337400007505d405140000936073100204040"
+    "40400030492b005c00000003407f0040000e600000000030004060000000003000406000000000300040002840000049647452382c47"
+    "400b7f7f71407c40000a2e002800204040404000404020007f00000012407f0040003c75000000003000407500000000300040750000"
+    "00003000401512533a0000007f2650005040017f7f3d404040000824001400204040404000404020007f000000064069204028308000"
+    "00000030004080000000003000408000000000300040002840000040007f280028000000002a4f406740001830000000204040404000"
+    "404020007f00000003407f0040000e810000000030004081000000003000408100000000300040002840000049920000000000009224"
+    "00000000000049920000000000009224000000000000499200000000000092240000000000001111000000000000aaaa000000000000"
+    "300100003301000032010000310100003001000033010000330100003201000035010000340100003301000034010000370100003601"
+    "00003501000034010000370100003701000036010000390100003801000037010000380100003b0100003a0100003901000038010000"
+    "3b0100003b0100003a0100003d0100003c0100003b0100003c0100004001000044010000480100002801000028030000280100032803"
+    "000028010000280300002801000028030000050000030a1e010432800604105a0608036407030a14";
+#define X6_LEN 672
+#define X6_FNV 0x8a8b3458u
+static int x8_hex(const char *h, uint8_t *b) { int n = 0; for (; h[0] && h[1]; h += 2) { unsigned v; sscanf(h, "%2x", &v); b[n++] = (uint8_t)v; } return n; }
+
 /* the sound engine's tests: pattern 40 bare (bare()), the drive off; eng_go takes its kits up and plays it, eng_run
  * renders (the last block's output in eng_out) */
 static int16_t eng_out[2 * M2K_SUB];
@@ -1457,16 +1534,16 @@ static int selftest(void)
             static m2k_pattern_t w, w2;
             static uint8_t wb[BLOB_MAX];
             m_cpy(&w, &pat[9], sizeof w);                             /* A10 SMOKE (no FM, no SID) */
-            for (int t = 0; t < M2K_TRACKS; t++) if (w.machine[t] == M_GSIN) w.machine[t] = M_GPRC;   /* (no page that converts) */
-            for (int t = 0; t < M2K_TRACKS; t++) for (int k = 0; k < P_WBNK; k++) w.kit[t][k] = (uint8_t)((t * 31 + k * 7) & 127);
-            for (int t = 0; t < M2K_TRACKS; t++) w.kit[t][P_HOLD] = 127;  /* INF: HOLD's conversion (13) leaves it */
-            for (int t = 0; t < M2K_TRACKS; t++) { w.kit[t][P_SPU] = 0; w.kit[t][P_DSND] = 64; }   /* (17 turns sends) */
+            for (int t = 0; t < M2K_TRACKS6; t++) if (w.machine[t] == M_GSIN) w.machine[t] = M_GPRC;   /* (no page that converts) */
+            for (int t = 0; t < M2K_TRACKS6; t++) for (int k = 0; k < P_WBNK; k++) w.kit[t][k] = (uint8_t)((t * 31 + k * 7) & 127);
+            for (int t = 0; t < M2K_TRACKS6; t++) w.kit[t][P_HOLD] = 127;  /* INF: HOLD's conversion (13) leaves it */
+            for (int t = 0; t < M2K_TRACKS6; t++) { w.kit[t][P_SPU] = 0; w.kit[t][P_DSND] = 64; }   /* (17 turns sends) */
             int wn = pat_pack_v(&w, wb, 7);
             int same = pat_unpack(&w2, wb, wn);
             static m2k_pattern_t we;                                     /* (16 turns the amp's and the LFOs' alone) */
             m_cpy(&we, &w, sizeof we);
             feel_v15(&we);
-            for (int t = 0; t < M2K_TRACKS; t++) same = same && !memcmp(w2.kit[t], we.kit[t], P_WBNK) && w2.kit[t][P_WBNK] == 0;
+            for (int t = 0; t < M2K_TRACKS6; t++) same = same && !memcmp(w2.kit[t], we.kit[t], P_WBNK) && w2.kit[t][P_WBNK] == 0;
             CHECK(same, "format: version 7 -> 8 keeps every kit value, the bank MONO2K's 32");
             w.kit[3][P_WBNK] = 127;
             wn = pat_pack(&w, wb);
@@ -1516,7 +1593,7 @@ static int selftest(void)
             lk(&w, 2, 7, P_SYN + 4, 70);                     /* DEP2, held: to 2ENV */
             lk(&w, 1, 9, P_SYN + 1, 20);                     /* STAT's DEP1: to 1ENV */
             lk(&w, 1, 11, P_SYN + 6, 40);                    /* its FDBK: to 1FB */
-            w.kit[0][P_LFO + L_TRCK] = 1 * 128 / M2K_TRACKS + 1; w.kit[0][P_LFO + L_DEST] = P_SYN + 4 + 1;   /* T2's DEP2 */
+            w.kit[0][P_LFO + L_TRCK] = 1 * 128 / M2K_TRACKS6 + 1; w.kit[0][P_LFO + L_DEST] = P_SYN + 4 + 1;   /* T2's DEP2 */
             int wn = pat_pack_v(&w, wb, 9);
             int ok = pat_unpack(&w2, wb, wn);
             const uint8_t *s2 = &w2.kit[1][P_SYN], *d2 = &w2.kit[2][P_SYN];
@@ -1544,7 +1621,7 @@ static int selftest(void)
             wn = pat_pack(&w2, wb);
             int wn2 = pat_unpack(&w, wb, wn) ? pat_pack(&w, wb2) : 0;
             CHECK(wn2 == wn && !memcmp(wb, wb2, (size_t)wn), "format: today's version loads unchanged");
-            for (int t = 0; t < M2K_TRACKS; t++)             /* (a version-10 SID, GND-SIN or VOX-6 page is the old one: none) */
+            for (int t = 0; t < M2K_TRACKS6; t++)            /* (a version-10 SID, GND-SIN or VOX-6 page is the old one: none) */
                 if (w2.machine[t] == M_GSIN || w2.machine[t] == M_SID || w2.machine[t] == M_VOX) w2.machine[t] = M_GPRC;
             wn = pat_pack_v(&w2, wb, 10);                   /* and a version-10 pattern: its FM pages already the new ones */
             wn2 = pat_unpack(&w, wb, wn) ? pat_pack(&w, wb2) : 0;
@@ -1564,7 +1641,7 @@ static int selftest(void)
             m_cpy(&w.kit[2][P_SYN], os, 8);
             lk(&w, 2, 4, P_SYN + 0, 70);                             /* WAV1 to T+S: MIX */
             lk(&w, 2, 6, P_SYN + 5, 70);                             /* FINE: goes */
-            w.kit[0][P_LFO + 8 + L_TRCK] = 2 * 128 / M2K_TRACKS + 1; w.kit[0][P_LFO + 8 + L_DEST] = P_SYN + 1 + 1;   /* T3's PW */
+            w.kit[0][P_LFO + 8 + L_TRCK] = 2 * 128 / M2K_TRACKS6 + 1; w.kit[0][P_LFO + 8 + L_DEST] = P_SYN + 1 + 1;   /* T3's PW */
             int wn = pat_pack_v(&w, wb, 10);
             const uint8_t *k = &w2.kit[2][P_SYN];
             int ok = pat_unpack(&w2, wb, wn) && (k[3] * 5) >> 7 == 2 && k[0] == 48 && k[1] == 20 && k[2] >= 64 &&
@@ -1618,8 +1695,8 @@ static int selftest(void)
             lk(&w, 0, 2, P_SYN + 0, 0);                                           /* a VOWL lock: an A */
             lk(&w, 0, 3, P_SYN + 4, 127);                                         /* a BRTH lock */
             lk(&w, 0, 4, P_SYN + 5, 50);                                          /* a RESO lock: gone */
-            w.kit[1][P_LFO + L_TRCK] = enc(0, M2K_TRACKS); w.kit[1][P_LFO + L_DEST] = P_SYN + 4 + 1;          /* on BRTH */
-            w.kit[1][P_LFO + 8 + L_TRCK] = enc(0, M2K_TRACKS); w.kit[1][P_LFO + 8 + L_DEST] = P_SYN + 7 + 1;  /* on VIBR */
+            w.kit[1][P_LFO + L_TRCK] = trck_enc(0); w.kit[1][P_LFO + L_DEST] = P_SYN + 4 + 1;          /* on BRTH */
+            w.kit[1][P_LFO + 8 + L_TRCK] = trck_enc(0); w.kit[1][P_LFO + 8 + L_DEST] = P_SYN + 7 + 1;  /* on VIBR */
             w.kit[2][P_HOLD] = 40;                                                /* a version-13 HOLD: in beats already */
             int wn = pat_pack_v(&w, wb, 13);
             int ok = pat_unpack(&w2, wb, wn) && w2.kit[2][P_HOLD] == 40;
@@ -1660,7 +1737,7 @@ static int selftest(void)
             w.kit[1][P_DEC] = 100;                                       /* (T2's own: its LFO reads T1's) */
             uint8_t *b1 = &w.kit[0][P_LFO], *b2 = &w.kit[1][P_LFO + 8];
             b1[L_DEST] = P_PAN + 1; b1[L_MULT] = enc(4, 8); b1[L_SPD] = 64; b1[L_DPTH] = 72;
-            b2[L_TRCK] = enc(0, M2K_TRACKS); b2[L_DEST] = P_DEC + 1; b2[L_DPTH] = 28;
+            b2[L_TRCK] = trck_enc(0); b2[L_DEST] = P_DEC + 1; b2[L_DPTH] = 28;
             lk(&w, 0, 4, P_DEC, 30);
             lk(&w, 0, 8, P_LFO + L_SPD, 16);
             int wn = pat_pack_v(&w, wb, 15);
@@ -1722,8 +1799,8 @@ static int selftest(void)
             lk(&w, 0, 2, P_SYN + 0, 70);                                          /* a TUNE lock */
             lk(&w, 0, 3, P_SYN + 6, 99);                                          /* a CLIK lock */
             lk(&w, 1, 3, P_SYN + 0, 50);                                          /* SWAV-SAW's A: stays */
-            w.kit[2][P_LFO + L_TRCK] = enc(0, M2K_TRACKS); w.kit[2][P_LFO + L_DEST] = P_SYN + 4 + 1;   /* T3's LFO on T1's PDEP */
-            w.kit[2][P_LFO + 8 + L_TRCK] = enc(1, M2K_TRACKS); w.kit[2][P_LFO + 8 + L_DEST] = P_SYN + 4 + 1;   /* and T2's E */
+            w.kit[2][P_LFO + L_TRCK] = trck_enc(0); w.kit[2][P_LFO + L_DEST] = P_SYN + 4 + 1;   /* T3's LFO on T1's PDEP */
+            w.kit[2][P_LFO + 8 + L_TRCK] = trck_enc(1); w.kit[2][P_LFO + 8 + L_DEST] = P_SYN + 4 + 1;   /* and T2's E */
             int wn = pat_pack_v(&w, wb, 11);
             const uint8_t ng[8] = {11, 22, 33, 44, 55, 66, 77, 60};               /* FOLD SUB NOIS PDEP PDEC CLIK HARM TUNE */
             int ok = pat_unpack(&w2, wb, wn) && !memcmp(&w2.kit[0][P_SYN], ng, 8) && !memcmp(&w2.kit[1][P_SYN], og, 8) &&
@@ -1972,9 +2049,9 @@ static int selftest(void)
             lk(&e, 1, 12, P_SYN + 0, 26);                                      /* and an interval locked there (+5) */
             lk(&e, 2, 8, P_SYN + 6, 0);
             uint8_t *lf = &e.kit[0][P_LFO];                                     /* T1's LFOs: onto T2's PCH2, T5's A */
-            lf[L_TRCK] = enc(1, M2K_TRACKS); lf[L_DEST] = P_SYN + 0 + 1; lf[L_DPTH] = 90;
-            lf[8 + L_TRCK] = enc(4, M2K_TRACKS); lf[8 + L_DEST] = P_SYN + 0 + 1; lf[8 + L_DPTH] = 90;
-            lf[16 + L_TRCK] = enc(1, M2K_TRACKS); lf[16 + L_DEST] = P_ATK + 1;
+            lf[L_TRCK] = trck_enc(1); lf[L_DEST] = P_SYN + 0 + 1; lf[L_DPTH] = 90;
+            lf[8 + L_TRCK] = trck_enc(4); lf[8 + L_DEST] = P_SYN + 0 + 1; lf[8 + L_DPTH] = 90;
+            lf[16 + L_TRCK] = trck_enc(1); lf[16 + L_DEST] = P_ATK + 1;
             lk(&e, 0, 4, P_LFO + 16 + L_DEST, P_SYN + 2 + 1);                 /* LFO 3 locked onto T2's PCH3 at step 4 */
             int en = pat_pack_v(&e, eb, 6);
             int ok_load = pat_unpack(&g, eb, en);
@@ -2289,7 +2366,7 @@ static int selftest(void)
             m2k_init(15);
             m2k_pattern_t today = pat[2];
             for (int i = 0; i < 16; i++) { memset(pat[i].name, 0, 8); s_cpy(pat[i].name, OLD_DEMO[10][i]); }
-            int same = pat_unpack(&pat[2], lb, ln) && pat_pack(&pat[2], rb) == ln + G_COUNT_V18 - G_COUNT_V17;   /* (18: Grids') */
+            int same = pat_unpack(&pat[2], lb, ln) && pat_pack(&pat[2], rb) == ln + G_COUNT_OF(18, M2K_TRACKS6) - G_COUNT_OF(17, M2K_TRACKS6);   /* (18: Grids') */
             if (k) pat[2].kit[3][P_VOL] ^= 1;         /* a knob turned a detent, the name kept */
             int vol = pat[2].kit[3][P_VOL], mine = 0;
             for (int s = 0; s < 64; s++) { pat[4].step[0][s].flags = ST_TRIG; pat[4].step[0][s].note = (uint8_t)(36 + s % 12); }
@@ -2307,7 +2384,7 @@ static int selftest(void)
                 CHECK(ok && same && !memcmp(&pat[2], &today, sizeof today) && len == pat_pack(&today, rb) && !memcmp(b, rb, (size_t)len),
                       "store: revision 10's A03 LATTICE as it shipped becomes today's, in the work and in P1");
             else
-                CHECK(ok && !strcmp(pat[2].name, "LATTICE") && pat[2].kit[3][P_VOL] == vol && len == ln + G_COUNT_V18 - G_COUNT_V17,
+                CHECK(ok && !strcmp(pat[2].name, "LATTICE") && pat[2].kit[3][P_VOL] == vol && len == ln + G_COUNT_OF(18, M2K_TRACKS6) - G_COUNT_OF(17, M2K_TRACKS6),
                       "store: revision 10's LATTICE with a knob turned under its name is the owner's: kept");
             CHECK(ok && rest, "store: revision 10's A05 PROCESS with the owner's work and A06-A16 stay, none blanked");
         }
@@ -2381,7 +2458,7 @@ static int selftest(void)
         if (f) fclose(f);
         js[jn] = 0;
         char want[40];
-        snprintf(want, sizeof want, "const BLOB_MAX = %d;", (int)BLOB_MAX);
+        snprintf(want, sizeof want, "const BLOB_MAX = %d;", (int)BLOB_OF(M2K_TRACKS6));   /* (the FM-1's: six tracks) */
         CHECK(!f || strstr(js, want), "store: the most a pattern packs to is the Patch Editor's BLOB_MAX");
     }
     /* a store that does not read whole leaves everything as it was: cut in the second project, an image's length one
@@ -2390,7 +2467,8 @@ static int selftest(void)
         static uint8_t good[STORE_MAX];
         m2k_init(18);
         s_cpy(pat[0].name, "MYWORK");
-        for (int s = 0; s < 64; s++) pat[0].step[1][s].flags = ST_TRIG;
+        for (int t = 0; t < M2K_TRACKS; t++) for (int s = 0; s < 64; s++) pat[0].step[t][s].flags = ST_TRIG;   /* (A01-A04
+                                                                       * together past the most any format packs to) */
         project_save(1);
         s_cpy(pat[5].name, "UNSAVED");
         int n = m2k_store_pack(), whole = 1;
@@ -2406,7 +2484,7 @@ static int selftest(void)
             if (c == 0) len = (int)p2 + 40;                                   /* cut in P2 */
             if (c == 1) store_buf[w0 + 8]++;                                  /* the working image's length one more */
             if (c == 2) {                                                     /* P1's A01 longer than a pattern packs to */
-                int l[4] = {BLOB_MAX + 1, 0, 0, a4 - BLOB_MAX - 1};
+                int l[4] = {BLOB_ANY + 1, 0, 0, a4 - BLOB_ANY - 1};            /* (any: format 21's, eight wide) */
                 for (int i = 0; i < 4; i++) { store_buf[p1 + 12 + 2 * i] = (uint8_t)l[i]; store_buf[p1 + 13 + 2 * i] = (uint8_t)(l[i] >> 8); }
             }
             if (c == 3) len = n - 100;                                        /* in the sounds */
@@ -2458,7 +2536,7 @@ static int selftest(void)
             if (!m2k_store_unpack(len)) continue;
             loaded++;
             for (int i = 0; i < M2K_PATTERNS; i++) {
-                for (int t = 0; t < M2K_TRACKS; t++) for (int q = 0; q < P_COUNT; q++) ranged &= pat[i].kit[t][q] <= 127;
+                for (int t = 0; t < M2K_TRACKS; t++) for (int q = 0; q < P_COUNT; q++) ranged &= pat[i].kit[t][q] <= KIT_MAX(q);
                 ranged &= pat[i].glob[G_LEN] >= 1 && pat[i].glob[G_LEN] <= 64 && pat[i].glob[G_SPD1] <= 127 && pat[i].glob[G_GLCH] <= 127;
             }
             cur_pat = (int)(fuzz_rnd() % 20);
@@ -2478,8 +2556,8 @@ static int selftest(void)
             m2k_init(24);                                 /* (each as it would boot: no track's last machine left) */
             if (!pat_unpack(&pat[0], bl, bn)) continue;
             unpacked++;
-            for (int t = 0; t < M2K_TRACKS; t++) for (int q = 0; q < P_COUNT; q++) ranged &= pat[0].kit[t][q] <= 127;
-            for (int i = 0; i < M2K_LOCKS; i++) ranged &= pat[0].lock[i].val <= 127;
+            for (int t = 0; t < M2K_TRACKS; t++) for (int q = 0; q < P_COUNT; q++) ranged &= pat[0].kit[t][q] <= KIT_MAX(q);
+            for (int i = 0; i < M2K_LOCKS; i++) ranged &= pat[0].lock[i].val <= KIT_MAX(pat[0].lock[i].param);
             cur_pat = 0;
             work_reset_current();
             seq_play(1);
@@ -2846,7 +2924,7 @@ static int selftest(void)
             ui.trk = 2;
             ui.snd_sel = (uint8_t)i;
             sound_load(p);
-            for (int l = 0; l < 3; l++) own &= ((p->kit[2][P_LFO + 8 * l + L_TRCK] * M2K_TRACKS) >> 7) == 2;
+            for (int l = 0; l < 3; l++) own &= trck_of(p->kit[2][P_LFO + 8 * l + L_TRCK]) == 2;
             int ph = lib_phrase(i);
             for (const ph_t *e = PHRASE[ph]; e->step != 0xFF; e++)
                 p->step[2][e->step] = (m2k_step_t){(uint8_t)(LIB[i].root + e->note), (uint8_t)(ST_TRIG | e->flags), C_ALWAYS, 0};
@@ -3208,7 +3286,7 @@ static int selftest(void)
                 ui.page = PGS[i]; ui.sub = 1 % nsub(PGS[i]); ui.trk = 5;
                 const int sub = ui.sub;
                 m2k_encoder(E_SELECT, 1);
-                trk &= ui.trk == 0 && ui.page == PGS[i] && ui.sub == sub;
+                trk &= ui.trk == (5 + 1) % M2K_TRACKS && ui.page == PGS[i] && ui.sub == sub;
                 m2k_encoder(E_SELECT, -1);
                 trk &= ui.trk == 5;
                 int m0 = PAT(cur_pat)->machine[5];
@@ -4217,7 +4295,11 @@ static int selftest(void)
          * the one two before too), FX-DYNAMIX after it; any set asked for, the groups kept */
         for (int mode = 0; mode < 3; mode++)
             for (int m = mode ? 1 : 0; m < (mode ? (1 << M2K_TRACKS) - 1 : 1); m++) {
-                static const uint8_t MS[M2K_TRACKS] = {M_SAW, M_FXC, M_GSIN, M_GSIN, M_FXR, M_FXD};
+                static const uint8_t MS[M2K_TRACKS] = {M_SAW, M_FXC, M_GSIN, M_GSIN, M_FXR, M_FXD
+#if M2K_TRACKS > M2K_TRACKS6
+                                                       , M_GSIN, M_FXR               /* (FX-RING on T8: T7, its EXT T6's) */
+#endif
+                };
                 par_mode = mode; m2k_par_begin = mode ? par_test_begin : 0; m2k_par_end = mode ? par_test_end : 0;
                 par_force = mode ? m : -1;
                 m2k_init(23);
@@ -4237,7 +4319,7 @@ static int selftest(void)
                 if (mode) sets++;
             }
         m2k_par_begin = 0; m2k_par_end = 0; par_force = -1;
-        CHECK(same && sets == 6 * 62 * 2, "two cores: any set of tracks on the second (FX machines kept with what they hear), "
+        CHECK(same && sets == 6 * ((1 << M2K_TRACKS) - 2) * 2, "two cores: any set of tracks on the second (FX machines kept with what they hear), "
               "bank A, DENSE and six FX-chained tracks the same sample for sample");
     }
     /* the measured split (1.6.1, the FM-1's clock): a fake clock that says one track takes three times its estimate.
@@ -4628,7 +4710,7 @@ static int selftest(void)
     }
     /* format 19: a pattern with no track of its own length packs as 18, byte for byte (bank A's bytes kept); one with, as
      * 19, six bytes more, read back the same; a version-18 pattern loads with every track on the pattern's length (0); a
-     * length past 64 reads 64; version 21 is refused; a store keeps the lengths. Every length set to the pattern's own
+     * length past 64 reads 64; a version past today's (22) is refused; a store keeps the lengths. Every length set to the pattern's own
      * plays as none set (A01, two seconds) */
     {
         static m2k_pattern_t w, w2;
@@ -4636,17 +4718,17 @@ static int selftest(void)
         m2k_init(37);
         m_cpy(&w, &pat[0], sizeof w);
         int n18 = pat_pack(&w, b18), ok18 = b18[1] == 18 && n18 == pat_pack_v(&w, bx, 18) && !memcmp(b18, bx, (size_t)n18);
-        static const uint8_t TL[M2K_TRACKS] = {0, 12, 7, 0, 5, 64};
-        for (int t = 0; t < M2K_TRACKS; t++) w.glob[G_TLEN1 + t] = TL[t];
+        static const uint8_t TL[M2K_TRACKS6] = {0, 12, 7, 0, 5, 64};
+        for (int t = 0; t < M2K_TRACKS6; t++) w.glob[G_TLEN1 + t] = TL[t];
         int n19 = pat_pack(&w, b19);
         int ok19 = b19[1] == 19 && n19 == n18 + 6 && pat_unpack(&w2, b19, n19) && !memcmp(w2.glob, w.glob, G_COUNT) &&
                    pat_pack(&w2, bx) == n19 && !memcmp(bx, b19, (size_t)n19);
         int nv = pat_pack_v(&w, bx, 18), old = pat_unpack(&w2, bx, nv) && !memcmp(w2.glob, w.glob, G_COUNT_V18);
         for (int t = 0; t < M2K_TRACKS; t++) old &= w2.glob[G_TLEN1 + t] == 0;
         m_cpy(bx, b19, (size_t)n19);
-        bx[2 + 8 + M2K_TRACKS + G_TLEN1 + 1] = 200;
+        bx[2 + 8 + M2K_TRACKS6 + G_COUNT_OF(18, M2K_TRACKS6) + 1] = 200;   /* (T2's length, as 19 packs it) */
         int clamp = pat_unpack(&w2, bx, n19) && w2.glob[G_TLEN1 + 1] == 64;
-        bx[1] = 21;
+        bx[1] = 22;
         int refused = !pat_unpack(&w2, bx, n19);
         pat[5].glob[G_TLEN1 + 2] = 7;
         int sn = m2k_store_pack();
@@ -4667,7 +4749,7 @@ static int selftest(void)
     }
     /* format 20, the tracks' chances (PROB): a pattern with every track at 100 % packs as before (19 with a length of
      * its own, bank A's as 18), byte for byte; one with a chance as 20, six bytes more, read back the same; a version-19
-     * pattern loads with every track at 100 % (0); a step past 15 reads 15 (0 %); version 21 is refused; a store keeps
+     * pattern loads with every track at 100 % (0); a step past 15 reads 15 (0 %); version 22 is refused; a store keeps
      * the chances; HOME's second page is the track's TLEN SPD PROB LANE */
     {
         static m2k_pattern_t w, w2;
@@ -4677,17 +4759,17 @@ static int selftest(void)
         m_cpy(&w, &pat[0], sizeof w);
         w.glob[G_TLEN1 + 1] = 12;
         int n19 = pat_pack(&w, b19), ok19 = b19[1] == 19 && n19 == pat_pack_v(&w, bx, 19) && !memcmp(b19, bx, (size_t)n19);
-        static const uint8_t PB[M2K_TRACKS] = {0, 8, 15, 0, 3, 1};
-        for (int t = 0; t < M2K_TRACKS; t++) w.glob[G_TPRB1 + t] = PB[t];
+        static const uint8_t PB[M2K_TRACKS6] = {0, 8, 15, 0, 3, 1};
+        for (int t = 0; t < M2K_TRACKS6; t++) w.glob[G_TPRB1 + t] = PB[t];
         int n20 = pat_pack(&w, b20);
         int ok20 = b20[1] == 20 && n20 == n19 + 6 && pat_unpack(&w2, b20, n20) && !memcmp(w2.glob, w.glob, G_COUNT) &&
                    pat_pack(&w2, bx) == n20 && !memcmp(bx, b20, (size_t)n20);
         int nv = pat_pack_v(&w, bx, 19), old = pat_unpack(&w2, bx, nv) && !memcmp(w2.glob, w.glob, G_COUNT_V19);
         for (int t = 0; t < M2K_TRACKS; t++) old &= w2.glob[G_TPRB1 + t] == 0;
         m_cpy(bx, b20, (size_t)n20);
-        bx[2 + 8 + M2K_TRACKS + G_TPRB1 + 2] = 200;
+        bx[2 + 8 + M2K_TRACKS6 + G_COUNT_OF(19, M2K_TRACKS6) + 2] = 200;   /* (T3's chance, as 20 packs it) */
         int clamp = pat_unpack(&w2, bx, n20) && w2.glob[G_TPRB1 + 2] == 15;
-        bx[1] = 21;
+        bx[1] = 22;
         int refused = !pat_unpack(&w2, bx, n20);
         pat[5].glob[G_TPRB1 + 3] = 8;
         int sn = m2k_store_pack();
@@ -4707,11 +4789,215 @@ static int selftest(void)
         for (int i = 0; i < 20; i++) edit(2, -1);
         home2 &= pat[cur_pat].glob[G_TPRB1 + 2] == 0;
         ui.sub = 0;
-        printf("     packed 18 %d, 19 %d, 20 %d, 19 read %d, clamp %d, 21 refused %d, store %d, HOME 2 %d\n", ok18, ok19, ok20,
+        printf("     packed 18 %d, 19 %d, 20 %d, 19 read %d, clamp %d, 22 refused %d, store %d, HOME 2 %d\n", ok18, ok19, ok20,
                old, clamp, refused, kept, home2);
         CHECK(ok18 && ok19 && ok20 && old && clamp && refused && kept && home2,
               "format: 20 the tracks' chances (all 100 %: packed as before, byte for byte), 19 loads at 100 %; HOME 2: TLEN SPD PROB LANE");
     }
+    /* format 21, eight tracks (M2K_TRACKS 8, the Move's build): a pattern of six packs as before in either build, byte for
+     * byte (x8_pattern 0: its length and FNV-1a the same in both; bank A's: OLD_PACKED), and a build of eight reads it
+     * with T7 and T8 blank (an INIT machine, no trigs). One that uses T7 or T8 packs as 21 (FMT21: the build of eight's
+     * bytes); a build of six reads it as its first six, an LFO aimed past them off; a build of eight as it was. Bytes
+     * flipped in it: refused or in range, played and drawn */
+    {
+        static m2k_pattern_t w, w2, e;
+        static uint8_t b[BLOB_ANY], b2[BLOB_ANY], fx[BLOB_ANY];
+        m2k_init(43);
+        x8_pattern(&w, 0);
+        int n6 = pat_pack(&w, b), six = n6 == X6_LEN && fnv(b, (uint32_t)n6) == X6_FNV && b[1] == 20;
+        if (!six) printf("     x8_pattern 0 packs to %d bytes, FNV-1a 0x%08xu: X6_LEN, X6_FNV wanted\n", n6, fnv(b, (uint32_t)n6));
+        six &= pat_unpack(&w2, b, n6) && !memcmp(&w2, &w, sizeof w) && pat_pack(&w2, b2) == n6 && !memcmp(b, b2, (size_t)n6);
+        const int fn = x8_hex(FMT21, fx);
+        int blank = 1, wide = 1, read6 = 1;
+#if M2K_TRACKS > M2K_TRACKS6
+        static m2k_pattern_t r;                                   /* tracks past the sixth as a pattern of six leaves them */
+        for (int t = M2K_TRACKS6; t < M2K_TRACKS; t++) track_blank(&r, t);
+        for (int t = M2K_TRACKS6; t < M2K_TRACKS; t++) {
+            blank &= w2.machine[t] == r.machine[t] && !memcmp(w2.kit[t], r.kit[t], P_COUNT) && w2.glob[G_SPD1 + t] == SPD_1X &&
+                     !w2.glob[G_LANE1 + t] && !w2.glob[G_TLEN1 + t] && !w2.glob[G_TPRB1 + t] && !(w2.mute >> t & 1) &&
+                     trck_of(w2.kit[t][P_LFO + L_TRCK]) == t;
+            for (int s = 0; s < M2K_STEPS; s++) blank &= !(w2.step[t][s].flags & ST_TRIG) && w2.step[t][s].note == 60;
+            for (int i = 0; i < M2K_LOCKS; i++) blank &= w2.lock[i].trk != t;
+        }
+        blank &= w2.machine[6] == M_SID && w2.machine[7] == M_GPRC && !pat_wide(&w2);
+        for (int i = 0; i < 16; i++) blank &= !pat_wide(&pat[i]);          /* bank A and the blanks: six */
+        x8_pattern(&w, 1);
+        int n8 = pat_pack(&w, b);
+        wide = b[1] == 21 && n8 == fn && !memcmp(b, fx, (size_t)fn) && n8 <= BLOB_ANY;
+        if (!wide) {
+            printf("     FMT21 wanted (%d bytes):\n", n8);
+            for (int i = 0; i < n8; i += 54) { printf("    \""); for (int j = i; j < n8 && j < i + 54; j++) printf("%02x", b[j]); printf("\"\n"); }
+        }
+        wide &= pat_unpack(&w2, fx, fn) && !memcmp(&w2, &w, sizeof w) && pat_pack(&w2, b2) == fn && !memcmp(b2, fx, (size_t)fn);
+        /* each part of T7's or T8's makes it 21; put back, six again */
+        for (int c = 0; c < 9; c++) {
+            x8_pattern(&e, 0);
+            uint8_t was = 0;
+            switch (c) {
+            case 0: e.machine[7] = M_FMS; break;
+            case 1: e.kit[6][P_LEVL] ^= 1; break;
+            case 2: e.step[7][9].flags = ST_TRIG; break;
+            case 3: lk(&e, 6, 2, P_PAN, 10); break;
+            case 4: e.mute |= 1u << 7; break;
+            case 5: e.glob[G_TPRB1 + 6] = 3; break;
+            case 6: e.glob[G_LANE1 + 7] = enc(1, 4); break;
+            case 7: was = e.kit[2][P_LFO + 16 + L_TRCK]; e.kit[2][P_LFO + 16 + L_TRCK] = trck_enc(7); break;
+            case 8: lk(&e, 3, 5, P_LFO + L_TRCK, trck_enc(6)); break;
+            }
+            wide &= pat_pack(&e, b) > 0 && b[1] == 21;
+            if (c == 7) { e.kit[2][P_LFO + 16 + L_TRCK] = was; wide &= pat_pack(&e, b) == n6 && b[1] == 20; }
+        }
+        read6 = 1;                                                       /* (this build reads its own: above) */
+#else
+        /* a build of six: format 21 as its first six (T7, T8, their locks and the LFO aimed past them gone) */
+        blank = 1;
+        x8_pattern(&e, 2);
+        int en = pat_pack(&e, b2);
+        read6 = fn > 0 && fx[1] == 21 && pat_unpack(&w2, fx, fn) && pat_pack(&w2, b) == en && !memcmp(b, b2, (size_t)en) && b[1] == 20 &&
+                !memcmp(w2.machine, e.machine, sizeof e.machine) && !memcmp(w2.kit, e.kit, sizeof e.kit) &&
+                !memcmp(w2.glob, e.glob, sizeof e.glob) && !memcmp(w2.step, e.step, sizeof e.step) && w2.mute == e.mute &&
+                w2.kit[0][P_LFO + L_DEST] == 0 && w2.kit[0][P_LFO + L_TRCK] == trck_enc(0);
+        int dl = 0;                                                       /* T2's step-4 TRCK lock: a DEST lock of 0 */
+        for (int i = 0; i < M2K_LOCKS; i++)
+            if (w2.lock[i].trk != 0xFF) {
+                read6 &= w2.lock[i].trk < M2K_TRACKS && !is_trck(w2.lock[i].param);
+                dl += w2.lock[i].trk == 1 && w2.lock[i].step == 4 && w2.lock[i].param == P_LFO + 8 + L_DEST && !w2.lock[i].val;
+            }
+        read6 &= dl == 1;
+        /* a pattern of six, read as 21 (its layout eight wide, T7 and T8 blank, written here as a build of eight would):
+         * the same six */
+        wide = fn > 0;
+#endif
+        /* bytes flipped in format 21: refused, or read with every value in range, played and drawn */
+        int fz = 0, fok = 0, franged = 1;
+        static int16_t sb[2 * 128];
+        for (int it = 0; it < 300 && fn > 0; it++) {
+            m_cpy(b, fx, (uint32_t)fn);
+            int k = 1 + (int)(fuzz_rnd() % 6);
+            for (int j = 0; j < k; j++) b[fuzz_rnd() % (uint32_t)fn] ^= (uint8_t)(1u << (fuzz_rnd() % 8));
+            m2k_init(44);
+            fz++;
+            if (!pat_unpack(&pat[0], b, fn)) continue;
+            fok++;
+            for (int t = 0; t < M2K_TRACKS; t++) {
+                for (int q = 0; q < P_COUNT; q++) franged &= pat[0].kit[t][q] <= KIT_MAX(q);
+                franged &= pat[0].machine[t] < M_COUNT && pat[0].glob[G_TLEN1 + t] <= 64 && pat[0].glob[G_TPRB1 + t] <= 15;
+            }
+            franged &= (pat[0].mute & ~M2K_TMASK) == 0;
+            for (int i = 0; i < M2K_LOCKS; i++)
+                franged &= pat[0].lock[i].trk == 0xFF || (pat[0].lock[i].trk < M2K_TRACKS && pat[0].lock[i].val <= KIT_MAX(pat[0].lock[i].param));
+            cur_pat = 0;
+            work_reset_current();
+            seq_play(1);
+            for (int f = 0; f < 128 * 4; f += 128) m2k_render(sb, 128);
+            m2k_frame(7000 + 40u * (uint32_t)it);
+            seq_play(0);
+        }
+        printf("     format 21: six %d, T7 T8 blank %d, eight %d, read by six %d; %d of %d flipped read, in range %d\n",
+               six, blank, wide, read6, fok, fz, franged);
+        CHECK(six && blank && wide && read6 && fok > 30 && franged,
+              "format: 21 eight tracks (one that uses T7 or T8; a pattern of six packs as before in either build, T7 T8 blank), "
+              "read by a build of six as its first six, an LFO aimed past them off");
+    }
+#if M2K_TRACKS > M2K_TRACKS6
+    /* eight tracks played: T7's and T8's trigs at their chances, T7 at 3/2x, T8 on 12 steps of its own, their p-locks
+     * on their steps, T1's LFO moving T8's filter; T7's arp from MIDI's seventh channel, held; T8 from the eighth; a
+     * mute; a store keeps them (as the FM-1's store too); bank A's T7 and T8 silent; SELECT and the LFO's TRCK reach
+     * them; HOME, GLO > PLAY and GLO > MIDI show the track in view among six, every text clear */
+    {
+        static m2k_pattern_t w8;
+        m2k_init(45);
+        x8_pattern(&pat[8], 1);
+        pat[8].mute = 0;                                         /* (heard: muted below) */
+        m2k_pattern(8);
+        seq_play(1);
+        sblk_sync();
+        int h7 = 0, h8 = 0, lock7 = 0, lfo8 = 0, h1 = 0;
+        while (sq.n1x < 16 * 12) {
+            int m = sblk();
+            h1 += m & 1; h7 += m >> 6 & 1; h8 += m >> 7 & 1;
+            if (m >> 6 & 1) lock7 += trk[6].eff[P_BASE] == (track_pos(6) == 4 ? 90 : pat[8].kit[6][P_BASE]);
+            lfo8 |= trk[7].mod[P_BASE] != 0;
+        }
+        /* 192 steps: T1 6 trigs a loop (72); T7 at 3/2x 288 of its steps, 4 trigs in 16 (72) at 80 %; T8 on 12 steps,
+         * 6 trigs in them (96, one a ratchet of three) at 50 % */
+        int steps = h1 == 72 && h7 >= 45 && h7 <= 68 && h8 >= 30 && h8 <= 100 && lock7 == h7 && lfo8;
+        printf("     eight tracks: T1 %d, T7 %d (of 72 at 80 %%), T8 %d (96 at 50 %%, a ratchet), T7's locks %d, T8 moved by T1 %d\n",
+               h1, h7, h8, lock7, lfo8);
+        const int ch = (store_.set[S_MCH] * 16) >> 7;
+        m2k_midi(0xB0 | ((ch + 6) & 15), 64, 127);              /* T7's HOLD (a pedal on its channel), two keys */
+        m2k_midi(0x90 | ((ch + 6) & 15), 60, 100);
+        m2k_midi(0x90 | ((ch + 6) & 15), 67, 100);
+        m2k_midi(0x80 | ((ch + 6) & 15), 60, 0);
+        m2k_midi(0x80 | ((ch + 6) & 15), 67, 0);
+        int arp = 0, arpn[128] = {0};
+        for (int i = 0; i < 4 * 44100 / M2K_SUB; i++) if (sblk() >> 6 & 1) { arp++; arpn[trk[6].note & 127]++; }
+        int arpd = arp;
+        arp = sq.arp_hold[6] && sq.nheld[6] == 2 && arp >= 12 && arpn[60] && arpn[67] && arpn[72] && arpn[79];
+        m2k_midi(0xB0 | ((ch + 6) & 15), 64, 0);
+        sblk();
+        arp &= !sq.nheld[6];
+        m2k_midi(0x90 | ((ch + 7) & 15), 45, 100);              /* T8 from its channel */
+        sblk();
+        int ch8 = trk[7].note == 45 && trk[7].gate;
+        m2k_midi(0x80 | ((ch + 7) & 15), 45, 0);
+        m2k_mute(7);                                             /* T8 muted (at the bar) */
+        int waited = mute_pending();
+        while (mute_pending()) sblk();
+        int m8 = 0;
+        for (int i = 0; i < 44100 / M2K_SUB; i++) m8 += sblk() >> 7 & 1;
+        int muted = waited && (pat[8].mute >> 7 & 1) && !m8;
+        seq_play(0);
+        /* the store keeps it whole, and the FM-1's store (16 patterns, one project) as this build reads it */
+        x8_pattern(&w8, 1);
+        int stored = 1;
+        for (int as = 0; as < 2; as++) {
+            int n = as ? m2k_store_pack_as(16, 1) : m2k_store_pack();   /* (T8 muted, as x8_pattern has it) */
+            m2k_init(46);
+            stored &= n > 0 && m2k_store_unpack(n) == 1 && !memcmp(&pat[8], &w8, sizeof w8);
+        }
+        /* bank A: T7 and T8 silent (their peaks nothing) as it plays */
+        m2k_init(47);
+        m2k_pattern(0);
+        seq_play(1);
+        int32_t pk = 0;
+        mon.peak[6] = mon.peak[7] = 0;                          /* (the monitor's: kept over an init, decayed by frames) */
+        for (int i = 0; i < 4 * 44100 / M2K_SUB; i++) { sblk(); pk |= mon.peak[6] | mon.peak[7]; }
+        seq_play(0);
+        /* the panel: SELECT T6 > T7 > T8 > T1; the LFO page's TRCK to T7 and T8 (128, 129) and back to T6; HOME, GLO >
+         * PLAY and GLO > MIDI with T8 in view, every text clear */
+        ux_init(48);
+        int before = ta_found, sel = 1, trck = 1;
+        ui.trk = 5;
+        m2k_encoder(E_SELECT, 1); sel &= ui.trk == 6;
+        m2k_encoder(E_SELECT, 1); sel &= ui.trk == 7;
+        m2k_encoder(E_SELECT, 1); sel &= ui.trk == 0;
+        m2k_encoder(E_SELECT, -1); sel &= ui.trk == 7;
+        ui.trk = 0; ui.page = PG_LFO; ui.sub = 0;
+        int tk = -1;
+        for (int k = 0; k < 4; k++) if (knob_at(k) == P_LFO + L_TRCK) tk = k;
+        char o[16];
+        const char *u;
+        if (tk >= 0) {
+            for (int i = 0; i < 8; i++) edit(tk, 1);
+            fmt(pinfo(0, P_LFO + L_TRCK), 0, PAT(cur_pat)->kit[0][P_LFO + L_TRCK], o, &u);
+            trck &= PAT(cur_pat)->kit[0][P_LFO + L_TRCK] == TRCK_PAST + 1 && !strcmp(o, "T8");
+            ux_ms(100); ta_check((int)ux_now);
+            edit(tk, -1); trck &= PAT(cur_pat)->kit[0][P_LFO + L_TRCK] == TRCK_PAST;
+            edit(tk, -1); trck &= PAT(cur_pat)->kit[0][P_LFO + L_TRCK] == enc(5, 6);
+        } else trck = 0;
+        ui.trk = 7;
+        static const uint8_t PGV[3][2] = {{PG_HOME, 0}, {PG_GLO, GS_PLAY}, {PG_GLO, GS_MIDI}};
+        for (int i = 0; i < 3; i++) { ui.page = PGV[i][0]; ui.sub = PGV[i][1]; ux_ms(3000); ta_check((int)ux_now); }
+        int panel = sel && trck && ta_found == before;
+        ui.page = PG_HOME; ui.sub = 0; ui.trk = 0;
+        printf("     arp %d (%d notes), T8's channel %d, mute %d, stored %d, bank A's T7 T8 peak %d, SELECT %d, TRCK %d, text %d\n",
+               arp, arpd, ch8, muted, stored, (int)pk, sel, trck, ta_found == before);
+        CHECK(steps && arp && ch8 && muted && stored && !pk && panel,
+              "eight tracks: T7 T8 play their trigs, locks, chances, speed, length, an arp held, their channels, a mute; "
+              "stored; bank A's silent; SELECT and TRCK reach them, the screens clear");
+    }
+#endif
     /* PROB: every trig a track would play, its own condition passed, plays with the chance: 100 % every trig and no
      * draw (its generator untouched), 0 % none, 50 % about half of 512 (a fixed seed), a 1:2 trig at 50 % a quarter, a
      * track without trigs nothing whatever its chance; a track following a lane takes it too; the same on two cores,
@@ -5072,15 +5358,15 @@ static int selftest(void)
         q->glob[G_TMPO] = 255;
         static const uint8_t CC[6] = {C_P90, C_P60, C_P40, C_P10, C_P75, C_P50};
         static const int WANT[6] = {230, 154, 102, 26, 192, 128};
-        for (int t = 0; t < M2K_TRACKS; t++)
+        for (int t = 0; t < M2K_TRACKS6; t++)
             for (int st = 0; st < 16; st++) q->step[t][st] = (m2k_step_t){.note = 60, .flags = ST_TRIG, .cond = CC[t]};
         int hits[6] = {0, 0, 0, 0, 0, 0};
         seq_play(1);
         sblk_sync();
-        while (sq.n1x < 60 * 16) { int m = sblk(); for (int t = 0; t < M2K_TRACKS; t++) hits[t] += m >> t & 1; }
+        while (sq.n1x < 60 * 16) { int m = sblk(); for (int t = 0; t < M2K_TRACKS6; t++) hits[t] += m >> t & 1; }
         seq_play(0);
         int rates = 1;
-        for (int t = 0; t < M2K_TRACKS; t++) {
+        for (int t = 0; t < M2K_TRACKS6; t++) {
             int want = WANT[t] * 960 / 256;
             rates &= abs(hits[t] - want) <= 48;
             printf("     chance %s: %d of 960 (%d wanted)\n", COND_N[CC[t]], hits[t], want);
@@ -5111,7 +5397,7 @@ static int selftest(void)
         w = pat[0];
         w.glob[G_GRX] = 10; w.glob[G_GRY] = 120; w.glob[G_GRCH] = 77; w.glob[G_GRES] = 127;
         w.glob[G_GRBD] = 1; w.glob[G_GRSD] = 2; w.glob[G_GRHH] = 3;
-        for (int t = 0; t < M2K_TRACKS; t++) w.glob[G_LANE1 + t] = (uint8_t)enc(t & 3, 4);
+        for (int t = 0; t < M2K_TRACKS6; t++) w.glob[G_LANE1 + t] = (uint8_t)enc(t & 3, 4);
         int s0 = -1;
         for (int st = 0; st < M2K_STEPS && s0 < 0; st++) if (w.step[0][st].flags & ST_TRIG) s0 = st;
         w.step[0][s0].cond = C_P60;
@@ -6617,9 +6903,33 @@ static int link_store(const char *mode, const char *path)
     return !ok;
 }
 
+/* --render-hash [SECONDS]: bank A's four, DENSE and x8_pattern's six played from their start, each render's FNV-1a (the
+ * same in a build of six and of eight: tools/check.sh holds the two alike, T7 and T8 silent beside the six) */
+static int render_hash(int sec)
+{
+    static int16_t b[2 * 1024];
+    static const char *const N[6] = {"A01", "A02", "A03", "A04", "DENSE", "EIGHT"};
+    for (int p = 0; p < 6; p++) {
+        m2k_init(2000);
+        if (p == 4) dense_pattern(&pat[46]);
+        if (p == 5) x8_pattern(&pat[47], 0);
+        m2k_pattern(p < 4 ? p : 42 + p);
+        seq_play(1);
+        uint32_t h = 2166136261u;
+        for (int f = 0; f < sec * M2K_SR; f += 1024) {
+            m2k_render(b, 1024);
+            const uint8_t *q = (const uint8_t *)b;
+            for (unsigned k = 0; k < sizeof b; k++) h = (h ^ q[k]) * 16777619u;
+        }
+        printf("  %-6s %08x\n", N[p], h);
+    }
+    return 0;
+}
+
 int main(int argc, char **argv)
 {
     if (argc > 1 && !strcmp(argv[1], "--selftest")) return selftest();
+    if (argc > 1 && !strcmp(argv[1], "--render-hash")) return render_hash(argc > 2 ? atoi(argv[2]) : 30);
     if (argc > 1 && !strcmp(argv[1], "--text-sweep")) return text_sweep();
     if (argc > 1 && !strcmp(argv[1], "--verb-grid")) return verb_grid();
     if (argc > 1 && !strcmp(argv[1], "--bank-hash")) {        /* as host/m2k_link_test.c prints it, through the FM-1's cache */

@@ -18,7 +18,7 @@ static m2k_pattern_t *pat_v5(int i, const char *name, int bpm, const uint8_t *ma
 {
     m2k_pattern_t *p = PAT(i);
     pat_init(p, name);
-    for (int t = 0; t < M2K_TRACKS; t++) {
+    for (int t = 0; t < M2K_TRACKS6; t++) {          /* (six tracks: those past them blank, track_blank) */
         kit_default(p, t, machines[t]);
         if (machines[t] == M_GSIN) m_cpy(&p->kit[t][P_SYN], GSIN_V11, 8);  /* the parts are written on that page */
     }

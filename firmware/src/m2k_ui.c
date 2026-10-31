@@ -47,21 +47,25 @@ static const pi_t PI_MOD[4] = {
     {"TYPE", "MOD TYPE", K_MODT}, {"RATE", "MOD RATE", K_MHZ}, {"DPTH", "MOD DEPTH", K_NUM}, {"MIX", "MOD MIX", K_NUM},
 };
 
+/* a global of each track's, T1 .. (the seventh and eighth in a build of eight) */
+#if M2K_TRACKS > M2K_TRACKS6
+#define PI_T78(s4, nm, k) , {s4, "T7 " nm, k}, {s4, "T8 " nm, k}
+#else
+#define PI_T78(s4, nm, k)
+#endif
+#define PI_TRK(s4, nm, k) {s4, "T1 " nm, k}, {s4, "T2 " nm, k}, {s4, "T3 " nm, k}, {s4, "T4 " nm, k}, {s4, "T5 " nm, k}, \
+                          {s4, "T6 " nm, k} PI_T78(s4, nm, k)
 static const pi_t PI_GLOB[G_COUNT] = {
     {"BPM", "TEMPO", K_BPM}, {"SWNG", "SWING", K_SWNG}, {"LEN", "PATTERN LENGTH", K_LEN}, {"ACNT", "ACCENT", K_NUM},
     /* (TAPE, GLCH, SIZE and HISS: kept in the pattern, on no knob and unheard since 1.5) */
     {"TAPE", "TAPE WOW", K_NUM}, {"ADPC", "ADPCM CRUNCH", K_NUM}, {"GLCH", "GLITCH AMOUNT", K_NUM}, {"SIZE", "REPEAT SIZE", K_NUM},
     {"DCAY", "REVERB DECAY", K_DCAY}, {"DAMP", "REVERB DAMPING", K_DAMP}, {"HISS", "HISS AND DUST", K_NUM}, {"DRIV", "BUS DRIVE", K_NUM},
-    {"SPD", "T1 SPEED", K_SPD}, {"SPD", "T2 SPEED", K_SPD}, {"SPD", "T3 SPEED", K_SPD}, {"SPD", "T4 SPEED", K_SPD},
-    {"SPD", "T5 SPEED", K_SPD}, {"SPD", "T6 SPEED", K_SPD},
+    PI_TRK("SPD", "SPEED", K_SPD),
     {"X", "MAP X", K_PCT}, {"Y", "MAP Y", K_PCT}, {"CHAOS", "CHAOS", K_PCT}, {"RES", "CYCLE", K_GRES},
     {"BD", "KICK DENSITY", K_PCT}, {"SD", "SNARE DENSITY", K_PCT}, {"HH", "HATS DENSITY", K_PCT},
-    {"LANE", "T1 LANE", K_LANE}, {"LANE", "T2 LANE", K_LANE}, {"LANE", "T3 LANE", K_LANE}, {"LANE", "T4 LANE", K_LANE},
-    {"LANE", "T5 LANE", K_LANE}, {"LANE", "T6 LANE", K_LANE},
-    {"TLEN", "T1 LENGTH", K_TLEN}, {"TLEN", "T2 LENGTH", K_TLEN}, {"TLEN", "T3 LENGTH", K_TLEN}, {"TLEN", "T4 LENGTH", K_TLEN},
-    {"TLEN", "T5 LENGTH", K_TLEN}, {"TLEN", "T6 LENGTH", K_TLEN},
-    {"PROB", "T1 CHANCE", K_PROB}, {"PROB", "T2 CHANCE", K_PROB}, {"PROB", "T3 CHANCE", K_PROB},
-    {"PROB", "T4 CHANCE", K_PROB}, {"PROB", "T5 CHANCE", K_PROB}, {"PROB", "T6 CHANCE", K_PROB},
+    PI_TRK("LANE", "LANE", K_LANE),
+    PI_TRK("TLEN", "LENGTH", K_TLEN),
+    PI_TRK("PROB", "CHANCE", K_PROB),
 };
 
 static const pi_t PI_SET[17] = {
@@ -208,7 +212,7 @@ static int kind_choices(int k);
 static int choice_of(int kind, int v)
 {
     int n = kind_choices(kind);
-    return kind == K_FR24 ? fr24(v) : kind == K_SYIN ? syin_choice(v) : n ? (v * n) >> 7 : 0;
+    return kind == K_FR24 ? fr24(v) : kind == K_SYIN ? syin_choice(v) : kind == K_TRK ? trck_of(v) : n ? (v * n) >> 7 : 0;
 }
 
 static int kind_choices(int k)
@@ -227,7 +231,8 @@ static int kind_choices(int k)
     case K_MODT: return 3;
     case K_PROJ: return M2K_PROJECTS;
     case K_VOIC: case K_LWAV: return 7;
-    case K_TRK: case K_AMOD: return 6;
+    case K_TRK: return M2K_TRACKS;
+    case K_AMOD: return 6;
     case K_LTRG: return 5;
     case K_MULT: return 8;
     case K_DWV4: return 4;
@@ -638,6 +643,16 @@ static struct {
 static void ui_forget(void);
 static int view_trk(void) { return ui.trk; }
 
+/* the FM-1's panel is six tracks wide: its keys reach six (GLO's mutes and solos, PADS, GRID's black keys) and the
+ * pictures of every track lay six out (HOME's lanes, GLO > PLAY, GLO > MIDI). In a build of more, SELECT reaches them
+ * all and those pictures show six from ui_tr0, the track in view among them (a Move's screen comes later) */
+#define UI_KT M2K_TRACKS6
+#if M2K_TRACKS > UI_KT
+static int ui_tr0(void) { return ui.trk < UI_KT ? 0 : ui.trk - UI_KT + 1; }
+#else
+#define ui_tr0() 0
+#endif
+
 #define SPLASH_MS 2100                 /* the splash at power-on, then the wipe into HOME */
 #define WIPE_MS 400
 
@@ -795,7 +810,7 @@ static void sound_load(m2k_pattern_t *p)
     if (sd->name[0]) {                           /* its keys and new trigs on the note it was made at */
         p->machine[ui.trk] = sd->machine;
         m_cpy(p->kit[ui.trk], sd->kit, P_COUNT);
-        for (int l = 0; l < 3; l++) p->kit[ui.trk][P_LFO + 8 * l + L_TRCK] = enc(ui.trk, M2K_TRACKS);   /* its LFOs move
+        for (int l = 0; l < 3; l++) p->kit[ui.trk][P_LFO + 8 * l + L_TRCK] = trck_enc(ui.trk);   /* its LFOs move
                                                                        * it, on whichever track (they moved the one saved) */
         track_home(ui.trk, snd_root[ui.snd_sel]);
         s_cpy(o + 3, sd->name);
@@ -852,7 +867,7 @@ static void cat_hear(int i)
     const int t = cat.trk;
     p->machine[t] = sd->machine;
     m_cpy(p->kit[t], sd->kit, P_COUNT);
-    for (int l = 0; l < 3; l++) p->kit[t][P_LFO + 8 * l + L_TRCK] = enc(t, M2K_TRACKS);   /* (as LOAD sets them) */
+    for (int l = 0; l < 3; l++) p->kit[t][P_LFO + 8 * l + L_TRCK] = trck_enc(t);   /* (as LOAD sets them) */
     m_cpy(trk[t].eff, p->kit[t], P_COUNT);
     track_home(t, snd_root[i]);
     voice_trig(t, snd_root[i], 100, 0, 0);       /* (a step's trig: its gate a step's) */
@@ -990,7 +1005,7 @@ static void edit(int k, int d)
     int v = knob_value(code);
     fmt(pi, ui.trk, v, old, &u);
     int n = kind_choices(pi->kind), nv;
-    if (n) nv = enc(CLAMP(choice_of(pi->kind, v) + d, 0, n - 1), n);
+    if (n) { int c = CLAMP(choice_of(pi->kind, v) + d, 0, n - 1); nv = pi->kind == K_TRK ? trck_enc(c) : enc(c, n); }
     else nv = CLAMP(v + d, kind_min(pi->kind), kind_max(pi->kind));
     if (code == SETTING(16)) {
         ui.proj_sel = (uint8_t)((nv * M2K_PROJECTS) >> 7);
@@ -1335,12 +1350,12 @@ static void key_event(int k, int down)
     ui.kt0[k] = ui.now;
     if (held(B_GLO) && w >= 0) {       /* GLO + white: 1-6 mute, 7 fill next loop, 8 tap tempo, 9-14 solo, 15 unmute */
         ui.glo_used = 1;
-        if (w >= 8 && w < 8 + M2K_TRACKS) {         /* solo while held, several together (with BAR, from the bar) */
+        if (w >= 8 && w < 8 + UI_KT) {              /* solo while held, several together (with BAR, from the bar) */
             solo_key(w - 8, 1);
             ui.kact[k] = KA_SOLO; ui.karg[k] = (uint8_t)(w - 8);
             return;
         }
-        if (w < M2K_TRACKS) mute_to(w, !mute_will(w));   /* (with BAR, while playing: at the next bar) */
+        if (w < UI_KT) mute_to(w, !mute_will(w));   /* (with BAR, while playing: at the next bar) */
         else if (w == 6) { sq.fill_next = 1; toast("FILL", "THE NEXT LOOP"); }
         else if (w == 7) {                           /* tap tempo: two taps or more, a second or two apart at most */
             if (ui.ntap && ui.now - ui.tap_t[(ui.ntap - 1) & 3] > 2000) ui.ntap = 0;
@@ -1393,7 +1408,7 @@ static void key_event(int k, int down)
         return;
     }
     if (ui.pads && w >= 0) {           /* PADS: white 1-6 and 9-14 hit T1-T6, each at its root */
-        int t = w < M2K_TRACKS ? w : w >= 8 && w < 8 + M2K_TRACKS ? w - 8 : -1;
+        int t = w < UI_KT ? w : w >= 8 && w < 8 + UI_KT ? w - 8 : -1;
         if (t >= 0) {
             pad_hit(t, track_root(p, t));
             ui.flash_t[t] = ui.now;
@@ -1402,7 +1417,7 @@ static void key_event(int k, int down)
     }
     if (ui.pads) {                     /* the black keys as in GRID: T1-T6 pick the track (the keys' too), F#5 mutes it */
         if (b < 0) return;
-        if (b < M2K_TRACKS) track_to(b);
+        if (b < UI_KT) track_to(b);
         else if (b == 10) mute_flip(ui.trk);
         return;
     }
@@ -1435,7 +1450,7 @@ static void key_event(int k, int down)
             ui.kact[k] = KA_PKEY; ui.karg[k] = (uint8_t)(b - 6);
             return;
         }
-        if (b < M2K_TRACKS) track_to(b);
+        if (b < UI_KT) track_to(b);
         else mute_flip(ui.trk);
         return;
     }
@@ -1774,7 +1789,7 @@ static char *s_tracks(char *e, int m)                /* " T2 T4" */
 
 static void grids_written(int m)
 {
-    char o[28];
+    char o[12 + 3 * M2K_TRACKS];
     s_cpy(s_tracks(o, m), ": STEPS");
     toast("LANES WRITTEN", o + 1);
     start_glitch(3);
@@ -1788,7 +1803,7 @@ static void grids_snapshot(void)
     for (int t = 0; t < M2K_TRACKS; t++)
         for (int st = 0; st < pat_tlen(p, t) && (m >> t & 1); st++) if (p->step[t][st].flags & ST_TRIG) over |= 1 << t;
     if (over) {                        /* over trigs: asked */
-        char o[28];
+        char o[12 + 3 * M2K_TRACKS];                 /* ("OVER T1 .. T6 TRIGS" and its end) */
         s_cpy(s_tracks(s_cpy(o, "OVER"), over), " TRIGS");
         ask_open(ASK_GRIDS, "WRITE STEPS", o);
         return;
@@ -2995,8 +3010,8 @@ static void home(void)
 {
     m2k_pattern_t *p = PAT(cur_pat);
     CELL(0, STAGE_Y - 3, 240, STEPS_R + 2, SX0, STAGE_Y, SX1, STEPS_R);
-    for (int t = 0; t < M2K_TRACKS; t++) {
-        int b = LANE_B + t * LANE_P;
+    for (int r = 0; r < UI_KT; r++) {
+        const int t = ui_tr0() + r, b = LANE_B + r * LANE_P;
         int flash = ui.now - ui.flash_t[t] < 90, inv = t == ui.trk || flash;
         if ((((sq.mq_m | sq.sq_m | sq.solo_rel) >> t) & 1) && ((ui.now >> 7) & 1)) inv = !inv;   /* waits for the bar */
         char n[2] = {(char)('1' + t), 0};
@@ -3589,7 +3604,7 @@ static void grids_picture(void)
             int b = 80 + l * 36, m = 0;
             for (int t = 0; t < M2K_TRACKS; t++) if (lane_of(p, t) == l + 1) m |= 1 << t;
             int x = SX0 + (lane_of(p, ui.trk) == l + 1 ? inv_tag(&F_S, SX0 + 2, b, N[l]) + 2 : tx_b(&F_S, SX0, b, N[l], 1)) + 8;
-            char o[24];
+            char o[4 + 3 * M2K_TRACKS];
             if (m) { s_tracks(o, m); tx_b(&F_S, x, b, o + 1, 1); }
             grids_lane(SX0, b + 22, STW, 14, l);
         }
@@ -3628,8 +3643,8 @@ static void play_picture(int busy)
 {
     const m2k_pattern_t *p = PAT(cur_pat);
     const int fast = (ui.now >> 7) & 1;
-    for (int i = 0; i < M2K_TRACKS; i++) {
-        int x = SX0 + (i % 3) * 80, y = 72 + (i / 3) * 32, w = 72, b = 1 << i;
+    for (int j = 0; j < UI_KT; j++) {
+        const int i = ui_tr0() + j, x = SX0 + (j % 3) * 80, y = 72 + (j / 3) * 32, w = 72, b = 1 << i;
         int muted = p->mute & b, solo = sq.solo;
         if (fast && (sq.mq_m & b)) muted = sq.mq_v & b;
         if (fast && (sq.sq_m & b)) solo = (solo & ~b) | (sq.sq_v & b);
@@ -3724,8 +3739,8 @@ static void glo_picture(int busy)
         }
     } else if (ui.sub == GS_MIDI) {
         int ch = (store_.set[S_MCH] * 16) >> 7;
-        for (int i = 0; i < M2K_TRACKS; i++) {
-            int x = SX0 + (i % 3) * 80, y = 72 + (i / 3) * 32, w = 72, on = i == ui.trk;
+        for (int j = 0; j < UI_KT; j++) {
+            const int i = ui_tr0() + j, x = SX0 + (j % 3) * 80, y = 72 + (j / 3) * 32, w = 72, on = i == ui.trk;
             char o[4];
             s_int(o, (ch + i) % 16 + 1);
             if (on) rect(x, y, w, 24, 1); else frame(x, y, w, 24, 1);
@@ -4108,7 +4123,7 @@ static void white_keys(int x, int b)
     const int fast = (ui.now >> 7) & 1, ky = b + 4;
     for (int i = 0; i < 15; i++) {
         int bx = x + i * 12, on = 0, dot = 0;
-        if (i < M2K_TRACKS) {
+        if (i < UI_KT) {
             const int m = 1 << i;
             int muted = p->mute & m, solo = sq.solo;
             if (fast && (sq.mq_m & m)) muted = sq.mq_v & m;
@@ -4116,7 +4131,7 @@ static void white_keys(int x, int b)
             if (fast && (sq.solo_rel & m)) solo |= m;
             on = !muted && (!solo || (solo & m));
             dot = !muted && !on;
-        } else if (i >= 8 && i < 8 + M2K_TRACKS) on = (sq.solo >> (i - 8)) & 1;
+        } else if (i >= 8 && i < 8 + UI_KT) on = (sq.solo >> (i - 8)) & 1;
         else if (i == 6) on = sq.fill_next;
         if (on) rect(bx, ky, 8, 12, 1); else frame(bx, ky, 8, 12, 1);
         if (dot) rect(bx + 3, ky + 5, 2, 2, 1);
@@ -4453,12 +4468,12 @@ const uint8_t *m2k_leds(void)
     for (int k = 0; lay && k < M2K_KEYS; k++) {
         int w = ui.kw[k], b = ui.kb[k], v = 0;
         if (lay == 1 && w >= 0) {
-            if (w < M2K_TRACKS) {          /* (a mute waiting for the bar: blinking) */
+            if (w < UI_KT) {               /* (a mute waiting for the bar: blinking) */
                 int on = !((p->mute >> w) & 1), heard = on && (!sq.solo || ((sq.solo >> w) & 1));
                 v = (sq.mq_m >> w) & 1 ? (fast ? 255 : 0) : !on ? 0 : !heard ? 40 : ui.now - ui.flash_t[w] < 80 ? 255 : 200;
             } else if (w == 6) v = sq.fill_next ? (fast ? 255 : 40) : 16;
             else if (w == 7) v = ps >= 0 ? ((ps & 3) == 0 ? 255 : 16) : 16;
-            else if (w >= 8 && w < 8 + M2K_TRACKS)
+            else if (w >= 8 && w < 8 + UI_KT)
                 v = ((sq.sq_m | sq.solo_rel) >> (w - 8)) & 1 ? (fast ? 255 : 0) : (sq.solo >> (w - 8)) & 1 ? 255 : 16;
             else if (w == 14) v = mute_pending() ? (fast ? 255 : 16) : p->mute || sq.solo ? 90 : 16;
         } else if (lay == 2) {
@@ -4488,7 +4503,7 @@ const uint8_t *m2k_leds(void)
                     if (s == tp) v = 255;
                     for (int i = 0; i < ui.nheld; i++) if (ui.held[i] == s) v = ((ui.now >> 7) & 1) ? 255 : 40;
                 }
-            } else if (b < M2K_TRACKS) {
+            } else if (b < UI_KT) {
                 v = b == ui.trk ? 255 : (ui.now - ui.flash_t[b] < 80) ? 160 : 24;
             } else if (b < 10) {
                 v = b - 6 == ui.spage ? 255 : (tp >= 0 && tp / 16 == b - 6) ? 90 : 16;

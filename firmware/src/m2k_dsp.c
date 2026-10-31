@@ -199,6 +199,18 @@ static inline int32_t P7(const trk_t *t, int id) { return P8(t, id) >> 8; }
 static inline int32_t PB8(const trk_t *t, int id) { return P8(t, id) - 64 * 256; }
 /* a choice of n */
 static inline int32_t PN(const trk_t *t, int id, int n) { return (P7(t, id) * n) >> 7; }
+/* an LFO's TRCK: 0..127 the first six tracks as ever ((v * 6) >> 7), 128 on the tracks past them (format 21's
+ * seventh, eighth: out of the knob's 0..127, so a pattern of six reads and sounds as it did in any build) */
+#define TRCK_PAST 128
+static inline int trck_of(int v) { return v < TRCK_PAST ? (v * M2K_TRACKS6) >> 7 : M2K_TRACKS6 + v - TRCK_PAST; }
+/* the track an LFO moves: its modulated TRCK on the first six (one past them stands) */
+static inline int lfo_trk(const trk_t *t, int id)
+{
+#if M2K_TRACKS > M2K_TRACKS6
+    if (t->eff[id] >= TRCK_PAST) { int k = trck_of(t->eff[id]); return k < M2K_TRACKS ? k : M2K_TRACKS - 1; }
+#endif
+    return PN(t, id, M2K_TRACKS6);
+}
 /* a table between its entries at a parameter's Q8 (its LFO's share in it): an LFO glides through a law, never steps;
  * a whole value reads the entry itself, as the knob always has */
 static uint32_t tq_u32_mid(const uint32_t *T, int32_t q8)       /* (out of line: a modulated value's, rare) */
@@ -585,7 +597,8 @@ static void mach_block(int ti, int m, int32_t pitch)
          * RING multiplies the two triangles, unipolar, whatever the wave; R+S rings with the second synced */
         uint32_t inc1 = inc_of(pitch + (PB8(t, P_SYN + 7) >> 7));
         int mod = P7(t, P_SYN + 4) >> 5, wave = (P7(t, P_SYN + 3) * 5) >> 7;
-        uint32_t inc2 = P7(t, P_SYN + 5) >= 64 ? inc_of(trk[(ti + M2K_TRACKS - 1) % M2K_TRACKS].pitch)
+        /* (the previous track round the first six, as the Monomachine's: T1's is T6 in any build; T7's T6) */
+        uint32_t inc2 = P7(t, P_SYN + 5) >= 64 ? inc_of(trk[ti ? ti - 1 : M2K_TRACKS6 - 1].pitch)
                                                 : inc_of(48 * 64 + PK(t, P_SYN + 6, 24));
         t->ms[4] = (int32_t)(((uint32_t)t->ms[4] + (uint32_t)PK(t, P_SYN + 1, 64)) & 0x7FFFFFu);   /* the sweep, Q16 */
         int32_t pw = ((P8(t, P_SYN + 0) << 8) + t->ms[4]) & 0x7FFFFF;                             /* PW, Q16, 0..128 */
@@ -1438,7 +1451,7 @@ static void lfo_block(int ti)
         if (trig == 2) v = t->lhold[l];
         t->lval[l] = v;
         mon.lfo[ti][l] = v;
-        if (depth) mod_add(PN(t, b + L_TRCK, M2K_TRACKS), dest - 1, (v * depth) >> 14);   /* 2^15 by 2^14: a word */
+        if (depth) mod_add(lfo_trk(t, b + L_TRCK), dest - 1, (v * depth) >> 14);   /* 2^15 by 2^14: a word */
     }
 }
 

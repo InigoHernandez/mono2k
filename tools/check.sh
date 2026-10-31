@@ -1,14 +1,17 @@
 #!/bin/sh
 # SPDX-License-Identifier: GPL-3.0-only
 # The build checks, from the repo's root: sh tools/check.sh
-#  1. warnings: the host and the reference renderer with clang -Wall -Wextra, and with GCC -Wall -Wextra when a GCC
-#     is installed (its -Wstringop-overflow and -Warray-bounds see more than clang's); none allowed
+#  1. warnings: the host (and the host of eight tracks, M2K_TRACKS=8) and the reference renderer with clang -Wall
+#     -Wextra, and with GCC -Wall -Wextra when a GCC is installed (its -Wstringop-overflow and -Warray-bounds see more
+#     than clang's); none allowed
 #  2. the device rules: the core built for a 32-bit soft-float target (armv7m) calls no float helper and no 64-bit
 #     division (__aeabi_ldivmod / __aeabi_uldivmod, __divdi3 ...); its section sizes are printed
 #  3. sanitizers: the self-test, the FM-1's store and link (host/m2k_link_test.c, with the browser's store for it and
 #     its store read back in the browser), every screen (and the text audit: on the tour's frames and a sweep of every
 #     page, machine and knob value, no two texts touch and none is cut), every bank A track, every reference spec and
 #     the power test's loop under ASan + UBSan; any report fails the run
+#  3b. eight tracks: the host of eight's self-test, screens and text sweep under the sanitizers; its renders of bank A,
+#     DENSE and a pattern of six (--render-hash) the same as the six-track host's
 #  4. the pattern format's conversions mutated (tools/ref/mutate_formats.py): the self-test catches every mutant of
 #     fm_v9 and sid_v10 but the equivalent one
 #  5. the wave banks (tools/wave_check.py); the bus's controls, every value as recorded and every old value as it
@@ -31,6 +34,12 @@ for cc in clang $(ls /opt/homebrew/bin/gcc-[0-9]* /usr/local/bin/gcc-[0-9]* 2>/d
         echo "  $cc $src: $n warnings"
         [ "$n" -eq 0 ] || { printf "%s\n" "$out"; FAIL=1; }
     done
+    if ! out=$($cc -O2 $W -DM2K_TRACKS=8 $I -o "$B/m2k_host8" host/m2k_host.c -lm 2>&1); then   # (eight tracks: the Move's)
+        echo "  $cc host/m2k_host.c, eight tracks: DOES NOT BUILD"; printf "%s\n" "$out" | grep "error:" | head -5; FAIL=1; continue
+    fi
+    n=$(printf "%s" "$out" | grep -c "warning:")
+    echo "  $cc host/m2k_host.c, eight tracks: $n warnings"
+    [ "$n" -eq 0 ] || { printf "%s\n" "$out"; FAIL=1; }
 done
 ls /opt/homebrew/bin/gcc-[0-9]* /usr/local/bin/gcc-[0-9]* >/dev/null 2>&1 || [ -n "${GCC:-}" ] ||
     echo "  GCC: SKIPPED (none installed; GCC=path to use one)"
@@ -71,6 +80,24 @@ h1=$("$B/m2k_host_san" --bank-hash 2>/dev/null); h2=$(grep "bank hash" "$B/san.l
 [ -n "$h1" ] && [ "$h1" = "$h2" ] || echo "LINK FAILED: bank A through the cache ($h2) is not the browser's ($h1)" >> "$B/san.log"
 rep=$(grep -E "runtime error|ERROR: AddressSanitizer|SELFTEST FAILED|LINK FAILED|^FAIL|^TEXT " "$B/san.log" | sort | uniq -c)
 if [ -n "$rep" ]; then echo "$rep"; FAIL=1; else echo "  self-test, the FM-1 link, screens and their text, bank A, $(ls tools/ref/*.spec | wc -l | tr -d ' ') specs, the power loop: clean"; fi
+
+echo "== eight tracks (M2K_TRACKS=8, the Move's build)"
+# its self-test (format 21 both ways: the build of six reads its bytes, FMT21; both pack a pattern of six alike), every
+# screen's text and a sweep with T8 in view, under ASan + UBSan; bank A, DENSE and a pattern of six from their start
+# render as the build of six's, sample for sample (T7 and T8 silent beside them)
+rm -f "$B/m2k_host8_san"
+clang $SAN -w -DM2K_TRACKS=8 $I -o "$B/m2k_host8_san" host/m2k_host.c -lm || FAIL=1
+mkdir -p "$B/screens8"
+{
+    "$B/m2k_host8_san" --selftest
+    "$B/m2k_host8_san" "$B/screens8"
+    "$B/m2k_host8_san" --text-sweep
+} > "$B/san8.log" 2>&1
+rep=$(grep -E "runtime error|ERROR: AddressSanitizer|SELFTEST FAILED|^FAIL|^TEXT " "$B/san8.log" | sort | uniq -c)
+r6=$("$B/m2k_host" --render-hash 20 2>&1); r8=$("$B/m2k_host8" --render-hash 20 2>&1)
+if [ -n "$rep" ]; then echo "$rep"; FAIL=1;
+elif [ -z "$r6" ] || [ "$r6" != "$r8" ]; then echo "  the renders differ from six tracks':"; printf "%s\n%s\n" "$r6" "$r8"; FAIL=1;
+else echo "  self-test, screens and their text: clean; bank A, DENSE, a pattern of six: 20 s each as six tracks render them"; fi
 
 echo "== the format's conversions, mutated"
 .venv/bin/python tools/ref/mutate_formats.py > "$B/mutate.log" 2>&1 && tail -1 "$B/mutate.log" | sed 's/^/  /' || { grep -E "SURVIVED|MISSING|unmutated" "$B/mutate.log"; FAIL=1; }

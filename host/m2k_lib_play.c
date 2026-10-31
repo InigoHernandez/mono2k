@@ -52,12 +52,12 @@ static int lib_setup_on(int i, int trigs, int t)
     p->glob[G_TMPO] = 120 - 30;
     p->glob[G_LEN] = 32;
     for (int k = 0; k < M2K_TRACKS; k++) for (int s = 0; s < M2K_STEPS; s++) p->step[k][s].flags = 0;
-    p->mute = (uint8_t)(0x3F & ~(1u << t));
+    p->mute = (uint8_t)(M2K_TMASK & ~(1u << t));
     m2k_sound_t sd;
     lib_sound(i, &sd);
     p->machine[t] = sd.machine;
     m_cpy(p->kit[t], sd.kit, P_COUNT);
-    for (int l = 0; l < 3; l++) p->kit[t][P_LFO + 8 * l + L_TRCK] = enc(t, M2K_TRACKS);
+    for (int l = 0; l < 3; l++) p->kit[t][P_LFO + 8 * l + L_TRCK] = trck_enc(t);
     int ph = lib_phrase(i);
     for (const ph_t *s = PHRASE[ph]; trigs && s->step != 0xFF; s++)
         p->step[t][s->step] = (m2k_step_t){(uint8_t)(LIB[i].root + s->note), (uint8_t)(ST_TRIG | s->flags), C_ALWAYS, 0};

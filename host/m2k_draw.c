@@ -137,10 +137,10 @@ static void play_from(int p)
     m2k_init(2000);
     if (p == 4) { dense_pattern(&pat[46]); p = 46; }
     if (p == 5) {                      /* FXS: the FX machines each hearing a track with the chain's every stage on */
-        static const uint8_t MS[M2K_TRACKS] = {M_SAW, M_FXC, M_GSIN, M_GSIN, M_FXR, M_FXD};
+        static const uint8_t MS[M2K_TRACKS6] = {M_SAW, M_FXC, M_GSIN, M_GSIN, M_FXR, M_FXD};
         dense_pattern(&pat[47]);
         m2k_pattern_t *q = &pat[47];
-        for (int t = 0; t < M2K_TRACKS; t++) {
+        for (int t = 0; t < M2K_TRACKS6; t++) {
             uint8_t keep[P_COUNT];
             m_cpy(keep, q->kit[t], P_COUNT);
             kit_default(q, t, MS[t]);

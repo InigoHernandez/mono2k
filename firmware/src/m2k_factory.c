@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /* MONO2K's factory patterns: sixteen sound designs in bank A to show what six mono machines can do (the blank kit
- * fills the other banks).
+ * fills the other banks; a build of eight leaves its seventh and eighth tracks blank, track_blank).
  * Each pattern is a whole song part: its six machines and every parameter, its bus, its tempo, its steps.
  * Steps are written as a grid, one character a step ('|' and ' ' only separate):
  *   .  rest          x  trig        X  accent        s  slide         S  accent + slide
@@ -55,7 +55,7 @@ static void beat(m2k_pattern_t *p, int t, const char *g, const uint8_t *notes, i
 static uint8_t amp_v1_val(int prm, int v) { return prm >= P_ATK && prm <= P_REL ? T_AMPV1[prm - P_ATK][v & 127] : (uint8_t)v; }
 static void amp_v1(m2k_pattern_t *p)
 {
-    for (int t = 0; t < M2K_TRACKS; t++)
+    for (int t = 0; t < M2K_TRACKS6; t++)
         for (int k = P_ATK; k <= P_REL; k++) p->kit[t][k] = amp_v1_val(k, p->kit[t][k]);
     for (int i = 0; i < M2K_LOCKS; i++)
         if (p->lock[i].trk != 0xFF) p->lock[i].val = amp_v1_val(p->lock[i].param, p->lock[i].val);
@@ -101,7 +101,7 @@ static uint8_t v5_val(int prm, int v, const uint8_t *k, int note)
 
 static void chain_v4(m2k_pattern_t *p)
 {
-    for (int t = 0; t < M2K_TRACKS; t++) {
+    for (int t = 0; t < M2K_TRACKS6; t++) {
         int count[128] = {0}, note = 60, best = 0;
         for (int s = 0; s < M2K_STEPS; s++)
             if ((p->step[t][s].flags & ST_TRIG) && ++count[p->step[t][s].note & 127] > best) { best = count[p->step[t][s].note & 127]; note = p->step[t][s].note & 127; }
@@ -144,11 +144,12 @@ static int ens_lock(m2k_pattern_t *p, int t, int st, int prm, int v)
     return 1;
 }
 
-static int ens_target(int trck) { return ((trck & 127) * M2K_TRACKS) >> 7; }        /* the track an LFO reaches */
+/* the track an LFO reaches in a pattern of an older format: every one six tracks (the conversions touch those alone) */
+static int ens_target(int trck) { return ((trck & 127) * M2K_TRACKS6) >> 7; }
 
 static void ens_v6(m2k_pattern_t *p)
 {
-    for (int t = 0; t < M2K_TRACKS; t++) {
+    for (int t = 0; t < M2K_TRACKS6; t++) {
         if (p->machine[t] != M_ENS) continue;
         uint8_t *k = p->kit[t];
         /* which trigs the old level silenced, before its locks go */
@@ -173,7 +174,7 @@ static void ens_v6(m2k_pattern_t *p)
                 if (mute[st] && (p->step[t][st].flags & ST_TRIG))
                     for (int i = 0; i < 3; i++) ens_lock(p, t, st, P_SYN + i, 62);
     }
-    for (int t = 0; t < M2K_TRACKS; t++)
+    for (int t = 0; t < M2K_TRACKS6; t++)
         for (int l = 0; l < 3; l++) {
             uint8_t *b = &p->kit[t][P_LFO + 8 * l];
             int to = ens_target(b[L_TRCK]), dest = b[L_DEST] - 1;
@@ -255,7 +256,7 @@ static void fx_v16(m2k_pattern_t *p)
     g[G_VERB] = (uint8_t)(ov ? CLAMP((dc + 32768) >> 16, 1, 127) : 0);
     g[G_DAMP] = (uint8_t)CLAMP((dm + 32768) >> 16, 0, 127);
     int32_t gain = ov ? (lv + 2048) >> 12 : 256;
-    for (int t = 0; t < M2K_TRACKS; t++) {
+    for (int t = 0; t < M2K_TRACKS6; t++) {
         p->kit[t][P_SPU] = spu_v16(p->kit[t][P_SPU] & 127, gain);
         p->kit[t][P_DSND] = dsnd_v16(p->kit[t][P_DSND] & 127);
     }
@@ -340,7 +341,7 @@ static int fm_val(int dyn, int prm, int v, const uint8_t *old)
 
 static void fm_v9(m2k_pattern_t *p)
 {
-    for (int t = 0; t < M2K_TRACKS; t++) {
+    for (int t = 0; t < M2K_TRACKS6; t++) {
         int m = p->machine[t], dyn = m == M_FMD;
         if (m != M_FMS && m != M_FMD) continue;
         uint8_t *k = &p->kit[t][P_SYN], o[8];
@@ -376,7 +377,7 @@ static void fm_v9(m2k_pattern_t *p)
         }
         k[7] = 64;
     }
-    for (int t = 0; t < M2K_TRACKS; t++)              /* LFOs aimed at an FM page: to the parameter's new place */
+    for (int t = 0; t < M2K_TRACKS6; t++)              /* LFOs aimed at an FM page: to the parameter's new place */
         for (int l = 0; l < 3; l++) {
             uint8_t *b = &p->kit[t][P_LFO + 8 * l];
             int to = ens_target(b[L_TRCK]), dest = b[L_DEST] - 1, m = p->machine[to];
@@ -413,7 +414,7 @@ static int sid_val(int prm, int v)
  * VOIC, one on the rest stops */
 static void vox_v13(m2k_pattern_t *p)
 {
-    for (int t = 0; t < M2K_TRACKS; t++) {
+    for (int t = 0; t < M2K_TRACKS6; t++) {
         if (p->machine[t] != M_VOX) continue;
         uint8_t *k = &p->kit[t][P_SYN], o[8];
         m_cpy(o, k, 8);
@@ -429,7 +430,7 @@ static void vox_v13(m2k_pattern_t *p)
             else l->trk = 0xFF;
         }
     }
-    for (int t = 0; t < M2K_TRACKS; t++)
+    for (int t = 0; t < M2K_TRACKS6; t++)
         for (int l = 0; l < 3; l++) {
             uint8_t *b = &p->kit[t][P_LFO + 8 * l];
             int to = ens_target(b[L_TRCK]), dest = b[L_DEST] - 1;
@@ -481,9 +482,9 @@ static uint8_t feel_lfo_val(int prm, int v, int dest, const uint8_t *tk)
 
 static void feel_v15(m2k_pattern_t *p)
 {
-    static uint8_t old[M2K_TRACKS][P_COUNT];        /* the kits before: an LFO's depth reads its target's old value */
+    static uint8_t old[M2K_TRACKS6][P_COUNT];        /* the kits before: an LFO's depth reads its target's old value */
     m_cpy(old, p->kit, sizeof old);
-    for (int t = 0; t < M2K_TRACKS; t++) {
+    for (int t = 0; t < M2K_TRACKS6; t++) {
         for (int prm = P_ATK; prm <= P_REL; prm++) p->kit[t][prm] = feel_val(prm, old[t][prm]);
         for (int l = 0; l < 3; l++) {
             const uint8_t *b = &old[t][P_LFO + 8 * l];
@@ -494,7 +495,7 @@ static void feel_v15(m2k_pattern_t *p)
     }
     for (int i = 0; i < M2K_LOCKS; i++) {
         m2k_lock_t *l = &p->lock[i];
-        if (l->trk >= M2K_TRACKS) continue;
+        if (l->trk >= M2K_TRACKS6) continue;
         if (l->param >= P_LFO && l->param < P_LFO + 24) {
             const uint8_t *b = &old[l->trk][P_LFO + (l->param - P_LFO) / 8 * 8];
             l->val = feel_lfo_val(l->param, l->val, b[L_DEST] - 1, old[ens_target(b[L_TRCK])]);
@@ -532,7 +533,7 @@ static uint8_t hold_to(int v, int bpm) { return v >= 127 ? 127 : (uint8_t)CLAMP(
 static void hold_v12(m2k_pattern_t *p)
 {
     int bpm = 30 + p->glob[G_TMPO];
-    for (int t = 0; t < M2K_TRACKS; t++) p->kit[t][P_HOLD] = hold_to(p->kit[t][P_HOLD], bpm);
+    for (int t = 0; t < M2K_TRACKS6; t++) p->kit[t][P_HOLD] = hold_to(p->kit[t][P_HOLD], bpm);
     for (int i = 0; i < M2K_LOCKS; i++)
         if (p->lock[i].trk != 0xFF && p->lock[i].param == P_HOLD) p->lock[i].val = hold_to(p->lock[i].val, bpm);
 }
@@ -544,7 +545,7 @@ static int gsin_to(int k) { return k == 0 ? 7 : k - 1; }
 
 static void gsin_v11(m2k_pattern_t *p)
 {
-    for (int t = 0; t < M2K_TRACKS; t++) {
+    for (int t = 0; t < M2K_TRACKS6; t++) {
         if (p->machine[t] != M_GSIN) continue;
         uint8_t *k = &p->kit[t][P_SYN], o[8];
         m_cpy(o, k, 8);
@@ -554,7 +555,7 @@ static void gsin_v11(m2k_pattern_t *p)
             if (l->trk == t && l->param < P_SYN + 8) l->param = (uint8_t)(P_SYN + gsin_to(l->param - P_SYN));
         }
     }
-    for (int t = 0; t < M2K_TRACKS; t++)
+    for (int t = 0; t < M2K_TRACKS6; t++)
         for (int l = 0; l < 3; l++) {
             uint8_t *b = &p->kit[t][P_LFO + 8 * l];
             int to = ens_target(b[L_TRCK]), dest = b[L_DEST] - 1;
@@ -565,7 +566,7 @@ static void gsin_v11(m2k_pattern_t *p)
 
 static void sid_v10(m2k_pattern_t *p)
 {
-    for (int t = 0; t < M2K_TRACKS; t++) {
+    for (int t = 0; t < M2K_TRACKS6; t++) {
         if (p->machine[t] != M_SID) continue;
         uint8_t *k = &p->kit[t][P_SYN], o[8];
         m_cpy(o, k, 8);
@@ -580,7 +581,7 @@ static void sid_v10(m2k_pattern_t *p)
         k[0] = (uint8_t)sid_val(1, o[1]); k[1] = (uint8_t)sid_val(2, o[2]); k[2] = 127; k[3] = (uint8_t)sid_val(0, o[0]);
         k[4] = (uint8_t)sid_val(6, o[6]); k[5] = 0; k[6] = (uint8_t)sid_val(4, o[4]); k[7] = 64;
     }
-    for (int t = 0; t < M2K_TRACKS; t++)
+    for (int t = 0; t < M2K_TRACKS6; t++)
         for (int l = 0; l < 3; l++) {
             uint8_t *b = &p->kit[t][P_LFO + 8 * l];
             int to = ens_target(b[L_TRCK]), dest = b[L_DEST] - 1;
@@ -633,7 +634,7 @@ static void kit_v4(m2k_pattern_t *p, int t, int m)
 /* every track's LEV scaled: the mix's level under the bus's knee */
 static void trim(m2k_pattern_t *p, int lev)
 {
-    for (int t = 0; t < M2K_TRACKS; t++) p->kit[t][P_LEVL] = (uint8_t)CLAMP(p->kit[t][P_LEVL] * lev / 100, 0, 127);
+    for (int t = 0; t < M2K_TRACKS6; t++) p->kit[t][P_LEVL] = (uint8_t)CLAMP(p->kit[t][P_LEVL] * lev / 100, 0, 127);
 }
 
 /* the modulation effect: 0 chorus, 1 flanger, 2 phaser; rate (0.1..10 Hz), depth, mix */
@@ -685,7 +686,7 @@ static m2k_pattern_t *part(int i, const char *name, int bpm, const uint8_t *mach
 {
     m2k_pattern_t *p = PAT(i);
     pat_init(p, name);
-    for (int t = 0; t < M2K_TRACKS; t++) kit_default(p, t, machines[t]);
+    for (int t = 0; t < M2K_TRACKS6; t++) kit_default(p, t, machines[t]);
     p->glob[G_TMPO] = (uint8_t)(bpm - 30);
     p->glob[G_LEN] = 64;
     p->glob[G_VERB] = 50;

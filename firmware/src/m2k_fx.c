@@ -481,7 +481,7 @@ static int dub_line(void)
         for (int u = 0; ok && u < M2K_TRACKS; u++)
             for (int l = 0; l < 3; l++) {
                 const uint8_t *b = &p->kit[u][P_LFO + 8 * l];
-                if (b[L_DEST] == P_DSND + 1 && ((b[L_TRCK] * M2K_TRACKS) >> 7) == t) ok = 0;
+                if (b[L_DEST] == P_DSND + 1 && trck_of(b[L_TRCK]) == t) ok = 0;
             }
         if (ok) return t + 1;
     }

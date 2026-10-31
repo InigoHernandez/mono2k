@@ -9,7 +9,16 @@
 
 #define M2K_SR        44100
 #define M2K_SUB       16          /* control-rate block: envelopes, LFOs, params, triggers */
+/* the tracks: six on the FM-1 and in the browser; eight where a build sets it (the Ableton Move's, -DM2K_TRACKS=8).
+ * A pattern of six packs as ever (format 20 and before, byte for byte); one that uses a track past the sixth packs as
+ * format 21, eight wide, and a build of six reads it as its first six (m2k_proj.c) */
+#ifndef M2K_TRACKS
 #define M2K_TRACKS    6
+#endif
+#define M2K_TRACKS6   6           /* every pattern format's tracks before 21, the FM-1's panel's */
+#define M2K_TRACKS21  8           /* format 21's */
+#define M2K_TMASK     ((1u << M2K_TRACKS) - 1u)   /* a bit per track (the mutes, the solos: a byte holds eight) */
+_Static_assert(M2K_TRACKS == M2K_TRACKS6 || M2K_TRACKS == M2K_TRACKS21, "M2K_TRACKS is 6 or 8");
 #define M2K_STEPS     64
 #ifndef M2K_PATTERNS
 #define M2K_PATTERNS  64          /* per project: 4 banks of 16 (the FM-1's first build: 16, bank A, for its RAM) */
@@ -60,14 +69,19 @@ enum {
     G_TAPE, G_ADPC, G_GLCH, G_GSIZ,          /* the lofi bus */
     G_VERB, G_DAMP, G_HISS, G_DRIV,
     G_SPD1,                                  /* + t: track t's speed, 1/8x .. 2x (the pattern format's 15th) */
-    G_GRX = G_SPD1 + 6, G_GRY, G_GRCH, G_GRES,   /* Grids (format 18, m2k_grids.c): the map's X, Y, CHAOS, its cycle */
+    G_GRX = G_SPD1 + M2K_TRACKS, G_GRY, G_GRCH, G_GRES,   /* Grids (format 18, m2k_grids.c): the map's X, Y, CHAOS, its cycle */
     G_GRBD, G_GRSD, G_GRHH,                  /* the kick's, the snare's, the hats' density */
     G_LANE1,                                 /* + t: the lane track t follows: OFF BD SD HH, (v * 4) >> 7 */
-    G_TLEN1 = G_LANE1 + 6,                   /* + t: track t's own length, 1..64 steps; 0 the pattern's (format 19) */
-    G_TPRB1 = G_TLEN1 + 6,                   /* + t: track t's chance, PROB's step 0..15 (100 % .. 0 %): 0 every trig
+    G_TLEN1 = G_LANE1 + M2K_TRACKS,          /* + t: track t's own length, 1..64 steps; 0 the pattern's (format 19) */
+    G_TPRB1 = G_TLEN1 + M2K_TRACKS,          /* + t: track t's chance, PROB's step 0..15 (100 % .. 0 %): 0 every trig
                                               * (format 20) */
-    G_COUNT = G_TPRB1 + 6
+    G_COUNT = G_TPRB1 + M2K_TRACKS
 };
+/* the globals a format packs, its per-track blocks NT wide (six before 21): before 15 those before the speeds, then
+ * with them, from 18 with Grids' and the lanes, 19 the lengths, 20 the chances (the pattern's own: NT M2K_TRACKS) */
+#define G_COUNT_OF(ver, nt) ((ver) < 15 ? G_SPD1 : G_SPD1 + (nt) + ((ver) >= 18 ? G_LANE1 - G_GRX + (nt) : 0) + \
+                             ((ver) >= 19 ? (nt) : 0) + ((ver) >= 20 ? (nt) : 0))
+_Static_assert(G_COUNT_OF(20, M2K_TRACKS) == G_COUNT, "the globals' blocks");
 #define G_COUNT_V14 G_SPD1                   /* the globals before the speeds */
 #define G_COUNT_V17 G_GRX                    /* and before Grids */
 #define G_COUNT_V18 G_TLEN1                  /* and before the tracks' lengths */
@@ -119,6 +133,8 @@ typedef struct {
     m2k_step_t step[M2K_TRACKS][M2K_STEPS];
     m2k_lock_t lock[M2K_LOCKS];
 } m2k_pattern_t;
+/* the masks of tracks (the mutes, the solos, the second core's share) are bytes; a lock's track is a byte, 0xFF free */
+_Static_assert(M2K_TRACKS <= 8, "a byte a mask of the tracks");
 
 /* settings: the instrument's, not a pattern's; saved with the store. 0..127 */
 /* S_SCREEN: below 64 light (ink on paper), from 64 dark (the negative). GLO > MIDI: S_MCH track 1's channel (the

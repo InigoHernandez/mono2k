@@ -8,12 +8,12 @@
  * m2k_core.c */
 static void dense_pattern(m2k_pattern_t *q)
 {
-    static const uint8_t M[M2K_TRACKS] = {M_DKIK, M_DSNR, M_DHAT, M_SAW, M_FMD, M_WAV};
-    static const uint8_t ROOT[M2K_TRACKS] = {36, 38, 42, 45, 33, 57};
+    static const uint8_t M[M2K_TRACKS6] = {M_DKIK, M_DSNR, M_DHAT, M_SAW, M_FMD, M_WAV};
+    static const uint8_t ROOT[M2K_TRACKS6] = {36, 38, 42, 45, 33, 57};
     static const uint8_t COND[4] = {C_P50, C_1_2, C_P75, C_2_2};
     pat_init(q, "DENSE");
     int nl = 0;
-    for (int t = 0; t < M2K_TRACKS; t++) {
+    for (int t = 0; t < M2K_TRACKS6; t++) {          /* (six: a build of eight leaves the rest blank, as heard) */
         kit_init(q, t, M[t]);
         uint8_t *k = q->kit[t];
         k[P_EQF] = (uint8_t)(60 + 8 * t); k[P_EQG] = 96; k[P_DIST] = 88; k[P_SRR] = 24; k[P_BITS] = 40;
