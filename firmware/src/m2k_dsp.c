@@ -122,6 +122,14 @@ typedef struct {
     zop_t vohp;                        /* and its source's high-pass */
     int64_t vo_pw;                     /* and its compressor: the cascade's mean square, followed */
     int32_t vo_g;                      /* its gain (Q12 log2) */
+    int32_t vo_v[2], vo_f[2];          /* its vowel the last block (VOC1 VOC2, Q8), and where a legato trig's glides from */
+    uint8_t vo_in, vo_gl;              /* fading in from a fresh trig; blocks left of a legato trig's vowel glide */
+    /* a trig over a sounding note: the old oscillators' state, played on and crossfaded into the restarted ones */
+    uint8_t xf;                        /* blocks left of it (XF_N .. 1), 0 none */
+    uint32_t xph[8], xmenv[3];
+    int32_t xms[6];
+    int32_t xlev;                      /* the amp when it began (Q15): the old fade from no louder than it was heard */
+    int32_t acc;                       /* the accent's gain the last block (256 none) */
     /* the chain: EQ, the filter (LP1 before the clip, the HP's two-pole, its one-pole and LP2 after), SRR */
     zsvf_t eq, lp1, hp2;
     zop_t hp1, lp2a, lp2b;
@@ -247,6 +255,11 @@ static inline uint32_t noise_step(uint32_t *s) { uint32_t x = *s; x ^= x << 13; 
 #define VO_UP 57                       /* its gain up at most 0.23 dB a ms: Q12 log2 a block */
 #define VO_DET 475                     /* its detector, a one-pole on the mean square a block, Q15 (25 ms) */
 #define VO_G0 (-16806)                 /* its gain at a trig, Q12 log2 (-24.7 dB: 34.8 under its target at C3 on VOC 64 / 64) */
+#define VO_UPT 228                     /* and up from there at a fresh trig 4 x as fast, to its level (the owner's, 1.6.2:
+                                        * the Monomachine's 0.23 dB a ms left a 1/16 at 120 quiet; at C3 its level in
+                                        * ~40 ms, not ~150) */
+#define VO_GL 32                       /* a legato trig's vowel glide: 11.6 ms, blocks (a power of two) */
+#define VO_GLS 5
 #define VO_NZ 1023                     /* its noise against its voice, Q12 (tuned: alike at VOC 64 / 64) */
 #define RG_HR 1                        /* FX-RING out of the machine 6 dB down (its input reaches 1.94 x full scale) */
 #define RG_CEIL 65500                  /* FX-RING's input clip, 2.03 x a track's ceiling (T_CLIP) at LEV 100: clean to INP ~82 */
@@ -318,8 +331,36 @@ static inline int32_t drm_wave(int w, uint32_t ph, uint32_t inc, uint32_t inv, t
     }
 }
 
-static void mach_trig(trk_t *t, int m)
+/* a trig over a sounding note (legato: the amp over XF_MIN; an ATK 0 hit, over one heard past XF_HIT) on a machine
+ * that restarts its oscillators or its PW sweep: the old state plays on for XF_N blocks, crossfaded into the new on a
+ * smooth step (no kink at either end), from no louder than it was heard (xf_old); 2.9 ms, MONO2K's own declick: the
+ * Monomachine restarts them at every trig, sounding or not (chain_ens18), so a sounding one stepped (1.6.2). A fresh
+ * note starts as it always has. The drums restart hard: their restart is the hit */
+#define XF_N 8
+#define XF_SH 7                        /* log2 of its samples */
+#define XF_MIN 32                      /* the amp, Q15: under -60 dB a step is not heard */
+#define XF_HIT 328                     /* an ATK 0 hit's: the track heard under -40 dBFS before it (its last block's peak) */
+static int xf_machine(const trk_t *t, int m)
 {
+    switch (m) {
+    case M_GSIN: case M_FMS: case M_FMD: case M_FMP: case M_WAV: case M_PUL: case M_ENS: return 1;
+    case M_SID: return t->eff[P_SYN + 2] >= 64 && t->ms[4];
+    default: return 0;
+    }
+}
+/* the crossfade's share of the new at its K-th sample (1 .. 2^XF_SH): 3 w^2 - 2 w^3, Q12 */
+static inline int32_t xf_w(int32_t k) { return (k * k * (3 * (1 << XF_SH) - 2 * k)) >> (3 * XF_SH - 12); }
+
+static void mach_trig(trk_t *t, int m, int legato)
+{
+    t->xf = 0;
+    if (legato && xf_machine(t, m)) {
+        m_cpy(t->xph, t->ph, sizeof t->ph);
+        m_cpy(t->xms, t->ms, sizeof t->ms);
+        m_cpy(t->xmenv, t->menv, sizeof t->menv);
+        t->xf = XF_N;
+        t->xlev = (int32_t)(t->aenv >> 15);
+    }
     t->menv[0] = t->menv[1] = t->menv[2] = 1u << 30;
     switch (m) {
     case M_GSIN: case M_FMS: case M_FMD: case M_FMP:
@@ -329,14 +370,15 @@ static void mach_trig(trk_t *t, int m)
          * turned over, a ratio-2 one not) */
         if (m != M_GSIN) t->ph[0] = 1u << 31;
         break;
-    case M_WAV:
+    case M_WAV:                        /* (legato: the sync's master too, so it does not jump the new a cycle on) */
         t->ph[0] = t->ph[1] = 0;
+        if (legato) t->ph[2] = 0;
         break;
     case M_SID:                        /* PWRS ON: the PW sweep starts again */
         if (t->eff[P_SYN + 2] >= 64) t->ms[4] = 0;
         break;
-    case M_FXD:
-        t->ms[2] = t->ms[3] = 0;
+    case M_FXD:                        /* the compressor from rest; legato, it follows on (its own re-attack stepped) */
+        if (!legato) t->ms[2] = t->ms[3] = 0;
         break;
     case M_PUL:                        /* the voices start together (the unison's beating says so) */
         t->ph[0] = t->ph[1] = t->ph[2] = 0;
@@ -345,8 +387,17 @@ static void mach_trig(trk_t *t, int m)
     case M_ENS:                        /* the voices start together on a trig (chain_ens18: two trigs alike) */
         t->ph[0] = t->ph[1] = t->ph[2] = t->ph[3] = 0;
         break;
-    case M_VOX:                        /* the compressor's gain from near silence at each trig: the fade-in */
-        t->vo_g = VO_G0;
+    case M_VOX:                        /* a fresh trig: the compressor's gain from near silence, the fade-in; a legato one
+                                        * keeps its level, the new vowel gliding in from the last */
+        if (legato) {
+            t->vo_f[0] = t->vo_v[0];
+            t->vo_f[1] = t->vo_v[1];
+            t->vo_gl = VO_GL;
+        } else {
+            t->vo_g = VO_G0;
+            t->vo_in = 1;
+            t->vo_gl = 0;
+        }
         break;
     case M_DKIK:                       /* the phases from the sine's rising zero crossing; the snap and the click */
         t->ph[0] = t->ph[1] = 0;
@@ -383,7 +434,7 @@ static void machine_reset(int ti, int m)
     t->vo_pw = 0;
     t->vo_g = 0;
     if (m == M_ENS || m == M_FXC) m_set(ens_mem[ti], 0, sizeof ens_mem[ti]);   /* their line: not the last one's */
-    mach_trig(t, m);
+    mach_trig(t, m, 0);
     t->mach = (uint8_t)m;
 }
 
@@ -1127,13 +1178,22 @@ static void mach_block(int ti, int m, int32_t pitch)
          * DC: F1 on VOC1, F2 on VOC2, F3 2495 Hz, F4 3527 Hz. Its pitch in whole hertz, rounded down, as the
          * Monomachine's (TUNE +-2 semitones). Then a compressor, as the Monomachine's level says (its loudness over 117
          * vowels is the cascade's at a tenth of the dB, 10:1, residual 0.9 dB): the cascade's mean square followed
-         * (25 ms), the gain down at once and up at most 0.23 dB a ms, from the same low gain at each trig (the
-         * Monomachine's fade-in, straight in dB, 35 dB at C3 and longer where its gain is higher). CONS CLEN CVOL and V-SW's switch: still to come (their knobs kept) */
+         * (25 ms), the gain down at once and up at most 0.23 dB a ms, from the same low gain at a fresh trig (the
+         * Monomachine's fade-in, straight in dB, 35 dB at C3 and longer where its gain is higher), MONO2K's 4 x as fast
+         * (VO_UPT); a legato trig keeps the gain, its vowel gliding (VO_GL). CONS CLEN CVOL and V-SW's switch: still to
+         * come (their knobs kept) */
         uint32_t hz = mulu_hi(inc_of(pitch + (PB8(t, P_SYN + 7) >> 7)), M2K_SR, 32);
         if (hz < 8) hz = 8;
         uint32_t inc = (uint32_t)mul64_sh((int64_t)VO_INC_Q16, (int32_t)hz, 16), inv = 0xFFFFFFFFu / inc;
         int32_t sg = (int32_t)iexp2_q16((ilog2_q8(130) - ilog2_q8(hz)) >> 1);      /* Q16: sqrt(130 / hz) */
         int32_t v1 = P8(t, P_SYN + 0), v2 = P8(t, P_SYN + 1), vc = P8(t, P_SYN + 3);   /* Q8: the vowels glide */
+        if (t->vo_gl) {                /* a legato trig: from the last vowel to this one, straight */
+            int32_t k = VO_GL + 1 - t->vo_gl--;
+            v1 = t->vo_f[0] + (((v1 - t->vo_f[0]) * k) >> VO_GLS);          /* 2^15 by 2^5 */
+            v2 = t->vo_f[1] + (((v2 - t->vo_f[1]) * k) >> VO_GLS);
+        }
+        t->vo_v[0] = v1;
+        t->vo_v[1] = v2;
         zsvf_set(&t->vo[0], tq_u32(T_VO_G1, v1), tq_u32(T_VO_K1, v1));
         zsvf_set(&t->vo[1], tq_u32(T_VO_G2, v2), tq_u32(T_VO_K2, v2));
         zsvf_set(&t->vo[2], T_VO_GK34[0], T_VO_GK34[1]);
@@ -1143,7 +1203,9 @@ static void mach_block(int ti, int m, int32_t pitch)
         /* the compressor: its target from the cascade's level so far, the gain to it at once down, slewed up */
         int32_t lv = (ilog2_q8((uint32_t)((t->vo_pw >> 16) | 1)) + 16 * 256) >> 1;  /* the rms, Q8 log2 */
         int32_t gt = ((VO_T - lv) * (VO_R - 1) * 16) / VO_R;                       /* Q12, 10:1 over everything */
-        t->vo_g = gt < t->vo_g ? gt : t->vo_g + VO_UP < gt ? t->vo_g + VO_UP : gt;
+        int32_t up = t->vo_in ? VO_UPT : VO_UP;
+        t->vo_g = gt < t->vo_g ? gt : t->vo_g + up < gt ? t->vo_g + up : gt;
+        if (t->vo_g == gt) t->vo_in = 0;   /* its level reached: the compressor's own pace from here */
         uint32_t cg = iexp2_q16(t->vo_g >> 4);                                     /* Q16 */
         int64_t pw = 0;
         for (int i = 0; i < M2K_SUB; i++) {
@@ -1168,6 +1230,58 @@ static void mach_block(int ti, int m, int32_t pitch)
     default:
         m_set(o, 0, sizeof(int16_t) * M2K_SUB);
         break;
+    }
+}
+
+/* a block of a legato trig's crossfade (mach_trig): the machine once on the old state, once on the new, the old into
+ * the new over XF_N blocks (xf_w). Both hear the same noise (its generators as the block found them), so what the
+ * machine draws from it is the same in each. SWAV-ENS's chorus runs alike in both (its clock, its line's place) and
+ * each writes the block's place in the line: it keeps the crossfade, as the side does, for the taps to come */
+static void xf_swap(trk_t *t)
+{
+    uint32_t a[8];
+    m_cpy(a, t->ph, sizeof t->ph); m_cpy(t->ph, t->xph, sizeof t->ph); m_cpy(t->xph, a, sizeof t->ph);
+    m_cpy(a, t->ms, sizeof t->ms); m_cpy(t->ms, t->xms, sizeof t->ms); m_cpy(t->xms, a, sizeof t->ms);
+    m_cpy(a, t->menv, sizeof t->menv); m_cpy(t->menv, t->xmenv, sizeof t->menv); m_cpy(t->xmenv, a, sizeof t->menv);
+}
+
+/* the old's share at the K-th sample, Q12: what the crossfade leaves it, under an amp past the one it was heard at (an
+ * ATK 0 hit over a quiet tail) as much less, so it fades from its own level and the new hit is the new's */
+static inline int32_t xf_old(const trk_t *t, int32_t k, int32_t amp)
+{
+    int32_t g = 4096 - xf_w(k);
+    return amp > t->xlev ? g * t->xlev / amp : g;                     /* 2^12 by 2^15 */
+}
+static inline int16_t xf_mix(int32_t a, int32_t b, int32_t g) { return (int16_t)(b + (((a - b) * g) >> 12)); }   /* 2^16 by 2^12 */
+
+static void xf_block(int ti, int m, int32_t pitch)
+{
+    trk_t *t = &trk[ti];
+    int16_t old[M2K_SUB], olds[M2K_SUB], oline[M2K_SUB / 2], *o = blk[ti], *es = eside[ti], *ln = ens_mem[ti];
+    uint32_t r1 = t->lfsr, r2 = t->lfsr2, w = t->ph[5];
+    xf_swap(t);
+    mach_block(ti, m, pitch);
+    m_cpy(old, o, sizeof old);
+    if (m == M_ENS) {
+        m_cpy(olds, es, sizeof olds);
+        for (int j = 0; j < M2K_SUB / 2; j++) oline[j] = ln[(w + (uint32_t)j) & (ENS_LEN - 1)];
+    }
+    xf_swap(t);
+    t->lfsr = r1;
+    t->lfsr2 = r2;
+    mach_block(ti, m, pitch);
+    /* the amp across the block, as track_block ramps it: from the last block's to this one's */
+    int32_t k = (XF_N - t->xf--) * M2K_SUB + 1, a0 = t->amp1, da = (int32_t)(t->aenv >> 15) - a0, g[M2K_SUB];
+    for (int i = 0; i < M2K_SUB; i++) {
+        g[i] = xf_old(t, k + i, a0 + ((da * i) >> 4));
+        o[i] = xf_mix(old[i], o[i], g[i]);
+    }
+    if (m == M_ENS) {
+        for (int i = 0; i < M2K_SUB; i++) es[i] = xf_mix(olds[i], es[i], g[i]);
+        for (int j = 0; j < M2K_SUB / 2; j++) {
+            int16_t *p = &ln[(w + (uint32_t)j) & (ENS_LEN - 1)];
+            *p = xf_mix(oline[j], *p, g[2 * j + 1]);
+        }
     }
 }
 
@@ -1389,6 +1503,9 @@ static void voice_trig(int ti, int note, int vel, int slide, unsigned skip)
     t->slide = 0;
     if (!t->sounding || t->eff[P_PORT] == 0) t->pitch = t->ptarget;
     if (!(skip & ST_NOAMP)) {
+        /* over a note still heard: a soft onset (ATK past 0) goes on from where it is, so any restart steps there; ATK
+         * 0's hit masks one under XF_HIT (a hit over a quiet tail restarts as it always has, as the drums do) */
+        int legato = t->sounding && (t->aenv >> 15) >= XF_MIN && (t->eff[P_ATK] || t->peak >= XF_HIT);
         t->gate = 1;
         t->let_go = 0;
         t->sounding = 1;
@@ -1396,7 +1513,7 @@ static void voice_trig(int ti, int note, int vel, int slide, unsigned skip)
         /* ATK 0: percussive, from zero (its 1 ms rise the hit's edge, as bank A's drums have it); a slower attack goes
          * on from where the last note is, no step */
         t->aph = t->eff[P_ATK] ? atk_from(t->aenv) : 0;
-        mach_trig(t, PAT(cur_pat)->machine[ti]);
+        mach_trig(t, PAT(cur_pat)->machine[ti], legato);
     }
     if (!(skip & ST_NOFLT)) {
         t->fstage = 1;
@@ -1572,7 +1689,8 @@ static void track_block(int ti, int32_t *restrict L, int32_t *restrict R, int32_
     t->pitch += gd > 0 ? (gs + 65535) >> 16 : gs >> 16;
     int32_t pitch = t->pitch + (PB8(t, P_PTCH) >> 2);
     PROF(2);
-    mach_block(ti, m, pitch);
+    if (t->xf) xf_block(ti, m, pitch);
+    else mach_block(ti, m, pitch);
     PROF_M(m);
 
     /* the filter follows the note (and the tuned pitch): a cutoff 2^((step - 16) / 8) x f0, HP at BASE, LP at BASE + WDTH; the envelope adds
@@ -1645,6 +1763,8 @@ static void track_block(int ti, int32_t *restrict L, int32_t *restrict R, int32_
     int32_t vol = tq_u16(T_VOLK, P8(t, P_VOL));
     int32_t acc = 256 + (t->vel > 100 ? (pp->glob[G_ACNT] * 2) : 0);
     vol = (vol * acc) >> 8;
+    int32_t a_0 = t->amp0 ? t->acc : acc;               /* the accent the last block, on a sounding note */
+    t->acc = acc;
     int32_t lev = tq_u16(T_VOL, P8(t, P_LEVL));
     int32_t srr = P8(t, P_SRR);
     uint32_t sinc = tq_u32(T_SRR_INC, srr);
@@ -1694,6 +1814,20 @@ static void track_block(int ti, int32_t *restrict L, int32_t *restrict R, int32_
         t->mhp1.G = t->mhp2.G = MOD_SIDE_HP;
     }
     int16_t *to = tout[ti], *tv = tvol[ti];
+    int hto = heard;                   /* (an FX machine hears it before VOL: its tout below, but not where taken here) */
+    if (a_0 != acc) {                  /* an accent coming or going on a sounding note: across this block from the last
+                                        * one's, as the amp's ramp (a step at the block's edge clicked): what VOL scales,
+                                        * scaled by its share of this one's (a block now and then: its divisions too) */
+        for (int i = 0; i < M2K_SUB; i++) {
+            if (heard) to[i] = (int16_t)sat16(x[i]);
+            int32_t r = ((a_0 + (((acc - a_0) * i) >> 4)) << 15) / acc;      /* Q15, under 2^16 */
+            x[i] = (int32_t)mul_sh(x[i], r, 15);
+            if (side) xs[i] = (int32_t)mul_sh(xs[i], r, 15);
+            if (mmix && mtype != 2) msd[i] = (int32_t)mul_sh(msd[i], r, 15);
+            if (m == M_FXC) bside[ti][i] = (int16_t)sat16((bside[ti][i] * r) >> 15);   /* 2^15 by 2^16 */
+        }
+        hto = 0;
+    }
     if (!srr && bits >= 16 && !side && !(mmix && mtype != 2) && m != M_FXC) {
         if (!ds && !rs && !heard) {
             /* and nothing sent, no FX machine hearing it (its tout and tvol stand cleared, its sends at 0) */
@@ -1714,7 +1848,7 @@ static void track_block(int ti, int32_t *restrict L, int32_t *restrict R, int32_
         }
         for (int i = 0; i < M2K_SUB; i++) {           /* the common case: no SRR, BITS or side, the same steps as below */
             int32_t s = x[i];
-            if (heard) to[i] = (int16_t)sat16(s);
+            if (hto) to[i] = (int16_t)sat16(s);
             s = (int32_t)mul_sh(s, vol, 15);
             uint64_t lr = mul2_q15(s, gl, gr);
             int32_t l = CLAMP((int32_t)lr, -T_CLIP, T_CLIP), r = CLAMP((int32_t)(lr >> 32), -T_CLIP, T_CLIP);
@@ -1741,7 +1875,7 @@ static void track_block(int ti, int32_t *restrict L, int32_t *restrict R, int32_
         zop_t h1 = t->mhp1, h2 = t->mhp2;
         for (int i = 0; i < M2K_SUB; i++) {
             int32_t s = x[i];
-            if (heard) to[i] = (int16_t)sat16(s);
+            if (hto) to[i] = (int16_t)sat16(s);
             s = (int32_t)mul_sh(s, vol, 15);
             if (srr) {
                 sacc += sinc;
@@ -1783,7 +1917,7 @@ static void track_block(int ti, int32_t *restrict L, int32_t *restrict R, int32_
     }
     for (int i = 0; i < M2K_SUB; i++) {
         int32_t s = x[i];
-        if (heard) to[i] = (int16_t)sat16(s);                             /* an FX machine's input: before VOL, so VOL 0
+        if (hto) to[i] = (int16_t)sat16(s);                               /* an FX machine's input: before VOL, so VOL 0
                                                                            * keeps a track out of the mix and in the FX */
         s = (int32_t)mul_sh(s, vol, 15);
         /* the track clips here, a channel at a time after the pan: one ceiling for both while the pan holds the

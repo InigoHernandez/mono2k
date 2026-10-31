@@ -1204,6 +1204,7 @@ static void eng_run(double sec) { for (int i = 0; i < (int)(sec * M2K_SR) / M2K_
 /* the amp heard: T1's clean sine (GND-SIN at C7, the filter open, alone) played with this ATK HOLD DEC REL, let go
  * after gate blocks (never: -1), and if retrig a second note on it there; each 16-sample block's level (the most of it
  * and the two before: two cycles and more) into lv, n blocks */
+static int32_t amp_ae[M2K_SR * 12 / M2K_SUB];      /* and the amp itself, each block's end (Q15) */
 static void amp_probe(int atk, int hold, int dec, int rel, int gate, int retrig, int32_t *lv, int n)
 {
     m2k_pattern_t *q = eng_pat(41);
@@ -1221,6 +1222,7 @@ static void amp_probe(int atk, int hold, int dec, int rel, int gate, int retrig,
         for (int j = 0; j < M2K_SUB; j++) c = abs(eng_out[2 * j]) > c ? abs(eng_out[2 * j]) : c;
         lv[i] = c > a ? (c > b ? c : b) : a > b ? a : b;
         b = a; a = c;
+        amp_ae[i] = trk[0].amp1;
     }
 }
 /* the first block at or past i0 where lv is at least (up 1) or under (up 0) the fraction f of ref: -1 if none */
@@ -1243,6 +1245,45 @@ static double step_max(const int16_t *x, int a, int b)
     for (int i = (a < 1 ? 1 : a); i < b; i++)
         for (int c = 0; c < 2; c++) { double d = fabs((double)x[2 * i + c] - x[2 * (i - 1) + c]); if (d > m) m = d; }
     return m;
+}
+/* 1.6.2's clicks: machine m held (ATK 8, HOLD and DEC at INF, the filter open; an FX machine on T2 hearing a held sine
+ * on T1), its note N1, and at frame AT (a block's) a trig on N2 at VEL2 (its parts SKIP left out); KV over the kit
+ * (KV_END ends it), ACNT the accent's (-1: the pattern's); FRAMES frames into x */
+static void lg_run(int m, const uint8_t *kv, int n1, int n2, int vel2, unsigned skip, int acnt, int at, int frames,
+                   int16_t *x)
+{
+    m2k_pattern_t *q = eng_pat(41);
+    int tk = m >= M_FXC && m <= M_FXD;
+    if (tk) { kit_default(q, 0, M_GSIN); q->kit[0][P_HOLD] = 127; q->kit[0][P_DEC] = 127; }
+    kit_default(q, tk, m);
+    uint8_t *k = q->kit[tk];
+    k[P_ATK] = 8; k[P_HOLD] = 127; k[P_DEC] = 127; k[P_VOL] = 100; k[P_LEVL] = 127;
+    for (; kv && kv[0] != KV_END; kv += 2) k[kv[0]] = kv[1];
+    if (acnt >= 0) q->glob[G_ACNT] = (uint8_t)acnt;
+    for (int t = 0; t < M2K_TRACKS; t++) m_cpy(trk[t].eff, q->kit[t], P_COUNT);
+    if (tk) voice_on(0, 48, 100, 0);
+    voice_on(tk, n1, 100, 0);
+    for (int f = 0; f < frames; f += M2K_SUB) {
+        if (f == at) voice_trig(tk, n2, vel2, 0, skip);
+        m2k_render(x + 2 * f, M2K_SUB);
+    }
+}
+/* the high band: the second differences' energy, both channels, a frame, over frames [a, b) */
+static double hf_energy(const int16_t *x, int a, int b)
+{
+    double s = 0;
+    for (int i = (a < 2 ? 2 : a); i < b; i++)
+        for (int c = 0; c < 2; c++) { double d = (double)x[2 * i + c] - 2.0 * x[2 * (i - 1) + c] + x[2 * (i - 2) + c]; s += d * d; }
+    return s / (b - a);
+}
+/* the louder channel's magnitude at frame i */
+static int lr_abs(const int16_t *x, int i) { int l = abs(x[2 * i]), r = abs(x[2 * i + 1]); return l > r ? l : r; }
+/* the mean square of channel 0 over frames [a, b) */
+static double ms_of(const int16_t *x, int a, int b)
+{
+    double s = 0;
+    for (int i = a; i < b; i++) s += (double)x[2 * i] * x[2 * i];
+    return s / (b - a) + 1e-9;
 }
 /* track 0's delay has nothing left, in its quiet test's terms: every entry of its line silent, its filters at rest */
 static int eng_dly_quiet(void)
@@ -3604,7 +3645,7 @@ static int selftest(void)
             m_set(t->mod, 0, sizeof t->mod);
             int note = c == 0 ? 36 : 60;
             t->note = (uint8_t)note;
-            mach_trig(t, MC[c]);
+            mach_trig(t, MC[c], 0);
             int32_t pk = 0;
             double e2 = 0;
             for (int b = 0; b < 44100 / 16; b++) {
@@ -5358,12 +5399,154 @@ static int selftest(void)
         CHECK(ok, "AMP: the time shown is the time heard (ATK to full, DEC and REL to -60 dB), the attack swelling, on the "
                   "owner's laws (ATK 0.4 s at 64, 10 s at 127; DEC and REL 0.8 s at 64, 20 s at 127)");
         /* a trig over a sounding note: an attack goes on from where the note is (no step down); ATK 0 starts from
-         * zero, the percussive edge, as before */
+         * zero, the percussive edge, as before. (The amp itself from the trig; what is heard past the oscillators'
+         * crossfade, 1.6.2's: two sines half a cycle apart cross through less while it runs) */
         int n = 260, cont = 1;
         amp_probe(12, 127, 127, 30, 60, 160, lv, n);                    /* ATK 14 ms, REL 0.12 s: -18 dB at the trig */
-        for (int j = 160; j < n - 1; j++) cont &= lv[j + 1] >= lv[j] * 99 / 100;
+        for (int j = 160; j < n - 1; j++)
+            cont &= amp_ae[j + 1] >= amp_ae[j] && (j < 162 + XF_N || lv[j + 1] >= lv[j] * 99 / 100);
         CHECK(cont && lv[159] < lv[59] / 2 && lv[n - 1] > lv[59] * 98 / 100,
               "AMP: a trig on a releasing note rises from where it is to full, no step down (ATK 12)");
+    }
+    {
+        /* 1.6.2 (the owner's "fix it"): a trig over a sounding note restarted GND-SIN's, the FM+'s, DIGI-WAV's, SWAV-PULS's
+         * and SWAV-ENS's oscillators where they were (SID-6581's PW sweep with PWRS, FX-DYNMX's gain, VO-6's fade from
+         * near silence): a click. The old ones crossfade into the restarted ones now (FX-DYNMX and VO-6 follow on). Held
+         * on C4, a trig on G4 at eight places in a cycle: the high band about it against the same trig without its AMP
+         * part (the oscillators running on), under 2 dB everywhere, SWAV-ENS's chorus where its taps hear its line (it
+         * was 2.6 dB on SWAV-ENS to 31.5 on FX-DYNMX); a fresh note still starts its oscillators from their phase
+         * (GND-SIN's sine from zero, no crossfade), and so does an ATK 0 hit over a tail heard under -40 dBFS */
+        const struct { int m; const uint8_t *kv; int lo; } LG[] = {     /* (lo: frames heard from, to 220 more) */
+            {M_GSIN, 0, -44}, {M_FMS, KV(P_SYN + 2, 40), -44}, {M_FMD, KV(P_SYN + 1, 64, P_SYN + 3, 64, P_SYN + 5, 40), -44},
+            {M_FMP, KV(P_SYN + 1, 40, P_SYN + 3, 40, P_SYN + 5, 40), -44}, {M_WAV, 0, -44},
+            {M_PUL, KV(P_SYN + 4, 16, P_SYN + 5, 40, P_SYN + 6, 127), -44}, {M_ENS, 0, -44},
+            {M_ENS, KV(P_SYN + 5, 127, P_SYN + 6, 127), 500},     /* its chorus' taps, off its line, ~13 ms on */
+            {M_SID, KV(P_SYN + 1, 40, P_SYN + 2, 127, P_SYN + 3, 64), -44}, {M_VOX, 0, -44}, {M_FXD, 0, -44},
+        };
+        const int frames = 3 * M2K_SR / 4 / M2K_SUB * M2K_SUB;
+        int16_t *a = malloc((size_t)frames * 4), *b = malloc((size_t)frames * 4);
+        double worst = -99;
+        int wm = 0;
+        for (int j = 0; j < (int)(sizeof LG / sizeof LG[0]); j++) {
+            double w = -99;
+            for (int off = 0; off < 8; off++) {
+                int at = (M2K_SR / 2 + off * 48) / M2K_SUB * M2K_SUB;
+                lg_run(LG[j].m, LG[j].kv, 60, 67, 100, ST_NOAMP | ST_NOFLT | ST_NOLFO, -1, at, frames, b);
+                lg_run(LG[j].m, LG[j].kv, 60, 67, 100, 0, -1, at, frames, a);
+                int lo = at + LG[j].lo, hi = lo + 220;
+                double d = 10 * log10((hf_energy(a, lo, hi) + 1) / (hf_energy(b, lo, hi) + 1));
+                if (d > w) w = d;
+            }
+            printf("     legato on %s%s: the restart's high band %+.1f dB\n", MI[LG[j].m].name, LG[j].lo > 0 ? "'s chorus" : "", w);
+            if (w > worst) worst = w, wm = LG[j].m;
+        }
+        free(a);
+        free(b);
+        m2k_pattern_t *q = eng_pat(41);                  /* fresh: GND-SIN from silence, its sine from zero */
+        kit_default(q, 0, M_GSIN);
+        m_cpy(trk[0].eff, q->kit[0], P_COUNT);
+        voice_on(0, 60, 100, 0);
+        int fresh = trk[0].xf == 0;
+        m2k_render(eng_out, M2K_SUB);
+        fresh &= blk[0][0] == 0 && blk[0][1] > 0;
+        voice_on(0, 67, 100, 0);                         /* and over it, legato: the crossfade */
+        fresh &= trk[0].xf == XF_N;
+        q->kit[0][P_REL] = 60;                           /* an ATK 0 hit over its tail heard under -40 dBFS: as before */
+        m_cpy(trk[0].eff, q->kit[0], P_COUNT);
+        voice_off(0);
+        for (int i = 0; i < M2K_SR / M2K_SUB && trk[0].peak >= XF_HIT; i++) m2k_render(eng_out, M2K_SUB);
+        int tail = trk[0].sounding && (trk[0].aenv >> 15) >= XF_MIN;
+        voice_on(0, 60, 100, 0);
+        fresh &= tail && trk[0].xf == 0;
+        CHECK(worst < 2.0 && fresh, "LEGATO: a trig over a sounding note crossfades the restarted oscillators in (no click: "
+                                    "GND-SIN, FM+, DIGI-WAV, SWAV-PULS, SWAV-ENS, SID's PWRS, VO-6, FX-DYNMX); a fresh note, "
+                                    "and a hit over a quiet tail, start as before");
+        if (worst >= 2.0) printf("     the worst: %s\n", MI[wm].name);
+    }
+    {
+        /* 1.6.2: an accent coming on a sounding note stepped its VOL at a block's edge (x2 at ACNT 127); it ramps across
+         * the block now, as the amp does. A held C3 sine (VOL 64: doubled, under the clip) and a trig with no AMP FLT or
+         * LFO part, accented: no sample step past 2.5 x the sine's own (15.9 x before), its level doubled after it;
+         * unaccented, not a sample moves */
+        const int frames = 3 * M2K_SR / 4 / M2K_SUB * M2K_SUB;
+        int16_t *a = malloc((size_t)frames * 4), *b = malloc((size_t)frames * 4);
+        double worst = 0, lv = 0;
+        int same = 1;
+        for (int off = 0; off < 8; off++) {
+            int at = (M2K_SR / 2 + off * 48) / M2K_SUB * M2K_SUB;
+            lg_run(M_GSIN, KV(P_VOL, 64), 48, 48, 127, ST_NOAMP | ST_NOFLT | ST_NOLFO, 127, at, frames, a);
+            double o1 = step_max(a, at - 8820, at - 441), o2 = step_max(a, at + 4410, frames), r;
+            r = step_max(a, at - 441, at + 882) / (o1 > o2 ? o1 : o2);
+            if (r > worst) worst = r;
+            lv = 10 * log10(ms_of(a, at + 4410, frames) / ms_of(a, at - 8820, at - 441));
+            lg_run(M_GSIN, KV(P_VOL, 64), 48, 48, 100, ST_NOAMP | ST_NOFLT | ST_NOLFO, 127, at, frames, a);
+            lg_run(M_GSIN, KV(P_VOL, 64), 48, 48, 100, 0, 127, -1, frames, b);
+            same &= !memcmp(a, b, (size_t)frames * 4);
+        }
+        free(a);
+        free(b);
+        printf("     an accent on a held sine: its step %.2f x the sine's own, %+.1f dB after\n", worst, lv);
+        CHECK(worst < 2.5 && fabs(lv - 6.0) < 0.3 && same,
+              "ACCENT: an accent on a sounding note ramps in across a block (no step), as loud; none, nothing moves");
+    }
+    {
+        /* 1.6.2: VO-6 faded in from near silence at every trig, as the Monomachine's (~150 ms to its level at C3): a
+         * legato note was cut and a 1/16 came out quiet. A fresh note now rises 4 x as fast (VO_UPT), so from 50 ms each
+         * 20 ms is within 3 dB of the held level on the vowels and notes that took longest (it was 6 .. 35 dB under);
+         * a legato trig keeps its level (it fell 30 dB) */
+        static const uint8_t VV[6][3] = {{64, 64, 48}, {64, 64, 60}, {64, 64, 84}, {0, 0, 84}, {127, 127, 84}, {24, 100, 84}};
+        const int frames = 3 * M2K_SR / 4 / M2K_SUB * M2K_SUB;
+        int16_t *a = malloc((size_t)frames * 4);
+        double low = 0;
+        for (int v = 0; v < 6; v++) {
+            lg_run(M_VOX, KV(P_ATK, 0, P_SYN + 0, VV[v][0], P_SYN + 1, VV[v][1], P_SYN + 3, 0), VV[v][2], VV[v][2], 100, 0,
+                   -1, -1, frames, a);
+            double ref = ms_of(a, M2K_SR / 2, frames);
+            for (int w = 5; w < 11; w++) {
+                double d = 10 * log10(ms_of(a, w * M2K_SR / 100, (w + 2) * M2K_SR / 100) / ref);
+                if (fabs(d) > fabs(low)) low = d;
+            }
+        }
+        int at = M2K_SR / 2 / M2K_SUB * M2K_SUB;
+        lg_run(M_VOX, KV(P_SYN + 3, 0), 48, 48, 100, 0, -1, at, frames, a);
+        double leg = 10 * log10(ms_of(a, at + 441, at + 1323) / ms_of(a, at - 882, at));
+        free(a);
+        printf("     VO-6: a fresh note from 50 ms at most %+.1f dB off its level; legato %+.1f dB\n", low, leg);
+        CHECK(fabs(low) < 3.0 && fabs(leg) < 1.5, "VO-6: a fresh 1/16 at 120 reaches its level (from 50 ms); a legato trig "
+                                                   "keeps it, its new vowel gliding in");
+    }
+    {
+        /* 1.6.2: the delay's time glided from the last one even on a silent line; in the slowed clock (a time past the
+         * line: ping-pong from DTIM 48) that ran it fast and the first echo came early, 1.6 ms at DTIM 48 to 19 ms at
+         * 127 (regress delay_time). A C4 blip into a silent ping-pong line at 120 BPM: its echo lands at DTIM x
+         * 7.8125 + 7.6 ms, the Monomachine's (chain_delay), within 1 ms */
+        static const int DT[4] = {48, 64, 96, 127};
+        double worst = 0;
+        for (int j = 0; j < 4; j++) {
+            m2k_pattern_t *q = eng_pat(41);
+            seq_tempo();
+            kit_default(q, 0, M_GSIN);
+            uint8_t *k = q->kit[0];
+            k[P_ATK] = 0; k[P_HOLD] = 0; k[P_DEC] = 20; k[P_REL] = 0; k[P_LEVL] = 127;
+            k[P_DTIM] = (uint8_t)DT[j]; k[P_DSND] = 127; k[P_DFB] = 0; k[P_DBAS] = 0; k[P_DWID] = 127;
+            m_cpy(trk[0].eff, k, P_COUNT);
+            const int frames = (int)(1.1 * M2K_SR) / M2K_SUB * M2K_SUB;
+            int16_t *a = malloc((size_t)frames * 4);
+            voice_on(0, 60, 100, 0);
+            trk[0].gate_left = 4410 / M2K_SUB;
+            for (int f = 0; f < frames; f += M2K_SUB) m2k_render(a + 2 * f, M2K_SUB);
+            double want = DT[j] * 7.8125 + 7.6;
+            int lo = (int)((want - 20) * M2K_SR / 1000), hi = (int)((want + 60) * M2K_SR / 1000), on = -1, eo = -1, pk = 0, pe = 0;
+            for (int i = 0; i < 8820; i++) pk = lr_abs(a, i) > pk ? lr_abs(a, i) : pk;
+            for (int i = lo; i < hi; i++) pe = lr_abs(a, i) > pe ? lr_abs(a, i) : pe;
+            for (int i = 0; i < 8820 && on < 0; i++) if (lr_abs(a, i) * 10 > pk) on = i;
+            for (int i = lo; i < hi && eo < 0; i++) if (lr_abs(a, i) * 10 > pe) eo = i;
+            double got = (eo - on) * 1000.0 / M2K_SR;
+            printf("     DTIM %d ping-pong: the first echo at %.1f ms (%.1f wanted)\n", DT[j], got, want);
+            if (fabs(got - want) > worst) worst = fabs(got - want);
+            free(a);
+        }
+        CHECK(worst < 1.0, "DELAY: a silent line takes its time at once (the slowed clock's first echo on time)");
     }
     /* the LFOs (format 16): DPTH squared about 64, fine near the middle (72 swings a quarter octave of BASE, two steps:
      * format 15's 72 swung sixteen), full at the ends; the modulation glides between steps on what reads whole steps
@@ -5517,7 +5700,7 @@ static int selftest(void)
                     m_set(t->ph, 0, sizeof t->ph); m_set(t->ms, 0, sizeof t->ms); m_set(t->gn, 0, sizeof t->gn);
                     m_set(t->vo, 0, sizeof t->vo); m_set(&t->vohp, 0, sizeof t->vohp); t->vo_pw = 0; t->vo_g = 0;
                     m_set(ens_mem[1], 0, sizeof ens_mem[1]);
-                    mach_trig(t, b);
+                    mach_trig(t, b, 0);
                 }
                 for (int j = 0; j < 4; j++) { m2k_render(eng_out, M2K_SUB); m_cpy(&o[k][j * M2K_SUB], blk[1], sizeof blk[1]); }
             }

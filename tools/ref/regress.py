@@ -702,9 +702,13 @@ def cases():
         add("delay_pan", "chain_delay2", f"d2_pan_s{s:03d}_f048", "echoes", {"at": [258, 515]}, 1.0,
             xfail="DSND straight in level since format 17: a send half way 6 dB louder than the Monomachine's square"
             if s in (32, 96) else None)
+    dfx = {"d2_bas_096": "375 ms ping-pong runs past MONO2K's half line: the slowed clock darkens 2-4 kHz",
+           # 1.6.2: the slowed clock right from a silent line's first echo (delay_time) moved it 0.25 dB
+           "d2_wid_032": "the echoes' low-pass at DWID 32 falls slower about 1 kHz than the reference's (2.9 dB off at 1 kHz,"
+                         " 3.2 since 1.6.2 writes the first echo at the slowed clock's rate)"}
     for n in ("d2_bas_032", "d2_bas_064", "d2_bas_096", "d2_wid_032", "d2_wid_064", "d2_wid_096", "d2_bw_032_032", "d2_default"):
         add("delay_filter", "chain_delay2", n, "echo_bands", {"at": 0.379, "hz": [125, 250, 500, 1000, 2000, 4000]}, 3.0,
-            xfail="375 ms ping-pong runs past MONO2K's half line: the slowed clock darkens 2-4 kHz" if n == "d2_bas_096" else None)
+            xfail=dfx.get(n))
         add("delay_filter", "chain_delay2", n, "echo_bands", {"at": 0.379, "hz": [8000, 16000]}, 3.0, info=True)
     for d in (32, 48, 64, 80, 96):
         add("fenv", "chain_ftime5", f"ft_dec_{d:03d}", "fenv_ms", {"kind": "dec"}, 0.05, rel=True)
@@ -795,7 +799,7 @@ def cases():
             add("hold", "chain_hold46", f"h46_t{b:03d}_h{h:03d}", "hold_ms", {"note": 60}, 2.5)
     # VO-6 on the Monomachine's page (chain_vo47): F1 and F2 whispered (Hz, within 3 %), its level over the vowels
     # voiced and whispered (dB, within 1.5), VOIC's voice and noise (within 1.5 dB), its pitch in whole hertz (cents),
-    # its fade-in from the trig (dB at 20 .. 150 ms against the held level, within 3)
+    # its fade-in from the trig (dB at 20 .. 150 ms against the held level, within 3; since 1.6.2 a known gap, MONO2K's faster)
     for v in (0, 24, 48, 72, 96, 127):
         add("vo6", "chain_vo47", f"vo47_f1_{v:03d}", "vo_formant", {"ranges": [[120, 900]]}, "3%")
     for v in (8, 40, 72, 104):
@@ -810,7 +814,9 @@ def cases():
         add("vo6", "chain_vo47", f"vo47_nt_{n}", "rms", {}, 1.5)
     for t in (0, 40, 127):
         add("vo6", "chain_vo47", f"vo47_tn_{t:03d}", "vo_f0", {"note": 48}, 1.0)
-    add("vo6", "chain_vo47", "vo47_lv_064_064", "vo_onset", {"at": [0.02, 0.05, 0.08, 0.11, 0.15]}, 3.0)
+    add("vo6", "chain_vo47", "vo47_lv_064_064", "vo_onset", {"at": [0.02, 0.05, 0.08, 0.11, 0.15]}, 3.0,
+        xfail="the owner's departure (1.6.2): a fresh note fades in 4 x as fast (VO_UPT), its level by ~40 ms at C3, so"
+              " a 1/16 at 120 is heard; the Monomachine's takes ~150 ms (-23 dB at 50 ms)")
     peak = ("FX-RING's carrier: the Monomachine's is peakier above WAVE 96 (its peak 4.4 dB further over the fundamental"
             " at 127): harmonics past the 15th, which T_RINGW has not")
     for n in ("wav096", "wav127"):

@@ -144,7 +144,9 @@ static void delay_run(int ti, const dl_par_t *p, int sent, uint32_t sps, int dub
     int32_t target = dio ? (int32_t)(((uint32_t)DUB_TIM * (sps >> 5) + 128) & ~255u)
                          : ((int32_t)((uint32_t)p->dtim * (sps >> 5)) + (167 << 8) + 128) & ~255;
     int32_t dd = target - t->dt_q8;
-    t->dt_q8 = dd > -64 && dd < 64 ? target : t->dt_q8 + (dd >> 5);
+    /* a time turned glides (no zipper on what the line holds); a silent line holds nothing: its time at once (in the
+     * slowed clock a glide from the last time ran it fast, the first echo 19 ms early at DTIM 127: chain_delay) */
+    t->dt_q8 = (dd > -64 && dd < 64) || t->dquiet >= n ? target : t->dt_q8 + (dd >> 5);
     uint32_t th = (uint32_t)t->dt_q8 >> 8, room = n - 4;
     uint32_t rate = th <= room ? 65536u : (room << 16) / th;                  /* the line's clock, Q16 */
     int32_t back = th <= room ? t->dt_q8 : (int32_t)(room << 8);               /* the delay in line samples, Q8 */
