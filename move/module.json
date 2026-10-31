@@ -1,0 +1,17 @@
+{
+    "id": "mono2k",
+    "name": "MONO2K",
+    "abbrev": "M2K",
+    "version": "0.1.0",
+    "description": "Six mono machines, a 64-step sequencer with locks, and a lofi bus",
+    "author": "Sequencist",
+    "ui": "ui.js",
+    "dsp": "dsp.so",
+    "api_version": 2,
+    "component_type": "overtake",
+    "capabilities": {
+        "audio_out": true,
+        "midi_in": true,
+        "suspend_keeps_js": true
+    }
+}
