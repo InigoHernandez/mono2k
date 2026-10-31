@@ -7,6 +7,16 @@ window.M2K_KINDS = {
 };
 window.M2K_CHANGES = [
   {
+    date: "2026-10-31", title: "MONO2K 1.6.2: no clicks on legato notes and accents, VO-6 heard on short notes",
+    items: [
+      ["sound", "1.6.2: A note played over one still sounding no longer clicks on GND-SIN, FM+STAT, FM+DYN, FM+PAR, DIGI-WAV, SWAV-PULS and SWAV-ENS (and SID-6581 with PWRS): the old note passes into the new in 3 ms. A note from silence, and a hit (ATK 0) over a quiet tail, start exactly as before; the drums too."],
+      ["sound", "1.6.2: An accent on a note still sounding comes in smoothly instead of with a click."],
+      ["sound", "1.6.2: VO-6 reaches its level within about 40 ms, so a short note is heard at its full level; a note played over one still sounding keeps the level and glides to its new vowel instead of fading in again."],
+      ["fixes", "1.6.2: Long delay times (ping-pong from DTIM 48, or past 0.74 s) put their first echo on time; it came up to 19 ms early."],
+      ["fixes", "1.6.2: FX-DYNMX keeps compressing evenly through a note played over one still sounding."],
+    ],
+  },
+  {
     date: "2026-10-31", title: "MONO2K 1.6.1: the FM-1's two processors better shared, an arp on every track",
     items: [
       ["fixes", "1.6.1: the bus runs on the second processor: the first has room for the screen; the sound comes out 0.36 ms later"],

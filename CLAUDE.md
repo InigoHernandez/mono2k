@@ -176,7 +176,8 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   tracks. 1.6's pass (the chain's coefficients and an LFO's rate kept while their inputs stand, the MOD effect a block
   at a time, tout / tvol only where an FX machine listens, the general case's loop without the machine's side): one
   core 1984 -> 1944 (A01), 4058 -> 3942 (A04), 5507 -> 5333 (DENSE) Mac instructions a sample; the wall 2358 ->
-  2284 (A04), 3181 -> 3062 (DENSE).
+  2284 (A04), 3181 -> 3062 (DENSE). 1.6.2's declicks cost +3 (A01) to +7 (DENSE) one core, the wall +2..4: none of
+  them runs per sample where nothing changes (a crossfade only through its 2.9 ms, the accent's ramp a block of its own).
 - The bus (1.5, for the FM-1's time; the owner: "the important are: ADPC, reverb, drive"): GLO's pages TIME BUS SET
   MIDI IN PLAY (`GS_*` in m2k_ui.c: name them, never their numbers), BUS's knobs DCAY DAMP ADPC DRIV (`BUS_K`, PERFORM's
   knobs too), its picture the reverb's tail lifted by DRIV and stepped by ADPC. HISS, TAPE, GLCH and SIZE were cut: the
@@ -226,6 +227,22 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   converted on load. The
   Monomachine's tempo is set on its panel (TEMPO, the LEVEL knob a BPM a detent; `chain_hold46.panel`): the loop and
   spec modes leave it at 120.
+  1.6.2 (the owner's "fix it"; the OS image was not on the Mac, so from the stored calibration): a trig over a note
+  still heard (the amp over -60 dB; an ATK 0 hit only over a track heard past -40 dBFS, `XF_HIT`: under it the hit
+  masks the step) on a machine that restarts at a trig (the FM+, DIGI-WAV, SWAV-PULS, SWAV-ENS, SID-6581's PWRS sweep,
+  GND-SIN) plays its old state on 2.9 ms, crossfaded into the restarted one (`xf_block`: the machine twice, a smooth
+  step, the old from no louder than it was heard, SWAV-ENS's chorus line given the crossfade), MONO2K's own declick:
+  the Monomachine restarts them at every trig (chain_fm26, ens18, pul38, sid36). Its GND-SIN runs free (chain_kick40)
+  where MONO2K's starts at zero as calibrated; run free on legato alone it moved bank A's basses against their kicks
+  (A04 0.8 dB louder), so it crossfades too. A fresh note, an ATK 0 hit over a quiet tail and the drums restart as they
+  did. FX-DYNMX's compressor and VO-6's gain follow on through such a trig (VO-6's new vowel glides 11.6 ms, `VO_GL`);
+  a fresh VO-6 note rises 4 x as fast as the Monomachine's fade (`VO_UPT`: a 1/16 at 120 at its level by ~40 ms;
+  `vo47_lv_064_064` XFAIL, the owner's departure). An accent coming or going on a sounding note ramps across its block
+  (a pre-pass in `track_block` on that block alone: what VOL scales, by acc_i / acc). A silent delay line takes its time
+  at once (`dquiet`): the slowed clock's glide had its first echo up to 19 ms early (delay_time PASS since; `d2_wid_032`
+  XFAIL, 3.2 dB on a 3 dB tolerance). Self-test: LEGATO (the high band about a trig against the same trig without its
+  AMP part), ACCENT, VO-6, DELAY. Bank A: its legato tracks' clicks gone (A04's GND-SIN bass 18 dB less over 2 kHz),
+  levels and the rest as they were, the drums and hits sample for sample.
   A step's flags bits 3..5 are its trig types (`ST_NOAMP`, `ST_NOFLT`, `ST_NOLFO`; clear is ALL, as every older pattern
   has them: no format change). FM+'s 24 ratio steps decode as the Monomachine's sound does, `fr24` (v * 24 + 8) >> 7,
   not as its screen labels them (`chain_fmstep43`, FM+STAT's 2FRQ `chain_fmstep44`). The owner's sheet (FM MACHINE

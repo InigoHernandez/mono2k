@@ -10,13 +10,13 @@
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const minus = (v, d = 1) => (v < 0 ? "−" : v > 0 ? "+" : "") + Math.abs(v).toFixed(d);
 
-  /* regress.py check, 2026-10-27, on main's 7cd78d0 (MONO2K 1.1): [group, PASS, FAIL, XFAIL, INFO] */
+  /* regress.py check, 2026-10-31 (MONO2K 1.6.2): [group, PASS, FAIL, XFAIL, INFO] */
   const SUITE = [["levels", 18, 0, 0, 0], ["dist", 20, 0, 0, 3], ["dist_loud", 46, 0, 0, 0], ["machine_level", 14, 0, 2, 1],
     ["filter_mag", 49, 0, 7, 6], ["res_map", 26, 0, 0, 0], ["res_level", 24, 0, 2, 0], ["res_fit", 11, 0, 3, 0], ["clip", 15, 0, 3, 1],
     ["hp_drive", 0, 0, 0, 9], ["hp_sat", 8, 0, 21, 2], ["tune", 20, 0, 0, 0], ["ens", 120, 0, 3, 0], ["ens_stereo", 5, 0, 1, 0],
-    ["ens_accept", 13, 0, 0, 3], ["bend", 24, 0, 0, 0], ["eq", 21, 0, 3, 0], ["srr", 7, 0, 1, 0], ["delay_time", 3, 4, 0, 0],
-    ["delay_send", 2, 0, 6, 0], ["delay_fb", 3, 0, 0, 0], ["delay_pan", 2, 0, 2, 0], ["delay_filter", 7, 0, 1, 8], ["fenv", 8, 0, 1, 0],
-    ["fm", 85, 0, 4, 0], ["fmstep", 80, 0, 0, 0], ["ring", 17, 0, 2, 0], ["hold", 12, 0, 0, 0], ["vo6", 39, 0, 0, 0], ["sid", 45, 0, 6, 0],
+    ["ens_accept", 13, 0, 0, 3], ["bend", 24, 0, 0, 0], ["eq", 21, 0, 3, 0], ["srr", 7, 0, 1, 0], ["delay_time", 7, 0, 0, 0],
+    ["delay_send", 2, 0, 6, 0], ["delay_fb", 3, 0, 0, 0], ["delay_pan", 2, 0, 2, 0], ["delay_filter", 6, 0, 2, 8], ["fenv", 8, 0, 1, 0],
+    ["fm", 85, 0, 4, 0], ["fmstep", 80, 0, 0, 0], ["ring", 17, 0, 2, 0], ["hold", 12, 0, 0, 0], ["vo6", 38, 0, 1, 0], ["sid", 45, 0, 6, 0],
     ["kick", 1, 0, 16, 0], ["pul", 31, 0, 6, 0], ["gnoi", 41, 0, 0, 0]];
   const GNAME = {
     levels: "VOL, LEV, PAN", dist: "DIST", dist_loud: "DIST, driven hard", machine_level: "Each machine's level", filter_mag: "Filter response",
@@ -68,8 +68,8 @@
   const tot = SUITE.reduce((a, r) => [a[0] + r[1], a[1] + r[2], a[2] + r[3], a[3] + r[4]], [0, 0, 0, 0]);
   const tiles = [["Cases", tot.reduce((a, b) => a + b, 0)], ["PASS", tot[0]], ["Known gaps", tot[2]], ["INFO", tot[3]], ["FAIL", tot[1]]];
   const TIP = {
-    "Known gaps": "<b>27</b> chosen: the owner's own laws<br><b>36</b> the high-pass's saturation<br><b>21</b> oscillators' edges<br><b>6</b> the chain's corners",
-    FAIL: "The longest delay times land up to 2 % early",
+    "Known gaps": "<b>28</b> chosen: the owner's own laws<br><b>36</b> the high-pass's saturation<br><b>21</b> oscillators' edges<br><b>7</b> the chain's corners",
+    FAIL: "None: the last four, the longest delay times, land on time since 1.6.2",
   };
   $("made-tiles").innerHTML = tiles.map(([l, v]) => TIP[l]
     ? `<div class="tile has-tip" tabindex="0"><span class="label">${l}</span><b data-v="${v}">${v}</b><span class="tip" role="tooltip">${TIP[l]}</span></div>`

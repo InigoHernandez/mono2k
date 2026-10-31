@@ -334,8 +334,10 @@ static inline int32_t drm_wave(int w, uint32_t ph, uint32_t inc, uint32_t inv, t
 /* a trig over a sounding note (legato: the amp over XF_MIN; an ATK 0 hit, over one heard past XF_HIT) on a machine
  * that restarts its oscillators or its PW sweep: the old state plays on for XF_N blocks, crossfaded into the new on a
  * smooth step (no kink at either end), from no louder than it was heard (xf_old); 2.9 ms, MONO2K's own declick: the
- * Monomachine restarts them at every trig, sounding or not (chain_ens18), so a sounding one stepped (1.6.2). A fresh
- * note starts as it always has. The drums restart hard: their restart is the hit */
+ * Monomachine restarts these at every trig, sounding or not (chain_fm26, ens18, pul38, sid36), so a sounding one
+ * stepped (1.6.2). Its GND-SIN runs free (chain_kick40), MONO2K's starts at zero, as calibrated: run free on a legato
+ * trig alone, it moved bank A's basses against their kicks (A04 0.8 dB louder), so it crossfades too. A fresh note
+ * starts as it always has. The drums restart hard: their restart is the hit */
 #define XF_N 8
 #define XF_SH 7                        /* log2 of its samples */
 #define XF_MIN 32                      /* the amp, Q15: under -60 dB a step is not heard */

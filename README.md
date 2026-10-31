@@ -189,7 +189,8 @@ Done so far, all measured on OS 1.32B:
   Hz), F2 on VOC2 (451 .. 2757 Hz), F3 2495 and F4 3527 Hz fixed, widths 101 63 127 246 Hz (its spectra within 1.7 dB);
   its pitch whole hertz, rounded down (TUNE +-2 semitones). Its level is a compressor's: the Monomachine's loudness
   over 117 vowels is the cascade's at a tenth of the dB (10:1), followed on the cascade's mean square (25 ms), the gain
-  down at once and up at most 0.23 dB a ms from a low start at each trig, which is the voice's fade-in. F1 and F2
+  down at once and up at most 0.23 dB a ms from a low start at each trig, which is the voice's fade-in (since 1.6.2
+  MONO2K's rises 4 x as fast, so a short note is heard, and a legato trig keeps its level). F1 and F2
   within 0.2 % of the Monomachine's peaks, level within 0.3 dB over vowels, VOIC and C1 .. C6. Still to come: the
   consonants (CONS CLEN CVOL: 20, B .. Z, the screen's) and V-SW's switch (the vowel changing during the fade, a pop).
 - **SWAV-PUL**, new, on SWAVE-PULS's page (`tools/ref/chain_pul38.spec`, group `pul`; UNIL UNIW SUB1 SUB2 | PW PWAD
