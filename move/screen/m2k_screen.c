@@ -410,8 +410,8 @@ static int ms_q(const pi_t *pi, int v)
     return CLAMP(((v - mn) * 256) / (mx - mn ? mx - mn : 1), 0, 256);
 }
 
-/* the tempo knob while the Move's tempo is followed: the tempo heard, which the Move keeps */
-static int ms_move_tempo(const m2k_scr_t *s, int code) { return code == GL(G_TMPO) && s->sync && s->bpm10; }
+/* the tempo knob: the tempo heard (Move's under SYNC, or the one asked of it; MONO2K's own under INT), tenths */
+static int ms_move_tempo(const m2k_scr_t *s, int code) { return code == GL(G_TMPO) && s->bpm10; }
 static void ms_bpm_text(char *o, int b10) { char *e = s_int(o, b10 / 10); if (b10 % 10) { *e++ = '.'; *e++ = (char)('0' + b10 % 10); *e = 0; } }
 
 void m2k_screen_init(void)
@@ -471,14 +471,31 @@ static void g_knob(ms_view_t *v, const m2k_scr_t *s, int k)
     }
 }
 
+/* the tempo shown large (Shift + knob 1 on any page, or the page's BPM): its tenths, SYNC (Move's and MONO2K's) or INT
+ * (MONO2K's own) beside it, where it sits from 30 to 285 along the foot */
+static void g_tempo(ms_touch_t *tc, const m2k_scr_t *s, int k)
+{
+    const int b10 = s->bpm10 ? s->bpm10 : (int)seq_bpm() * 10;
+    tc->k = (int8_t)k;
+    s_cpy(tc->name, "TEMPO");
+    s_cpy(tc->s4, "BPM");
+    ms_bpm_text(tc->val, b10);
+    s_cpy(tc->unit, s->sync ? "SYNC" : "INT");
+    tc->q = (uint16_t)CLAMP((b10 - 300) * 256 / 2550, 0, 256);
+    tc->ruler = 1;
+}
+
 /* the knob shown large: its full name (A..H before a machine's, the track before MIX's), its value and unit whole */
 static void g_touch(ms_view_t *v, const m2k_scr_t *s)
 {
     ms_touch_t *tc = &v->touch;
     m_set(tc, 0, sizeof *tc);
     tc->k = -1;
-    if (s->touch < 0 || s->touch > 7 || s->page >= MS_PAGES) return;
+    if (s->touch < 0 || s->touch > 7) return;
+    if (s->tempo) { g_tempo(tc, s, s->touch); return; }
+    if (s->page >= MS_PAGES) return;
     const int code = m2k_screen_param(s->page, s->track, s->touch), t = m2k_screen_knob_track(s->page, s->track, s->touch);
+    if (code == GL(G_TMPO)) { g_tempo(tc, s, s->touch); return; }
     const pi_t *pi = code == NONE ? 0 : pinfo(t, code);
     if (!pi || pi->s4[0] == '-') return;
     tc->k = s->touch;
@@ -491,7 +508,6 @@ static void g_touch(ms_view_t *v, const m2k_scr_t *s)
     const int val = ms_value(s, t, code);
     const char *u;
     fmt(pi, t, val, o, &u);
-    if (ms_move_tempo(s, code)) { ms_bpm_text(o, s->bpm10); u = "MOVE"; }
     s_cpyn(tc->val, o, sizeof tc->val);
     s_cpyn(tc->unit, u ? u : "", sizeof tc->unit);
     tc->q = (uint16_t)ms_q(pi, val);
@@ -729,6 +745,7 @@ void m2k_screen_gather(ms_view_t *v, const m2k_scr_t *s)
     v->rec = sq.rec;
     v->shift = s->shift;
     v->mute = s->mute;
+    v->clk_int = (uint8_t)!s->sync;
     v->bank = s->bank;
     v->spage = s->spage;
     const int vl = seq_len() > tlen_of(t) ? seq_len() : tlen_of(t);
@@ -920,13 +937,15 @@ static void d_padmap(const ms_view_t *v)
 
 /* the pad and the page's tag (filled for a sound page, underlined for the rest), the track where the page is a
  * track's, then what has room: its machine's icon, a mute, an extra word (HOME's pattern name); at the right the
- * transport, REC, the pattern (the one queued instead, after a >; Shift held, the bank; Mute held, MUTE), the bars when
- * there are more than one (the one the steps show filled). The right is drawn first: the left's extras give way to it */
+ * transport, INT when MONO2K plays its own tempo (SYNC, Move's, is the rule and says nothing), REC, the pattern (the one
+ * queued instead, after a >; Shift held, the bank; Mute held, MUTE), the bars when there are more than one (the one the
+ * steps show filled) and there is room. The right is drawn first: the left's extras give way to it */
 static int ms_hdr_gap;                 /* (the audit's: the clear columns between the two ends) */
 static void d_header(const ms_view_t *v, const char *title, int show_track, const char *extra)
 {
     int rl = MS_W - 5;                                       /* the right part's leftmost lit column */
     ms_icon(v->playing ? I_PLAY : I_STOP, rl, MS_HB, 1);
+    if (v->clk_int) { rl -= 3 + ms_tw("INT"); ms_text(rl, MS_HB, "INT", 1); }
     if (v->rec) { rl -= 8; ms_icon(I_REC, rl, MS_HB, 1); }
     char o[16];
     if (v->shift) { char *e = s_cpy(o, "BANK "); *e++ = (char)('A' + v->bank); *e = 0; }
@@ -935,7 +954,10 @@ static void d_header(const ms_view_t *v, const char *title, int show_track, cons
     else s_cpy(o, v->slot);
     rl -= 4 + ms_tw(o);
     ms_text(rl, MS_HB, o, 1);
-    if (v->npage > 1 && !v->shift && !v->mute) {            /* the bars: 2 x 3 cells, 3 apart */
+    char tn[4];
+    ms_tname(tn, v->track);
+    const int lmin = (v->pad != 0xFF ? 28 : 0) + ms_tw(title) + 8 + (show_track ? ms_tw(tn) + 3 : 0);   /* (the left's least) */
+    if (v->npage > 1 && !v->shift && !v->mute && rl - 2 - 3 * v->npage - (lmin - 3) >= 3) {   /* the bars: 2 x 3 cells */
         rl -= 2 + 3 * v->npage;
         for (int b = 0; b < v->npage; b++) {
             const int bx = rl + b * 3;
@@ -946,8 +968,7 @@ static void d_header(const ms_view_t *v, const char *title, int show_track, cons
     if (v->pad != 0xFF) { d_padmap(v); x = 28; }
     x += ms_tag(x, MS_HB, title, v->fam == MS_FAM_SOUND) + 4;
     if (show_track) {
-        char tn[4];
-        x += ms_text(x, MS_HB, ms_tname(tn, v->track), 1) + 3;
+        x += ms_text(x, MS_HB, tn, 1) + 3;
         if (x + 7 + 3 <= rl) { ms_icon(v->icon, x, MS_HB, 1); x += 7 + 3; }
         if (v->muted && x + 7 + 3 <= rl) { ms_icon(I_MUTE, x, MS_HB, 1); x += 7 + 3; }
     }
@@ -1139,7 +1160,8 @@ static void d_lfo(const ms_view_t *v)
     ms_marker(cx, cy);
 }
 
-/* PAT: the tempo large (SYNC's link over BPM when it is the Move's), the bar's four beats under it, lit as they pass;
+/* PAT: the tempo large (SYNC's link over BPM when it is the Move's, INT when MONO2K's own), the bar's four beats
+ * under it, lit as they pass;
  * at the right the pattern's length and the track's, each a line as long as its steps (64 the whole), the playhead a
  * marker on each */
 static void d_pat(const ms_view_t *v)
@@ -1150,6 +1172,7 @@ static void d_pat(const ms_view_t *v)
     int x = 2 + ms_text_z(2, b, o, 3, 1) + 4;
     ms_text(x, b, "BPM", 1);
     if (v->st.tm.sync) ms_icon(I_SYNC, x, b - 9, 1);
+    else ms_text(x, b - 9, "INT", 1);
     for (int i = 0; i < 4; i++) { int bx = 2 + i * 14; if (i == v->st.tm.beat) ms_rect(bx, MS_ST_B - 5, 12, 5, 1); else ms_rframe(bx, MS_ST_B - 5, 12, 5, 1); }
     const int LX = 80, LW = 46;
     static const char *const N[2] = {"PAT", "TRK"};

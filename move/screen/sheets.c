@@ -41,21 +41,22 @@ static void step(int k, int on) { note(16 + k, on, 100); }
 static void btn(int cc, int v) { char s[32]; snprintf(s, sizeof s, "B %d %d", cc, v); in(s); }
 static void tap(int cc) { btn(cc, 127); blocks(1); btn(cc, 0); blocks(1); }
 static void knob(int k, int d) { char s[32]; snprintf(s, sizeof s, "K %d %d", k, d); in(s); }
+static void tempo(int k, int d10, int coarse) { char s[40]; snprintf(s, sizeof s, "P %d %d %d", k, d10, coarse); in(s); }
 static void touch(int k, int on) { char s[32]; snprintf(s, sizeof s, "T %d %d", k, on); in(s); }
 static void jog(int d) { char s[32]; snprintf(s, sizeof s, "J %d", d); in(s); }
 static void page_go(int page) { tap_pad(MS_PAD0 + ms_pad_of(page)); }
 static void track(int t) { char s[8]; snprintf(s, sizeof s, "%d", t); v2_set_param(&mv, "track", s); blocks(1); }
 static void play(int on) { v2_set_param(&mv, "play", on ? "1" : "0"); blocks(1); }
 
-/* the plugin as the Move opens it: the tests' seed, pattern n, no store, the render drawing (no threads), MONO2K's own
- * tempo (INT: no Move here to follow) */
+/* the plugin as the Move opens it: the tests' seed, pattern n, no store, the render drawing (no threads), Move's tempo
+ * (SYNC, the rule on the Move: no host here, so the pattern's number shows) */
 static void open_at(int pattern)
 {
     if (mv.live) v2_destroy(&mv);
     char js[200];
     snprintf(js, sizeof js, "{\"defaults\": {\"seed\": 2000, \"pattern\": %d, \"data_dir\": \"\", \"draw_thread\": 0}}", pattern);
     if (!v2_create("", js)) { fprintf(stderr, "create failed\n"); exit(1); }
-    ck.sync = MV_SYNC_INT;
+    ck.sync = MV_SYNC_MOVE;
     blocks(8);
 }
 
@@ -187,8 +188,8 @@ static void text_audit(void)
     }
 }
 
-/* the fullest header on every page: track 8 muted, REC, a pattern queued, four bars; its two ends never within 3 px
- * (its extras give way: ms_hdr_gap, as d_header laid it) */
+/* the fullest header on every page: track 8 muted, REC, INT, a pattern queued, four bars; its two ends never within
+ * 3 px (its extras give way: ms_hdr_gap, as d_header laid it) */
 static int hdr_gap(const ms_view_t *v)
 {
     uint8_t scratch[MS_BYTES];
@@ -199,6 +200,7 @@ static int hdr_gap(const ms_view_t *v)
 static void header_audit(void)
 {
     open_at(3);
+    ck.sync = MV_SYNC_INT;             /* (MONO2K's own tempo: INT in the header) */
     track(7);
     machine_to(7, M_FMD);
     PAT(cur_pat)->glob[G_LEN] = 64;
@@ -410,7 +412,7 @@ int main(int argc, char **argv)
         {MS_AMP, 0, "05_amp", "AMP  THE ENVELOPE, LIVE"}, {MS_FILT, 0, "06_filt", "FILT  THE RESPONSE, LIVE"},
         {MS_EFX, 4, "07_efx", "EFX  EQ, PING-PONG"}, {MS_DSTR, 0, "08_dstr", "DSTR  THE CRUSH, THE MOD"},
         {MS_LFO1, 0, "09_lfo1", "LFO1  TO WDTH"}, {MS_LFO3, 0, "09_lfo3", "LFO3"},
-        {MS_PAT, 0, "11_pat", "PAT  MONO2K'S TEMPO, THE LENGTHS"}, {MS_GRID, 0, "12_grid", "GRID"},
+        {MS_PAT, 0, "11_pat", "PAT  SYNC: THE MOVE'S TEMPO, THE LENGTHS"}, {MS_GRID, 0, "12_grid", "GRID"},
         {MS_MIX, 0, "13_mix", "MIX  (PROPOSAL) LEVELS, LIVE"}, {MS_GLO, 0, "14_glo", "GLO  THE BUS, MUTES"}};
     for (unsigned i = 0; i < sizeof PG / sizeof PG[0]; i++) {
         track(PG[i].t);
@@ -427,15 +429,15 @@ int main(int argc, char **argv)
         run_ms(700);
         shot("09_lfo2", "LFO2  SIN TO VOL, DEEP");
     }
-    ck.sync = MV_SYNC_MOVE;
+    ck.sync = MV_SYNC_INT;
     page_go(MS_PAT);
     blocks(VW_EVERY);
-    shot("11_pat_sync", "PAT  SYNC: THE MOVE'S TEMPO");
+    shot("11_pat_int", "PAT  INT: MONO2K'S OWN TEMPO");
+    ck.sync = MV_SYNC_MOVE;
     page_go(MS_AMP);
     touch(0, 1); blocks(VW_EVERY);
     shot("15_touch_atk", "AMP  ATK TOUCHED");
     touch(0, 0);
-    ck.sync = MV_SYNC_INT;
     page_go(MS_FILT);
     touch(0, 1); blocks(VW_EVERY);
     shot("15_touch_base", "FILT  BASE TOUCHED");
@@ -529,6 +531,26 @@ int main(int argc, char **argv)
     page_go(MS_SYN);
     run_ms(100);
     shot("21_syn_t8", "SYN  T8 MUTED, REC");
+
+    /* the tempo: Shift + knob 1 on AMP, turned (Move's and MONO2K's, asked of Move); then Move did not follow (INT) */
+    open_at(1);
+    play(1);
+    run_ms(600);
+    page_go(MS_AMP);
+    btn(49, 127);
+    tempo(0, 5, 0); blocks(VW_EVERY);
+    shot("22_tempo_shift", "SHIFT + KNOB 1: THE TEMPO, ANY PAGE");
+    btn(49, 0);
+    blocks(500);
+    tq.state = MV_TQ_ALONE;            /* (staged: Move did not follow, MONO2K plays on alone) */
+    toast("INT", "MOVE: LINK OFF");
+    blocks(VW_EVERY);
+    shot("22_tempo_alone", "MOVE DID NOT FOLLOW: INT, A HINT");
+    blocks(700);
+    page_go(MS_PAT);
+    blocks(VW_EVERY);
+    shot("22_tempo_alone_pat", "INT: THE HEADER, PAT");
+    tq.state = MV_TQ_NONE;
 
     specimens();
 

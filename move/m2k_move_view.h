@@ -21,11 +21,20 @@ enum { MV_SYNC_INT, MV_SYNC_MOVE };
 #define MV_K_LOCK   2u                 /* the value is a held step's lock */
 #define MV_K_BIP    4u                 /* bipolar: 64 the middle */
 #define MV_K_CHOICE 8u                 /* a list of choices, not a range */
-#define MV_K_MOVE   16u                /* Move sets it (the tempo, followed): turning it does nothing */
+#define MV_K_MOVE   16u                /* the tempo, Move's and MONO2K's: turning it asks Move for it too */
 typedef struct {
     uint16_t raw;                      /* 0..127 (the tempo 0..255) */
     uint8_t flags;                     /* MV_K_* */
 } mv_knob_t;
+
+/* how ui.js turns each knob's detents into steps (its curve, ui.js): a range, a short list's options (slower), the
+ * tempo (tenths of BPM, whole ones fast), nothing on it. Sent in the frame as '0'.. '3' */
+enum { MV_KK_RANGE, MV_KK_CHOICE, MV_KK_TEMPO, MV_KK_NONE };
+#define MV_KK_LIST 32                  /* a list this long or shorter turns as options; longer ones as a range */
+
+/* the tempo asked of Move (m2k_move.c tq): none, waiting for Move to follow (MONO2K at it already), MONO2K alone at
+ * it (Move did not follow: no Link, or Move->Schwung off) */
+enum { MV_TQ_NONE, MV_TQ_WAIT, MV_TQ_ALONE };
 
 /* a step's cell on the page shown */
 #define MV_ST_TRIG 1u
@@ -57,6 +66,10 @@ typedef struct {
     uint8_t playing, rec, shift;
     mv_knob_t knob[8];
     int8_t focus;                      /* the knob shown large (touched, or turned a moment ago), -1 none */
+    uint8_t tempo_focus;               /* what is shown large is the tempo (Shift + knob 1) */
+    uint8_t kkind[8];                  /* MV_KK_*: how ui.js turns each knob */
+    uint8_t tq_state, tq_seq;          /* MV_TQ_*; the tempo asked's number (bumps with each change; 0 never) */
+    uint16_t tq_b10;                   /* the tempo asked, tenths: ui.js writes it for Move (desired-tempo) */
     uint8_t step[16];                  /* MV_ST_* for the 16 shown */
     uint8_t spage, npage, follow;      /* the bar shown, how many the track reaches, whether it follows the playhead */
     uint8_t held;                      /* steps held */

@@ -60,11 +60,12 @@ typedef struct {
     uint8_t page;               /* MS_* in view */
     uint8_t track;              /* the track in view, 0..7 */
     int8_t touch;               /* the knob shown large (touched, or turned a moment ago), -1 none */
+    uint8_t tempo;              /* what is shown large is the tempo, whatever the knob is on the page (Shift + knob 1) */
     uint8_t held;               /* the first step held (0..63): the knobs show its locks; 0xFF none */
     uint8_t spage;              /* the bar the 16 steps show (0..3) */
     uint8_t cat_sel, cat_cat;   /* MS_CAT: the slot shown (0..127), the category (CAT_*, 0 all) */
     uint8_t pat_sel;            /* MS_PATS: the pattern under the cursor */
-    uint8_t sync;               /* the tempo is the Move's (SYNC); 0 MONO2K's own */
+    uint8_t sync;               /* the tempo is the Move's (SYNC); 0 MONO2K's own (INT: the header says so) */
     uint16_t bpm10;             /* the tempo heard, tenths (0: the pattern's) */
     uint8_t shift, mute;        /* Shift, Mute held */
     uint8_t bank;               /* the bank Shift + steps pick from */
@@ -122,6 +123,7 @@ typedef struct {
     uint8_t page, pad, fam, perf, track, ntrk;   /* the pad leading here (0..15, 0xFF none), its family */
     uint8_t icon, muted, hold, mutes;            /* the track's machine icon, muted, its arp holding; every mute */
     uint8_t playing, rec, shift, mute, bank, spage, npage;
+    uint8_t clk_int;                             /* MONO2K on its own tempo (INT), not Move's */
     char slot[4], next[4], pname[9];
     char toast[24], toast2[28];
     uint32_t ms;

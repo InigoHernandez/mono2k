@@ -8,7 +8,8 @@
  *                  the second the rest (HOME TRK PAT GRID MIX GLO, then SOUNDS and PERFORM): MS_PAD_PAGE
  *   pads 0..15     the keyboard, a two-row piano: the white keys C..C on the bottom row, the black over them; with
  *                  PERFORM on, its effects (the colours on the top row, the moves on the bottom; Up / Down the moves' page)
- *   8 knobs        the page's eight (m2k_screen_param); a held step's knobs lock it
+ *   8 knobs        the page's eight (m2k_screen_param); a held step's knobs lock it; Shift + knob 1 the tempo on
+ *                  every page (Move's and MONO2K's under SYNC: m2k_move.c tq_ask)
  *   steps          the sequencer on every page: trigs (a press places one, a quick tap on one takes it away, held its
  *                  locks); Shift + steps the bank's patterns; Mute + steps the tracks' mutes
  *   jog            the lists: the catalogue in SOUNDS, else the patterns (a click loads one); a held step's note;
@@ -23,6 +24,8 @@ static int mv_following(void);
 static int mv_sync(void);
 static uint32_t mv_bpm10(void);
 static void mv_save_request(int why);
+static void tq_ask(int d10, int coarse);
+static void tq_cancel(void);
 
 #define MV_TAP_MS 300                  /* a step tapped quicker takes its trig away */
 #define MV_FOCUS_MS 1200               /* a knob turned shows large so long */
@@ -39,6 +42,7 @@ static struct {
     uint8_t bank;
     int8_t touch;                      /* the knob touched (-1 none) */
     int8_t focus;
+    uint8_t tempo_focus;               /* what is shown large is the tempo (Shift + knob 1) */
     uint32_t focus_t;
     uint8_t perf, perf_pg;             /* PERFORM's effects on the keyboard; the moves' page (Up: the rest) */
     uint8_t plist, pat_sel;            /* the patterns' list (the jog's), its cursor */
@@ -61,7 +65,7 @@ static void mv_ctl_init(void)
 
 /* ------------------------------------------------------------------------------------------------ the pages */
 
-static void focus_off(void) { mc.focus_t = 0; mc.focus = -1; }
+static void focus_off(void) { mc.focus_t = 0; mc.focus = -1; mc.tempo_focus = 0; }
 
 /* a page of knobs that is neither function's: where SOUNDS and PERFORM go back to */
 static int page_plain(int pg) { return pg < MS_PAGES && pg != MS_PERF; }
@@ -121,13 +125,13 @@ static int mv_value(int code, int t)
 
 static int mv_locked(int code, int t) { return code < 0x80 && t == ui.trk && ui.nheld && lock_find(ui.trk, ui.held[0], code) >= 0; }
 
-static void mv_focus(int k) { mc.focus = (int8_t)k; mc.focus_t = ui.now | 1u; }
+static void mv_focus(int k) { mc.focus = (int8_t)k; mc.focus_t = ui.now | 1u; mc.tempo_focus = 0; }
 
 /* the catalogue's SLOT and CAT (edit()'s SETTING(18) and (21)): each sound landed on heard on the track */
-static void mv_cat_slot(int dir)
+static void mv_cat_slot(int d)
 {
     int n = 0, at = snd_list(ui.snd_sel, &n);
-    at = CLAMP(at + dir, 0, n - 1);
+    at = CLAMP(at + d, 0, n - 1);
     ui.snd_sel = (uint8_t)snd_nth(at);
     if (cat.open && ui.snd_sel != cat.heard) cat_hear(ui.snd_sel);
 }
@@ -142,12 +146,51 @@ static void mv_cat_cat(int dir)
 
 static int sgn(int d) { return d > 0 ? 1 : d < 0 ? -1 : 0; }
 
-/* knob k turned by d (accelerated by ui.js): as the FM-1's edit() does to the code the knob holds */
+static void mv_knob(int k, int d);
+
+/* a knob that is the tempo: Shift + knob 1 on every page, and the page's own BPM (HOME's knob 3, PAT's knob 1) */
+static int mv_is_tempo(int k) { return (k == 0 && mc.shift) || (!cat.open && mv_code(k) == GL(G_TMPO)); }
+
+/* the tempo turned: d10 tenths of BPM (coarse: whole BPM, landing on one), ui.js's curve for a tempo knob (MV_KK_TEMPO;
+ * a "K" turn on it comes here as whole BPM). Shown large, as a touched value is. Under SYNC it is Move's and MONO2K's:
+ * MONO2K at it at once, Move asked (tq_ask); Delete + it, Move's tempo again. INT (Move sent no clock): the pattern's
+ * own, whole BPM as on the FM-1 (the tenths add up), Delete + it back to its start */
+static void mv_tempo_knob(int k, int d10, int coarse)
+{
+    if (k < 0 || k > 7 || !d10) return;
+    if (!mv_is_tempo(k)) { mv_knob(k, sgn(d10)); return; }   /* (ui.js a frame behind a page change) */
+    mc.plist = 0;
+    mv_focus(k);
+    if (k == 0 && mc.shift) { mc.used = 1; mc.tempo_focus = 1; }
+    m2k_pattern_t *p = PAT(cur_pat);
+    if (mc.del) {
+        mc.used = 1;
+        if (ck.sync == MV_SYNC_MOVE) {
+            if (tq.state != MV_TQ_NONE) { tq_cancel(); toast("TEMPO", "MOVE'S AGAIN"); }
+            return;
+        }
+        undo_mark(N_PAT, 21);
+        pat_init(&pat_tmp, "X");
+        p->glob[G_TMPO] = pat_tmp.glob[G_TMPO];
+        tq.acc10 = 0;
+        toast("BPM", "BACK TO ITS START");
+        return;
+    }
+    if (ck.sync == MV_SYNC_MOVE) { tq_ask(d10, coarse); return; }
+    int whole;
+    if (coarse) { tq.acc10 = 0; whole = d10 / 10; }
+    else { tq.acc10 += d10; whole = tq.acc10 / 10; tq.acc10 -= whole * 10; }
+    p->glob[G_TMPO] = (uint8_t)CLAMP(p->glob[G_TMPO] + whole, 0, 255);
+}
+
+/* knob k turned by d steps (ui.js's curve: a range's values, a short list's options): as the FM-1's edit() does to the
+ * code the knob holds, d added once (no acceleration of its own here) */
 static void mv_knob(int k, int d)
 {
     if (k < 0 || k > 7 || !d) return;
+    if (mv_is_tempo(k)) { mv_tempo_knob(k, d * 10, 1); return; }   /* (as whole BPM) */
     if (cat.open) {                    /* the catalogue: KNOB 1 SLOT, KNOB 2 CAT */
-        if (k == 0) mv_cat_slot(sgn(d));
+        if (k == 0) mv_cat_slot(d);
         else if (k == 1) mv_cat_cat(sgn(d));
         return;
     }
@@ -183,10 +226,9 @@ static void mv_knob(int k, int d)
         }
         return;
     }
-    if (code == GL(G_TMPO) && mv_sync() == MV_SYNC_MOVE) { toast("TEMPO", "MOVE SETS IT"); return; }
     int v = mv_value(code, t), n = kind_choices(pi->kind), nv;
-    if (n) {                           /* a choice a detent; a fast turn through a long list two */
-        int c = CLAMP(choice_of(pi->kind, v) + sgn(d) * (n > 16 && (d > 4 || d < -4) ? 2 : 1), 0, n - 1);
+    if (n) {                           /* a list: d options (ui.js turns a short one's slower: MV_KK_CHOICE) */
+        int c = CLAMP(choice_of(pi->kind, v) + d, 0, n - 1);
         nv = pi->kind == K_TRK ? trck_enc(c) : enc(c, n);
     } else nv = CLAMP(v + d, kind_min(pi->kind), kind_max(pi->kind));
     if (code >= 0xC0) m2k_setting(code & 0x3F, nv);   /* (kept with the store: saved once it stands) */
@@ -209,7 +251,7 @@ static void mv_knob(int k, int d)
 static void mv_touch(int k, int on)
 {
     if (k < 0 || k > 7) return;
-    if (on) { mc.touch = (int8_t)k; mv_focus(k); mc.plist = 0; }
+    if (on) { mc.touch = (int8_t)k; mv_focus(k); mc.tempo_focus = (uint8_t)(k == 0 && mc.shift); mc.plist = 0; }
     else if (mc.touch == k) { mc.touch = -1; mc.focus_t = ui.now | 1u; }   /* (shown a moment more) */
 }
 
@@ -727,7 +769,21 @@ static void mv_view_build(mv_view_t *v)
         if (kind_choices(pi->kind)) kn->flags |= MV_K_CHOICE;
         if (code == GL(G_TMPO) && mv_sync() == MV_SYNC_MOVE) kn->flags |= MV_K_MOVE;
     }
+    for (int k = 0; k < 8; k++) {      /* how ui.js turns each: the tempo, a short list, a range */
+        int kk = MV_KK_NONE;
+        if (cat.open) kk = k == 0 ? MV_KK_RANGE : k == 1 ? MV_KK_CHOICE : MV_KK_NONE;
+        else if (!(v->knob[k].flags & MV_K_FREE)) {
+            const int code = mv_code(k), n = kind_choices(pinfo(mv_ktrk(k), code)->kind);
+            kk = code == GL(G_TMPO) ? MV_KK_TEMPO : n && n <= MV_KK_LIST ? MV_KK_CHOICE : MV_KK_RANGE;
+        }
+        if (k == 0 && mc.shift) kk = MV_KK_TEMPO;
+        v->kkind[k] = (uint8_t)kk;
+    }
+    v->tq_state = tq.state;
+    v->tq_seq = tq.seq;
+    v->tq_b10 = tq.b10;
     v->focus = mc.touch >= 0 ? mc.touch : mc.focus_t ? mc.focus : -1;
+    v->tempo_focus = (uint8_t)(v->focus >= 0 && mc.tempo_focus);
     /* the steps */
     const int len = tlen_of(t), pos = sq.playing ? track_pos(t) : -1;
     v->spage = ui.spage;
@@ -774,7 +830,8 @@ static void mv_view_build(mv_view_t *v)
     m_set(&s, 0, sizeof s);
     s.page = mc.plist ? MS_PATS : mc.page;
     s.track = (uint8_t)t;
-    s.touch = (int8_t)(mc.plist ? -1 : v->focus);
+    s.touch = (int8_t)(mc.plist && !v->tempo_focus ? -1 : v->focus);
+    s.tempo = v->tempo_focus;
     s.held = ui.nheld ? ui.held[0] : 0xFF;
     s.spage = ui.spage;
     s.cat_sel = ui.snd_sel;
