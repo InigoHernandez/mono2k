@@ -124,8 +124,9 @@ static struct {
  * writes it to /data/UserData/schwung/desired-tempo, which Schwung's Link sidecar gives the Link session (Move alone in
  * it), so Move follows. When Move's tempo reaches it MONO2K follows Move again, its phase brought back to Move's
  * gently (ck.relock). If Move has not followed TQ_WAIT_S after the write (no Link on Move, Move->Schwung off, another
- * peer in the session) MONO2K stays at it alone (INT) until Move's tempo next changes, Move starts again, or Delete +
- * the tempo knob: then it follows Move again */
+ * peer in the session) MONO2K stays at it alone (INT), started and stopped by Move's PLAY still, until Move's tempo
+ * next changes or Delete + the tempo knob: then it follows Move again (the owner's: a tempo set must not be lost at
+ * the next PLAY when Move has no Link) */
 #define TQ_TOL 0.05                    /* BPM: Move has followed */
 #define TQ_WAIT_S 2.5                  /* seconds after ui.js wrote it */
 #define TQ_NOWRITE_S 4.0               /* seconds after the last turn, if ui.js said nothing of a write */
@@ -195,8 +196,7 @@ static void ck_start(int st, uint64_t now)
     ck.fc = 0;
     ck.off = 0;
     ck.relock = 0;
-    if (tq.state == MV_TQ_ALONE) tq.state = MV_TQ_NONE;   /* (Move's start: in time with it again) */
-    ck.free = tq.state != MV_TQ_NONE;  /* (still waiting for Move: MONO2K at the tempo asked, from the start) */
+    ck.free = tq.state != MV_TQ_NONE;  /* (waiting for Move, or alone: MONO2K at the tempo asked, from the start) */
     ck.play_wait = 0;
     ck.last_rx = ck.last_tr = now;
     ck.tr_any = 1;
@@ -209,7 +209,6 @@ static void ck_stop(void)
     ck.run = 0;
     ck.anchored = 0;
     ck.relock = 0;
-    if (tq.state == MV_TQ_ALONE) { tq.state = MV_TQ_NONE; ck.free = 0; }   /* (stopped with Move: its tempo again) */
     ck.play_wait = 0;
     ck_measure_reset();
     m2k_midi_from(M2K_USB, 0xFC, 0, 0);

@@ -1080,7 +1080,8 @@ static int do_clock(int lag)
     printf("  the last 4 s: steps within %.1f samples of Move's pulses\n", off9);
     check(off9 <= 32, "then each step within 32 samples of Move's pulse");
 
-    /* 10: alone again, then Move stops and starts: in time with it at its start; Delete + the tempo knob re-syncs too */
+    /* 10: alone again, then Move stops and starts at the tempo it had: MONO2K keeps its own (the owner's: a tempo set is
+     * not lost at the next PLAY), started by Move's start; Delete + the tempo knob re-syncs */
     in("B 49 127;P 0 20 1;B 49 0");
     for (int i = 0; i < 1500; i++) tempo_block();
     const int alone10 = ts.ck[15] == MV_TQ_ALONE;
@@ -1089,8 +1090,8 @@ static int do_clock(int lag)
     blocks(20);
     clk_start(138.0, 0xFA);
     for (int i = 0; i < 400; i++) tempo_block();
-    check(alone10 && ts.ck[15] == MV_TQ_NONE && ts.ck[4] == (int)(28224000.0 / 138 + 0.5) && vint(view(), "sync") == 1,
-          "alone, then Move stopped and started: Move's tempo, in time from its start");
+    check(alone10 && ts.ck[15] == MV_TQ_ALONE && ts.ck[4] != (int)(28224000.0 / 138 + 0.5) && vint(view(), "sync") == 0,
+          "alone, then Move stopped and started: still alone at its own tempo (INT)");
     in("B 49 127;P 0 30 1;B 49 0");
     for (int i = 0; i < 200; i++) tempo_block();
     in("B 119 127;B 49 127;P 0 1 0;B 49 0;B 119 0");
