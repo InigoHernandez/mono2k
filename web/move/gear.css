@@ -1,0 +1,125 @@
+/* SPDX-License-Identifier: GPL-3.0-only */
+/* MONO2K on the Move, the playable drawing (gear.js). A dark, flat object in both of the site's themes, so its LEDs read
+ * as lights; the line under it in the site's ink and label type. Its own names (.mg*), nothing of style.css changed;
+ * the site's tokens used where it has them (--ink, --paper, --text), with fallbacks so it stands alone. */
+.mg {
+  --mg-body: #151515;
+  --mg-edge: #2c2c2c;
+  --mg-cap: #262626;
+  --mg-cap-edge: #3a3a3a;
+  --mg-face: #202020;
+  --mg-icon: #4c4c4c;
+  --mg-ink: var(--ink, #0b0b0b);
+  position: relative;
+  width: 100%;
+  max-width: 1180px;
+  margin: 0 auto;
+  color: var(--mg-ink);
+  font: 400 14px / 20px var(--text, "Helvetica Neue", Helvetica, Arial, sans-serif);
+  -webkit-tap-highlight-color: transparent;
+  outline: none;
+  animation: mg-in 420ms ease-out;
+}
+@keyframes mg-in { from { opacity: 0; transform: translateY(6px); } }
+.mg:focus-visible { outline: 2px solid var(--mg-ink); outline-offset: 6px; }
+.mg.mg--ptr:focus-visible { outline: none; }
+.mg__dev { position: relative; width: 100%; aspect-ratio: 1016 / 540; user-select: none; -webkit-user-select: none; }
+.mg__svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; overflow: visible; }
+.mg__svg [data-c] { touch-action: none; cursor: pointer; }
+.mg__oled, .mg__zoom { image-rendering: pixelated; image-rendering: crisp-edges; display: block; }
+.mg__oled { position: absolute; pointer-events: none; background: #000; }
+.mg__zoom { display: none; margin: 0 auto 12px; background: #000; border: 6px solid #000; border-radius: 6px; box-sizing: content-box; }
+.mg--narrow .mg__zoom { display: block; }
+
+/* the body */
+.mg-body { fill: var(--mg-body); stroke: var(--mg-edge); stroke-width: 2; }
+.mg-rule { stroke: #2e2e2e; stroke-width: 1.5; stroke-dasharray: 1.5 5; stroke-linecap: round; }
+.mg-bezel { fill: #000; stroke: #2a2a2a; stroke-width: 1.5; }
+.mg-hit { fill: transparent; stroke: none; }
+
+/* pads and steps: their LED is their face */
+.mg-pad, .mg-step, .mg-trk, .mg-btn { transition: transform 150ms cubic-bezier(.2, .8, .3, 1); }
+.mg-pad__face { fill: var(--mg-face); stroke: rgba(255, 255, 255, .05); stroke-width: 1; transition: fill 90ms linear; }
+.mg-pad__flash { fill: #fff; opacity: 0; pointer-events: none; transition: opacity 260ms ease-out; }
+.mg-pad:hover .mg-pad__face { stroke: rgba(255, 255, 255, .22); }
+.mg-pad.is-down { transform: scale(.94); transition-duration: 60ms; }
+.mg-pad.is-down .mg-pad__flash { opacity: calc(.08 + .3 * var(--v, .6)); transition-duration: 40ms; }
+.mg-step__face { fill: var(--mg-face); stroke: rgba(255, 255, 255, .06); stroke-width: 1; transition: fill 80ms linear; }
+.mg-step:hover .mg-step__face { stroke: rgba(255, 255, 255, .28); }
+.mg-step.is-down { transform: scale(.9); transition-duration: 60ms; }
+.mg-step__tick { fill: #3a3a3a; }
+
+/* track buttons: a capsule, its LED inside */
+.mg-trk__body { fill: var(--mg-cap); stroke: var(--mg-cap-edge); stroke-width: 1.2; }
+.mg-trk__led { fill: #1c1c1c; transition: fill 90ms linear; }
+.mg-trk:hover .mg-trk__body { stroke: #5a5a5a; }
+.mg-trk.is-down { transform: scale(.92); transition-duration: 60ms; }
+
+/* buttons: a cap and its picture, lit as the LED is */
+.mg-btn__body { fill: var(--mg-cap); stroke: var(--mg-cap-edge); stroke-width: 1.2; transition: fill 120ms; }
+.mg-btn__icon { fill: none; stroke: var(--mg-icon); stroke-linecap: round; stroke-linejoin: round; transition: stroke 120ms, fill 120ms; }
+.mg-btn__icon--fill { fill: var(--mg-icon); }
+.mg-btn:hover .mg-btn__body { stroke: #5a5a5a; }
+.mg-btn.is-down { transform: scale(.92); transition-duration: 60ms; }
+.mg-btn.is-down .mg-btn__body { fill: #303030; }
+.mg-btn--inert { cursor: default !important; }
+.mg-btn--inert:hover .mg-btn__body { stroke: var(--mg-cap-edge); }
+.mg-btn--inert .mg-btn__icon { stroke: #383838; }
+.mg-btn__latch { fill: #f4f4f0; opacity: 0; transform-box: fill-box; transform-origin: center; transform: scale(.2); transition: opacity 160ms, transform 220ms cubic-bezier(.2, 1.6, .4, 1); }
+.mg-btn.is-latched .mg-btn__latch { opacity: 1; transform: none; }
+.mg-btn.is-latched .mg-btn__body { stroke: #8a8a8a; }
+[data-c="btn:86"] .mg-btn__icon { fill: #5a2a26; stroke: #5a2a26; }       /* Rec, unlit: a dark red */
+/* before the sound: Play breathes, once a second and a half */
+.mg:not(.mg--on) [data-c="btn:85"] .mg-btn__icon { animation: mg-breathe 1.6s ease-in-out infinite; }
+@keyframes mg-breathe { 0%, 100% { fill: #6e6e6e; stroke: #6e6e6e; } 50% { fill: #e8e8e4; stroke: #e8e8e4; } }
+
+/* knobs: a cap with its mark, the value's arc round it (the page's colour), a ring while touched */
+.mg-knob__body { fill: var(--mg-cap); stroke: var(--mg-cap-edge); stroke-width: 1.2; }
+.mg-knob__mark { stroke: #cfcfca; stroke-width: 2.4; stroke-linecap: round; }
+.mg-knob__cap { transition: transform 90ms ease-out; }
+.mg-knob__track { fill: none; stroke: #3a3a3a; stroke-width: 1.6; stroke-dasharray: .1 4.6; stroke-linecap: round; }
+.mg-knob__val { fill: none; stroke: #9a9a9a; stroke-width: 2.6; stroke-linecap: round; }
+.mg-knob__ring { fill: none; stroke: #f4f4f0; stroke-width: 1.4; opacity: 0; transition: opacity 140ms; }
+.mg-knob.is-touch .mg-knob__ring { opacity: .55; }
+.mg-knob.is-free .mg-knob__mark { stroke: #555; }
+[data-c="vol"] .mg-knob__val { stroke: #cfcfca; }
+.mg-knob { cursor: ns-resize !important; }
+
+/* the jog: notches that turn with it, a cap that takes the click */
+.mg-jog__body { fill: #1d1d1d; stroke: var(--mg-cap-edge); stroke-width: 1.4; }
+.mg-jog__notch { stroke: #3c3c3c; stroke-width: 2; stroke-linecap: round; }
+.mg-jog__notch--mark { stroke: #9a9a96; }
+.mg-jog__rot { transition: transform 110ms ease-out; }
+.mg-jog__cap { fill: var(--mg-cap); stroke: var(--mg-cap-edge); stroke-width: 1.2; transform-box: fill-box; transform-origin: center; }
+.mg-jog:hover .mg-jog__body { stroke: #5a5a5a; }
+.mg-jog.is-down .mg-jog__cap { fill: #303030; }
+.mg-jog.is-click .mg-jog__cap { animation: mg-click 220ms ease-out; }
+@keyframes mg-click { 40% { transform: scale(.86); } }
+
+/* the line under it: the control under the pointer (or the keys), the sound */
+.mg__bar { display: flex; align-items: center; gap: 16px; min-height: 40px; margin-top: 12px; }
+.mg__say { flex: 1; min-width: 0; margin: 0; font: 700 11px / 16px var(--text, "Helvetica Neue", Helvetica, Arial, sans-serif);
+  text-transform: uppercase; letter-spacing: .1em; opacity: .62; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mg__say.is-tip { opacity: 1; }
+.mg__say kbd { display: inline-block; min-width: 1.5em; padding: 0 4px; margin: 0 1px; border: 1px solid currentColor; border-radius: 3px;
+  font: inherit; letter-spacing: .04em; text-align: center; line-height: 14px; }
+.mg__snd { display: inline-flex; align-items: center; gap: 8px; flex: none; padding: 8px 12px; border: 1px solid var(--mg-ink);
+  border-radius: 999px; background: transparent; color: var(--mg-ink); cursor: pointer;
+  font: 700 11px / 16px var(--text, "Helvetica Neue", Helvetica, Arial, sans-serif); text-transform: uppercase; letter-spacing: .1em;
+  transition: background 120ms, color 120ms, transform 120ms; }
+.mg__snd:hover { background: var(--mg-ink); color: var(--paper, #f2f1ec); }
+.mg__snd:active { transform: scale(.96); }
+.mg__snd svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.mg__snd .mg__wave { display: none; }
+.mg__snd.is-on .mg__wave { display: inline; }
+.mg__snd.is-on .mg__x { display: none; }
+@media (max-width: 560px) {
+  .mg__say { white-space: normal; }
+}
+@media (hover: none) {
+  .mg__keys { display: none; }                  /* (no computer keys on a touch screen) */
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mg, .mg * { transition: none !important; animation: none !important; }
+}

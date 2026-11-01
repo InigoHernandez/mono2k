@@ -56,6 +56,10 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   update also adds what it taught to `../FM1-FIRMWARE-HANDBOOK.md` (outside the repo: the owner's handbook of MONO2K's
   and Demake's lessons, for the next firmware), in its section and its Updates log. After a wasm build bump `m2k.wasm?v=` in
   `app.js`, `manual.js` and `editor.js` alike (and `worklet.js?v=` in `app.js` and `editor.js` with the worklet).
+  The playable Move (`web/move/`): `web/build.sh` also builds `web/move/m2k_move.wasm` (`m2k_move_web.c`: the Move's
+  build, eight tracks, on `move/m2k_move_glue.c`, the glue dsp.so shares; MONO2K's own clock, nothing saved); `gear.js`
+  draws the Move and plays it (embed and options at its top), `gear-worklet.js` runs the wasm, `gear.css` its look,
+  `gear-demo.html` alone. Bump `V` in `gear.js` with each changed file, and `gear.js?v=` where it is embedded.
 - The screen's grid (m2k_ui.c, `docs/screen-grid.md`; the 2026-10 restyle after the sound library page, Torso's S4,
   Hortator and the MNM-1's menu, the owner's): a 4 px grid for every position, size and text baseline (`tx_b` draws on
   a baseline); the type since 1.6 (2026-10-30) the owner's `mono2k-font.otf`, the FontStruction "Elektron Pixel Font"

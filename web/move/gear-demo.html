@@ -1,0 +1,28 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
+<!-- MONO2K on the Move, the playable drawing alone: a test page for gear.js (the Move home embeds it the same way) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MONO2K Move gear</title>
+<meta name="description" content="MONO2K for the Ableton Move, playable in the browser: a test page for the drawing.">
+<link rel="icon" href="../brand/mono2k-iso.svg" type="image/svg+xml">
+<style>
+  :root { --ink: #0b0b0b; --paper: #f2f1ec; color-scheme: light; }
+  @media (prefers-color-scheme: dark) { :root { --ink: #f2f1ec; --paper: #0b0b0b; color-scheme: dark; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--paper); color: var(--ink); font: 400 17px / 24px "Helvetica Neue", Helvetica, Arial, sans-serif; overflow-x: hidden; }
+  main { max-width: 1240px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { margin: 0 0 24px; font: 700 11px / 16px "Helvetica Neue", Helvetica, Arial, sans-serif; text-transform: uppercase; letter-spacing: .1em; }
+</style>
+</head>
+<body>
+<main>
+  <h1>MONO2K · Move · gear test</h1>
+  <div id="move-gear"></div>
+</main>
+<script src="gear.js?v=1"></script>
+<script>MoveGear.init(document.getElementById("move-gear"));</script>
+</body>
+</html>
