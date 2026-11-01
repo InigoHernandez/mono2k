@@ -4,10 +4,12 @@
  * of those calls). Built and run in the Move's container by move/proof.sh:
  *   bench DSP.so hash         bank A's A01..A04 through the plugin, FNV-1a over 10 s as host/m2k_draw.c --hash prints
  *                             them (seed 2000, from the start, one core)
- *   bench DSP.so time [SEC]   each block's render timed, A01..A04 playing; and with the screen drawn in the render
+ *   bench DSP.so time [SEC]   each block's render timed, A01..A04 playing; the screen's cost a frame (the publish on
+ *                             the audio thread, the drawing on the drawer's, in real time), and drawn in the render
  *   bench DSP.so rt           the presses, the controls, Move's clock, saves and the reads with the render: every
  *                             allocation, file, thread and sleep call made on the audio thread counted (none allowed)
- *   bench DSP.so ctl          every control of the Move, what it does to the core (get_param "view" and "dump")
+ *   bench DSP.so ctl          every control of the Move (the page pads, the keyboard, PERFORM, the jog's lists...),
+ *                             what it does to the core (get_param "view" and "dump")
  *   bench DSP.so clock        Move's clock followed: synthetic streams with a block's jitter and late frames, start,
  *                             stop, continue, tempo changes, no host tempo, no clock at all
  *   bench DSP.so save DIR     saving and loading: the saver's file against the core's own pack, byte for byte, a
@@ -29,6 +31,7 @@
 #include <sys/ioctl.h>
 #include <sys/syscall.h>
 #include "../vendor/schwung/plugin_api_v1.h"
+#include "../m2k_move_view.h"              /* (the pages, the pad map, the overlays: the controller's own) */
 
 /* ------------------------------------------------------------------- the audio thread's rules, counted */
 
@@ -130,6 +133,7 @@ static void step_tap(int k) { step(k, 1); A_render(); step(k, 0); A_render(); }
 static void pad(int i, int down, int vel) { A_note(down ? 0x90 : 0x80, 68 + i, down ? vel : 0); }
 static void knob(int k, int d) { char s[32]; snprintf(s, sizeof s, "K %d %d", k, d); in(s); }
 static void jog(int d) { char s[32]; snprintf(s, sizeof s, "J %d", d); in(s); }
+static void page(int pg) { const int j = ms_pad_of(pg); pad(MS_PAD0 + j, 1, 100); A_render(); pad(MS_PAD0 + j, 0, 0); A_render(); }
 
 static char vbuf[8192], dbuf[8192], cbuf[512];
 static const char *view(void) { A_get("view", vbuf, sizeof vbuf); return vbuf; }
@@ -181,6 +185,7 @@ static double now_us(void)
 }
 
 static void nap(int ms) { struct timespec ts = {0, ms * 1000000L}; real_nanosleep(&ts, 0); }
+static void nap_us(int us) { struct timespec ts = {0, us * 1000L}; real_nanosleep(&ts, 0); }
 
 static const char *const NAME[4] = {"A01", "A02", "A03", "A04"};
 
@@ -251,22 +256,51 @@ static int do_time(double sec)
                us[nb - 1], sum / nb / 2902.0 * 100, is);
         api->destroy_instance(inst);
     }
-    /* the screen drawn in the render (no drawer thread: every 8th block), A04 playing: those blocks against the rest */
+    /* the screen, as the Move runs it (A04 playing, a page at a time, a knob turned now and then, ui.js's reads every
+     * 12 blocks, the render paced to real time so the drawer thread draws as it would): the page state's publish on
+     * the audio thread (the controller, the LEDs, the screen's gather) and the drawing on the drawer's, a frame each */
+    static const int PG[] = {MS_HOME, MS_SYN, MS_AMP, MS_FILT, MS_EFX, MS_DSTR, MS_LFO1, MS_TRK, MS_PAT, MS_GRID, MS_MIX,
+                             MS_GLO, MS_PERF, MS_CAT};
+    inst = open_js("{\"defaults\": {\"seed\": 2000, \"pattern\": 3, \"data_dir\": \"\"}}");
+    api->set_param(inst, "play", "1");
+    for (int f = 0; f < 2 * 44100; f += 128) api->render_block(inst, blk, 128);
+    char cb[256], fb[4096];
+    unsigned pub_n = 0, pub_mean = 0, pub_most = 0, draw_n = 0, draw_mean = 0, draw_most = 0, reads = 0;
+    double block_sum = 0, block_most = 0;
+    int nbk = 0;
+    for (unsigned g = 0; g < sizeof PG / sizeof PG[0]; g++) {
+        const int j = ms_pad_of(PG[g]);
+        uint8_t on[3] = {0x90, (uint8_t)(68 + MS_PAD0 + j), 100}, off[3] = {0x80, (uint8_t)(68 + MS_PAD0 + j), 0};
+        api->on_midi(inst, on, 3, MOVE_MIDI_SOURCE_INTERNAL);
+        api->on_midi(inst, off, 3, MOVE_MIDI_SOURCE_INTERNAL);
+        for (int k = 0; k < 344; k++) {                  /* (a second a page) */
+            if (k % 40 == 0) api->set_param(inst, "in", k % 80 ? "K 2 1" : "K 2 -1");
+            const double t0 = now_us();
+            api->render_block(inst, blk, 128);
+            const double d = now_us() - t0;
+            block_sum += d; nbk++;
+            if (d > block_most) block_most = d;
+            if (k % 12 == 0) api->get_param(inst, "frame", fb, sizeof fb);
+            const double left = 2902 - (now_us() - t0);
+            if (left > 0) nap_us((int)left);
+        }
+        if (PG[g] == MS_CAT || PG[g] == MS_PERF) { api->on_midi(inst, on, 3, MOVE_MIDI_SOURCE_INTERNAL); api->on_midi(inst, off, 3, MOVE_MIDI_SOURCE_INTERNAL); }
+    }
+    api->get_param(inst, "cost", cb, sizeof cb);
+    sscanf(cb, "%u %u %u %u %u %u %u", &pub_n, &pub_mean, &pub_most, &draw_n, &draw_mean, &draw_most, &reads);
+    printf("  the screen, 14 pages a second each (A04 playing, real time): %u publishes (the audio thread) %.1f us mean, "
+           "%.1f most; %u frames drawn (the drawer thread) %.1f us mean, %.1f most; %u reads; a block %.1f us mean, "
+           "%.1f most\n", pub_n, pub_mean / 1000.0, pub_most / 1000.0, draw_n, draw_mean / 1000.0, draw_most / 1000.0,
+           reads, block_sum / nbk, block_most);
+    api->destroy_instance(inst);
+    /* the same, drawn in the render (no drawer thread: every other publish), for scale */
     inst = open_js("{\"defaults\": {\"seed\": 2000, \"pattern\": 3, \"data_dir\": \"\", \"draw_thread\": 0}}");
     api->set_param(inst, "play", "1");
-    long r = 0;                                      /* (renders since create: the 8th, 16th... draw) */
-    for (int f = 0; f < 2 * 44100; f += 128, r++) api->render_block(inst, blk, 128);
-    double sd = 0, sn = 0, md = 0;
-    int cd = 0, cn = 0;
-    for (int k = 0; k < nb; k++) {
-        if (k % 50 == 0) api->set_param(inst, "in", "K 0 1");   /* (the page state changing now and then) */
-        double t0 = now_us();
-        api->render_block(inst, blk, 128);
-        double d = now_us() - t0;
-        if (++r % 8 == 0) { sd += d; cd++; if (d > md) md = d; } else { sn += d; cn++; }
-    }
-    printf("  the screen drawn in the render instead (A04, no drawer thread): blocks drawing %.1f us mean, %.1f most;"
-           " the others %.1f\n", cd ? sd / cd : 0, md, cn ? sn / cn : 0);
+    for (int k = 0; k < nb; k++) { if (k % 50 == 0) api->set_param(inst, "in", "K 0 1"); api->render_block(inst, blk, 128); }
+    api->get_param(inst, "cost", cb, sizeof cb);
+    sscanf(cb, "%u %u %u %u %u %u %u", &pub_n, &pub_mean, &pub_most, &draw_n, &draw_mean, &draw_most, &reads);
+    printf("  drawn in the render instead (A04, no drawer thread): a frame %.1f us mean, %.1f most, on the audio thread\n",
+           draw_mean / 1000.0, draw_most / 1000.0);
     api->destroy_instance(inst);
     free(us);
     return 0;
@@ -300,11 +334,31 @@ static int do_ctl(void)
     blocks(4);
     const char *v = view();
     printf("  view at power-on: %.160s...\n", v);
-    check(vint(v, "pg") == 0 && vint(v, "trk") == 0 && !strcmp(vstr(v, "pat", s, sizeof s), "A01") && vint(v, "sync") == 1 &&
-          vint(v, "play") == 0, "power-on: SYN, track 1, A01, SYNC, stopped");
+    check(vint(v, "pg") == MS_HOME && vint(v, "trk") == 0 && !strcmp(vstr(v, "pat", s, sizeof s), "A01") &&
+          vint(v, "sync") == 1 && vint(v, "play") == 0, "power-on: HOME, track 1, A01, SYNC, stopped");
+
+    /* the page pads: each its page, lit bright in its family's colour, the rest of its row dim */
+    int every = 1, lights = 1;
+    for (int j = 0; j < 16; j++) {
+        const int pg = MS_PAD_PAGE[j];
+        if (pg == MS_CAT || pg == MS_PERF) continue;           /* (the two functions: below) */
+        page(pg);
+        v = view();
+        int pads[32];
+        vlist(v, "pads", pads, 32);
+        if (vint(v, "pg") != pg || vint(v, "spg") != pg) { every = 0; printf("  (pad %d: page %d, wanted %d)\n", 16 + j, vint(v, "pg"), pg); }
+        const int fam = ms_family(pg), on = fam == MS_FAM_SOUND ? 3 : 16, dim = fam == MS_FAM_SOUND ? 69 : 95;
+        for (int i = 0; i < 16; i++) {
+            const int want = i == j ? on : ms_family(MS_PAD_PAGE[i]) == MS_FAM_SOUND ? 69 : ms_family(MS_PAD_PAGE[i]) == MS_FAM_FN ? 115 : 95;
+            if (pads[16 + i] != want) { lights = 0; printf("  (page %d: pad %d lit %d, wanted %d)\n", pg, 16 + i, pads[16 + i], want); }
+        }
+        (void)dim;
+    }
+    check(every, "the 14 page pads: each its page, one press, on the screen too");
+    check(lights, "the page pads lit: the page in view bright (sound orange, the rest azure), the others dim, the functions magenta");
 
     /* the knobs: a range (AMP's VOL), a choice (DRM-KICK's WAVE, SYN A) */
-    jog(1); blocks(1);
+    page(MS_AMP);
     int k0 = kv(5), m0 = dump_kit(13);
     knob(5, 3); blocks(1);
     check(kv(5) == k0 + 3 && dump_kit(13) == m0 + 3, "AMP's knob 6 turned +3: VOL, the kit and the screen");
@@ -312,39 +366,49 @@ static int do_ctl(void)
     check(kv(5) == 0, "a turn past the range stops at 0");
     btn(119, 127); knob(5, 1); blocks(1); btn(119, 0); blocks(1);
     check(kv(5) == 68, "Delete + a knob: the value back to its start (DRM-KICK's INIT VOL, 68)");
-    jog(-1); blocks(1);
+    page(MS_SYN);
     int w0 = dump_kit(0);
     knob(0, 7); blocks(1);
     check((dump_kit(0) * 4) >> 7 == ((w0 * 4) >> 7) + 1, "SYN's knob 1 on a choice (the kick's WAVE): one choice a turn");
     knob(0, -7); blocks(1);
     in("T 2 1"); blocks(1);
-    check(vint(view(), "focus") == 2, "knob 3 touched: its value shown large");
+    v = view();
+    check(vint(v, "focus") == 2 && vint(v, "tk") == 2, "knob 3 touched: its full name and value large");
     in("T 2 0"); blocks(1);
     int still = vint(view(), "focus") == 2;
     blocks(500);
     check(still && vint(view(), "focus") == -1, "let go: shown a moment more, then the page");
+    /* MIX: a knob a track */
+    page(MS_MIX);
+    int l2 = kv(2);
+    knob(2, -5); blocks(1);
+    in("B 41 127;B 41 0"); blocks(1);                      /* (track 3 in view: its LEVL is the kit's) */
+    check(kv(2) == l2 - 5 && dump_kit(37) == l2 - 5, "MIX: knob 3 is track 3's level (track 1 in view)");
+    knob(2, 5); blocks(1);
+    in("B 43 127;B 43 0"); blocks(1);
 
-    /* the jog: pages, the page list */
+    /* the jog: no pages any more; the patterns' list (a click loads), the machine with Shift */
+    page(MS_AMP);
     jog(1); blocks(1);
-    check(vint(view(), "pg") == 1, "jog: the next page (AMP)");
-    jog(30); blocks(1);
-    check(vint(view(), "pg") == 11, "jog: the pages end at PAT");
-    jog(-30); blocks(1);
+    v = view();
+    check(vint(v, "pg") == MS_AMP && vint(v, "ov") == MV_OV_PATS && vint(v, "psel") == 1 && vint(v, "spg") == MS_PATS,
+          "the jog turned: the page stays, the patterns' list opens on A02");
     tap(3);
-    check(vint(view(), "ov") == 1 && vint(view(), "sel") == 0, "jog click: the page list, on the page shown");
-    jog(4); blocks(1);
-    tap(3);
-    check(vint(view(), "ov") == 0 && vint(view(), "pg") == 4, "jog in the list, a click: that page (DSTR)");
-    jog(-4); blocks(1);
-
-    /* Shift + jog: the machine */
+    v = view();
+    check(!strcmp(vstr(v, "pat", s, sizeof s), "A02") && vint(v, "ov") == 0 && vint(v, "pg") == MS_AMP,
+          "a click: A02 (stopped: at once), the list closed, the page as it was");
+    jog(-1); blocks(1); tap(3);
+    check(!strcmp(vstr(view(), "pat", s, sizeof s), "A01"), "and back to A01");
+    jog(2); blocks(1300);
+    check(vint(view(), "ov") == 0 && !strcmp(vstr(view(), "pat", s, sizeof s), "A01"), "the list left alone: it closes, nothing loaded");
     char mach0[16], mach1[16];
     vstr(view(), "mach", mach0, sizeof mach0);
     btn(49, 127); jog(1); blocks(1); btn(49, 0); blocks(1);
     vstr(view(), "mach", mach1, sizeof mach1);
-    check(strcmp(mach0, mach1) != 0, "Shift + jog: the track's machine (the FM-1's ALGO)");
+    check(strcmp(mach0, mach1) != 0 && vint(view(), "ov") == 0, "Shift + jog: the track's machine (the FM-1's ALGO)");
     btn(49, 127); jog(-1); blocks(1); btn(49, 0); blocks(1);
     check(!strcmp(vstr(view(), "mach", mach1, sizeof mach1), mach0), "and back");
+    page(MS_SYN);
 
     /* the steps */
     int e = 0;
@@ -362,11 +426,19 @@ static int do_ctl(void)
     jog(2); blocks(1);
     int note1 = 0;
     dump_step(e, &note1);
-    check(note1 == note0 + 2, "held + the jog: its note");
+    check(note1 == note0 + 2 && vint(view(), "ov") == 0, "held + the jog: its note (no list)");
     in("B 55 127;B 55 0"); blocks(1);
     step(e, 0); blocks(400);
     check(trig_at(e) && (step_flags(e) & 2) && (step_flags(e) & 64), "let go: the trig stays, locked, its ratchet (Up)");
     check(vint(dump(), "locks") >= 1, "the lock is in the pattern");
+    page(MS_FILT);
+    int e2 = 0;
+    while (e2 < 16 && (e2 == e || trig_at(e2))) e2++;
+    step_tap(e2);
+    int placed = trig_at(e2);
+    step_tap(e2);
+    check(placed && !trig_at(e2) && vint(view(), "pg") == MS_FILT, "on FILT the steps are the sequencer still (a trig, and away)");
+    page(MS_SYN);
 
     /* Delete: a lock away with a step held, a trig away, a value home */
     step(e, 1); blocks(1);
@@ -427,9 +499,9 @@ static int do_ctl(void)
     check(vint(view(), "mutes") == 1, "Mute tapped: the track in view");
     tap(88);
 
-    /* the bars: A16 (a blank: 16 steps) made 32 long */
+    /* the bars: A16 (a blank: 16 steps) made 32 long, on PAT (LEN) */
     btn(49, 127); step(15, 1); blocks(1); step(15, 0); btn(49, 0); blocks(1);
-    jog(11); blocks(1);
+    page(MS_PAT);
     const int len0 = kv(2);
     int np1 = vint(view(), "np");
     knob(2, 16); blocks(1);
@@ -446,69 +518,113 @@ static int do_ctl(void)
     int g0 = kv(0);
     knob(0, 5); blocks(1);
     check(kv(0) != g0 + 5 && (kf(0) & 16), "the tempo knob shows Move's tempo and Move keeps it");
-    jog(-11); blocks(1);
-    /* SEQ: the track's own length */
-    jog(9); blocks(1);
-    knob(0, 8); blocks(1);
-    check(step_flags(15) & 8, "SEQ's TLEN to 8: steps 9-16 past the track's end");
-    knob(0, -8); blocks(1);
-    jog(-9); blocks(1);
+    /* PAT holds the track's sequencing too (the FM-1's SEQ): its own length */
+    knob(4, 8); blocks(1);
+    check(step_flags(15) & 8, "PAT's TLEN to 8: steps 9-16 past the track's end");
+    knob(4, -8); blocks(1);
+    page(MS_GLO);
+    knob(4, 64); blocks(1);
+    check(kv(4) >= 64, "GLO's knob 5: MUTES (a setting) turned");
+    knob(4, -127); blocks(1);
+    page(MS_HOME);
 
-    /* the pads: rows a fourth apart, the C of the track's octave on the second row */
+    /* the keyboard: a two-row piano, the white keys C..C on the bottom row, the black over them */
     int quiet = 0;
     blocks(2000);
     for (int i = 0; i < 4; i++) { A_render(); for (int j = 0; j < 256; j++) if (abs(blk[j]) > quiet) quiet = abs(blk[j]); }
-    pad(8, 1, 100);
+    pad(0, 1, 100);
     int loud = 0;
     for (int i = 0; i < 30; i++) { A_render(); for (int j = 0; j < 256; j++) if (abs(blk[j]) > loud) loud = abs(blk[j]); }
     int pads[32];
     vlist(view(), "pads", pads, 32);
-    pad(8, 0, 0); blocks(300);
-    int n8 = -1, ee = 0;
+    pad(0, 0, 0); blocks(300);
+    int n0 = -1, ee = 0;
     while (ee < 15 && trig_at(ee)) ee++;
     step_tap(ee);
-    dump_step(ee, &n8);
-    if (quiet > 50 || loud <= 500 || pads[8] != 120) printf("  (quiet %d, loud %d, pad LED %d)\n", quiet, loud, pads[8]);
-    check(quiet <= 50 && loud > 500 && pads[8] == 120, "a pad plays the track from silence, lit while held");
-    check(n8 == 60 + 12 * vint(view(), "oct"), "pad 9 (second row's first) is the octave's C; new trigs take it");
+    dump_step(ee, &n0);
+    if (quiet > 50 || loud <= 500 || pads[0] != 120) printf("  (quiet %d, loud %d, pad LED %d)\n", quiet, loud, pads[0]);
+    check(quiet <= 50 && loud > 500 && pads[0] == 120, "the bottom-left pad plays the track from silence, lit while held");
+    check(n0 == 60 + 12 * vint(view(), "oct"), "it is the octave's C; new trigs take it");
     step_tap(ee);
+    static const int KEY[16] = {0, 2, 4, 5, 7, 9, 11, 12, 1, 3, -1, 6, 8, 10, -1, -1};
+    int piano = 1, last = n0;
+    for (int i = 0; i < 16; i++) {                         /* (a pad no key has plays nothing: new trigs keep the last) */
+        pad(i, 1, 100); blocks(1);
+        int nn = -1;
+        step_tap(ee);
+        dump_step(ee, &nn);
+        const int want = KEY[i] < 0 ? last : n0 + KEY[i];
+        if (nn != want) { piano = 0; printf("  (pad %d: note %d, wanted %d)\n", i, nn, want); }
+        last = want;
+        step_tap(ee);
+        pad(i, 0, 0); blocks(1);
+    }
+    check(piano, "the pads: C D E F G A B C on the bottom row, C# D# - F# G# A# - - over them");
+    vlist(view(), "pads", pads, 32);
+    check(pads[10] == 0 && pads[14] == 0 && pads[15] == 0, "the pads no key has are dark");
+    int roots = 0;
+    for (int i = 0; i < 16; i++) roots += pads[i] == 3;
+    check(roots >= 1, "the root lit (orange)");
     const int oc0 = vint(view(), "oct");
     tap(55);
-    check(vint(view(), "oct") == oc0 + 1, "Up: the track's octave up");
+    v = view();
+    check(vint(v, "oct") == oc0 + 1 && !strncmp(vstr(v, "toast", s, sizeof s), "OCT", 3), "Up: the octave up, said a moment");
     tap(54);
-    vlist(view(), "pads", pads, 32);
-    int roots = 0;
-    for (int i = 0; i < 32; i++) roots += pads[i] == 17;
-    check(roots >= 2, "the root pads lit");
-
-    /* PERFORM: Shift + pads */
     btn(49, 127); pad(0, 1, 100); blocks(2);
-    check(vint(view(), "perf") == 1 && vint(view(), "ov") == 3, "Shift + pad 1: PERFORM's first effect, held");
+    check(vint(view(), "perf") == 0, "Shift + a pad: no PERFORM any more (a note)");
     pad(0, 0, 0); btn(49, 0); blocks(2);
-    check(vint(view(), "perf") == 0, "let go: off");
-    btn(49, 127); pad(16, 1, 100); blocks(2); btn(49, 0); blocks(2);
-    check(vint(view(), "perf") == 1 << 11, "Shift + the third row's first: bank B's first (held past Shift)");
-    pad(16, 0, 0); blocks(2);
 
-    /* the catalogue: Menu held */
+    /* PERFORM: its pad puts its effects on the keyboard, bank A's on the bottom row, bank B's on the top */
+    page(MS_PERF);
+    v = view();
+    check(vint(v, "pg") == MS_PERF && !strcmp(vstr(v, "pkeys", s, sizeof s), "1,0"), "PERFORM's pad: its page, the keys its effects");
+    pad(0, 1, 100); blocks(2);
+    check(vint(view(), "perf") == 1, "the bottom-left key: bank A's first, held");
+    pad(0, 0, 0); blocks(2);
+    check(vint(view(), "perf") == 0, "let go: off");
+    pad(8, 1, 100); blocks(2);
+    check(vint(view(), "perf") == 1 << 11, "the row over it: bank B's first");
+    pad(8, 0, 0); blocks(2);
+    tap(55);
+    pad(0, 1, 100); blocks(2);
+    check(vint(view(), "perf") == 1 << 8, "Up: each bank's 9-11 (the bottom-left now bank A's ninth)");
+    pad(0, 0, 0); blocks(2);
+    vlist(view(), "pads", pads, 32);
+    check(pads[3] == 0 && pads[0] == 115 && pads[8] == 109, "their keys lit in the functions' colours, the rest dark");
+    page(MS_FILT);
+    check(vint(view(), "pg") == MS_FILT && !strcmp(vstr(view(), "pkeys", s, sizeof s), "1,1"), "a page: PERFORM's keys stay on");
+    page(MS_PERF);
+    check(vint(view(), "pg") == MS_FILT && !strcmp(vstr(view(), "pkeys", s, sizeof s), "0,1"), "its pad again: the keyboard back");
+    page(MS_PERF); page(MS_CAT); page(MS_CAT);
+    check(vint(view(), "pg") == MS_PERF, "SOUNDS opened over PERFORM and closed: PERFORM's page again");
+    page(MS_PERF);
+    check(vint(view(), "pg") == MS_FILT && !strcmp(vstr(view(), "pkeys", s, sizeof s), "0,0"), "PERFORM off: the page before it");
+    page(MS_HOME);
+
+    /* SOUNDS: its pad opens the catalogue */
     char d0[2000], d1[2000];
     vstr(dump(), "kit", d0, sizeof d0);
-    btn(50, 127); blocks(200); btn(50, 0); blocks(1);
-    check(vint(view(), "ov") == 2, "Menu held: the sound catalogue");
+    page(MS_CAT);
+    check(vint(view(), "ov") == MV_OV_CAT && vint(view(), "pg") == MS_CAT, "SOUNDS' pad: the sound catalogue");
     jog(1); blocks(1);
     char c1[32];
     vstr(view(), "cat", c1, sizeof c1);
     vstr(dump(), "kit", d1, sizeof d1);
     check(strcmp(d0, d1) != 0, "a turn: the next sound on the track, heard");
-    tap(50);
+    page(MS_CAT);
     vstr(dump(), "kit", d1, sizeof d1);
-    check(vint(view(), "ov") == 0 && !strcmp(d0, d1), "Menu: the track's own sound back, byte for byte");
-    btn(50, 127); blocks(200); btn(50, 0); jog(2); blocks(1); tap(3);
+    check(vint(view(), "ov") == 0 && !strcmp(d0, d1) && vint(view(), "pg") == MS_HOME, "its pad again: the track's own sound back, byte for byte, HOME");
+    page(MS_CAT); jog(1); blocks(1); tap(50);
+    vstr(dump(), "kit", d1, sizeof d1);
+    check(vint(view(), "ov") == 0 && !strcmp(d0, d1), "Menu: the same");
+    page(MS_CAT); jog(2); blocks(1); tap(3);
     vstr(dump(), "kit", d1, sizeof d1);
     check(vint(view(), "ov") == 0 && strcmp(d0, d1) != 0, "a click keeps the sound shown");
     tap(56);
     vstr(dump(), "kit", d1, sizeof d1);
     check(!strcmp(d0, d1), "Undo: the track's own again");
+    btn(50, 127); blocks(200); btn(50, 0); blocks(1);
+    check(vint(view(), "ov") == 0, "Menu held: no catalogue any more (its pad has it)");
 
     /* Rec, Loop */
     tap(86);
@@ -873,23 +989,26 @@ static int do_draw(const char *d)
 {
     inst = open_at(0, 2000);
     blocks(4);
-    shot(d, "1_syn");
+    shot(d, "1_home");
     static char fr[4096];
     int n = A_get("frame", fr, sizeof fr);
     int lit = 0;
-    for (int i = 12; i < 12 + 22; i++) lit += fr[i] != '0';
+    for (int i = 12; i < 12 + 7 * 22; i++) lit += fr[i] != '0';            /* (the header: rows 0..6) */
     check(n == 4 + 8 + 64 * 22 + 2 * 63 && !strncmp(fr, "M2K1", 4) && lit > 10, "a frame: M2K1, 64 rows, the LEDs; the header lit");
-    in("T 3 1"); blocks(2); shot(d, "2_focus"); in("T 3 0");
+    in("T 3 1"); blocks(8); shot(d, "2_focus"); in("T 3 0");
     blocks(500);
-    jog(1); blocks(1); shot(d, "3_amp");
-    tap(3); jog(5); blocks(1); shot(d, "4_pages"); tap(3);
-    btn(50, 127); blocks(200); btn(50, 0); jog(3); blocks(1); shot(d, "5_sounds"); tap(50);
-    btn(49, 127); blocks(1); shot(d, "6_shift"); btn(49, 0);
-    btn(88, 127); blocks(1); shot(d, "7_mute"); btn(88, 0);
+    page(MS_AMP); blocks(8); shot(d, "3_amp");
+    jog(5); blocks(8); shot(d, "4_patterns"); tap(50);
+    page(MS_CAT); jog(3); blocks(8); shot(d, "5_sounds"); page(MS_CAT);
+    btn(49, 127); blocks(8); shot(d, "6_shift"); btn(49, 0);
+    btn(88, 127); blocks(8); shot(d, "7_mute"); btn(88, 0);
     blocks(800);
     api->set_param(inst, "play", "1");
+    page(MS_FILT);
     step(4, 1); blocks(80); shot(d, "8_held_playing"); step(4, 0);
-    jog(10); blocks(600); shot(d, "9_pat");
+    page(MS_PAT); blocks(600); shot(d, "9_pat");
+    page(MS_MIX); blocks(60); shot(d, "10_mix");
+    page(MS_PERF); pad(1, 1, 100); blocks(60); shot(d, "11_perform"); pad(1, 0, 0); page(MS_PERF);
     api->destroy_instance(inst);
     return fails != 0;
 }

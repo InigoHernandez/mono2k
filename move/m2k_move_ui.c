@@ -2,37 +2,20 @@
 /* MONO2K on the Move: the controller. The Move's controls in, the core's edits out, and the page state for the screen
  * (m2k_move_view.h). Included by m2k_move.c after the core (one unit, as the core is), so it calls the FM-1 UI's own
  * helpers (m2k_ui.c: set_machine, select_pattern, mute_flip, track_to, held_note, the catalogue's cat_*, undo_mark /
- * undo_do, step_remove...) and does to the core what the FM-1's controls do, on the Move's layout:
- *   8 knobs        a page of 8: the Monomachine's (SYN AMP FILT EFX, DSTR and TRK the rest, LFO 1-3) and the
- *                  pattern's (SEQ GRID PAT); a held step's knobs lock it
- *   jog            the pages; a click the page list; Shift + jog the machine; a held step's note
- *   steps          trigs (GRID's: a press places one, a quick tap on one takes it away, held its locks); Shift +
- *                  steps the bank's patterns; Mute + steps the tracks' mutes
+ * undo_do, step_remove...) and does to the core what the FM-1's controls do, on the Move's layout (the owner's,
+ * 2026-11-01: every page one press away, the sequencer always on the steps, the keyboard at the bottom):
+ *   pads 16..31    the pages, a pad each: the top row the sound of the track in view (SYN AMP FILT EFX DSTR LFO1-3),
+ *                  the second the rest (HOME TRK PAT GRID MIX GLO, then SOUNDS and PERFORM): MS_PAD_PAGE
+ *   pads 0..15     the keyboard, a two-row piano: the white keys C..C on the bottom row, the black over them; with
+ *                  PERFORM on, its effects (bank A's on the bottom row, bank B's on the top; Up / Down their 9-11)
+ *   8 knobs        the page's eight (m2k_screen_param); a held step's knobs lock it
+ *   steps          the sequencer on every page: trigs (a press places one, a quick tap on one takes it away, held its
+ *                  locks); Shift + steps the bank's patterns; Mute + steps the tracks' mutes
+ *   jog            the lists: the catalogue in SOUNDS, else the patterns (a click loads one); a held step's note;
+ *                  Shift + jog the machine
  *   track buttons  tracks 1-4, Shift 5-8; Mute + a button its mute
- *   pads           the track chromatically, rows a fourth apart; Shift + pads PERFORM
- *   Menu held      the sound catalogue (the FM-1's EDIT held)
  *   Rec, Copy, Delete, Undo, Loop, arrows: README's table.
  * Everything here runs on the audio thread, between blocks (m2k_move.c drains the events before each render). */
-
-/* ------------------------------------------------------------------------------------------------ the pages */
-
-#define TG(g) (0x100 | (g))            /* a global of each track's: g + the track in view */
-static const uint16_t MV_PAGE[MV_PG_COUNT][8] = {
-    {P_SYN, P_SYN + 1, P_SYN + 2, P_SYN + 3, P_SYN + 4, P_SYN + 5, P_SYN + 6, P_SYN + 7},
-    {P_ATK, P_HOLD, P_DEC, P_REL, P_DIST, P_VOL, P_PAN, P_PORT},
-    {P_BASE, P_WDTH, P_HPQ, P_LPQ, P_FATK, P_FDEC, P_BOF, P_WOF},
-    {P_EQF, P_EQG, P_SRR, P_DTIM, P_DSND, P_DFB, P_DBAS, P_DWID},
-    {P_BITS, P_FOLD, P_XOR, P_SPU, P_MODT, P_MODR, P_MODD, P_MODM},
-    {P_PTCH, P_LEVL, P_AMOD, P_ASPD, P_ARNG, P_GATE, P_WBNK, NONE},     /* BANK: the wave machine's alone */
-    {P_LFO, P_LFO + 1, P_LFO + 2, P_LFO + 3, P_LFO + 4, P_LFO + 5, P_LFO + 6, P_LFO + 7},
-    {P_LFO + 8, P_LFO + 9, P_LFO + 10, P_LFO + 11, P_LFO + 12, P_LFO + 13, P_LFO + 14, P_LFO + 15},
-    {P_LFO + 16, P_LFO + 17, P_LFO + 18, P_LFO + 19, P_LFO + 20, P_LFO + 21, P_LFO + 22, P_LFO + 23},
-    {TG(G_TLEN1), TG(G_SPD1), TG(G_TPRB1), TG(G_LANE1), NONE, NONE, NONE, NONE},   /* HOME 2's */
-    {GL(G_GRX), GL(G_GRY), GL(G_GRCH), GL(G_GRES), GL(G_GRBD), GL(G_GRSD), GL(G_GRHH), TG(G_LANE1)},
-    {GL(G_TMPO), GL(G_SWNG), GL(G_LEN), GL(G_ACNT), GL(G_VERB), GL(G_DAMP), GL(G_ADPC), GL(G_DRIV)},
-};
-static const char *const MV_PAGE_N[MV_PG_COUNT] = {"SYN", "AMP", "FILT", "EFX", "DSTR", "TRK", "LFO1", "LFO2", "LFO3",
-                                                   "SEQ", "GRID", "PAT"};
 
 /* the glue's (m2k_move.c): the clock, the saver */
 static void mv_play_press(void);
@@ -41,26 +24,25 @@ static int mv_sync(void);
 static uint32_t mv_bpm10(void);
 static void mv_save_request(int why);
 
-/* the PERFORM pads: bank A's eleven on the lower two rows from the left, bank B's on the upper two */
-static int perf_of_pad(int i) { int b = i >> 4, k = i & 15; return k < PF_BANK ? b * PF_BANK + k : -1; }
-
-#define MV_HOLD_MS 400                 /* Menu held so long opens the catalogue (the FM-1's EDIT) */
 #define MV_TAP_MS 300                  /* a step tapped quicker takes its trig away */
 #define MV_FOCUS_MS 1200               /* a knob turned shows large so long */
 #define MV_TOAST_MS 1600
+#define MV_LIST_MS 3000                /* the patterns' list stays so long after its last turn */
 
 enum { SRC_NONE, SRC_STEP, SRC_TRK, SRC_PAT };   /* what Copy held picked first */
 
 static struct {
-    uint8_t page, list, list_sel;
-    uint8_t shift, mute, copy, del, menu, left, right;
-    uint8_t used;                      /* the modifier held (Mute, Copy, Delete, Menu, Shift) met another control */
-    uint32_t menu_t0;
+    uint8_t page, prev, cat_from;      /* the page in view (MS_*); the last plain page; the one SOUNDS was opened on */
+    uint8_t shift, mute, copy, del, left, right;
+    uint8_t used;                      /* the modifier held (Mute, Copy, Delete, Shift) met another control */
     uint8_t src, src_a;                /* Copy's source (SRC_*) and which */
     uint8_t bank;
     int8_t touch;                      /* the knob touched (-1 none) */
     int8_t focus;
     uint32_t focus_t;
+    uint8_t perf, perf_pg;             /* PERFORM's effects on the keyboard; their page (each bank's 1-8, its 9-11) */
+    uint8_t plist, pat_sel;            /* the patterns' list (the jog's), its cursor */
+    uint32_t plist_t;
     uint8_t sdown[16], sstep[16];      /* each step key: held, and the step it holds */
     uint32_t st0[16];
     uint8_t pkind[32], parg[32], ptrk[32];   /* each pad: 1 a note (arg), 2 a PERFORM effect (arg); on which track */
@@ -71,36 +53,73 @@ static void mv_ctl_init(void)
     m_set(&mc, 0, sizeof mc);
     mc.touch = -1;
     mc.focus = -1;
-    mc.page = MV_PG_SYN;
+    mc.page = mc.prev = mc.cat_from = MS_HOME;
     mc.bank = (uint8_t)(cur_pat / 16);
     ui.grid = 1;                       /* the steps are always steps (GRID's), the knobs lock what is held */
     ui.follow = 1;
 }
 
-/* ----------------------------------------------------------------------------------------------- the knobs */
+/* ------------------------------------------------------------------------------------------------ the pages */
 
-static int mv_code(int k)
+static void focus_off(void) { mc.focus_t = 0; mc.focus = -1; }
+
+/* a page of knobs that is neither function's: where SOUNDS and PERFORM go back to */
+static int page_plain(int pg) { return pg < MS_PAGES && pg != MS_PERF; }
+
+/* the catalogue closed (kept, put back, or left): the page it was opened from, PERFORM's only while its keys are on */
+static void cat_left(void)
 {
-    int c = MV_PAGE[mc.page][k];
-    if (c & 0x100) return GL((c & 0xFF) + ui.trk);
-    if (c == P_WBNK && PAT(cur_pat)->machine[ui.trk] != M_WAV) return NONE;
-    return c;
+    if (mc.page != MS_CAT) return;
+    mc.page = page_plain(mc.cat_from) || (mc.cat_from == MS_PERF && mc.perf) ? mc.cat_from : mc.prev;
 }
 
-/* what a knob shows: a held step's lock, the kit, a global */
-static int mv_value(int code)
+/* a page pad (16 + j): its page; SOUNDS opens the catalogue (again: the track's own sound back, the page before);
+ * PERFORM puts its effects on the keyboard (again: the keyboard back) */
+static void page_pad(int j)
+{
+    const int pg = MS_PAD_PAGE[j & 15];
+    mc.plist = 0;
+    focus_off();
+    if (pg == MS_CAT) {
+        if (cat.open) { cat_back(); cat_left(); return; }
+        mc.cat_from = mc.page;
+        if (page_plain(mc.page)) mc.prev = mc.page;
+        cat_open();
+        mc.page = MS_CAT;
+        return;
+    }
+    if (cat.open) cat_back();          /* (leaving SOUNDS for a page: the track's own sound, as the FM-1's) */
+    if (pg == MS_PERF) {
+        if (mc.perf) { mc.perf = 0; if (!page_plain(mc.page)) mc.page = mc.prev; return; }
+        if (page_plain(mc.page)) mc.prev = mc.page;
+        mc.perf = 1;
+        mc.perf_pg = 0;
+        mc.page = MS_PERF;
+        return;
+    }
+    mc.page = (uint8_t)pg;
+}
+
+/* ----------------------------------------------------------------------------------------------- the knobs */
+
+static int mv_code(int k) { return m2k_screen_param(mc.page, ui.trk, k); }
+static int mv_ktrk(int k) { return m2k_screen_knob_track(mc.page, ui.trk, k); }
+
+/* what a knob shows: a setting, a global, a held step's lock (the track in view's), the kit */
+static int mv_value(int code, int t)
 {
     const m2k_pattern_t *p = PAT(cur_pat);
     if (code == NONE) return 0;
+    if (code >= 0xC0) return store_.set[code & 0x3F];
     if (code >= 0x80) return p->glob[code & 0x7F];
-    if (ui.nheld) {
+    if (ui.nheld && t == ui.trk) {
         int i = lock_find(ui.trk, ui.held[0], code);
         if (i >= 0) return p->lock[i].val;
     }
-    return p->kit[ui.trk][code];
+    return p->kit[t][code];
 }
 
-static int mv_locked(int code) { return code < 0x80 && ui.nheld && lock_find(ui.trk, ui.held[0], code) >= 0; }
+static int mv_locked(int code, int t) { return code < 0x80 && t == ui.trk && ui.nheld && lock_find(ui.trk, ui.held[0], code) >= 0; }
 
 static void mv_focus(int k) { mc.focus = (int8_t)k; mc.focus_t = ui.now | 1u; }
 
@@ -132,15 +151,17 @@ static void mv_knob(int k, int d)
         else if (k == 1) mv_cat_cat(sgn(d));
         return;
     }
-    int code = mv_code(k);
+    mc.plist = 0;
+    const int code = mv_code(k), t = mv_ktrk(k);
     if (code == NONE) return;
     m2k_pattern_t *p = PAT(cur_pat);
-    const pi_t *pi = pinfo(ui.trk, code);
+    const pi_t *pi = pinfo(t, code);
     if (pi->s4[0] == '-') return;
     mv_focus(k);
     if (mc.del) {                      /* Delete held (the FM-1's OCT-): a held step's lock away, else the value home */
         mc.used = 1;
-        if (ui.nheld && code < 0x80) {
+        if (code >= 0xC0) return;      /* (a setting has no start of its own) */
+        if (ui.nheld && code < 0x80 && t == ui.trk) {
             undo_mark(N_STEP, 20);
             for (int i = 0; i < ui.nheld; i++) {
                 int li = lock_find(ui.trk, ui.held[i], code);
@@ -154,40 +175,41 @@ static void mv_knob(int k, int d)
             undo_mark(N_PAT, 21);
             if (code >= 0x80) { pat_init(&pat_tmp, "X"); p->glob[code & 0x7F] = pat_tmp.glob[code & 0x7F]; }
             else {
-                kit_init(&pat_tmp, ui.trk, p->machine[ui.trk]);
-                p->kit[ui.trk][code] = pat_tmp.kit[ui.trk][code];
-                trk[ui.trk].eff[code] = p->kit[ui.trk][code];
+                kit_init(&pat_tmp, t, p->machine[t]);
+                p->kit[t][code] = pat_tmp.kit[t][code];
+                trk[t].eff[code] = p->kit[t][code];
             }
             toast(pi->s4, "BACK TO ITS START");
         }
         return;
     }
     if (code == GL(G_TMPO) && mv_sync() == MV_SYNC_MOVE) { toast("TEMPO", "MOVE SETS IT"); return; }
-    int v = mv_value(code), n = kind_choices(pi->kind), nv;
+    int v = mv_value(code, t), n = kind_choices(pi->kind), nv;
     if (n) {                           /* a choice a detent; a fast turn through a long list two */
         int c = CLAMP(choice_of(pi->kind, v) + sgn(d) * (n > 16 && (d > 4 || d < -4) ? 2 : 1), 0, n - 1);
         nv = pi->kind == K_TRK ? trck_enc(c) : enc(c, n);
     } else nv = CLAMP(v + d, kind_min(pi->kind), kind_max(pi->kind));
-    if (code >= 0x80) p->glob[code & 0x7F] = (uint8_t)nv;
-    else if (ui.nheld) {               /* steps held: their locks */
+    if (code >= 0xC0) m2k_setting(code & 0x3F, nv);   /* (kept with the store: saved once it stands) */
+    else if (code >= 0x80) p->glob[code & 0x7F] = (uint8_t)nv;
+    else if (ui.nheld && t == ui.trk) {   /* steps held: their locks */
         for (int i = 0; i < ui.nheld; i++) lock_set(ui.trk, ui.held[i], code, nv);
         trk[ui.trk].eff[code] = (uint8_t)nv;
         ui.held_edit = 1;
-    } else if (sq.rec && sq.playing) { /* REC playing: the step playing's lock, on a trig */
+    } else if (sq.rec && sq.playing && t == ui.trk) {   /* REC playing: the step playing's lock, on a trig */
         int s = track_pos(ui.trk);
         if (p->step[ui.trk][s].flags & ST_TRIG) lock_set(ui.trk, s, code, nv);
         else p->kit[ui.trk][code] = (uint8_t)nv;
         trk[ui.trk].eff[code] = (uint8_t)nv;
     } else {
-        p->kit[ui.trk][code] = (uint8_t)nv;
-        trk[ui.trk].eff[code] = (uint8_t)nv;
+        p->kit[t][code] = (uint8_t)nv;
+        trk[t].eff[code] = (uint8_t)nv;
     }
 }
 
 static void mv_touch(int k, int on)
 {
     if (k < 0 || k > 7) return;
-    if (on) { mc.touch = (int8_t)k; mv_focus(k); }
+    if (on) { mc.touch = (int8_t)k; mv_focus(k); mc.plist = 0; }
     else if (mc.touch == k) { mc.touch = -1; mc.focus_t = ui.now | 1u; }   /* (shown a moment more) */
 }
 
@@ -241,8 +263,8 @@ static void steps_paste(int s)
     toast(lost ? "LOCKS FULL" : "PASTE", lost ? "SOME LOCKS LOST" : "UNDO TAKES IT BACK");
 }
 
-/* a pattern: Shift + step. Picked (at the bar's end while playing, the FM-1's PRESET; again before the bar: now),
- * copied and pasted with Copy held, its steps cleared with Delete held */
+/* a pattern: Shift + step, or the patterns' list clicked. Picked (at the bar's end while playing, the FM-1's PRESET;
+ * again before the bar: now), copied and pasted with Copy held, its steps cleared with Delete held */
 static void pattern_key(int n)
 {
     char a[16], o[24], *e;
@@ -269,7 +291,7 @@ static void pattern_key(int n)
         toast(a, n == cur_pat ? "UNDO TAKES IT BACK" : "ITS STEPS");
         return;
     }
-    if (cat.open) cat_back();
+    if (cat.open) { cat_back(); cat_left(); }
     if (sq.playing && sq.queued == n && n != cur_pat) {
         sq.jump = 1;
         s_cpy(e, " NOW");
@@ -277,6 +299,7 @@ static void pattern_key(int n)
         return;
     }
     select_pattern(n);
+    if (!s_is(ui.toast, "PATTERNS FULL")) ui.toast_t = 0;   /* (the header names it, the one queued framed: no message) */
 }
 
 static void mv_step(int k, int down)
@@ -332,7 +355,7 @@ static void mv_step(int k, int down)
     mc.sdown[k] = 1;
     mc.sstep[k] = (uint8_t)s;
     mc.st0[k] = ui.now;
-    mc.focus_t = 0;
+    focus_off();
 }
 
 /* --------------------------------------------------------------------------------------------- the tracks */
@@ -382,7 +405,7 @@ static void track_key(int b)
         if (t == ui.trk) syn_sub_check();
         return;
     }
-    if (cat.open) cat_back();
+    if (cat.open) { cat_back(); cat_left(); }
     if (t != ui.trk) {                 /* (steps held were the last track's: let go, so no knob locks the new one's) */
         ui.nheld = 0;
         m_set(mc.sdown, 0, sizeof mc.sdown);
@@ -392,9 +415,23 @@ static void track_key(int b)
 
 /* ----------------------------------------------------------------------------------------------- the pads */
 
-/* the chromatic keyboard: rows a fourth apart, the second row from the bottom starting on the C of the track's
- * octave (the FM-1's keys' C), so the octave played sits in the middle of the pads */
-static int pad_note(int i) { return CLAMP(55 + 12 * ui.oct[ui.trk] + 5 * (i >> 3) + (i & 7), 0, 127); }
+/* the keyboard: a two-row piano on the bottom rows, as an Elektron keyboard lays its trig keys. The bottom row the
+ * white keys C D E F G A B C of the track's octave, the row over it the black keys over theirs (C# D# - F# G# A# - -) */
+static const int8_t KB_WHITE[8] = {0, 2, 4, 5, 7, 9, 11, 12};
+static const int8_t KB_BLACK[8] = {1, 3, -1, 6, 8, 10, -1, -1};
+static int key_note(int i)
+{
+    if (i < 0 || i >= 16) return -1;
+    const int o = i < 8 ? KB_WHITE[i] : KB_BLACK[i - 8];
+    return o < 0 ? -1 : CLAMP(60 + 12 * ui.oct[ui.trk] + o, 0, 127);
+}
+
+/* PERFORM on the keyboard: bank A's eleven on the bottom row, bank B's on the top, eight at a time (Up: their 9-11) */
+static int perf_of_key(int i)
+{
+    const int k = (i & 7) + mc.perf_pg * 8;
+    return i >= 0 && i < 16 && k < PF_BANK ? (i >> 3) * PF_BANK + k : -1;
+}
 
 static void mv_pad(int i, int vel, int down)
 {
@@ -409,15 +446,16 @@ static void mv_pad(int i, int vel, int down)
         return;
     }
     if (mc.pkind[i]) mv_pad(i, 0, 0); /* (a press without its release: let go first) */
-    if (mc.shift) {                    /* PERFORM: held, its effect plays */
-        mc.used = 1;
-        int e = perf_of_pad(i);
+    if (i >= MS_PAD0) { page_pad(i - MS_PAD0); return; }
+    if (mc.perf) {                     /* PERFORM: held, its effect plays */
+        int e = perf_of_key(i);
         if (e < 0) return;
         if (bus_perform(e, 1)) { mc.pkind[i] = 2; mc.parg[i] = (uint8_t)e; }
         else toast(PF_NAME[e], "NO DELAY FREE");
         return;
     }
-    const int t = ui.trk, n = pad_note(i);
+    const int t = ui.trk, n = key_note(i);
+    if (n < 0) return;
     sq.ktrk = (uint8_t)t;
     live_on_t(t, n, vel);
     ui.note[t] = (uint8_t)n;           /* (new trigs take the last note played, as from the FM-1's keys) */
@@ -428,12 +466,13 @@ static void mv_pad(int i, int vel, int down)
 
 /* ----------------------------------------------------------------------------------- the jog and the buttons */
 
+/* the jog: SOUNDS' list; a held step's note (Shift: its condition); Shift + jog the machine; else the patterns' list,
+ * opened by the turn at the pattern open, the cursor moved by it (nothing loads until a click) */
 static void mv_jog(int d)
 {
     if (!d) return;
     if (cat.open) { mv_cat_slot(sgn(d)); return; }
-    if (mc.list) { mc.list_sel = (uint8_t)CLAMP(mc.list_sel + d, 0, MV_PG_COUNT - 1); return; }
-    if (ui.nheld) {                    /* a held step: its note; with Shift its condition */
+    if (ui.nheld) {
         if (mc.shift) { mc.used = 1; held_step_edit(sgn(d), 0); }
         else held_note(d);
         return;
@@ -442,18 +481,24 @@ static void mv_jog(int d)
         mc.used = 1;
         const m2k_pattern_t *p = PAT(cur_pat);
         set_machine(M_ORDER[(m_place(p->machine[ui.trk]) + M_COUNT + sgn(d)) % M_COUNT]);
+        if (mc.page == MS_SYN) ui.toast_t = 0;   /* (SYN names it large itself) */
         return;
     }
-    mc.page = (uint8_t)CLAMP(mc.page + d, 0, MV_PG_COUNT - 1);
-    mc.focus_t = 0;
+    if (!mc.plist) { mc.plist = 1; mc.pat_sel = (uint8_t)cur_pat; }
+    mc.pat_sel = (uint8_t)CLAMP(mc.pat_sel + d, 0, M2K_PATTERNS - 1);
+    mc.plist_t = ui.now | 1u;
+    focus_off();
 }
 
+/* a click: SOUNDS keeps the sound shown; the patterns' list loads the one under the cursor; else it opens the list */
 static void jog_click(void)
 {
-    if (cat.open) { cat_keep(); return; }
-    if (mc.list) { mc.page = mc.list_sel; mc.list = 0; mc.focus_t = 0; return; }
-    mc.list = 1;
-    mc.list_sel = mc.page;
+    if (cat.open) { cat_keep(); cat_left(); return; }
+    if (mc.plist) { mc.plist = 0; pattern_key(mc.pat_sel); return; }
+    mc.plist = 1;
+    mc.pat_sel = (uint8_t)cur_pat;
+    mc.plist_t = ui.now | 1u;
+    focus_off();
 }
 
 static void bars(int d)
@@ -503,14 +548,6 @@ static void mv_button(int cc, int v)
         if (mc.del && !mc.used) toast("DELETE: HOLD IT", "AND A STEP OR TRACK");
         mc.del = 0;
         return;
-    case 50:                                                                   /* Menu: held, the catalogue */
-        if (down) {
-            mc.menu = 1; mc.menu_t0 = ui.now | 1u; mc.used = 0;
-            if (cat.open) { cat_back(); mc.used = 1; }
-            return;
-        }
-        mc.menu = 0;
-        return;
     case 62: case 63:                                                          /* Left, Right: the bars; Shift the bank */
         if (cc == 62) mc.left = (uint8_t)down; else mc.right = (uint8_t)down;
         if (!down) return;
@@ -528,19 +565,28 @@ static void mv_button(int cc, int v)
     if (!down) return;
     switch (cc) {
     case 3: jog_click(); break;
+    case 50:                                                                   /* Menu: a list closed */
+        if (cat.open) { cat_back(); cat_left(); }
+        mc.plist = 0;
+        break;
     case 43: case 42: case 41: case 40: track_key(43 - cc); break;            /* (CC 43 is track 1) */
     case 85: mv_play_press(); break;                                           /* Play: Move's too (passed through) */
     case 86:                                                                   /* Rec: REC; Shift + Rec saves */
         if (mc.shift) { mc.used = 1; mv_save_request(1); break; }
         sq.rec ^= 1;
         if (!sq.rec) sq.ready = 0;
-        toast(sq.rec ? "REC" : "REC OFF", sq.rec ? "PADS AND KNOBS WRITE" : 0);
+        toast(sq.rec ? "REC" : "REC OFF", 0);
         break;
     case 56: undo_do(mc.shift); if (mc.shift) mc.used = 1; break;             /* Undo; Shift + Undo redoes */
     case 55: case 54: {                                                        /* Up, Down */
         int d = cc == 55 ? 1 : -1;
-        if (cat.open) { if (d > 0) cat_keep(); else cat_back(); break; }
+        if (cat.open) { if (d > 0) cat_keep(); else cat_back(); cat_left(); break; }
         if (ui.nheld) { held_step_edit(0, d); break; }                         /* a held step's ratchet */
+        if (mc.perf) {                                                         /* PERFORM's keys: 1-8, 9-11 */
+            mc.perf_pg = (uint8_t)(d > 0);
+            toast("PERFORM", mc.perf_pg ? "KEYS 9-11" : "KEYS 1-8");
+            break;
+        }
         int8_t *oc = &ui.oct[ui.trk];
         *oc = (int8_t)CLAMP(*oc + d, -3, 3);
         char o[8], *e = s_cpy(o, "OCT ");
@@ -560,33 +606,32 @@ static void mv_button(int cc, int v)
     }
 }
 
-/* each block: Menu held long enough opens the catalogue; the bars follow the playhead */
+/* each block: the bars follow the playhead; the patterns' list closes a while after its last turn; a knob turned
+ * shows large a moment */
 static void mv_tick(void)
 {
-    if (mc.menu && !mc.used && ui.now - (mc.menu_t0 & ~1u) >= MV_HOLD_MS) {
-        mc.used = 1;
-        if (!cat.open) {
-            mc.list = 0;
-            cat_open();
-            toast("SOUNDS", "JOG NEXT, CLICK KEEPS");
-        }
-    }
     if (ui.follow && sq.playing) {
         int s = track_pos(ui.trk);
         if (s >= 0) ui.spage = (uint8_t)(s / 16);
     }
     if (ui.spage * 16 >= view_len()) ui.spage = 0;
-    if (mc.focus_t && mc.touch < 0 && ui.now - (mc.focus_t & ~1u) > MV_FOCUS_MS) { mc.focus_t = 0; mc.focus = -1; }
+    if (mc.plist && ui.now - (mc.plist_t & ~1u) > MV_LIST_MS) mc.plist = 0;
+    if (mc.focus_t && mc.touch < 0 && ui.now - (mc.focus_t & ~1u) > MV_FOCUS_MS) focus_off();
+    if (!cat.open) cat_left();         /* (the catalogue closed elsewhere: a pattern, Undo) */
 }
 
 /* ------------------------------------------------------------------------------------------- the page state */
 
-/* the Move's palette (Schwung's constants.mjs) and the white buttons' brightness */
-enum { C_OFF = 0, C_RED = 1, C_ROSE = 24, C_VIOLET = 19, C_AZURE = 16, C_ROYAL = 17, C_DAZURE = 95, C_DROSE = 111,
-       C_DVIOLET = 101, C_DRED = 66, C_ORANGE = 3, C_WHITE = 120, C_GREY = 119 };
+/* the Move's palette (Schwung's constants.mjs) and the white buttons' brightness. A family a colour: the sound pages
+ * orange (the keyboard's root too), the sequence and mix pages azure (the steps' trigs too), the functions magenta
+ * (PERFORM's keys too); the page in view or the function on bright, the rest dim */
+enum { C_OFF = 0, C_RED = 1, C_ORANGE = 3, C_AZURE = 16, C_MAGENTA = 26, C_WHITE = 120, C_GREY = 119, C_GREY3 = 123,
+       C_DAZURE = 95, C_DORANGE = 69, C_DMAGENTA = 115, C_DPINK = 109, C_DRED = 66 };
 enum { W_OFF = 0, W_DIM = 16, W_MID = 64, W_ON = 124 };
 
 static void str_n(char *d, const char *s, int n) { s_cpyn(d, s ? s : "", n); }
+
+static int page_lit(int pg) { return pg == mc.page || (pg == MS_PERF && mc.perf) || (pg == MS_CAT && cat.open); }
 
 static void mv_leds(mv_view_t *v)
 {
@@ -608,18 +653,24 @@ static void mv_leds(mv_view_t *v)
         l->step[k] = c;
     }
     const int root = track_root(p, t) % 12;
-    for (int i = 0; i < 32; i++) {
+    for (int i = 0; i < 16; i++) {     /* the keyboard, or PERFORM's keys */
         uint8_t c;
-        if (mc.shift) {
-            int e = perf_of_pad(i);
-            c = e < 0 ? C_OFF : perf.on[e] ? C_WHITE : e < PF_BANK ? C_DROSE : C_DVIOLET;
+        if (mc.perf) {
+            int e = perf_of_key(i);
+            c = e < 0 ? C_OFF : perf.on[e] ? C_WHITE : i < 8 ? C_DMAGENTA : C_DPINK;
         } else {
-            int n = pad_note(i), lit = 0;
-            for (int k = 0; k < 32; k++) if (mc.pkind[k] == 1 && mc.parg[k] == n && mc.ptrk[k] == t) lit = 1;
+            int n = key_note(i), lit = 0;
+            if (n < 0) { l->pad[i] = C_OFF; continue; }
+            for (int k = 0; k < 16; k++) if (mc.pkind[k] == 1 && mc.parg[k] == n && mc.ptrk[k] == t) lit = 1;
             if (trk[t].gate && trk[t].note == n) lit = 1;
-            c = lit ? C_WHITE : n % 12 == root ? C_ROYAL : C_OFF;
+            c = lit ? C_WHITE : n % 12 == root ? C_ORANGE : i < 8 ? C_GREY3 : C_GREY;
         }
         l->pad[i] = c;
+    }
+    for (int j = 0; j < 16; j++) {     /* the page pads */
+        const int pg = MS_PAD_PAGE[j], fam = ms_family(pg), on = page_lit(pg);
+        l->pad[MS_PAD0 + j] = (uint8_t)(fam == MS_FAM_SOUND ? (on ? C_ORANGE : C_DORANGE)
+                                        : fam == MS_FAM_FN ? (on ? C_MAGENTA : C_DMAGENTA) : (on ? C_AZURE : C_DAZURE));
     }
     for (int b = 0; b < 4; b++) {
         int tt = mc.shift ? b + 4 : b;
@@ -633,9 +684,9 @@ static void mv_leds(mv_view_t *v)
     l->btn[4] = mc.del ? W_ON : W_DIM;                                         /* Delete */
     l->btn[5] = ui.spage > 0 ? W_ON : last ? W_DIM : W_OFF;                   /* Left */
     l->btn[6] = ui.spage < last ? W_ON : last ? W_DIM : W_OFF;                /* Right */
-    l->btn[7] = ui.oct[t] > 0 ? W_ON : W_DIM;                                  /* Up */
-    l->btn[8] = ui.oct[t] < 0 ? W_ON : W_DIM;                                  /* Down */
-    l->btn[9] = cat.open ? W_ON : W_DIM;                                       /* Menu */
+    l->btn[7] = mc.perf ? (mc.perf_pg ? W_ON : W_DIM) : ui.oct[t] > 0 ? W_ON : W_DIM;   /* Up */
+    l->btn[8] = mc.perf ? (mc.perf_pg ? W_DIM : W_ON) : ui.oct[t] < 0 ? W_ON : W_DIM;   /* Down */
+    l->btn[9] = cat.open || mc.plist ? W_ON : W_OFF;                           /* Menu: a list to close */
     l->btn[10] = sq.arp_hold[t] ? W_ON : W_DIM;                                /* Loop */
 }
 
@@ -644,15 +695,9 @@ static void mv_view_build(mv_view_t *v)
     const m2k_pattern_t *p = PAT(cur_pat);
     const int t = ui.trk;
     v->page = mc.page;
-    str_n(v->page_name, MV_PAGE_N[mc.page], sizeof v->page_name);
     v->trk = (uint8_t)t;
-    v->ntrk = M2K_TRACKS;
     str_n(v->machine, MI[p->machine[t]].name, sizeof v->machine);
     s_pat(v->slot, cur_pat);
-    char nm[9];
-    m_cpy(nm, p->name, 8);
-    nm[8] = 0;
-    str_n(v->name, nm, sizeof v->name);
     if (sq.queued != cur_pat) s_pat(v->next, sq.queued); else v->next[0] = 0;
     v->bpm10 = (uint16_t)mv_bpm10();
     v->sync = (uint8_t)mv_sync();
@@ -662,41 +707,20 @@ static void mv_view_build(mv_view_t *v)
     v->shift = mc.shift;
     for (int k = 0; k < 8; k++) {
         mv_knob_t *kn = &v->knob[k];
-        const int code = mv_code(k);
-        const pi_t *pi = pinfo(t, code);
+        const int code = mv_code(k), kt = mv_ktrk(k);
+        const pi_t *pi = pinfo(kt, code);
         kn->flags = 0;
-        if (code == NONE || pi->s4[0] == '-') {
-            str_n(kn->label, "-", sizeof kn->label);
-            kn->value[0] = kn->unit[0] = kn->name[0] = 0;
-            kn->raw = 0;
-            kn->flags = MV_K_FREE;
-            continue;
-        }
-        const int val = mv_value(code);
-        const char *u = "";
-        char o[24];
-        fmt(pi, t, val, o, &u);
-        str_n(kn->label, pi->s4, sizeof kn->label);
-        str_n(kn->value, o, sizeof kn->value);
-        str_n(kn->unit, u, sizeof kn->unit);
-        str_n(kn->name, pi->name, sizeof kn->name);
-        kn->raw = (uint16_t)val;
-        if (mv_locked(code)) kn->flags |= MV_K_LOCK;
+        kn->raw = 0;
+        if (code == NONE || pi->s4[0] == '-' || mc.page >= MS_PAGES) { kn->flags = MV_K_FREE; continue; }
+        kn->raw = (uint16_t)mv_value(code, kt);
+        if (mv_locked(code, kt)) kn->flags |= MV_K_LOCK;
         if (bipolar(pi->kind)) kn->flags |= MV_K_BIP;
         if (kind_choices(pi->kind)) kn->flags |= MV_K_CHOICE;
-        if (code == GL(G_TMPO) && mv_sync() == MV_SYNC_MOVE) {   /* the tempo heard: Move's */
-            kn->flags |= MV_K_MOVE;
-            const uint32_t b = mv_bpm10();
-            char *e = s_int(kn->value, (int)(b / 10));
-            if (b % 10) { *e++ = '.'; *e++ = (char)('0' + b % 10); *e = 0; }
-            str_n(kn->unit, "MOVE", sizeof kn->unit);
-        }
+        if (code == GL(G_TMPO) && mv_sync() == MV_SYNC_MOVE) kn->flags |= MV_K_MOVE;
     }
     v->focus = mc.touch >= 0 ? mc.touch : mc.focus_t ? mc.focus : -1;
     /* the steps */
     const int len = tlen_of(t), pos = sq.playing ? track_pos(t) : -1;
-    v->len = (uint8_t)len;
-    v->play = (int16_t)pos;
     v->spage = ui.spage;
     v->npage = (uint8_t)((view_len() + 15) / 16);
     v->follow = ui.follow;
@@ -718,22 +742,44 @@ static void mv_view_build(mv_view_t *v)
         v->step[k] = f;
     }
     v->held = ui.nheld;
-    if (ui.nheld) s_note(v->held_note, p->step[t][ui.held[0]].note); else v->held_note[0] = 0;
     v->mutes = 0;
     for (int k = 0; k < M2K_TRACKS; k++) if (mute_will(k)) v->mutes |= (uint8_t)(1u << k);
     v->oct = ui.oct[t];
     v->bank = mc.bank;
-    v->overlay = cat.open ? MV_OV_CAT : mc.list ? MV_OV_PAGES : mc.shift ? MV_OV_SHIFT : mc.mute ? MV_OV_MUTE : MV_OV_NONE;
-    v->list_sel = mc.list_sel;
+    v->overlay = cat.open ? MV_OV_CAT : mc.plist ? MV_OV_PATS : mc.shift ? MV_OV_SHIFT : mc.mute ? MV_OV_MUTE : MV_OV_NONE;
+    v->pat_sel = mc.pat_sel;
+    v->perf = mc.perf;
+    v->perf_pg = mc.perf_pg;
     v->cat_slot[0] = 'S';
     s_num3(v->cat_slot + 1, ui.snd_sel + 1);
     str_n(v->cat_name, snd[ui.snd_sel].name[0] ? snd[ui.snd_sel].name : "INIT", sizeof v->cat_name);
-    str_n(v->cat_cat, CAT_N[ui.snd_cat < CAT_COUNT ? ui.snd_cat : 0], sizeof v->cat_cat);
-    v->perf = 0;
-    for (int k = 0; k < PF_COUNT && k < 32; k++) if (perf.on[k]) v->perf |= 1u << k;
+    v->perf_on = 0;
+    for (int k = 0; k < PF_COUNT && k < 32; k++) if (perf.on[k]) v->perf_on |= 1u << k;
     if (ui.toast_t && ui.now - (ui.toast_t & ~1u) < MV_TOAST_MS) {
         str_n(v->toast, ui.toast, sizeof v->toast);
         str_n(v->toast2, ui.toast2, sizeof v->toast2);
     } else v->toast[0] = v->toast2[0] = 0;
     mv_leds(v);
+    /* the screen's view: the moment as the renderer wants it, then everything it reads of the core */
+    m2k_scr_t s;
+    m_set(&s, 0, sizeof s);
+    s.page = mc.plist ? MS_PATS : mc.page;
+    s.track = (uint8_t)t;
+    s.touch = (int8_t)(mc.plist ? -1 : v->focus);
+    s.held = ui.nheld ? ui.held[0] : 0xFF;
+    s.spage = ui.spage;
+    s.cat_sel = ui.snd_sel;
+    s.cat_cat = ui.snd_cat;
+    s.pat_sel = mc.pat_sel;
+    s.sync = (uint8_t)(mv_sync() == MV_SYNC_MOVE);
+    s.bpm10 = (uint16_t)mv_bpm10();
+    s.shift = mc.shift;
+    s.mute = mc.mute;
+    s.bank = mc.bank;
+    s.perf = mc.perf;
+    s.perf_pg = mc.perf_pg;
+    s.toast = v->toast;
+    s.toast2 = v->toast2;
+    s.ms = ui.now;
+    m2k_screen_gather(&v->scr, &s);
 }

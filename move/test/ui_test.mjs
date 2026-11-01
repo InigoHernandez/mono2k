@@ -2,9 +2,10 @@
 /* move/ui.js run in Node against a mock of Schwung's shadow UI and of dsp.so's params:
  *   node move/test/ui_test.mjs
  * The controls forwarded (knobs batched and summed, the jog, buttons at once, the knobs' touch; nothing of the host's,
- * the pads' or the steps'), the frame read ~30 times a second and painted by rows and runs (only the rows that
- * changed, nothing for the same frame), the LEDs at most 16 a tick and to the right notes and CCs, a failed send
- * kept, the parked tick, the resume. */
+ * the pads' or the steps': the pages, the keyboard and PERFORM are the DSP's), the frame read every two panel frames
+ * (34.83 ms, ~28.7 a second, evenly, never caught up after a stall) and painted by rows and runs (only the rows that
+ * changed, nothing for the same frame), the LEDs at most 16 a tick and to the right notes and CCs (the 32 pads on
+ * 68.., the page pads among them), a failed send kept, the parked tick, the resume. */
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
@@ -70,37 +71,51 @@ const lastIn = () => (sets.length ? sets.at(-1)[1] : null);
 ctx.init();
 check(clears === 1 && prints === 1, 'init: the screen cleared, MONO2K until the first frame');
 tick(100);                              /* 100 ticks over 100 ms */
-check(gets.length >= 3 && gets.length <= 4, `frames read ~30 a second (${gets.length} in 100 ms of ticks)`);
+check(gets.length === 3, `frames read every 34.83 ms (${gets.length} in 100 ms of ticks)`);
 check(fills.length === 64 && fills.every((f) => f[2] === 128 && f[4] === 0), 'a blank first frame: each row cleared once');
 
 /* a row with runs, then the same frame again, then one row changed */
 fills.length = 0;
 frameRows[3] = rowFrom('1'.repeat(10) + '0'.repeat(5) + '11' + '0'.repeat(100) + '1'.repeat(11));
 frameSeq++;
-tick(34, 1);
+tick(36, 1);
 const r3 = fills.filter((f) => f[1] === 3);
 check(fills.length === 4 && r3.length === 4, `only the changed row painted (${fills.length} calls)`);
 check(r3[1][0] === 0 && r3[1][2] === 10 && r3[2][0] === 15 && r3[2][2] === 2 && r3[3][0] === 117 && r3[3][2] === 11,
       'its lit runs as fill_rects: 0+10, 15+2, 117+11 (to the edge)');
 fills.length = 0;
-tick(34, 1);
+tick(36, 1);
 check(fills.length === 0, 'the same frame number: nothing painted');
+
+/* the pace over a second of 2 ms ticks: 28 or 29 reads, 34 or 35 ms apart (the panel's frame twice); a stall of 200 ms
+ * is not caught up (one read, then the pace again) */
+gets.length = 0;
+tick(500, 2);
+const gaps = gets.slice(1).map((t, i) => t - gets[i]);
+check(gets.length >= 28 && gets.length <= 29 && gaps.every((g) => g >= 34 && g <= 36),
+      `~28.7 reads a second, evenly (${gets.length}; gaps ${Math.min(...gaps)}-${Math.max(...gaps)} ms)`);
+gets.length = 0;
+clock += 200;
+tick(36, 1);
+check(gets.length === 2, `after a 200 ms stall: one read at once, then the pace (${gets.length} in 36 ms)`);
 
 /* the LEDs: at most 16 a tick, each to its note or CC */
 frameLeds = Array.from({ length: 63 }, (_, i) => 1 + (i % 100));
 frameSeq++;
 leds.length = 0;
 const per = [];
-for (let i = 0; i < 6; i++) { const n = leds.length; tick(1, 34); per.push(leds.length - n); }
+for (let i = 0; i < 6; i++) { const n = leds.length; tick(1, 35); per.push(leds.length - n); }
 check(Math.max(...per) <= 16, `LEDs at most 16 a tick (${per.join(', ')})`);
 check(leds.length === 63, `every LED sent once over the ticks (${leds.length})`);
 const step1 = leds.find((l) => l[0] === 'n' && l[1] === 16), pad1 = leds.find((l) => l[0] === 'n' && l[1] === 68);
 const trk1 = leds.find((l) => l[0] === 'cc' && l[1] === 43), rec = leds.find((l) => l[0] === 'cc' && l[1] === 86);
+const pad17 = leds.find((l) => l[0] === 'n' && l[1] === 84), pad32 = leds.find((l) => l[0] === 'n' && l[1] === 99);
 check(step1 && step1[2] === 1 && pad1 && pad1[2] === 17 && trk1 && trk1[2] === 49 && rec && rec[2] === 53,
       'steps on notes 16.., pads on 68.., track 1 on CC 43, Rec on CC 86');
+check(pad17 && pad17[2] === 33 && pad32 && pad32[2] === 48, 'the page pads: the second row from note 84, the top row to 99');
 check(!leds.some((l) => l[0] === 'cc' && l[1] === 85), "PLAY's LED left to Move");
 leds.length = 0;
-tick(3, 34);
+tick(3, 35);
 check(leds.length === 0, 'unchanged LEDs: nothing sent');
 
 /* the controls */
@@ -156,7 +171,7 @@ check(gets.length === g && leds.length === l && fills.length === f, 'parked: no 
 ctx.onResume();
 fills.length = 0;
 leds.length = 0;
-tick(10, 34);
+tick(10, 35);
 check(fills.filter((x) => x[2] === 128).length === 64 && leds.length === 63, 'resumed: every row and LED again');
 
 if (fails) { console.log(`${fails} failed`); process.exit(1); }

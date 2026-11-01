@@ -16,8 +16,8 @@ Move hardware ─┬─ pads, steps ──────────────�
 dsp.so (core 3, 128-frame blocks = 8 x M2K_SUB)
   ├─ firmware/src core: engines, sequencer, arps, PERFORM, bus     (unchanged code)
   ├─ m2k_par_* on real-time workers, cores 0-2                     (the FM-1's 2nd core, x3)
-  └─ 128x64 1-bit screen renderer in C, on a worker                (m2k_move_ui.c, m2k_move_draw.c)
-                       │ one bulk read per tick: 1 KB page + ~100 values
+  └─ 128x64 1-bit screen: gathered on the audio thread, drawn on a worker   (screen/m2k_screen.c)
+                       │ one bulk read every 2 panel frames (34.8 ms): 1 KB page + the LEDs
                        ▼
 ui.js: paints the page, sets the LEDs, forwards input. No logic.
 ```
@@ -34,10 +34,10 @@ The files live in `move/`, a fourth platform beside `fm1/`, `web/` and `host/`:
 
 | Move | MONO2K |
 |---|---|
-| 16 steps | The trig keys: steps, p-locks held, bar view. |
-| 8 knobs + touch | One page of 8 parameters, as on the Monomachine. A touch shows the value. |
-| 32 pads | The keyboard and the arp (velocity and aftertouch). Shift+pads opens PERFORM. |
-| Jog | Pages, the catalogue and the library. A click enters. |
+| 16 steps | The sequencer on every page: steps, p-locks held, bar view. |
+| 8 knobs + touch | One page of 8 parameters, as on the Monomachine. A touch shows the name and the value. |
+| 32 pads | The top two rows the pages (a pad each) and SOUNDS and PERFORM; the bottom two the keyboard (a two-row piano), PERFORM's effects while it is on. |
+| Jog | The lists: the patterns, the catalogue. A click loads or keeps. |
 | Track buttons (4) + Shift | Tracks 1–4. With Shift, 5–8. |
 | Play / Rec / Mute / Copy / Delete / Undo | Their MONO2K jobs. |
 | Master knob | Move's volume (kept by the host). |
@@ -79,8 +79,11 @@ The files live in `move/`, a fourth platform beside `fm1/`, `web/` and `host/`:
 - **Builds go on the Move over Wi-Fi** (the SSH key from Schwung's installer, `move.local`): a copy to a temp name, then a rename.
 - **In time with Move** (owner, 2026-11-01): MONO2K takes Move's tempo and transport, one Play starts both, and Move's own tracks play along. Built in step 2 (README, In time with Move): Move's pulses through the core's own clock in, a gentle phase lock, the period pinned to Move's tempo. MONO2K plays alone (INT) only when Move sends no clock.
 - **Step 2, hands on** (2026-11-01): the controls, the screen's page state with a plain renderer, saving to `/data/UserData/schwung/mono2k/mono2k.m2ks`, the LEDs. The table is in README.md.
+- **The screen, calmer; the pads** (owner, 2026-11-01, on step 3's sheets): "names on touch only", "good but calmer"; "use the 2 rows pads of move for pages and functions too", "to avoid eternal pagination on the main wheel knob"; "sequencer is always available as there is a dedicated row in the bottom". Built: every page a pad (the top row the sound, the second the rest and SOUNDS and PERFORM), the jog for lists only, the keyboard a two-row piano, PERFORM's effects on it while on, the knob names gone from the screen until touched, dsp.so drawing step 3's renderer through the controller's page state, 28.7 frames a second (README, The screen). MIX (the eight levels) is a proposal for the owner.
 
 ## Open questions
+
+- **The pads:** MIX on the freed pad (a proposal); PERFORM's 22 effects on the keyboard's 16 keys, 8 + 8 at a time (Up shows each bank's 9–11); the jog click, free outside the lists, opens the patterns' list; Menu closes a list; the FM-1's MIDI settings have no page (the Move routes no MIDI to them).
 
 - **Name:** the catalog already has "Mono" (timncox/schwung-mono, MIT), a six-track Elektron-style machine synth. MONO2K keeps its full name. Read its code only for its API use, never copy it.
 - **Move's own audio under MONO2K:** mixed for now (ui.js `MUTE_MOVE`), muting is one flag.

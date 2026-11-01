@@ -1,35 +1,28 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /* MONO2K on the Move: the page state. The controller (m2k_move_ui.c, mv_view_build) fills one on the audio thread and
- * publishes it; a renderer reads a copy on its own thread and draws the 128 x 64 screen from it alone (m2k_move_draw.c,
- * the plain one; the final design replaces it). Plain data: every string NUL-ended, in capitals, as the FM-1 writes
- * them; nothing in it points into the core. The LEDs ride along: ui.js sets them as they are here. */
+ * publishes it; the drawer reads a copy on its own thread and draws the 128 x 64 screen from its screen part alone
+ * (scr: move/screen/m2k_screen.h's plain view, m2k_screen_draw). Plain data: nothing in it points into the core. The
+ * LEDs ride along: ui.js sets them as they are here; the rest is the controller's summary, for the tests. */
 #ifndef M2K_MOVE_VIEW_H
 #define M2K_MOVE_VIEW_H
 
 #include <stdint.h>
+#include "screen/m2k_screen.h"
 
-/* the pages the jog turns, in its order (m2k_move_ui.c MV_PAGE) */
-enum { MV_PG_SYN, MV_PG_AMP, MV_PG_FILT, MV_PG_EFX, MV_PG_DSTR, MV_PG_TRK, MV_PG_LFO1, MV_PG_LFO2, MV_PG_LFO3,
-       MV_PG_SEQ, MV_PG_GRID, MV_PG_PAT, MV_PG_COUNT };
-
-/* what is over the page: nothing, the page list (jog click), the sound catalogue (Menu held), Shift's layer (pattern,
- * bank, PERFORM, machine), Mute's layer */
-enum { MV_OV_NONE, MV_OV_PAGES, MV_OV_CAT, MV_OV_SHIFT, MV_OV_MUTE };
+/* what is over the page: nothing, the sound catalogue (SOUNDS), the patterns' list (the jog), Shift's layer (patterns,
+ * bank, machine), Mute's layer */
+enum { MV_OV_NONE, MV_OV_PATS, MV_OV_CAT, MV_OV_SHIFT, MV_OV_MUTE };
 
 /* the tempo's source: Move's clock (followed, or waited for), or MONO2K's own (Move sent none when PLAY was pressed) */
 enum { MV_SYNC_INT, MV_SYNC_MOVE };
 
 /* a knob */
-#define MV_K_FREE   1u                 /* nothing on it ("-") */
+#define MV_K_FREE   1u                 /* nothing on it */
 #define MV_K_LOCK   2u                 /* the value is a held step's lock */
 #define MV_K_BIP    4u                 /* bipolar: 64 the middle */
 #define MV_K_CHOICE 8u                 /* a list of choices, not a range */
 #define MV_K_MOVE   16u                /* Move sets it (the tempo, followed): turning it does nothing */
 typedef struct {
-    char label[8];                     /* the FM-1's four letters: "ATCK" */
-    char value[12];                    /* "64", "1/16", "INF" */
-    char unit[16];                     /* "MS", "SEMI", "" */
-    char name[20];                     /* the long name: "FILTER ATTACK" */
     uint16_t raw;                      /* 0..127 (the tempo 0..255) */
     uint8_t flags;                     /* MV_K_* */
 } mv_knob_t;
@@ -54,37 +47,30 @@ typedef struct {
 
 typedef struct {
     uint32_t seq;                      /* bumps with every publish */
-    /* the header */
-    uint8_t page;                      /* MV_PG_* */
-    char page_name[8];                 /* "AMP" */
-    uint8_t trk, ntrk;                 /* the track in view from 0, how many */
+    uint8_t page;                      /* MS_* in view */
+    uint8_t trk;                       /* the track in view from 0 */
     char machine[10];                  /* "SID-6581" */
-    char slot[4], name[9];             /* the pattern: "A01", "CIRCUIT" */
-    char next[4];                      /* the pattern queued for the bar's end ("" none) */
+    char slot[4], next[4];             /* the pattern, the one queued for the bar's end ("" none) */
     uint16_t bpm10;                    /* the tempo heard (Move's while following), tenths */
     uint8_t sync;                      /* MV_SYNC_* */
     uint8_t following;                 /* MONO2K plays to Move's clock now */
     uint8_t playing, rec, shift;
-    /* the knobs */
     mv_knob_t knob[8];
     int8_t focus;                      /* the knob shown large (touched, or turned a moment ago), -1 none */
-    /* the steps */
     uint8_t step[16];                  /* MV_ST_* for the 16 shown */
     uint8_t spage, npage, follow;      /* the bar shown, how many the track reaches, whether it follows the playhead */
-    int16_t play;                      /* the track's step playing, from 0 (-1 stopped) */
-    uint8_t len;                       /* the track's length */
     uint8_t held;                      /* steps held */
-    char held_note[6];                 /* the first held step's note: "C4" */
     uint8_t mutes;                     /* a bit a track, as it will be (a mute waiting for the bar shown as done) */
     int8_t oct;                        /* the track's keyboard octave, -3..3 */
     uint8_t bank;                      /* the bank Shift + steps pick from */
-    /* what is over the page */
     uint8_t overlay;                   /* MV_OV_* */
-    uint8_t list_sel;                  /* the page list's choice */
-    char cat_slot[6], cat_name[9], cat_cat[8];   /* the catalogue: "S012", its name ("INIT" empty), its category shown */
-    uint32_t perf;                     /* PERFORM's effects on, a bit each (22) */
+    uint8_t pat_sel;                   /* the patterns' list's cursor */
+    uint8_t perf, perf_pg;             /* PERFORM's keys on the keyboard, their page */
+    char cat_slot[6], cat_name[9];     /* the catalogue: "S012", its name ("INIT" empty) */
+    uint32_t perf_on;                  /* PERFORM's effects on, a bit each (22) */
     char toast[24], toast2[28];        /* a message, a moment after an action ("" none) */
     mv_leds_t led;
+    ms_view_t scr;                     /* the screen's view: all the drawer reads */
 } mv_view_t;
 
 #endif

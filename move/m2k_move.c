@@ -6,13 +6,14 @@
  * frames every 2.9 ms), so nothing on that path allocates, locks, logs, formats with libc or touches a file. create and
  * destroy run on Schwung's loader thread: the store is read there, and written there on closing. Two threads of our
  * own, made in create and joined in destroy, demoted to SCHED_OTHER on cores 0-2 (Schwung's rule):
- *   the drawer   the 128 x 64 screen from the page state the audio thread publishes (m2k_move_draw.c), into a
- *                triple buffer get_param("frame") reads;
+ *   the drawer   the 128 x 64 screen from the page state the audio thread publishes (its screen part, gathered by
+ *                move/screen/m2k_screen.c on the audio thread and drawn here by m2k_screen_draw), into a triple
+ *                buffer get_param("frame") reads;
  *   the saver    the store's file from a snapshot the audio thread copies a piece a block (a temp file, then a rename).
  * In: the pads and the steps to on_midi (sample-exact); Move's clock and transport to on_midi too (once a block);
  * the knobs, the jog, the buttons and the knobs' touch from ui.js, through set_param("in"). All of it goes into one
  * queue the next render drains, in order, into the controller (m2k_move_ui.c). Out: get_param("frame"), the screen and
- * the LEDs, once a frame. */
+ * the LEDs, once a frame (ui.js reads one every two of the panel's frames, ~28.7 a second: README, The screen). */
 #define _GNU_SOURCE
 #include <errno.h>
 #include <pthread.h>
@@ -67,7 +68,8 @@ static struct {
     uint64_t samples;                  /* frames rendered since create */
     uint32_t blocks;
     int want_play, want_track;         /* set_param's "play" and "track" (-1 nothing): the bench's, the tools' */
-    uint8_t touched;                   /* the queue fed the controller this block: the page state goes out */
+    uint8_t touched, pending;          /* the queue fed the controller this block; a publish owed since */
+    uint32_t nodraw;                   /* publishes, when the render draws (no drawer thread) */
     uint32_t cpu_sum, cpu_max, cpu_n, cpu_mean, cpu_most;
     char dir[200];                     /* where the store lives ("" none: nothing read or written) */
     uint8_t save_on_close, loaded, draw_thread;
@@ -377,21 +379,39 @@ static int sv_write_bytes(const uint8_t *b, int n)
 
 /* ------------------------------------------------------------------------------------- the screen, the threads */
 
-/* the page state: built on the audio thread every few blocks (and after any press), published by a sequence lock the
- * drawer reads without ever making the audio thread wait */
+/* the page state: built on the audio thread once a panel frame (6 blocks, 17.4 ms: the OLED takes a slice a block),
+ * and 3 blocks after a press at the soonest, published by a sequence lock the drawer reads without ever making the
+ * audio thread wait. Its screen part is the renderer's gather (m2k_screen_gather): all the drawer reads */
+#define VW_EVERY 6                     /* blocks between publishes, nothing pressed */
+#define VW_SOON 3                      /* after a press, at the soonest */
 static mv_view_t vw_pub, vw_now;
 static _Atomic uint32_t vw_lock;
-static uint32_t vw_count;
+static uint32_t vw_count, vw_last;   /* publishes; the block of the last */
 static void mv_view_build(mv_view_t *v);   /* (m2k_move_ui.c) */
+
+/* what the screen costs, for the bench (get_param "cost"): the publish on the audio thread, the drawing on the drawer's,
+ * the reads; ns */
+static struct { uint64_t pub_ns, pub_max, draw_ns, draw_max; uint32_t pub_n, draw_n, reads; } cost;
+static uint64_t now_ns(void)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);   /* (the vDSO's: no system call) */
+    return (uint64_t)ts.tv_sec * 1000000000u + (uint64_t)ts.tv_nsec;
+}
 
 static void view_publish(void)
 {
+    const uint64_t t0 = now_ns();
     mv_view_build(&vw_now);
     vw_now.seq = ++vw_count;
     atomic_fetch_add_explicit(&vw_lock, 1u, memory_order_acq_rel);     /* (odd: being written) */
     atomic_thread_fence(memory_order_release);
     memcpy(&vw_pub, &vw_now, sizeof vw_pub);
     atomic_fetch_add_explicit(&vw_lock, 1u, memory_order_release);
+    const uint64_t d = now_ns() - t0;
+    cost.pub_ns += d;
+    if (d > cost.pub_max) cost.pub_max = d;
+    cost.pub_n++;
 }
 
 static int view_read(mv_view_t *v)
@@ -407,11 +427,11 @@ static int view_read(mv_view_t *v)
 }
 
 #include "m2k_move_ui.c"
-#include "m2k_move_draw.c"
+#include "screen/m2k_screen.c"
 
 /* the frames: a triple buffer. The drawer draws into its own, then trades it for the middle one (marked new); a read
  * takes the middle one when it is new. Neither waits */
-static uint8_t fbuf[3][MV_FB];
+static uint8_t fbuf[3][MS_BYTES];
 static uint32_t fseq[3];
 static _Atomic uint32_t fb_mid = 1;
 static int fb_w, fb_r = 2;             /* the drawer's, the reader's */
@@ -419,7 +439,12 @@ static uint32_t fb_count;
 
 static void frame_draw(const mv_view_t *v)
 {
-    mv_draw(v, fbuf[fb_w]);
+    const uint64_t t0 = now_ns();
+    m2k_screen_draw(&v->scr, fbuf[fb_w]);
+    const uint64_t d = now_ns() - t0;
+    cost.draw_ns += d;                 /* (the drawer's own, or the render's without one: one writer either way) */
+    if (d > cost.draw_max) cost.draw_max = d;
+    cost.draw_n++;
     fseq[fb_w] = ++fb_count;
     fb_w = (int)(atomic_exchange_explicit(&fb_mid, (uint32_t)fb_w | 4u, memory_order_acq_rel) & 3u);
 }
@@ -437,6 +462,7 @@ static void nap_ms(int ms)
 /* a thread of ours off the audio's: SCHED_OTHER first (a thread inherits its maker's FIFO), cores 0-2 */
 static void thread_demote(void)
 {
+#ifdef __linux__                       /* (the Move's; the sheets build this unit on a Mac and run no threads) */
     struct sched_param sp;
     memset(&sp, 0, sizeof sp);
     sched_setscheduler(0, SCHED_OTHER, &sp);
@@ -444,21 +470,25 @@ static void thread_demote(void)
     CPU_ZERO(&s);
     for (int c = 0; c < 3; c++) CPU_SET(c, &s);
     sched_setaffinity(0, sizeof s, &s);
+#endif
 }
 
+/* the drawer: a frame for each page state published whose screen changed (a publish is a panel frame apart at most
+ * once in 6 blocks, or 3 after a press), drawn from its copy alone */
 static void *draw_main(void *arg)
 {
     (void)arg;
     thread_demote();
-    static mv_view_t v, last;
+    static mv_view_t v;
+    static ms_view_t last;
+    uint32_t seen = 0;
     int have = 0;
     while (!atomic_load_explicit(&th_stop, memory_order_acquire)) {
-        if (view_read(&v) && (!have || memcmp((const uint8_t *)&v + 4, (const uint8_t *)&last + 4, sizeof v - 4))) {
-            frame_draw(&v);
-            last = v;
-            have = 1;
+        if (view_read(&v) && v.seq != seen) {
+            seen = v.seq;
+            if (!have || memcmp(&v.scr, &last, sizeof last)) { frame_draw(&v); last = v.scr; have = 1; }
         }
-        nap_ms(8);
+        nap_ms(4);
     }
     return 0;
 }
@@ -497,6 +527,7 @@ static int frame_string(char *o)
 {
     if (atomic_load_explicit(&fb_mid, memory_order_acquire) & 4u)
         fb_r = (int)(atomic_exchange_explicit(&fb_mid, (uint32_t)fb_r, memory_order_acq_rel) & 3u);
+    cost.reads++;
     const uint8_t *fb = fbuf[fb_r];
     char *e = ap(o, "M2K1");
     e = ap_hex8(e, fseq[fb_r]);
@@ -559,6 +590,7 @@ static int view_string(char *o)
     mv_view_build(&v);
     char *e = o;
     e = ap(e, "pg="); e = s_int(e, v.page);
+    e = ap(e, " pname="); e = ap(e, m2k_screen_page_name(v.page));
     e = ap(e, " trk="); e = s_int(e, v.trk);
     e = ap(e, " mach="); e = ap(e, v.machine);
     e = ap(e, " pat="); e = ap(e, v.slot);
@@ -569,7 +601,7 @@ static int view_string(char *o)
     e = ap(e, " fol="); e = s_int(e, v.following);
     e = ap(e, " bpm10="); e = s_int(e, v.bpm10);
     e = ap(e, " ov="); e = s_int(e, v.overlay);
-    e = ap(e, " sel="); e = s_int(e, v.list_sel);
+    e = ap(e, " psel="); e = s_int(e, v.pat_sel);
     e = ap(e, " oct="); e = s_int(e, v.oct);
     e = ap(e, " bank="); e = s_int(e, v.bank);
     e = ap(e, " sp="); e = s_int(e, v.spage);
@@ -578,7 +610,8 @@ static int view_string(char *o)
     e = ap(e, " mutes="); e = s_int(e, v.mutes);
     e = ap(e, " held="); e = s_int(e, v.held);
     e = ap(e, " focus="); e = s_int(e, v.focus);
-    e = ap(e, " perf="); e = s_int(e, (int)v.perf);
+    e = ap(e, " perf="); e = s_int(e, (int)v.perf_on);
+    e = ap(e, " pkeys="); e = s_int(e, v.perf); *e++ = ','; e = s_int(e, v.perf_pg);
     e = ap(e, " hold="); e = s_int(e, sq.arp_hold[v.trk]);
     e = ap(e, " k=");
     for (int k = 0; k < 8; k++) { if (k) *e++ = ','; e = s_int(e, v.knob[k].raw); }
@@ -593,7 +626,8 @@ static int view_string(char *o)
     e = ap(e, " trkled=");
     for (int k = 0; k < 4; k++) { if (k) *e++ = ','; e = s_int(e, v.led.trk[k]); }
     e = ap(e, " cat="); e = ap(e, v.cat_slot); *e++ = ':'; e = ap(e, v.cat_name);
-    e = ap(e, " v0="); e = ap(e, v.knob[0].value);
+    e = ap(e, " spg="); e = s_int(e, v.scr.page);
+    e = ap(e, " tk="); e = s_int(e, v.scr.touch.k); *e++ = ':'; e = ap(e, v.scr.touch.name);
     e = ap(e, " toast="); e = ap(e, v.toast); *e++ = '|'; e = ap(e, v.toast2);
     return (int)(e - o);
 }
@@ -643,6 +677,21 @@ static int clock_string(char *o)
     e = s_int(e, (int)atomic_load(&sv.done)); *e++ = ' ';
     e = s_int(e, (int)atomic_load(&sv.failed)); *e++ = ' ';
     e = s_int(e, atomic_load(&sv.state));
+    return (int)(e - o);
+}
+
+/* the screen's cost, for the bench: "PUBLISHES PUB_NS_MEAN PUB_NS_MOST DRAWS DRAW_NS_MEAN DRAW_NS_MOST READS" */
+static int cost_string(char *o)
+{
+    char *e = o;
+    e = s_int(e, (int)cost.pub_n); *e++ = ' ';
+    e = s_int(e, (int)(cost.pub_n ? cost.pub_ns / cost.pub_n : 0)); *e++ = ' ';
+    e = s_int(e, (int)cost.pub_max); *e++ = ' ';
+    e = s_int(e, (int)cost.draw_n); *e++ = ' ';
+    e = s_int(e, (int)(cost.draw_n ? cost.draw_ns / cost.draw_n : 0)); *e++ = ' ';
+    e = s_int(e, (int)cost.draw_max); *e++ = ' ';
+    e = s_int(e, (int)cost.reads);
+    *e = 0;
     return (int)(e - o);
 }
 
@@ -739,7 +788,10 @@ static void *v2_create(const char *module_dir, const char *json_defaults)
     ui.splash_end = 0;                  /* (no splash) */
     ui.splashed = 1;
     if (pattern >= 0 && pattern < M2K_PATTERNS) m2k_pattern(pattern);
+    ui.toast_t = 0;                     /* (the pattern opened says so in the header) */
     mv_ctl_init();
+    m2k_screen_init();                  /* (every kind's values swept here, never in a render) */
+    m_set(&cost, 0, sizeof cost);
 
     m_set(&sv, 0, sizeof sv);
     atomic_store(&sv.state, SV_IDLE);
@@ -748,6 +800,7 @@ static void *v2_create(const char *module_dir, const char *json_defaults)
     atomic_store(&fb_mid, 1u);
     fb_w = 0; fb_r = 2; fb_count = 0;
     vw_count = 0;
+    vw_last = 0;
     atomic_store(&vw_lock, 0u);
     view_publish();
     atomic_store(&th_stop, 0);
@@ -840,6 +893,7 @@ static int v2_get_param(void *inst, const char *key, char *buf, int buf_len)
     if (s_is(key, "view")) return put_out(buf, buf_len, o, view_string(o));
     if (s_is(key, "dump")) return put_out(buf, buf_len, o, dump_string(o));
     if (s_is(key, "clock")) return put_out(buf, buf_len, o, clock_string(o));
+    if (s_is(key, "cost")) return put_out(buf, buf_len, o, cost_string(o));
     return -1;                          /* (rui_poll, state, remote_snapshot_rt_safe...: not served) */
 }
 
@@ -914,9 +968,13 @@ static void v2_render(void *inst, int16_t *out, int frames)
     const uint32_t d = atomic_load(&sv.done), x = atomic_load(&sv.failed);
     if (d != sv.seen_done) { sv.seen_done = d; toast("SAVED", "MONO2K.M2KS"); mv.touched = 1; }
     if (x != sv.seen_failed) { sv.seen_failed = x; toast("NOT SAVED", "FILE NOT WRITTEN"); mv.touched = 1; }
-    if (mv.touched || !(mv.blocks & 3u)) {
+    mv.pending |= mv.touched;
+    const uint32_t since = mv.blocks - vw_last;
+    if (since >= VW_EVERY || (mv.pending && since >= VW_SOON)) {
         view_publish();
-        if (!th_draw_on && !(mv.blocks & 7u)) frame_draw(&vw_now);   /* (no drawer: here, every 8th block) */
+        vw_last = mv.blocks;
+        mv.pending = 0;
+        if (!th_draw_on && !(++mv.nodraw & 1u)) frame_draw(&vw_now);   /* (no drawer: here, every other publish) */
     }
     mv.touched = 0;
     const uint32_t dt = now_us() - t0;

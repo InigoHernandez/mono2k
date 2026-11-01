@@ -1,9 +1,15 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /* MONO2K on the Move: a thin layer over dsp.so, which holds the controller, the screen and the LEDs (m2k_move_ui.c,
- * m2k_move_draw.c). This file forwards the controls the DSP does not hear itself (the knobs, the jog, the buttons, the
- * knobs' touch: the pads, the steps and Move's clock go to it straight, through its on_midi), reads one frame ~30 times
- * a second (the 128 x 64 page and the LEDs, one bulk get), paints the rows that changed and sets the LEDs that changed,
- * at most 16 a tick. No sequencing, sound or page logic lives here.
+ * screen/m2k_screen.c). This file forwards the controls the DSP does not hear itself (the knobs, the jog, the buttons,
+ * the knobs' touch: the pads, the steps and Move's clock go to it straight, through its on_midi), reads one frame every
+ * two of the OLED's frames (~28.7 a second: the 128 x 64 page and the LEDs, one bulk get), paints the rows that
+ * changed and sets the LEDs that changed, at most 16 a tick. No sequencing, sound or page logic lives here.
+ *
+ * The pace (README, The screen): the overtake tick runs every 2 ms (Schwung's shadow_ui.c), the OLED takes one of its
+ * six slices an SPI frame (128 samples, 2.9 ms; display_pull.h), so a whole panel frame is 17.4 ms (57.4 a second), and
+ * a param read waits ~2.8 ms for the shim's next SPI frame. A frame read every second panel frame shows each frame for
+ * exactly two of the panel's, and keeps the channel 8 % busy. host_set_refresh_rate is not ours to call: shadow_ui.c
+ * (where overtake modules run) has none, and schwung_host.c's ~11 Hz is a variable its loop never reads.
  *
  * The host keeps: Back (parks MONO2K; Shift + Back closes it), the master knob, and the escape (Shift + touching the
  * volume knob + jog click). PLAY reaches Move too (module.json's button_passthrough), so one press starts both and
@@ -15,7 +21,7 @@ import {
     setLED, setButtonLED, invalidateLedCache, decodeDelta, decodeAcceleratedDelta
 } from '/data/UserData/schwung/shared/input_filter.mjs';
 
-const POLL_MS = 33;            /* a frame read at most ~30 times a second (a read is ~2.8 ms on the param channel) */
+const FRAME_MS = 2 * 6 * 128 * 1000 / 44100;   /* 34.83 ms: two panel frames (six slices, one each 128 samples) */
 const LED_BUDGET = 16;         /* LED messages a tick at most; the rest wait for the next */
 const MUTE_MOVE = false;       /* Move's own audio under MONO2K: mixed (false) or muted (the owner's call) */
 const ROWS = 64, ROW_CH = 22, HEAD = 12;                  /* the frame: "M2K1", its number (8 hex), 64 rows of 22 */
@@ -24,7 +30,7 @@ const BTN_CC = [86, 88, 56, 60, 119, 62, 63, 55, 54, 50, 58];   /* m2k_move_view
                                                             * Delete Left Right Up Down Menu Loop */
 const HOST_CC = new Set([MoveBack, MoveMaster]);          /* the host's */
 
-let lastPoll = 0;
+let nextPoll = 0;              /* when the next frame is read (ms, fractional: the pace never drifts) */
 let events = [];               /* controls to send, in order, as one "in" value */
 let rows = new Array(ROWS).fill(null);   /* each row as last painted */
 let lastSeq = "";
@@ -151,7 +157,7 @@ globalThis.init = function () {
     resetAll();
     if (typeof print === "function") print(3, 28, "MONO2K", 1);   /* (until the first frame) */
     if (MUTE_MOVE && typeof host_mute_move_audio === "function") host_mute_move_audio(1);
-    lastPoll = 0;
+    nextPoll = 0;
 };
 
 globalThis.onResume = function () { resetAll(); };
@@ -164,7 +170,10 @@ globalThis.tick = function () {
     if (globalThis.overtakeParked) return;        /* parked in the background: no reads, no drawing, no LEDs */
     flush();
     const now = Date.now();
-    if (now - lastPoll >= POLL_MS) { lastPoll = now; poll(); }
+    if (now >= nextPoll) {                        /* (late by more than a frame: start again from now, no catching up) */
+        nextPoll = now - nextPoll < FRAME_MS ? nextPoll + FRAME_MS : now + FRAME_MS;
+        poll();
+    }
     leds();
 };
 
