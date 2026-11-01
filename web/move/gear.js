@@ -4,7 +4,7 @@
  *
  * Embed (the Move home is web/move/index.html, beside this file):
  *   <div id="move-gear"></div>
- *   <script src="gear.js?v=3"></script>
+ *   <script src="gear.js?v=4"></script>
  *   <script>MoveGear.init(document.getElementById("move-gear"));</script>
  * MoveGear.init(el, opts) builds the drawing into el and returns { start, mute }. opts (all optional):
  *   bar: false       no line under the drawing (the control under the pointer, the keys, the sound toggle)
@@ -159,7 +159,7 @@ window.MoveGear = (() => {
     const ctl = {};                                      /* data-c -> its parts */
     const add = (key, g, parts) => { g.setAttribute("data-c", key); ctl[key] = Object.assign({ g }, parts); return g; };
 
-    el("rect", { class: "mg-body", x: 1, y: 1, width: W - 2, height: H - 2, rx: 16 }, svg);
+    el("rect", { class: "mg-body", x: 1, y: 1, width: W - 2, height: H - 2, rx: 4 }, svg);
     el("line", { class: "mg-rule", x1: LX, y1: (TY + TH + PY) / 2, x2: W - LX, y2: (TY + TH + PY) / 2 }, svg);
 
     /* the screen: a black bezel; the glass is a canvas laid over it */
