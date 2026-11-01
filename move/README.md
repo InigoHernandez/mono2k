@@ -204,9 +204,10 @@ cc -O2 -DM2K_TRACKS=8 -Ifirmware/src -Ifirmware/gen -o build/move/screen_sheets 
 
 ## How it fits
 
-- **`m2k_move.c`** is the glue: the plugin API, the queue, the clock follower, the saver, the frames. It includes `m2k_core.c` (as the browser's glue does), then `m2k_move_ui.c` (the controller: it calls the FM-1 UI's own helpers in `m2k_ui.c`) and `screen/m2k_screen.c` (the renderer).
+- **`m2k_move.c`** is Schwung's side: the plugin API, the saver, the drawer, the frames. It includes `m2k_core.c` (as the browser's glue does), then **`m2k_move_glue.c`**, the part every build of MONO2K-on-the-Move shares: the queue, the clock follower and the tempo asked of Move, the block (`mv_block`), `m2k_move_ui.c` (the controller: it calls the FM-1 UI's own helpers in `m2k_ui.c`) and `screen/m2k_screen.c` (the renderer).
   - One instance: the core is a set of statics.
   - One core: `m2k_par_begin` stays unset.
+  - The site's playable Move (`web/move/gear.js`) runs the same glue in the browser (`web/move/m2k_move_web.c`, built by `web/build.sh` into `web/move/m2k_move.wasm`): on its own clock (INT), nothing saved.
 - **The audio thread** runs render, on_midi, set_param and get_param. Nothing there allocates, locks, logs or touches a file.
   - Pads, steps and Move's transport (on_midi), and ui.js's controls (`set_param("in", "K i d;P i d c;J d;B cc v;T i v;W n ok")`: K a knob's steps, P the tempo in tenths (c: whole BPM), W the tempo written), go into one queue. The next render drains it in order.
   - The render runs the core 16 samples at a time, with Move's pulses between.
