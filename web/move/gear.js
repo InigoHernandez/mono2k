@@ -4,7 +4,7 @@
  *
  * Embed (the Move home is web/move/index.html, beside this file):
  *   <div id="move-gear"></div>
- *   <script src="gear.js?v=5"></script>
+ *   <script src="gear.js?v=6"></script>
  *   <script>MoveGear.init(document.getElementById("move-gear"));</script>
  * MoveGear.init(el, opts) builds the drawing into el and returns { start, mute }. opts (all optional):
  *   bar: false       no line under the drawing (the control under the pointer, the keys, the sound toggle)
@@ -20,7 +20,7 @@
  * piano's white keys), W..O the row over it, Z / X Down / Up, Space Play, Shift Shift. */
 window.MoveGear = (() => {
   "use strict";
-  const V = { css: 3, worklet: 1, wasm: 1 };      /* bump with each changed file (the site's ?v= rule) */
+  const V = { css: 4, worklet: 1, wasm: 1 };      /* bump with each changed file (the site's ?v= rule) */
   const BASE = (() => {
     const s = document.currentScript && document.currentScript.src;
     return s ? s.replace(/[^/]*$/, "") : "";
@@ -32,13 +32,13 @@ window.MoveGear = (() => {
   /* one drawing in units (the viewBox): the left column (the screen over it and the track buttons, the jog, Back and
    * Menu, Play and Rec), the track buttons, the 4 x 8 pads, the 2 x 4 function buttons, the knobs and the volume over
    * them, the 16 steps under the pads, the arrows beside the steps */
-  const W = 1016, H = 540;
-  const LX = 28, LW = 172, TX = 214, TW = 30, PX = 258, PS = 66, PG = 8, FX = 860, FW = 128;
-  const TY = 24, TH = 124, PY = 166, SY = 490;
+  const W = 1128, H = 508;                          /* wide and low (the owner's) */
+  const LX = 28, LW = 172, TX = 214, TW = 30, PX = 258, PW = 80, PH = 58, PG = 8, FX = 972, FW = 128;   /* pads wider than tall */
+  const TY = 24, TH = 124, PY = 166, SY = 458;
   const OLED = { x: 32, y: 34, w: 208, h: 104 };   /* the screen's glass, inside its black bezel */
-  const padX = (c) => PX + c * (PS + PG);
-  const rowY = (r) => PY + r * (PS + PG);           /* r 0 the top row */
-  const rowC = (r) => rowY(r) + PS / 2;
+  const padX = (c) => PX + c * (PW + PG);
+  const rowY = (r) => PY + r * (PH + PG);           /* r 0 the top row */
+  const rowC = (r) => rowY(r) + PH / 2;
   const KNOB_Y = TY + TH / 2, KNOB_R = 25;
   const JOG = { x: LX + LW / 2, y: (rowC(0) + rowC(1)) / 2, r: 54 };
   const VOL = { x: FX + FW / 2 + 18, y: KNOB_Y, r: 29 };
@@ -177,7 +177,7 @@ window.MoveGear = (() => {
       el("line", { class: "mg-knob__mark", x1: cx, y1: cy - r * 0.42, x2: cx, y2: cy - r * 0.86 }, cap);
       ctl[key].val = val; ctl[key].cap = cap; ctl[key].geo = { cx, cy, r };
     };
-    for (let k = 0; k < 8; k++) knob("knob:" + k, padX(k) + PS / 2, KNOB_Y, KNOB_R);
+    for (let k = 0; k < 8; k++) knob("knob:" + k, padX(k) + PW / 2, KNOB_Y, KNOB_R);
     knob("vol", VOL.x, VOL.y, VOL.r);
 
     /* the jog: one plain circle (the owner's); a turn lights its edge a moment, a press darkens it */
@@ -212,13 +212,13 @@ window.MoveGear = (() => {
     /* the pads, 0 bottom left to 31 top right */
     for (let i = 0; i < 32; i++) {
       const c = i % 8, r = 3 - (i >> 3), x = padX(c), y = rowY(r);
-      const g = add("pad:" + i, el("g", { class: "mg-pad", style: `transform-origin:${x + PS / 2}px ${y + PS / 2}px` }, svg), {});
-      ctl["pad:" + i].led = el("rect", { class: "mg-pad__face", x, y, width: PS, height: PS, rx: 2 }, g);
-      el("rect", { class: "mg-pad__flash", x, y, width: PS, height: PS, rx: 2 }, g);
+      const g = add("pad:" + i, el("g", { class: "mg-pad", style: `transform-origin:${x + PW / 2}px ${y + PH / 2}px` }, svg), {});
+      ctl["pad:" + i].led = el("rect", { class: "mg-pad__face", x, y, width: PW, height: PH, rx: 2 }, g);
+      el("rect", { class: "mg-pad__flash", x, y, width: PW, height: PH, rx: 2 }, g);
     }
 
     /* the steps, round, a beat's tick under every fourth */
-    const pitch = (8 * PS + 7 * PG) / 16;
+    const pitch = (8 * PW + 7 * PG) / 16;
     for (let i = 0; i < 16; i++) {
       const cx = PX + pitch * (i + 0.5);
       const g = add("step:" + i, el("g", { class: "mg-step", style: `transform-origin:${cx}px ${SY}px` }, svg), {});
