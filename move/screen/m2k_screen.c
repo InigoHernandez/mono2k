@@ -1244,19 +1244,19 @@ static void d_glo(const ms_view_t *v)
     ms_dots_h(X, ty + 1, W);
 }
 
-/* PERFORM: the keyboard's two rows as the Move has them, bank B's over bank A's (the page the arrows show: each
- * bank's 1-8, or its 9-11), the effects playing lit, the rest framed; what plays named at the left, large while one
+/* PERFORM: the keyboard's two rows as the Move has them, the colours over the moves (the moves' page the arrows
+ * show), the effects playing lit, the rest framed; what plays named at the left, large while one
  * alone */
 static void d_perf(const ms_view_t *v)
 {
     const int X = 64, Y = MS_ST_T + 6, pg = v->st.perf.pg;
     for (int r = 0; r < 2; r++)
         for (int c = 0; c < 8; c++) {
-            const int k = c + pg * 8, e = (1 - r) * PF_BANK + k, x = X + c * 8, y = Y + r * 9;
-            if (k >= PF_BANK) { ms_px(x + 3, y + 3, 1); continue; }
+            const int e = mv_perf_key(r ? c : 8 + c, pg), x = X + c * 8, y = Y + r * 9;
+            if (e < 0) { ms_px(x + 3, y + 3, 1); continue; }
             if ((v->st.perf.on >> e) & 1) ms_rect(x, y, 6, 6, 1); else ms_frame(x, y, 6, 6, 1);
         }
-    ms_text(X, MS_ST_B - 1, pg ? "9-11" : "1-8", 1);
+    ms_text(X, MS_ST_B - 1, pg ? "MOVES 2" : "MOVES 1", 1);
     int n = 0, last = -1;
     for (int k = 0; k < PF_COUNT; k++) if ((v->st.perf.on >> k) & 1) { n++; last = k; }
     if (!v->perf) { ms_text(2, MS_ST_T + 7, "KEYS OFF", 1); return; }

@@ -7,7 +7,7 @@
  *   pads 16..31    the pages, a pad each: the top row the sound of the track in view (SYN AMP FILT EFX DSTR LFO1-3),
  *                  the second the rest (HOME TRK PAT GRID MIX GLO, then SOUNDS and PERFORM): MS_PAD_PAGE
  *   pads 0..15     the keyboard, a two-row piano: the white keys C..C on the bottom row, the black over them; with
- *                  PERFORM on, its effects (bank A's on the bottom row, bank B's on the top; Up / Down their 9-11)
+ *                  PERFORM on, its effects (the colours on the top row, the moves on the bottom; Up / Down the moves' page)
  *   8 knobs        the page's eight (m2k_screen_param); a held step's knobs lock it
  *   steps          the sequencer on every page: trigs (a press places one, a quick tap on one takes it away, held its
  *                  locks); Shift + steps the bank's patterns; Mute + steps the tracks' mutes
@@ -40,7 +40,7 @@ static struct {
     int8_t touch;                      /* the knob touched (-1 none) */
     int8_t focus;
     uint32_t focus_t;
-    uint8_t perf, perf_pg;             /* PERFORM's effects on the keyboard; their page (each bank's 1-8, its 9-11) */
+    uint8_t perf, perf_pg;             /* PERFORM's effects on the keyboard; the moves' page (Up: the rest) */
     uint8_t plist, pat_sel;            /* the patterns' list (the jog's), its cursor */
     uint32_t plist_t;
     uint8_t sdown[16], sstep[16];      /* each step key: held, and the step it holds */
@@ -426,12 +426,21 @@ static int key_note(int i)
     return o < 0 ? -1 : CLAMP(60 + 12 * ui.oct[ui.trk] + o, 0, 127);
 }
 
-/* PERFORM on the keyboard: bank A's eleven on the bottom row, bank B's on the top, eight at a time (Up: their 9-11) */
-static int perf_of_key(int i)
+/* PERFORM on the keyboard (the owner's, 2026-11-01): the top row the colours, which stack (held with anything), the
+ * bottom row the moves, which share the ring (one at a time, the next taking over); each column a pair that plays
+ * together; Up swaps the moves for the rest, the colours staying. -1: no key */
+static const int8_t MV_PERF_TOP[8] = {PF_LPF, PF_DUB, PF_HPF, PF_GATE, PF_CRSH, PF_DRIV, PF_WOW, PF_SHIM};
+static const int8_t MV_PERF_LOW[2][8] = {{PF_R4, PF_R8, PF_R16, PF_R32, PF_ROLL, PF_STUT, PF_REV, PF_STOP},
+                                         {PF_FRZ, PF_SCAT, PF_OCTD, PF_OCTU, PF_SPIN, PF_KILL, -1, -1}};
+/* key i of the keyboard (0..7 the bottom row, 8..15 the top), the moves' page pg: its effect, or -1 */
+static int mv_perf_key(int i, int pg)
 {
-    const int k = (i & 7) + mc.perf_pg * 8;
-    return i >= 0 && i < 16 && k < PF_BANK ? (i >> 3) * PF_BANK + k : -1;
+    if (i < 0 || i >= 16) return -1;
+    return i >= 8 ? MV_PERF_TOP[i - 8] : MV_PERF_LOW[pg ? 1 : 0][i];
 }
+
+/* PERFORM on the keyboard: the colours on the top row, the moves on the bottom */
+static int perf_of_key(int i) { return mc.perf ? mv_perf_key(i, mc.perf_pg) : -1; }
 
 static void mv_pad(int i, int vel, int down)
 {
@@ -584,7 +593,7 @@ static void mv_button(int cc, int v)
         if (ui.nheld) { held_step_edit(0, d); break; }                         /* a held step's ratchet */
         if (mc.perf) {                                                         /* PERFORM's keys: 1-8, 9-11 */
             mc.perf_pg = (uint8_t)(d > 0);
-            toast("PERFORM", mc.perf_pg ? "KEYS 9-11" : "KEYS 1-8");
+            toast("PERFORM", mc.perf_pg ? "MOVES 2" : "MOVES 1");
             break;
         }
         int8_t *oc = &ui.oct[ui.trk];
@@ -657,7 +666,7 @@ static void mv_leds(mv_view_t *v)
         uint8_t c;
         if (mc.perf) {
             int e = perf_of_key(i);
-            c = e < 0 ? C_OFF : perf.on[e] ? C_WHITE : i < 8 ? C_DMAGENTA : C_DPINK;
+            c = e < 0 ? C_OFF : perf.on[e] ? C_WHITE : i < 8 ? C_DMAGENTA : C_DPINK;   /* (the moves magenta, the colours pink) */
         } else {
             int n = key_note(i), lit = 0;
             if (n < 0) { l->pad[i] = C_OFF; continue; }
