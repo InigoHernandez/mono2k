@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: GPL-3.0-only
 # MONO2K onto the Move over Wi-Fi (after move/build.sh): the module copied under a temporary name beside Schwung's
 # modules, then renamed into place, so the Move never sees a half-copied module and a dsp.so the Move still has
 # mapped is replaced by a rename, never written over.
