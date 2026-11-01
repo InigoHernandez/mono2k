@@ -7,7 +7,7 @@ window.M2K_KINDS = {
 };
 window.M2K_CHANGES = [
   {
-    date: "2026-10-31", title: "MONO2K 1.6.2: no clicks on legato notes and accents, VO-6 heard on short notes",
+    date: "2026-11-01", title: "MONO2K 1.6.2: no clicks on legato notes and accents, VO-6 heard on short notes",
     items: [
       ["sound", "1.6.2: A note played over one still sounding no longer clicks on GND-SIN, FM+STAT, FM+DYN, FM+PAR, DIGI-WAV, SWAV-PULS and SWAV-ENS (and SID-6581 with PWRS): the old note passes into the new in 3 ms. A note from silence, and a hit (ATK 0) over a quiet tail, start exactly as before; the drums too."],
       ["sound", "1.6.2: An accent on a note still sounding comes in smoothly instead of with a click."],
