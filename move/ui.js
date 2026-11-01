@@ -1,30 +1,34 @@
-/* MONO2K on the Move, step 1: a thin layer over dsp.so. The pads and the steps go to the DSP straight from the host
- * (its on_midi); this file forwards PLAY and the track buttons, reads the DSP's state ~30 times a second, and draws
- * the screen and the LEDs from it. No sequencing or sound logic lives here.
+/* SPDX-License-Identifier: GPL-3.0-only */
+/* MONO2K on the Move: a thin layer over dsp.so, which holds the controller, the screen and the LEDs (m2k_move_ui.c,
+ * m2k_move_draw.c). This file forwards the controls the DSP does not hear itself (the knobs, the jog, the buttons, the
+ * knobs' touch: the pads, the steps and Move's clock go to it straight, through its on_midi), reads one frame ~30 times
+ * a second (the 128 x 64 page and the LEDs, one bulk get), paints the rows that changed and sets the LEDs that changed,
+ * at most 16 a tick. No sequencing, sound or page logic lives here.
  *
- * The escape (Shift + touching the volume knob + jog click) is the host's and is never taken here; with
- * suspend_keeps_js, Back parks MONO2K (it keeps playing) and Shift + Back closes it. */
+ * The host keeps: Back (parks MONO2K; Shift + Back closes it), the master knob, and the escape (Shift + touching the
+ * volume knob + jog click). PLAY reaches Move too (module.json's button_passthrough), so one press starts both and
+ * Move keeps its LED; MONO2K follows Move's start and stop, or plays alone if Move sends no clock. */
 import {
-    MovePlay, MoveShift, MoveRow1, MoveRow2, MoveRow3, MoveRow4, MoveSteps,
-    Black, White, DarkGrey, Blue, BrightGreen
+    MoveBack, MoveMainKnob, MoveMaster, MoveSteps, MovePads
 } from '/data/UserData/schwung/shared/constants.mjs';
-import { setLED, setButtonLED, invalidateLedCache } from '/data/UserData/schwung/shared/input_filter.mjs';
+import {
+    setLED, setButtonLED, invalidateLedCache, decodeDelta, decodeAcceleratedDelta
+} from '/data/UserData/schwung/shared/input_filter.mjs';
 
-const POLL_MS = 34;            /* the DSP read at most ~30 times a second (a read is ~2.8 ms on the param channel) */
+const POLL_MS = 33;            /* a frame read at most ~30 times a second (a read is ~2.8 ms on the param channel) */
 const LED_BUDGET = 16;         /* LED messages a tick at most; the rest wait for the next */
 const MUTE_MOVE = false;       /* Move's own audio under MONO2K: mixed (false) or muted (the owner's call) */
-const TRACK_CC = [MoveRow1, MoveRow2, MoveRow3, MoveRow4];   /* CC 43..40: tracks 1..4, with Shift 5..8 */
+const ROWS = 64, ROW_CH = 22, HEAD = 12;                  /* the frame: "M2K1", its number (8 hex), 64 rows of 22 */
+const TRACK_CC = [43, 42, 41, 40];                         /* tracks 1..4 (with Shift 5..8): the DSP's order */
+const BTN_CC = [86, 88, 56, 60, 119, 62, 63, 55, 54, 50, 58];   /* m2k_move_view.h MV_BTN_CC: Rec Mute Undo Copy
+                                                            * Delete Left Right Up Down Menu Loop */
+const HOST_CC = new Set([MoveBack, MoveMaster]);          /* the host's */
 
-/* the DSP's state, as get_param("ui") reports it (m2k_move.c, ui_string) */
-const st = {
-    playing: 0, step: -1, bpm: 0, track: 0, tracks: 6, page: 0, len: 16, trigs: 0,
-    cpuMean: 0, cpuMost: 0, slot: "", name: "", ok: false
-};
 let lastPoll = 0;
-let holdPlayUntil = 0;         /* a PLAY just pressed: its state kept over a read that predates it */
-let shift = false;
-let dirty = true;
-let pending = {};              /* params to send, as one bulk set */
+let events = [];               /* controls to send, in order, as one "in" value */
+let rows = new Array(ROWS).fill(null);   /* each row as last painted */
+let lastSeq = "";
+let want = null;               /* the LEDs as the DSP wants them: [{key, kind, id, color}] */
 let shown = {};                /* LED key -> colour as last sent */
 
 /* the bulk param format: "<count>\n" then "<len>\n<bytes>" per item (shim_handle_param_bulk) */
@@ -49,135 +53,108 @@ function unbulk(blob) {
     return out;
 }
 
-function send(key, value) { pending[key] = value; }
-
-/* one bulk set for what waits (a single set is dropped when the channel is busy; the bulk one is answered) */
-function flush() {
-    const keys = Object.keys(pending);
-    if (!keys.length) return;
-    let ok = false;
-    if (typeof host_module_set_params === "function") {
-        const items = [];
-        for (const k of keys) items.push(k, pending[k]);
-        ok = host_module_set_params(bulk(items)) === true;
+/* a knob's or the jog's turns add up until the next send; a button goes at once (a modifier must be there before the
+ * step or pad it modifies, which reaches the DSP straight) */
+function push(tok) {
+    const last = events.length ? events[events.length - 1] : null;
+    const m = /^([KJ])(\d*) (-?\d+)$/.exec(tok), lm = last && /^([KJ])(\d*) (-?\d+)$/.exec(last);
+    if (m && lm && m[1] === lm[1] && m[2] === lm[2]) {
+        events[events.length - 1] = m[1] + m[2] + " " + (parseInt(lm[3], 10) + parseInt(m[3], 10));
+        return;
     }
-    if (!ok && typeof host_module_set_param_blocking === "function") {
-        ok = true;
-        for (const k of keys) ok = !!host_module_set_param_blocking(k, String(pending[k]), 100) && ok;
-    }
-    if (ok) pending = {};
+    events.push(tok);
 }
 
-function parse(s) {
-    if (typeof s !== "string") return;
-    const f = s.split(" ");
-    if (f.length < 11) return;
-    const now = Date.now();
-    const next = {
-        playing: now < holdPlayUntil ? st.playing : (f[0] === "1" ? 1 : 0),
-        step: parseInt(f[1], 10), bpm: parseInt(f[2], 10), track: parseInt(f[3], 10),
-        tracks: parseInt(f[4], 10), page: parseInt(f[5], 10), len: parseInt(f[6], 10),
-        trigs: parseInt(f[7], 16), cpuMean: parseInt(f[8], 10), cpuMost: parseInt(f[9], 10),
-        slot: f[10], name: f.slice(11).join(" "), ok: true
-    };
-    if ("track" in pending) next.track = st.track;
-    for (const k in next) if (st[k] !== next[k]) { st[k] = next[k]; dirty = true; }
+function flush() {
+    if (!events.length) return;
+    const v = events.join(";");
+    let sent = false;
+    if (typeof host_module_set_params === "function") sent = host_module_set_params(bulk(["in", v])) === true;
+    if (!sent && typeof host_module_set_param_blocking === "function") sent = !!host_module_set_param_blocking("in", v, 100);
+    if (sent) events = [];
+}
+
+/* ------------------------------------------------------------------------------------------------ the screen */
+
+/* a row of 22 characters, 6 pixels each from '0' (MSB first): cleared, then its lit runs */
+function paintRow(y, r) {
+    fill_rect(0, y, 128, 1, 0);
+    let start = -1;
+    for (let x = 0; x < 128; x++) {
+        const on = ((r.charCodeAt((x / 6) | 0) - 48) >> (5 - x % 6)) & 1;
+        if (on && start < 0) start = x;
+        else if (!on && start >= 0) { fill_rect(start, y, x - start, 1, 1); start = -1; }
+    }
+    if (start >= 0) fill_rect(start, y, 128 - start, 1, 1);
+}
+
+function paint(s) {
+    const seq = s.substr(4, 8);
+    if (seq === lastSeq) return;
+    lastSeq = seq;
+    for (let y = 0; y < ROWS; y++) {
+        const r = s.substr(HEAD + y * ROW_CH, ROW_CH);
+        if (r === rows[y]) continue;
+        rows[y] = r;
+        paintRow(y, r);
+    }
+}
+
+function parseLeds(s) {
+    let p = HEAD + ROWS * ROW_CH;
+    const next = () => { const v = parseInt(s.substr(p, 2), 16); p += 2; return v; };
+    const w = [];
+    for (let k = 0; k < 16; k++) w.push({ key: "s" + k, note: true, id: MoveSteps[k], color: next() });
+    for (let k = 0; k < 32; k++) w.push({ key: "p" + k, note: true, id: MovePads[k], color: next() });
+    for (let k = 0; k < 4; k++) w.push({ key: "t" + k, note: false, id: TRACK_CC[k], color: next() });
+    for (let k = 0; k < BTN_CC.length; k++) w.push({ key: "b" + k, note: false, id: BTN_CC[k], color: next() });
+    if (w.every((l) => !isNaN(l.color))) want = w;
 }
 
 function poll() {
     let s = null;
     if (typeof host_module_get_params === "function") {
-        const blob = host_module_get_params(bulk(["ui"]));
+        const blob = host_module_get_params(bulk(["frame"]));
         if (typeof blob === "string") s = unbulk(blob)[0];
     }
-    if (s == null && typeof host_module_get_param === "function") s = host_module_get_param("ui");
-    parse(s);
-}
-
-/* ------------------------------------------------------------------------------------------------ the screen */
-
-function fontH() { return typeof get_font_height === "function" ? get_font_height() : 8; }
-function textW(t) { return typeof text_width === "function" ? text_width(t) : t.length * 6; }
-
-function draw() {
-    const h = fontH();
-    clear_screen();
-    fill_rect(0, 0, 128, h + 4, 1);
-    print(3, 2, "MONO2K", 0);
-    const tr = "T" + (st.track + 1);
-    print(125 - textW(tr), 2, tr, 0);
-    if (!st.ok) { print(3, 20, "STARTING", 1); return; }
-    if (shift) {
-        /* Shift held: what a block costs the DSP (a Move block is 2902 us) */
-        const pct = Math.round(st.cpuMean * 100 / 2902);
-        print(3, h + 9, "CPU " + st.cpuMean + " US " + pct + "%", 1);
-        print(3, 2 * h + 14, "MOST " + st.cpuMost + " US", 1);
-    } else {
-        print(3, h + 9, st.slot + " " + st.name, 1);
-        const bpm = st.bpm + " BPM";
-        print(3, 2 * h + 14, bpm, 1);
-        const pl = st.playing ? "PLAY" : "STOP";
-        print(125 - textW(pl), 2 * h + 14, pl, 1);
-    }
-    /* the page's 16 steps: a trig filled, an empty step framed, past the track's length nothing; the playhead under */
-    const first = st.page * 16;
-    for (let k = 0; k < 16; k++) {
-        if (first + k >= st.len) break;
-        const x = k * 8 + 1;
-        if ((st.trigs >> k) & 1) fill_rect(x, 48, 6, 6, 1);
-        else draw_rect(x, 48, 6, 6, 1);
-        if (st.playing && st.step === first + k) fill_rect(x, 57, 6, 3, 1);
-    }
+    if (s == null && typeof host_module_get_param === "function") s = host_module_get_param("frame");
+    if (typeof s !== "string" || !s.startsWith("M2K1") || s.length < HEAD + ROWS * ROW_CH) return;
+    paint(s);
+    parseLeds(s);
 }
 
 /* -------------------------------------------------------------------------------------------------- the LEDs */
 
-function stepColor(k) {
-    const s = st.page * 16 + k;
-    if (s >= st.len) return Black;
-    if (st.playing && st.step === s) return White;
-    if ((st.trigs >> k) & 1) return Blue;
-    return (k & 3) === 0 ? DarkGrey : Black;     /* the beats faint, as the FM-1's GRID marks them */
-}
-
-function trackColor(b) {
-    if (st.track === b) return White;
-    if (st.track === b + 4) return Blue;          /* (tracks 5.. on Shift: their button in another colour) */
-    return b < st.tracks ? DarkGrey : Black;
-}
-
-/* what changed since the last send, at most LED_BUDGET a tick */
 function leds() {
+    if (!want) return;
     let n = 0;
-    const want = (key, color, fn, id) => {
-        if (n >= LED_BUDGET || shown[key] === color) return;
-        fn(id, color);
-        shown[key] = color;
+    for (const l of want) {
+        if (n >= LED_BUDGET) break;
+        if (shown[l.key] === l.color) continue;
+        if (l.note) setLED(l.id, l.color); else setButtonLED(l.id, l.color);
+        shown[l.key] = l.color;
         n++;
-    };
-    for (let k = 0; k < 16; k++) want("s" + k, stepColor(k), setLED, MoveSteps[k]);
-    for (let b = 0; b < 4; b++) want("t" + b, trackColor(b), setButtonLED, TRACK_CC[b]);
-    want("play", st.playing ? BrightGreen : DarkGrey, setButtonLED, MovePlay);
+    }
 }
 
-function ledsReset() {
+function resetAll() {
     shown = {};
+    rows = new Array(ROWS).fill(null);
+    lastSeq = "";
     if (typeof invalidateLedCache === "function") invalidateLedCache();
+    if (typeof clear_screen === "function") clear_screen();
 }
 
 /* ------------------------------------------------------------------------------------------- the host's hooks */
 
 globalThis.init = function () {
-    ledsReset();
+    resetAll();
+    if (typeof print === "function") print(3, 28, "MONO2K", 1);   /* (until the first frame) */
     if (MUTE_MOVE && typeof host_mute_move_audio === "function") host_mute_move_audio(1);
     lastPoll = 0;
-    dirty = true;
 };
 
-globalThis.onResume = function () {
-    ledsReset();
-    dirty = true;
-};
+globalThis.onResume = function () { resetAll(); };
 
 globalThis.onUnload = function () {
     if (MUTE_MOVE && typeof host_mute_move_audio === "function") host_mute_move_audio(0);
@@ -185,38 +162,28 @@ globalThis.onUnload = function () {
 
 globalThis.tick = function () {
     if (globalThis.overtakeParked) return;        /* parked in the background: no reads, no drawing, no LEDs */
+    flush();
     const now = Date.now();
-    if (now - lastPoll >= POLL_MS) {
-        lastPoll = now;
-        flush();
-        poll();
-    }
-    if (dirty) { draw(); dirty = false; }
+    if (now - lastPoll >= POLL_MS) { lastPoll = now; poll(); }
     leds();
 };
 
 globalThis.onMidiMessageInternal = function (data) {
     const status = data[0] & 0xF0, d1 = data[1], d2 = data[2];
-    if (status !== 0xB0) return;                  /* (pads and steps: the DSP's, through on_midi) */
-    if (d1 === MoveShift) { shift = d2 > 0; dirty = true; return; }
-    if (d2 === 0) return;
-    if (d1 === MovePlay) {
-        st.playing = st.playing ? 0 : 1;
-        holdPlayUntil = Date.now() + 150;
-        send("play", st.playing);
+    if (status === 0xB0) {
+        if (HOST_CC.has(d1)) return;
+        if (d1 >= 71 && d1 <= 78) { const d = decodeAcceleratedDelta(d2, d1); if (d) push("K" + (d1 - 71) + " " + d); return; }
+        if (d1 === MoveMainKnob) { const d = decodeDelta(d2); if (d) push("J " + d); return; }
+        if (d1 === 114 || d1 === 115) return;     /* (the jacks' detection) */
+        push("B " + d1 + " " + d2);
         flush();
-        dirty = true;
         return;
     }
-    const b = TRACK_CC.indexOf(d1);
-    if (b >= 0) {
-        const t = shift ? b + 4 : b;
-        if (t >= st.tracks) return;
-        st.track = t;
-        send("track", t);
+    if ((status === 0x90 || status === 0x80) && d1 < 8) {       /* a knob touched (127) or let go */
+        push("T " + d1 + " " + (status === 0x90 && d2 >= 64 ? 1 : 0));
         flush();
-        dirty = true;
     }
+    /* (the pads and the steps: the DSP's own, through on_midi; aftertouch: the core takes none) */
 };
 
 globalThis.onMidiMessageExternal = function () {};

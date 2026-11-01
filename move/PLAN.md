@@ -16,7 +16,7 @@ Move hardware ─┬─ pads, steps ──────────────�
 dsp.so (core 3, 128-frame blocks = 8 x M2K_SUB)
   ├─ firmware/src core: engines, sequencer, arps, PERFORM, bus     (unchanged code)
   ├─ m2k_par_* on real-time workers, cores 0-2                     (the FM-1's 2nd core, x3)
-  └─ 128x64 1-bit screen renderer in C, on a worker                (new, m2k_ui_move.c)
+  └─ 128x64 1-bit screen renderer in C, on a worker                (m2k_move_ui.c, m2k_move_draw.c)
                        │ one bulk read per tick: 1 KB page + ~100 values
                        ▼
 ui.js: paints the page, sets the LEDs, forwards input. No logic.
@@ -77,12 +77,17 @@ The files live in `move/`, a fourth platform beside `fm1/`, `web/` and `host/`:
 - **8 tracks on the Move** (owner, 2026-10-31). `M2K_TRACKS` becomes a build option; the FM-1 stays at 6. A 6-track pattern loads on the Move with tracks 7–8 empty, and the FM-1 takes the first 6 tracks of an 8-track pattern.
 - **Open source** (owner, 2026-11-01): the Move version is GPL-3.0-only like the FM-1's, with Grids and the DRM- drums as they are, in the same public repo.
 - **Builds go on the Move over Wi-Fi** (the SSH key from Schwung's installer, `move.local`): a copy to a temp name, then a rename.
+- **In time with Move** (owner, 2026-11-01): MONO2K takes Move's tempo and transport, one Play starts both, and Move's own tracks play along. Built in step 2 (README, In time with Move): Move's pulses through the core's own clock in, a gentle phase lock, the period pinned to Move's tempo. MONO2K plays alone (INT) only when Move sends no clock.
+- **Step 2, hands on** (2026-11-01): the controls, the screen's page state with a plain renderer, saving to `/data/UserData/schwung/mono2k/mono2k.m2ks`, the LEDs. The table is in README.md.
 
 ## Open questions
 
 - **Name:** the catalog already has "Mono" (timncox/schwung-mono, MIT), a six-track Elektron-style machine synth. MONO2K keeps its full name. Read its code only for its API use, never copy it.
-- **Move's own audio under MONO2K:** muted (`host_mute_move_audio`) or mixed?
-- **Clock:** run MONO2K's own clock, or follow Move's tempo and play (`move_info`, MIDI clock in)?
+- **Move's own audio under MONO2K:** mixed for now (ui.js `MUTE_MOVE`), muting is one flag.
+- **Move's tempo from MONO2K:** a module cannot set it (the APIs only read it). The only route is Schwung's internal `desired-tempo` file through its Link sidecar (Link on, Move alone, once a second at most): not used.
+- **Aftertouch:** the core takes none. It could drive a parameter (a filter, an LFO's depth) if the owner wants one.
+- **Saving on close:** on (`save_on_close`), unlike the FM-1, which keeps only what SAVE kept.
+- **The clock's lag:** 64 samples (half a block) matches the model. Check by ear against Move's own tracks on the device (`clock_lag`).
 
 ## Risks
 

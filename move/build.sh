@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: GPL-3.0-only
 # MONO2K on the Move: dsp.so for the Move (aarch64 Linux, glibc 2.35) built in an aarch64 Debian container, checked,
 # and packaged as Schwung installs a module.
 #   sh move/build.sh            -> build/move/modules/overtake/mono2k/ and build/move/mono2k-move.tar.gz
@@ -56,9 +57,16 @@ docker run --rm --platform linux/arm64 -v "$ROOT":/w -w /w -e OPT="$OPT" -e MOD=
     [ "$exp" = "move_plugin_init_v2 " ] || { echo "exports: $exp(only move_plugin_init_v2 expected)"; exit 1; }
     imp=$(nm -D --undefined-only "$MOD/dsp.so" | awk "{print \$2}" | sed "s/@.*//" | sort -u | tr "\n" " ")
     echo "imports: $imp"
-    # nothing that allocates, locks, logs or does I/O can be reached: the audio thread forbids them all
-    bad=$(echo "$imp" | tr " " "\n" | grep -E "^(malloc|calloc|realloc|free|posix_memalign|aligned_alloc|memalign|f?open|fopen64|fclose|fread|fwrite|f?printf|puts|vsn?printf|syslog|pthread_mutex_lock|pthread_create|usleep|nanosleep|write|read)$" || true)
-    [ -z "$bad" ] || { echo "forbidden on the audio thread: $bad"; exit 1; }
+    # only what is known: the memory and string calls the audio thread uses, the clock (the vDSO), and what the
+    # drawer, the saver and create / destroy use off the audio thread (threads, sleeps, the store'"'"'s file). Nothing that
+    # allocates, locks or logs; that the audio thread reaches none of the rest the bench proves (bench rt, per thread)
+    ok="_ITM_deregisterTMCloneTable _ITM_registerTMCloneTable __cxa_finalize __getauxval __gmon_start__ __stack_chk_fail __stack_chk_guard"
+    ok="$ok memcpy memset memcmp strlen strstr clock_gettime"
+    ok="$ok pthread_create pthread_join sched_setscheduler sched_setaffinity nanosleep"
+    ok="$ok fopen fopen64 fread fwrite fflush fileno fsync fclose rename unlink mkdir"
+    bad=""
+    for s in $imp; do case " $ok " in *" $s "*) ;; *) bad="$bad $s" ;; esac; done
+    [ -z "$bad" ] || { echo "imports not on the list:$bad"; exit 1; }
 
     tar --owner=0 --group=0 --sort=name -czf "$OUT/mono2k-move.tar.gz" -C "$OUT/modules/overtake" mono2k
     tar -tzvf "$OUT/mono2k-move.tar.gz"
