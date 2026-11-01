@@ -46,6 +46,7 @@ p, h2, h3, dl, dd, ol { margin: 0; }
 .tracks li { font: var(--label); text-transform: uppercase; letter-spacing: 0.1em; }
 .small { font: var(--small); }
 .lede { font: var(--body); max-width: 40em; }
+.lede a { color: var(--ink); text-underline-offset: 4px; }
 .title { font: var(--title); text-transform: uppercase; letter-spacing: 0.01em; }
 .display { font: var(--display); text-transform: uppercase; letter-spacing: 0; }
 
@@ -465,7 +466,8 @@ kbd { display: inline-block; min-width: 1.5em; padding: 0 4px; font: 700 11px / 
   .keymap, .drawer .midi { grid-template-columns: 1fr; }
   .bar > * { grid-column: span 6; }
   .bar { row-gap: var(--s1); padding-top: var(--s2); padding-bottom: var(--s2); }   /* bars that wrap: rows apart */
-  header.bar > :nth-child(2) { display: none; }                  /* the name, the Ko-fi and the switch */
+  header.bar { display: flex; justify-content: space-between; gap: var(--s1); }   /* the isotype, the device, the Ko-fi and the theme */
+  .dev__on { display: none; }
   .cta .long { display: none; }                                   /* on a phone just "Ko-fi" */
   .hero__line, .hero__acts, .sec__n, .sec__body, .keys { grid-column: 1 / -1; }
   .hero__acts { justify-content: flex-start; }
@@ -544,18 +546,18 @@ a.label { color: var(--ink); text-decoration: none; }
   100% { clip-path: inset(0); filter: none; }
 }
 :is(.cta, .themebtn, .start, .bigbtn:not([disabled]), .ed__btn:not([disabled]), .log__kinds button, .midi button, .btn, .pbtn, .hit, .eng__btns button,
-    .tracks .tsel, .tracks .tmute, .subnav a, .pager a, .cards a, .docs__side a, details > summary):hover {
+    .tracks .tsel, .tracks .tmute, .subnav a, .pager a, .cards a, .docs__side a, details > summary, .seg__o:not([aria-current]), .mpad, .pfk):hover {
   animation: gl-burst 210ms steps(1, end);
 }
 :is(.links a, .kofi, .doc p a, .doc li a, .doc td a, .lede a, .small a):hover { animation: gl-text 160ms steps(1, end); }
 :is(.cta, .themebtn, .start, .bigbtn:not([disabled]), .ed__btn:not([disabled]), .log__kinds button, .midi button, .btn, .pbtn, .hit, .eng__btns button,
-    .tracks .tsel, .tracks .tmute, .subnav a, .pager a, .cards a, .docs__side a, details > summary, .ed__kb .k):active {
+    .tracks .tsel, .tracks .tmute, .subnav a, .pager a, .cards a, .docs__side a, details > summary, .ed__kb .k, .mpad, .pfk, .mstep):active {
   animation: gl-press 90ms steps(1, end);
 }
 details.gl-dealt[open] > :not(summary) { animation: gl-deal 240ms steps(1, end); }
 @media (prefers-reduced-motion: reduce) {
   :is(.cta, .themebtn, .start, .bigbtn, .ed__btn, .log__kinds button, .midi button, .btn, .pbtn, .hit, .eng__btns button, .tracks .tsel,
-      .tracks .tmute, .subnav a, .pager a, .cards a, .docs__side a, details > summary, .links a, .kofi, .doc a,
+      .tracks .tmute, .subnav a, .pager a, .cards a, .docs__side a, details > summary, .links a, .kofi, .doc a, .seg__o, .mpad, .pfk, .mstep,
       .lede a, .small a, .ed__kb .k):is(:hover, :active),
   details.gl-dealt[open] > :not(summary) { animation: none; }
 }
@@ -792,4 +794,162 @@ details.gl-dealt[open] > :not(summary) { animation: gl-deal 240ms steps(1, end);
   .ed__mach { grid-template-columns: 72px minmax(0, 1fr); }
   .ed__mach p { grid-column: 1 / -1; }
   .ed__pages { grid-template-columns: 1fr; }
+}
+
+/* ------------------------------------------------------------------------------------------- the device switch */
+/* FM-1 | MOVE in every header (switch.js): two tabs, the device in view under a block of ink that slides to the other
+ * when it is picked, stepped as the screen's transitions; the block inverts what it passes over (white, difference),
+ * so a letter half under it is half inverted on the way. The other tab fills with the dither on hover, as a button. */
+.dev { display: flex; align-items: center; gap: var(--s1); justify-self: start; min-width: 0; }
+.dev__on { white-space: nowrap; opacity: 0.6; }
+.seg { --on: 0; --n: 2; position: relative; isolation: isolate; display: inline-grid; grid-auto-flow: column; grid-auto-columns: 1fr;
+  border: 1px solid var(--ink); background: var(--paper); flex: 0 0 auto; }
+.seg::after { content: ""; position: absolute; top: 0; bottom: 0; left: 0; z-index: 2; width: calc(100% / var(--n)); pointer-events: none;
+  background: #fff; mix-blend-mode: difference; transform: translateX(calc(var(--on) * 100%)); transition: transform 210ms steps(6, end); }
+.seg__o { position: relative; z-index: 0; display: grid; place-items: center; height: 30px; padding: 0 12px; white-space: nowrap; cursor: pointer;
+  font: var(--label); text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink); background: none; border: 0; border-radius: 0; text-decoration: none; }
+.seg__o + .seg__o { border-left: 1px solid var(--ink); }
+.seg__o::before { content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  background: var(--d-check) 0 0 / 2px 2px; image-rendering: pixelated; clip-path: inset(0 100% 0 0); transition: clip-path 180ms steps(5); }
+.seg__o:not([aria-current]):not([aria-pressed="true"]):is(:hover, :focus-visible)::before { clip-path: inset(0); }
+.seg.go .seg__o::before { clip-path: inset(0 100% 0 0); }
+.seg__o:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; z-index: 3; }
+@media (prefers-reduced-motion: reduce) { .seg::after, .seg__o::before { transition: none; } }
+
+/* ------------------------------------------------------------------------------------------- the Move's pages */
+/* the Move's screen: a still of its 128 x 64 OLED (move/screens, light on dark whatever the theme, as the glass is),
+ * three of the panel's pixels to one of its, in a black margin */
+.oled { display: block; width: 100%; max-width: 410px; height: auto; padding: 12px; background: #0b0b0b; border: 1px solid var(--ink);
+  image-rendering: pixelated; image-rendering: crisp-edges; }
+.ofig { margin: 0; min-width: 0; }
+.ofig figcaption { margin-top: var(--s1); max-width: 410px; font: var(--small); }
+.ofig figcaption b { margin-right: var(--s1); font: var(--label); text-transform: uppercase; letter-spacing: 0.1em; }
+.ofigs { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: var(--s3) var(--gut); }
+.ofigs .ofig { flex: 1 1 260px; max-width: 410px; }
+.fig .oled { width: 410px; max-width: 100%; }
+.fig:has(.oled) figcaption { max-width: 410px; }
+/* the playable Move (gear.js, another file's) and, until it has filled its place, the pads' motion as a picture */
+.mplay { position: relative; z-index: 1; padding: var(--s6) var(--gut) var(--s4); border-top: 1px solid var(--ink); border-bottom: 1px solid var(--ink); }
+#move-gear:empty { display: none; }
+#move-gear:not(:empty) ~ .mgear-fb { display: none; }
+.mgear-fb { margin: 0 auto; width: min(100%, 735px); display: grid; gap: var(--s1); }
+.mgear-fb img { display: block; width: 100%; height: auto; border: 1px solid var(--ink); background: #101010; }
+.mgear-fb figcaption { display: flex; justify-content: space-between; gap: var(--s2); flex-wrap: wrap; }
+
+/* the pads, played here: the screen the pad leads to on 5 columns, the Move's four track buttons, its 32 pads and its
+ * 16 steps on 7. A family a texture (the Move's colours: the sound orange, a band of ink; the rest azure, a checker;
+ * the functions magenta, dots); the page in view in ink; the keys a two-row piano, its root marked; PERFORM's effects
+ * on the keys while it is on */
+.mx { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: var(--gut); row-gap: var(--s3); align-items: start; }
+.mx > .ofig { grid-column: 1 / span 5; position: sticky; top: var(--s3); }
+.mx__cap { min-height: 44px; }
+.mx__dev { grid-column: 6 / span 7; display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: var(--s1) var(--s2); min-width: 0; max-width: 680px; }
+.mx__trk { grid-column: 1; grid-row: 1; display: grid; grid-template-rows: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.mtrk { align-self: center; justify-self: center; width: 22px; height: 22px; padding: 0; border-radius: 50%; cursor: pointer;
+  font: 700 9px / 1 var(--text); color: var(--ink); background: var(--paper); border: 1px solid var(--ink); }
+.mtrk[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+.mtrk:focus-visible, .mpad:focus-visible, .mstep:focus-visible, .pfk:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.mx__pads { grid-column: 2; display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 6px; }
+.mpad { position: relative; isolation: isolate; overflow: hidden; aspect-ratio: 1; min-width: 0; padding: 4px 2px 0; cursor: pointer;
+  display: grid; place-items: center; font: 700 10px / 12px var(--text); text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--ink); background: var(--paper); border: 1px solid var(--ink); border-radius: 3px; }
+.mpad::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 7px; z-index: -1; image-rendering: pixelated; }
+.mpad.snd::before { background: var(--ink); }
+.mpad.rest::before { background: var(--d-check) 0 0 / 2px 2px; }
+.mpad.fn::before { background: var(--d-dots) 0 0 / 2px 2px; height: 100%; opacity: 0.55; }
+.mpad.blk { background: var(--d-sparse) 0 0 / 4px 4px; image-rendering: pixelated; }
+.mpad.fn span, .mpad.blk span, .mpad.pc span, .mpad.pm span { background: var(--paper); padding: 0 2px; }
+.mpad.none { border-style: dotted; cursor: default; opacity: 0.45; }
+.mpad i { font-style: normal; }
+.mpad .sht { display: none; }
+.mpad.root::after { content: ""; position: absolute; right: 4px; bottom: 4px; width: 5px; height: 5px; background: var(--ink); }
+.mpad.pc::before { background: var(--d-check) 0 0 / 2px 2px; height: 100%; opacity: 0.35; }
+.mpad.pm::before { background: var(--d-sparse) 0 0 / 4px 4px; height: 100%; }
+.mpad:hover:not(.none):not(.on) { box-shadow: inset 0 0 0 2px var(--ink); }
+.mpad.on, .mpad.lit { color: var(--paper); background: var(--ink); }
+.mpad.on::before, .mpad.lit::before, .mpad.on::after, .mpad.lit::after { display: none; }
+.mpad.on span, .mpad.lit span { background: none; }
+.mx__steps { grid-column: 2; display: grid; grid-template-columns: repeat(16, minmax(0, 1fr)); gap: 3px; margin-top: var(--s1); }
+.mstep { aspect-ratio: 5 / 4; min-width: 0; padding: 0; cursor: pointer; background: var(--paper); border: 1px solid var(--ink); border-radius: 2px; }
+.mstep:nth-child(4n + 1) { box-shadow: inset 0 -2px 0 var(--ink); }
+.mstep.trig { background: var(--d-check) 0 0 / 2px 2px; image-rendering: pixelated; }
+.mstep.ph { background: var(--ink); }
+.mx__foot { grid-column: 2; display: flex; flex-wrap: wrap; gap: var(--s1); align-items: center; justify-content: space-between; }
+.mx__foot .small { opacity: 0.7; }
+
+/* PERFORM, played here: its two rows of keys, the colours over the moves, Up for the moves' second page; what plays,
+ * large; the Move's screen beside */
+.pf { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: var(--gut); row-gap: var(--s3); align-items: start; }
+.pf > .ofig { grid-column: 1 / span 5; }
+.pf__board { grid-column: 6 / span 7; display: grid; gap: var(--s1); min-width: 0; }
+.pf__now { min-height: 2.2em; font: 400 clamp(22px, 2.6vw, 34px) / 1.1 var(--head); text-transform: uppercase; overflow-wrap: anywhere; }
+.pf__row { display: grid; grid-template-columns: 64px repeat(8, minmax(0, 1fr)); gap: 6px; align-items: stretch; }
+.pf__row > .label { align-self: center; opacity: 0.7; }
+.pfk { position: relative; isolation: isolate; min-width: 0; min-height: 52px; padding: 4px 2px; cursor: pointer; overflow: hidden;
+  font: 700 10px / 12px var(--text); text-transform: uppercase; letter-spacing: 0.02em; overflow-wrap: anywhere;
+  color: var(--ink); background: var(--paper); border: 1px solid var(--ink); border-radius: 3px; }
+.pfk::before { content: ""; position: absolute; inset: 0; z-index: -1; opacity: 0.4; image-rendering: pixelated; }
+.pf__row.c .pfk::before { background: var(--d-check) 0 0 / 2px 2px; }
+.pf__row.m .pfk::before { background: var(--d-sparse) 0 0 / 4px 4px; opacity: 1; }
+.pfk span { background: var(--paper); padding: 0 2px; }
+.pfk[aria-pressed="true"] { color: var(--paper); background: var(--ink); }
+.pfk[aria-pressed="true"]::before { display: none; }
+.pfk[aria-pressed="true"] span { background: none; }
+.pfk[disabled] { cursor: default; border-style: dotted; opacity: 0.4; }
+.pf__acts { display: flex; flex-wrap: wrap; gap: var(--s1); align-items: center; margin-top: var(--s1); }
+.pf__acts .small { opacity: 0.7; }
+
+/* the tempo: three states on a switch of the header's kind, the Move's screen for each */
+.tp { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: var(--gut); row-gap: var(--s2); align-items: start; }
+.tp > .ofig { grid-column: 1 / span 5; }
+.tp__say { grid-column: 6 / span 7; display: grid; gap: var(--s3); align-content: start; justify-items: start; }
+.tp__say .seg .seg__o { height: 38px; padding: 0 var(--s2); }
+.tp__say b { display: block; margin-bottom: var(--s1); font: 400 clamp(28px, 3.4vw, 44px) / 1 var(--head); text-transform: uppercase; }
+.tp__say p { font: var(--body); max-width: 28em; }
+
+/* the machines on the Move's home: the FM-1's screen for each stays on the FM-1's */
+.eng__screen.mhide { display: none !important; }
+.mfacts .tile b { font-variant-numeric: tabular-nums; }
+
+/* the Move's footer: the disclaimer wider */
+.foot .wide { grid-column: span 5; }
+.foot .nar { grid-column: span 2; }
+
+/* the Move's install page: the package's place, a download once there is one, "coming soon" until then */
+.dl { margin-top: var(--s4); display: grid; gap: var(--s2); justify-items: start; }
+.dl .bigbtn { margin-top: 0; max-width: 100%; font-size: clamp(28px, 5.6vw, 64px); }
+.bigbtn[aria-disabled="true"], .doc a.bigbtn[aria-disabled="true"] { position: relative; isolation: isolate; overflow: hidden; cursor: not-allowed;
+  color: var(--ink); background: var(--paper); border: 1px solid var(--ink); }
+.bigbtn[aria-disabled="true"]:hover { outline: 0; animation: none; }
+.bigbtn[aria-disabled="true"]::before { content: ""; position: absolute; inset: 0; z-index: -1; background: var(--d-sparse) 0 0 / 4px 4px; image-rendering: pixelated; opacity: 0.6; }
+.bigbtn[aria-disabled="true"] > * { justify-self: start; padding: 0 4px; background: var(--paper); }
+.soon { display: inline-flex; align-items: center; gap: var(--s1); }
+.soon::before { content: ""; width: 9px; height: 9px; background: currentColor; animation: soon 1.6s steps(1, end) infinite; }
+@keyframes soon { 50% { opacity: 0.15; } }
+.dl__file { font: 13px / 20px var(--mono); overflow-wrap: anywhere; }
+@media (prefers-reduced-motion: reduce) { .soon::before { animation: none; } }
+
+@media (max-width: 1100px) {
+  .mx > .ofig, .pf > .ofig, .tp > .ofig { grid-column: 1 / span 6; }
+  .tp__say .seg .seg__o { padding: 0 var(--s1); }
+  .mx__dev, .pf__board, .tp__say { grid-column: 7 / span 6; }
+}
+@media (max-width: 860px) {
+  .mx > .ofig { position: static; }
+  .mx > .ofig, .mx__dev, .pf > .ofig, .pf__board, .tp > .ofig, .tp__say { grid-column: 1 / -1; }
+}
+@media (max-width: 720px) {
+  .mplay { padding-top: var(--s4); }
+  .mx__dev { grid-template-columns: 22px minmax(0, 1fr); gap: var(--s1); }
+  .mtrk { width: 20px; height: 20px; }
+  .mx__pads { gap: 4px; }
+  .mpad { font-size: 7px; line-height: 9px; letter-spacing: 0; padding: 4px 1px 0; }
+  .mpad::before { height: 5px; }
+  .mpad .lng { display: none; }
+  .mpad .sht { display: inline; }
+  .mx__steps { gap: 2px; }
+  .pf__row { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .pf__row > .label { grid-column: 1 / -1; }
+  .pfk { min-height: 44px; }
+  .foot .wide, .foot .nar { grid-column: span 6; }
 }

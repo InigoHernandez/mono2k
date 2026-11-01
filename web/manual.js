@@ -1,9 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // The manual: one page at a time (the address's #name), its breadcrumb and its neighbours; the screens drawn in the
 // page's ink; the FM-1 drawn from panel.js; and what the firmware itself knows (m2k.wasm, no sound): the machines,
-// their marks and knobs, every page's knobs, bank A's names.
+// their marks and knobs, every page's knobs, bank A's names. The Move's manual (move/manual.html) runs it too: its
+// files are found beside this script, and the Move's pages use what they hold (the machines, bank A, the log).
 (() => {
   "use strict";
+  const BASE = new URL(".", (document.currentScript && document.currentScript.src) || location.href);
+  const at = (f) => new URL(f, BASE).href;
+  const TITLE = document.title;                     /* "MONO2K Manual", "MONO2K Move Manual" */
   const $ = (s, r = document) => r.querySelector(s);
   const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
   const css = () => getComputedStyle(document.documentElement);
@@ -30,7 +34,7 @@
     const pg = $("#pager");
     const link = (a, cls, what) => a ? `<a class="${cls}" href="#${a.id}"><small>${what}</small><b>${esc($("h1", a).textContent)}</b></a>` : "";
     pg.innerHTML = link(arts[i - 1], "prev", "Previous") + link(arts[i + 1], "next", "Next");
-    document.title = `${$("h1", arts[i]).textContent} · MONO2K Manual`;
+    document.title = `${$("h1", arts[i]).textContent} · ${TITLE}`;
     if (matchMedia("(max-width: 720px)").matches) side.open = false;
     if (scroll) window.scrollTo({ top: 0 });
   }
@@ -62,7 +66,7 @@
   }
   $$("canvas[data-scr]").forEach((cv) => {
     const n = cv.dataset.scr;
-    if (!shots.has(n)) { const im = new Image(); im.src = `manual/${n}.png`; shots.set(n, im); }
+    if (!shots.has(n)) { const im = new Image(); im.src = at(`manual/${n}.png`); shots.set(n, im); }
     const im = shots.get(n);
     if (im.complete) drawScreen(cv); else im.addEventListener("load", () => drawScreen(cv));
     cv.setAttribute("role", "img");
@@ -83,7 +87,7 @@
     const t = (x, y, str, size, a = {}) => Object.assign(el("text", { x, y, "font-size": size, "text-anchor": "middle", "font-weight": 700, "letter-spacing": "0.04em", fill: "currentColor", ...a }), { textContent: str });
     el("rect", { x: 22, y: 22, width: 860, height: 522, rx: 38, ...L, "stroke-width": 2 });
     el("rect", { x: 237, y: 49, width: 221, height: 221, rx: 14, ...L });
-    if (kind === "home") el("image", { href: "manual/01_home_stopped.png", x: 247, y: 59, width: 201, height: 201, style: "image-rendering: pixelated" });
+    if (kind === "home") el("image", { href: at("manual/01_home_stopped.png"), x: 247, y: 59, width: 201, height: 201, style: "image-rendering: pixelated" });
     else { el("rect", { x: 247, y: 59, width: 201, height: 201, ...L, "stroke-dasharray": "2 3" }); t(347.5, 165, "SCREEN", 11, { opacity: 0.7 }); }
     for (let k = 0; k < 27; k++) {
       const r = P.KEYR[k], cx = r[0] + 21;
@@ -138,7 +142,7 @@
   };
   const cstr = (x, p) => { const m = new Uint8Array(x.memory.buffer); let s = ""; while (m[p]) s += String.fromCharCode(m[p++]); return s; };
   async function firmware() {
-    const r = await fetch("m2k.wasm?v=111");
+    const r = await fetch(at("m2k.wasm?v=111"));
     const x = new WebAssembly.Instance(new WebAssembly.Module(await r.arrayBuffer()), {}).exports;
     if (x._initialize) x._initialize();
     x.w_init(2000);

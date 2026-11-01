@@ -55,7 +55,15 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   line: machines sound sequencer workflow patterns screen web fixes), and bumps `changelog.js?v=` in `manual.html`. Every
   update also adds what it taught to `../FM1-FIRMWARE-HANDBOOK.md` (outside the repo: the owner's handbook of MONO2K's
   and Demake's lessons, for the next firmware), in its section and its Updates log. After a wasm build bump `m2k.wasm?v=` in
-  `app.js`, `manual.js` and `editor.js` alike (and `worklet.js?v=` in `app.js` and `editor.js` with the worklet).
+  `app.js`, `manual.js`, `editor.js` and `move/move.js` alike (and `worklet.js?v=` in `app.js` and `editor.js` with the worklet).
+  The Move's site is `web/move/` (inigohernandez.github.io/mono2k/move/), on the same `style.css`: its home (`index.html`,
+  `move.js`: the pads, PERFORM, the tempo, the numbers, and `../engines.js` loaded as the machines come near; `#move-gear`
+  for `gear.js` / `gear.css`, the playable Move, with the pads' motion as a picture until it fills), its manual
+  (`manual.html` on `../manual.js`, which finds its files beside itself; `changelog.js` the Move version's log) and
+  `install.html` (the download "Coming soon" until `RELEASE` is set in its script). Its screens are stills of the Move's,
+  `move/screens/*.png` (move/screen's sheets' PBMs as 1-bit PNGs, lit in the site's paper on its ink), `move/img/` the pad
+  map and the pages' motion. Every page on both has the FM-1 | MOVE switch in its header (`switch.js`: the same page on
+  the other device; the editor goes to the Move's home) and `wordmark.js` draws both homes' hero.
 - The screen's grid (m2k_ui.c, `docs/screen-grid.md`; the 2026-10 restyle after the sound library page, Torso's S4,
   Hortator and the MNM-1's menu, the owner's): a 4 px grid for every position, size and text baseline (`tx_b` draws on
   a baseline); the type since 1.6 (2026-10-30) the owner's `mono2k-font.otf`, the FontStruction "Elektron Pixel Font"

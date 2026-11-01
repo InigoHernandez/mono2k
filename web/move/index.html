@@ -1,0 +1,204 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
+<!-- MONO2K on the Ableton Move: the Move's home. The same site as the FM-1's (../style.css, its grid and motion), the
+     Move's own things: the playable Move (gear.js, filling #move-gear; until it does, the pads' motion as a picture),
+     the pads played here (the Move's screen stills, screens/*.png, from move/screen's sheets), PERFORM, the tempo, the
+     sounds, and the machines (../engines.js, the FM-1's, loaded as they come near). move.js runs the page's parts. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MONO2K for Move</title>
+<meta name="description" content="MONO2K on the Ableton Move: the Monomachine-style groovebox from the FM-1, on eight tracks, every page one pad away. Runs on Schwung.">
+<script>try { const t = localStorage.getItem("mono2k.theme"); if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t); } catch (e) {}</script>
+<link rel="icon" href="../brand/mono2k-iso.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../style.css?v=59">
+</head>
+<body>
+<!-- the controls' glitch (style.css): rows slipped sideways, in hard bands -->
+<svg class="gldefs" width="0" height="0" aria-hidden="true" focusable="false"><filter id="gl-a" x="-10%" y="0" width="120%" height="100%" color-interpolation-filters="sRGB"><feTurbulence type="fractalNoise" baseFrequency="0 0.22" numOctaves="1" seed="7" result="n"/><feComponentTransfer in="n" result="m"><feFuncR type="discrete" tableValues="0.5 0.5 0.15 0.5 0.85 0.5 0.5 0.3"/><feFuncG type="discrete" tableValues="0.5"/><feFuncA type="discrete" tableValues="1"/></feComponentTransfer><feDisplacementMap in="SourceGraphic" in2="m" scale="12" xChannelSelector="R" yChannelSelector="G"/></filter><filter id="gl-b" x="-10%" y="0" width="120%" height="100%" color-interpolation-filters="sRGB"><feTurbulence type="fractalNoise" baseFrequency="0 0.22" numOctaves="1" seed="23" result="n"/><feComponentTransfer in="n" result="m"><feFuncR type="discrete" tableValues="0.5 0.8 0.5 0.5 0.2 0.5 0.65 0.5"/><feFuncG type="discrete" tableValues="0.5"/><feFuncA type="discrete" tableValues="1"/></feComponentTransfer><feDisplacementMap in="SourceGraphic" in2="m" scale="18" xChannelSelector="R" yChannelSelector="G"/></filter></svg>
+<div class="rules" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+
+<header class="bar">
+  <a class="brand" href="./" aria-label="MONO2K for Move, home"><svg viewBox="0 0 372 323" aria-hidden="true" focusable="false" shape-rendering="crispEdges"><defs><pattern id="isotex" width="187.93" height="187.93" patternUnits="userSpaceOnUse"><rect width="187.93" height="187.93" fill="currentColor"/><g class="isodots"><rect x="0.00" y="70.47" width="23.49" height="23.49"/><rect x="93.96" y="70.47" width="23.49" height="23.49"/><rect x="0.00" y="164.44" width="23.49" height="23.49"/><rect x="93.96" y="164.44" width="23.49" height="23.49"/></g></pattern><pattern id="isotex-a" width="187.93" height="187.93" patternUnits="userSpaceOnUse"><rect width="187.93" height="187.93" fill="currentColor"/><g class="isodots"><rect x="0.00" y="46.98" width="46.98" height="46.98"/><rect x="93.97" y="140.95" width="46.98" height="46.98"/></g></pattern><pattern id="isotex-b" width="187.93" height="187.93" patternUnits="userSpaceOnUse"><rect width="187.93" height="187.93" fill="currentColor"/><g class="isodots"><rect x="93.97" y="0.00" width="93.97" height="93.97"/></g></pattern></defs><path class="iso" fill="url(#isotex)" d="M371.177 322.938C346.353 322.511 320.193 322.919 295.267 322.922L295.273 104.054C295.267 99.0664 294.898 83.9219 295.427 79.542L296.438 78.8486C320.811 79.2205 346.759 79.0906 371.157 78.835L371.177 322.938Z"/><path class="iso" fill="url(#isotex)" d="M0.669267 78.8184C25.8069 79.0513 50.9474 79.1065 76.0863 78.9844C76.3341 89.9106 76.2328 101.312 76.1214 112.248C75.4061 182.366 77.1693 252.854 76.0511 322.926L0.211259 322.914L0.239579 136.432C0.240178 128.986 -0.521935 82.3877 0.669267 78.8184Z"/><path class="iso" fill="url(#isotex)" d="M294.993 0.0126953L295.059 50.0684C295.073 58.1959 295.558 70.9773 294.282 78.6768C293.851 81.2748 286.387 92.4032 284.354 95.624C256.977 143.305 237.109 194.92 225.451 248.654C199.163 248.347 172.382 248.585 146.057 248.601C136.258 206.935 122.268 166.368 104.299 127.521C100.06 118.751 95.4768 110.151 90.5609 101.741C74.8422 74.5385 76.2209 83.3897 76.264 51.0928L76.3607 0.0556641L119.721 0.078125C146.678 50.4618 164.631 89.8462 185.732 143.171C204.51 94.0237 226.566 46.1929 251.748 0L294.993 0.0126953Z"/></svg></a>
+  <nav class="dev" aria-label="Device"><span class="label dev__on">Runs on</span><span class="seg" style="--on:1"><a class="seg__o" href="../">FM-1</a><a class="seg__o" href="./" aria-current="page">Move</a></span></nav>
+  <span class="r acts"><a class="cta" href="https://ko-fi.com/sequencist" target="_blank" rel="noopener"><span class="long">Support on&nbsp;</span>Ko-fi</a><button id="theme" class="themebtn" type="button" aria-label="Colour theme">Auto</button></span>
+</header>
+<nav class="subnav" aria-label="Pages">
+  <a href="install.html">Install</a>
+  <a href="manual.html">Manual</a>
+</nav>
+
+<section class="hero">
+  <canvas id="wordmark" aria-label="MONO2K"></canvas>
+  <div class="hero__sub">
+    <p class="lede hero__line">The Monomachine-style groovebox, started on the FM-1, now on the Ableton Move, with 8 tracks.</p>
+    <p class="hero__acts"><a class="btn" href="#play">Play</a><a class="btn ghost" href="#pads">Pads</a><a class="btn ghost" href="install.html">Install</a></p>
+  </div>
+</section>
+
+<section class="mplay" id="play" aria-label="MONO2K on the Move, in this page">
+  <div id="move-gear"></div>
+  <figure class="mgear-fb">
+    <picture>
+      <source srcset="img/motion_pages.png" media="(prefers-reduced-motion: reduce)">
+      <img src="img/motion_pages.gif" width="735" height="224" alt="MONO2K's screen beside the Move's pads: each page pad pressed in turn, the screen following">
+    </picture>
+    <figcaption><span class="label">Every page a pad</span><span class="label">The screen follows</span></figcaption>
+  </figure>
+</section>
+
+<section class="sec" id="pads">
+  <p class="sec__n">01</p>
+  <div class="sec__body">
+    <h2 class="display">Pads</h2>
+    <p class="lede">Every page one press away.</p>
+    <p class="lbls"><span>Top row: the sound</span><span>Second: the rest</span><span>Bottom two: the keys</span></p>
+  </div>
+  <div class="mx" id="mx">
+    <figure class="ofig">
+      <img class="oled" id="mx-oled" src="screens/02_home_play.png" width="128" height="64" alt="The Move's screen: HOME, eight lanes playing">
+      <figcaption class="mx__cap" id="mx-cap" aria-live="polite"><b>HOME</b>Eight lanes, each playhead its own.</figcaption>
+    </figure>
+    <div class="mx__dev">
+      <div class="mx__trk" id="mx-trk" role="group" aria-label="Track buttons"></div>
+      <div class="mx__pads" id="mx-pads" role="group" aria-label="The 32 pads"></div>
+      <div class="mx__steps" id="mx-steps" role="group" aria-label="The 16 steps"></div>
+      <div class="mx__foot"><span class="small">Point at a pad; the steps play on every page.</span><button class="pbtn" id="mx-shift" type="button" aria-pressed="false">Shift</button></div>
+    </div>
+    <noscript><img src="img/padmap.png" width="1406" height="1386" alt="The Move's pads under MONO2K, lit" style="grid-column:1/-1;width:100%;height:auto"></noscript>
+  </div>
+</section>
+
+<section class="sec" id="tracks">
+  <p class="sec__n">02</p>
+  <div class="sec__body">
+    <h2 class="display">8 tracks</h2>
+    <p class="lede">Two more than the FM-1. Track buttons 1–4; with Shift, 5–8.</p>
+  </div>
+  <ul class="made__facts mfacts">
+    <li class="tile"><b data-count="8">8</b><span>Tracks</span></li>
+    <li class="tile"><b data-count="64">64</b><span>Steps a pattern</span></li>
+    <li class="tile"><b data-count="19">19</b><span>Machines</span></li>
+  </ul>
+  <div class="ofigs">
+    <figure class="ofig scan"><img class="oled" src="screens/02_home_play.png" width="128" height="64" alt="HOME: eight lanes, each playhead its own" loading="lazy"><figcaption><b>HOME</b>Eight lanes at a glance.</figcaption></figure>
+    <figure class="ofig scan"><img class="oled" src="screens/13_mix.png" width="128" height="64" alt="MIX: eight levels, live" loading="lazy"><figcaption><b>MIX</b>Eight levels on the eight knobs.</figcaption></figure>
+  </div>
+</section>
+
+<section class="sec" id="perform">
+  <p class="sec__n">03</p>
+  <div class="sec__body">
+    <h2 class="display">Perform</h2>
+    <p class="lede">Colours stack. Moves take turns.</p>
+    <p class="lbls"><span>PERFORM pad</span><span>The keys, held</span><span>Up: six more</span></p>
+  </div>
+  <div class="pf" id="pf">
+    <figure class="ofig scan"><img class="oled" src="screens/20_perf_one.png" width="128" height="64" alt="PERFORM on the Move's screen: RPT 1/8 held" loading="lazy"><figcaption><b>PERFORM</b>The keys are its effects.</figcaption></figure>
+    <div class="pf__board">
+      <p class="pf__now" id="pf-now" aria-live="polite">Hold a key</p>
+      <div class="pf__row c" id="pf-c" role="group" aria-label="The colours, top row"><span class="label">Colours</span></div>
+      <div class="pf__row m" id="pf-m" role="group" aria-label="The moves, bottom row"><span class="label">Moves</span></div>
+      <div class="pf__acts"><button class="pbtn" id="pf-up" type="button" aria-pressed="false">Up</button><span class="small">Held on the Move; tapped here.</span></div>
+    </div>
+  </div>
+</section>
+
+<section class="sec" id="tempo">
+  <p class="sec__n">04</p>
+  <div class="sec__body">
+    <h2 class="display">Tempo</h2>
+    <p class="lede">In time with the Move: one Play starts both.</p>
+  </div>
+  <div class="tp" id="tp">
+    <figure class="ofig"><img class="oled" id="tp-oled" src="screens/22_tempo_shift.png" width="128" height="64" alt="The tempo, large, with SYNC" loading="lazy"></figure>
+    <div class="tp__say">
+      <div class="seg" role="group" aria-label="The tempo's states"><button class="seg__o" type="button" aria-pressed="true">Shift + knob 1</button><button class="seg__o" type="button" aria-pressed="false">Sync</button><button class="seg__o" type="button" aria-pressed="false">Int</button></div>
+      <div aria-live="polite"><b id="tp-t">Any page</b><p id="tp-p">Shift + knob 1 sets the tempo: tenths turned slowly, whole BPM fast.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="sec" id="sounds">
+  <p class="sec__n">05</p>
+  <div class="sec__body">
+    <h2 class="display">Sounds</h2>
+    <p class="lede">96 sounds, a pad away: the jog plays each on the track.</p>
+  </div>
+  <div class="ofigs">
+    <figure class="ofig scan"><img class="oled" src="screens/18_cat.png" width="128" height="64" alt="SOUNDS: the library's rows, the one heard lit" loading="lazy"><figcaption><b>Jog</b>Each sound heard as you land on it; a click keeps it.</figcaption></figure>
+    <figure class="ofig scan"><img class="oled" src="screens/18_cat_cat.png" width="128" height="64" alt="SOUNDS: a category picked" loading="lazy"><figcaption><b>Knob 2</b>A category.</figcaption></figure>
+  </div>
+</section>
+
+<section class="sec inv" id="machines">
+  <p class="sec__n">06</p>
+  <div class="sec__body">
+    <h2 class="display">Machines</h2>
+    <p class="lede">The FM-1's nineteen, on eight tracks. Pick one and hit it.</p>
+  </div>
+  <div class="eng" id="eng">
+    <div class="eng__side">
+      <div class="eng__head">
+        <h3 class="title" id="eng-name">GND-SIN</h3>
+      </div>
+      <p class="eng__desc" id="eng-desc"></p>
+      <figure class="eng__screen mhide" aria-hidden="true">
+        <canvas id="eng-lcd" width="240" height="240"></canvas>
+      </figure>
+    </div>
+    <div class="eng__plate wipe">
+      <div class="eng__pick" id="eng-pick" role="group" aria-label="The machines"></div>
+      <div class="eng__scope" id="eng-scope">
+        <figure class="eng__plot">
+          <canvas id="eng-wave" role="img" aria-label="The hit's waveform"></canvas>
+          <figcaption><span>Wave</span><span id="eng-wave-r"></span></figcaption>
+        </figure>
+        <figure class="eng__plot">
+          <canvas id="eng-spec" role="img" aria-label="The hit's spectrum"></canvas>
+          <figcaption><span>Spectrum</span><span id="eng-spec-r"></span></figcaption>
+        </figure>
+      </div>
+      <p class="vh" id="eng-nums" aria-live="polite"></p>
+      <div class="eng__ctl">
+        <div class="eng__knobs" id="eng-knobs"></div>
+        <div class="eng__acts">
+          <button class="hit" id="eng-hit" type="button"><canvas id="eng-mark" width="64" height="64" aria-hidden="true"></canvas><span>Hit</span><small id="eng-hit-n">INIT · C3</small></button>
+          <button class="pbtn" id="eng-reset" type="button">INIT</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="sec" id="status-sec">
+  <p class="sec__n">07</p>
+  <div class="sec__body">
+    <h2 class="display">Status</h2>
+    <p class="lede">0.1, not released yet. It runs on <a href="https://schwung.dev" target="_blank" rel="noopener">Schwung</a>, unofficial: <a href="install.html">how it installs</a>.</p>
+  </div>
+</section>
+
+<nav class="bar links" aria-label="Sequencist, the author">
+  <span class="label">By Sequencist</span>
+  <a class="label" href="https://github.com/InigoHernandez" target="_blank" rel="noopener">GitHub</a>
+  <a class="label" href="https://sequencist.bandcamp.com/" target="_blank" rel="noopener">Bandcamp</a>
+  <a class="label" href="https://www.youtube.com/@sequencist" target="_blank" rel="noopener">YouTube</a>
+  <a class="label" href="https://www.instagram.com/sequencist.fm" target="_blank" rel="noopener">Instagram</a>
+  <a class="label" href="https://soundcloud.com/sequencist" target="_blank" rel="noopener">SoundCloud</a>
+</nav>
+
+<footer class="bar foot">
+  <span class="label nar">MONO2K for Move</span><span class="label wide">Not affiliated with Ableton, M-VAVE or Elektron; runs on Schwung (unofficial)</span><a class="label kofi" href="https://ko-fi.com/sequencist" target="_blank" rel="noopener">Support on Ko-fi</a><span class="label r nar">2026</span>
+</footer>
+
+<script src="../site.js?v=4"></script>
+<script src="../switch.js?v=1"></script>
+<script src="../panel.js?v=2"></script>
+<script src="../wordmark.js?v=1"></script>
+<script src="move.js?v=1"></script>
+<script src="gear.js?v=1"></script>
+<script>if (window.MoveGear) MoveGear.init(document.getElementById("move-gear"));   /* gear.js loads its own gear.css */</script>
+</body>
+</html>

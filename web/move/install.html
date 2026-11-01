@@ -1,0 +1,118 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
+<!-- MONO2K on the Move: how it installs, through Schwung (unofficial). The download is "Coming soon" until the package
+     is public. TO PUBLISH IT: set RELEASE in the script at the foot of this page (version, date, file, its URL, its
+     SHA-256): the button, the side table and the notes follow. Nothing else on the page changes. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MONO2K for Move: Install</title>
+<meta name="description" content="Install MONO2K on the Ableton Move through Schwung: from Schwung Manager's catalog or as a custom module; open it, update it, remove it.">
+<script>try { const t = localStorage.getItem("mono2k.theme"); if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t); } catch (e) {}</script>
+<link rel="icon" href="../brand/mono2k-iso.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../style.css?v=59">
+</head>
+<body>
+<!-- the controls' glitch (style.css): rows slipped sideways, in hard bands -->
+<svg class="gldefs" width="0" height="0" aria-hidden="true" focusable="false"><filter id="gl-a" x="-10%" y="0" width="120%" height="100%" color-interpolation-filters="sRGB"><feTurbulence type="fractalNoise" baseFrequency="0 0.22" numOctaves="1" seed="7" result="n"/><feComponentTransfer in="n" result="m"><feFuncR type="discrete" tableValues="0.5 0.5 0.15 0.5 0.85 0.5 0.5 0.3"/><feFuncG type="discrete" tableValues="0.5"/><feFuncA type="discrete" tableValues="1"/></feComponentTransfer><feDisplacementMap in="SourceGraphic" in2="m" scale="12" xChannelSelector="R" yChannelSelector="G"/></filter><filter id="gl-b" x="-10%" y="0" width="120%" height="100%" color-interpolation-filters="sRGB"><feTurbulence type="fractalNoise" baseFrequency="0 0.22" numOctaves="1" seed="23" result="n"/><feComponentTransfer in="n" result="m"><feFuncR type="discrete" tableValues="0.5 0.8 0.5 0.5 0.2 0.5 0.65 0.5"/><feFuncG type="discrete" tableValues="0.5"/><feFuncA type="discrete" tableValues="1"/></feComponentTransfer><feDisplacementMap in="SourceGraphic" in2="m" scale="18" xChannelSelector="R" yChannelSelector="G"/></filter></svg>
+<div class="rules" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+
+<header class="bar">
+  <a class="brand" href="./" aria-label="MONO2K for Move, home"><svg viewBox="0 0 372 323" aria-hidden="true" focusable="false" shape-rendering="crispEdges"><defs><pattern id="isotex" width="187.93" height="187.93" patternUnits="userSpaceOnUse"><rect width="187.93" height="187.93" fill="currentColor"/><g class="isodots"><rect x="0.00" y="70.47" width="23.49" height="23.49"/><rect x="93.96" y="70.47" width="23.49" height="23.49"/><rect x="0.00" y="164.44" width="23.49" height="23.49"/><rect x="93.96" y="164.44" width="23.49" height="23.49"/></g></pattern><pattern id="isotex-a" width="187.93" height="187.93" patternUnits="userSpaceOnUse"><rect width="187.93" height="187.93" fill="currentColor"/><g class="isodots"><rect x="0.00" y="46.98" width="46.98" height="46.98"/><rect x="93.97" y="140.95" width="46.98" height="46.98"/></g></pattern><pattern id="isotex-b" width="187.93" height="187.93" patternUnits="userSpaceOnUse"><rect width="187.93" height="187.93" fill="currentColor"/><g class="isodots"><rect x="93.97" y="0.00" width="93.97" height="93.97"/></g></pattern></defs><path class="iso" fill="url(#isotex)" d="M371.177 322.938C346.353 322.511 320.193 322.919 295.267 322.922L295.273 104.054C295.267 99.0664 294.898 83.9219 295.427 79.542L296.438 78.8486C320.811 79.2205 346.759 79.0906 371.157 78.835L371.177 322.938Z"/><path class="iso" fill="url(#isotex)" d="M0.669267 78.8184C25.8069 79.0513 50.9474 79.1065 76.0863 78.9844C76.3341 89.9106 76.2328 101.312 76.1214 112.248C75.4061 182.366 77.1693 252.854 76.0511 322.926L0.211259 322.914L0.239579 136.432C0.240178 128.986 -0.521935 82.3877 0.669267 78.8184Z"/><path class="iso" fill="url(#isotex)" d="M294.993 0.0126953L295.059 50.0684C295.073 58.1959 295.558 70.9773 294.282 78.6768C293.851 81.2748 286.387 92.4032 284.354 95.624C256.977 143.305 237.109 194.92 225.451 248.654C199.163 248.347 172.382 248.585 146.057 248.601C136.258 206.935 122.268 166.368 104.299 127.521C100.06 118.751 95.4768 110.151 90.5609 101.741C74.8422 74.5385 76.2209 83.3897 76.264 51.0928L76.3607 0.0556641L119.721 0.078125C146.678 50.4618 164.631 89.8462 185.732 143.171C204.51 94.0237 226.566 46.1929 251.748 0L294.993 0.0126953Z"/></svg></a>
+  <nav class="dev" aria-label="Device"><span class="label dev__on">Runs on</span><span class="seg" style="--on:1"><a class="seg__o" href="../installer.html">FM-1</a><a class="seg__o" href="install.html" aria-current="page">Move</a></span></nav>
+  <span class="r acts"><a class="cta" href="https://ko-fi.com/sequencist" target="_blank" rel="noopener"><span class="long">Support on&nbsp;</span>Ko-fi</a><button id="theme" class="themebtn" type="button" aria-label="Colour theme">Auto</button></span>
+</header>
+<nav class="subnav" aria-label="Pages">
+  <a href="install.html" aria-current="page">Install</a>
+  <a href="manual.html">Manual</a>
+</nav>
+
+<section class="phead">
+  <p class="sec__n">MOVE</p>
+  <div class="sec__body">
+    <h1 class="display" style="margin:0">Install</h1>
+    <p class="lede">MONO2K onto the Ableton Move, through Schwung. A few minutes, over Wi-Fi.</p>
+  </div>
+</section>
+
+<section class="inst">
+  <aside class="side doc">
+    <table>
+      <thead><tr><th colspan="2">MONO2K for Move</th></tr></thead>
+      <tbody>
+        <tr><td>Package</td><td id="st-pkg"><span class="soon">Coming soon</span></td></tr>
+        <tr><td>Version</td><td id="st-ver">0.1</td></tr>
+        <tr><td>Needs</td><td>A Move with Schwung</td></tr>
+        <tr><td>Licence</td><td>GPL-3.0-only</td></tr>
+      </tbody>
+    </table>
+  </aside>
+  <div class="main doc">
+    <h2 style="margin-top:0">1 · What you need</h2>
+    <ul>
+      <li>An Ableton Move.</li>
+      <li><a href="https://schwung.dev" target="_blank" rel="noopener">Schwung</a> installed on it. Schwung is unofficial, not made or supported by Ableton: <b>back up your sets first.</b></li>
+      <li>A computer or phone on the same Wi-Fi.</li>
+    </ul>
+
+    <h2>2 · Install MONO2K</h2>
+    <p><b>From the catalog.</b> Open Schwung Manager in a browser at <a href="http://move.local:7700" target="_blank" rel="noopener">move.local:7700</a>, find MONO2K and install it, once it is listed there.</p>
+    <p><b>As a custom module.</b> Download the package below, then in Schwung Manager choose Install Custom Module and pick the file.</p>
+    <div class="dl" id="dl">
+      <a class="bigbtn" id="dl-btn" role="link" aria-disabled="true"><span>Download</span><small class="soon" id="dl-sub">Coming soon</small></a>
+      <p class="small" id="dl-note">The package isn't public yet: it comes with MONO2K for Move's first release.</p>
+    </div>
+
+    <h2>3 · Open it</h2>
+    <ol class="steps">
+      <li>Shift + touch the volume knob + step 13: Schwung's Tools.</li>
+      <li>Overtake Modules, then MONO2K. Bank A plays: press Play.</li>
+      <li>Back parks it, playing on; Shift + Back closes it and saves. Shift + volume touch + jog click is always the way back to Move.</li>
+    </ol>
+    <p>Then the <a href="manual.html">manual</a>: the <a href="manual.html#pads">pads</a> first.</p>
+
+    <h2>Updating</h2>
+    <p>Close MONO2K first with Shift + Back (a parked one keeps the old version loaded), then install the new package the same way. Your patterns and sounds stay: they live outside the module, in <code>/data/UserData/schwung/mono2k/</code>.</p>
+
+    <h2>Removing</h2>
+    <p>Remove MONO2K in Schwung Manager. Its saves stay in <code>/data/UserData/schwung/mono2k/</code>; delete that folder too to remove them. Removing Schwung itself is Schwung's own job: see its site.</p>
+
+    <h2>Tempo with Link (optional)</h2>
+    <p>MONO2K always follows Move's tempo. For MONO2K's tempo knob to set Move's too, turn on Link in Move's settings and Move->Schwung in Schwung's Global Settings, Audio. It has a cost: the <a href="manual.html#tempo">manual</a> says what.</p>
+
+    <div class="callout"><b>At your own risk</b><p>Schwung and MONO2K are unofficial: Ableton doesn't support them. Back up your sets before you start. MONO2K is not affiliated with Ableton, M-VAVE or Elektron.</p></div>
+    <p class="small">MONO2K runs on Schwung (MIT), an open framework for Move's modules. MONO2K itself is GPL-3.0-only; its source is on <a href="https://github.com/InigoHernandez/mono2k" target="_blank" rel="noopener">GitHub</a>.</p>
+  </div>
+</section>
+
+<footer class="bar foot">
+  <span class="label nar">MONO2K for Move</span><span class="label wide">Not affiliated with Ableton, M-VAVE or Elektron; runs on Schwung (unofficial)</span><a class="label kofi" href="https://ko-fi.com/sequencist" target="_blank" rel="noopener">Support on Ko-fi</a><span class="label r nar">2026</span>
+</footer>
+<script src="../site.js?v=4"></script>
+<script src="../switch.js?v=1"></script>
+<script>
+"use strict";
+/* THE FLAG: null while the package isn't public ("Coming soon"). To publish, set it, for example:
+ * const RELEASE = { version: "0.1", date: "2026-11-15", file: "mono2k-move-0.1.tar.gz",
+ *                   url: "https://github.com/InigoHernandez/mono2k/releases/download/move-0.1/mono2k-move-0.1.tar.gz",
+ *                   sha256: "…" };
+ * Nothing else changes: the button, the side table and the note below read it. */
+const RELEASE = null;
+if (RELEASE) {
+  const $ = (id) => document.getElementById(id);
+  const btn = $("dl-btn");
+  btn.removeAttribute("aria-disabled");
+  btn.removeAttribute("role");
+  btn.href = RELEASE.url;
+  btn.setAttribute("download", RELEASE.file);
+  $("dl-sub").className = "";
+  $("dl-sub").textContent = `${RELEASE.file} · ${RELEASE.date}`;
+  $("dl-note").innerHTML = "";
+  $("dl-note").append("SHA-256 ", Object.assign(document.createElement("code"), { className: "dl__file", textContent: RELEASE.sha256 || "–" }));
+  $("st-pkg").textContent = `${RELEASE.version}, ${RELEASE.date}`;
+  $("st-ver").textContent = RELEASE.version;
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,22 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// The Move version's change log (move/manual.html#changelog, drawn by ../manual.js as the FM-1's): one entry per
+// update, newest first, each line under one of the kinds. The FM-1's is ../changelog.js; what both get goes in both.
+window.M2K_KINDS = window.M2K_KINDS || {
+  machines: "Machines", sound: "Sound", sequencer: "Sequencer", workflow: "Workflow",
+  patterns: "Patterns", screen: "Screen", web: "Website", fixes: "Fixes",
+};
+window.M2K_CHANGES = [
+  {
+    date: "2026-11-01", title: "MONO2K for the Move 0.1: the first version (not released yet)",
+    items: [
+      ["machines", "The FM-1's nineteen machines, its sequencer, PERFORM and the bus, on eight tracks. The same core as the FM-1's, so the same sound, sample for sample."],
+      ["workflow", "Every page a pad: the sound's eight on the top row; HOME TRK PAT GRID MIX GLO, SOUNDS and PERFORM on the second. The keyboard a two-row piano on the bottom two; the steps the sequencer on every page."],
+      ["workflow", "MIX: the eight tracks' levels on the eight knobs."],
+      ["sequencer", "In time with the Move: one Play starts both, at Move's tempo, locked to its bar. Shift + knob 1 sets the tempo on any page, Move's too with Link on."],
+      ["workflow", "PERFORM on the keys: eight colours that stack over eight moves that take turns; Up for six more moves."],
+      ["screen", "A screen of its own for the Move's 128 × 64: every page one live picture, the knobs as pictures, a knob's name and value large while touched."],
+      ["patterns", "Four banks of 16 patterns, bank A the FM-1's demos; saved with Shift + Rec and on closing, kept across updates."],
+      ["web", "Its own pages: home, manual and install, a switch away from the FM-1's."],
+    ],
+  },
+];
