@@ -64,7 +64,7 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   `move.js`: the pads, PERFORM, the tempo, the numbers, and `../engines.js` loaded as the machines come near; `#move-gear`
   for `gear.js` / `gear.css`, the playable Move, with the pads' motion as a picture until it fills), its manual
   (`manual.html` on `../manual.js`, which finds its files beside itself; `changelog.js` the Move version's log) and
-  `install.html` (the download "Coming soon" until `RELEASE` is set in its script). Its screens are stills of the Move's,
+  `install.html` (the download "Coming soon" until `RELEASE` is set in its script; set 2026-11-01 for 0.2). The Move's releases: tags `move-vX.Y.Z` (the version `move/module.json`'s), the package `mono2k-module.tar.gz` (`move/build.sh`; `MOVE_NATIVE=1` on an aarch64 bookworm), never marked Latest (the FM-1 Hub takes Latest), `release.json` at the root (Schwung Manager reads it: the version and the URL), `.github/workflows/move-release.yml` building and attaching on a tag when the release lacks the package. 0.2 released 2026-11-01 at the owner's "release it". Its screens are stills of the Move's,
   `move/screens/*.png` (move/screen's sheets' PBMs as 1-bit PNGs, lit in the site's paper on its ink), `move/img/` the pad
   map and the pages' motion. Every page on both has the FM-1 | MOVE switch in its header (`switch.js`: the same page on
   the other device; the editor goes to the Move's home) and `wordmark.js` draws both homes' hero.

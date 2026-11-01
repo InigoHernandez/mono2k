@@ -198,7 +198,7 @@ cc -O2 -DM2K_TRACKS=8 -Ifirmware/src -Ifirmware/gen -o build/move/screen_sheets 
   | `draw` | The screens as PBM, in `build/move/proof/screens/`. |
   | `time` | The render's cost; the screen's a frame (publish, draw). |
 
-- **Output:** the module in `build/move/modules/overtake/mono2k/` (`dsp.so`, `module.json`, `ui.js`), and `build/move/mono2k-move.tar.gz`, with `mono2k/` at its top (Schwung Manager: Install Custom Module).
+- **Output:** the module in `build/move/modules/overtake/mono2k/` (`dsp.so`, `module.json`, `ui.js`), and `build/move/mono2k-module.tar.gz`, with `mono2k/` at its top (Schwung Manager: Install Custom Module).
 - **deploy.sh** copies to `/data/UserData/schwung/.mono2k-incoming`, then renames it to `modules/overtake/mono2k`. Close an open MONO2K first (Shift + Back): a parked one keeps the old `dsp.so`.
 - **Opening it:** MONO2K is in Schwung's Tools menu, under Overtake Modules. If it was open, close it first with Shift + Back: a parked MONO2K keeps the old `dsp.so` loaded.
 

@@ -7,7 +7,7 @@ window.M2K_KINDS = window.M2K_KINDS || {
 };
 window.M2K_CHANGES = [
   {
-    date: "2026-11-01", title: "MONO2K for the Move 0.1: the first version (not released yet)",
+    date: "2026-11-01", title: "MONO2K for the Move 0.2: the first release",
     items: [
       ["machines", "The FM-1's nineteen machines, its sequencer, PERFORM and the bus, on eight tracks. The same core as the FM-1's, so the same sound, sample for sample."],
       ["workflow", "Every page a pad: the sound's eight on the top row; HOME TRK PAT GRID MIX GLO, SOUNDS and PERFORM on the second. The keyboard a two-row piano on the bottom two; the steps the sequencer on every page."],

@@ -1,0 +1,50 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# MONO2K for the Move: on a tag move-vX.Y.Z, builds mono2k-module.tar.gz on an arm64 runner in Debian bookworm
+# (move/build.sh checks the Move's glibc 2.35 rule, the exports and the imports) and attaches it to that tag's release,
+# made when missing and never marked Latest: the FM-1 Firmware Hub takes the repo's Latest release, the FM-1's. A
+# release made by hand with the package already attached is left as it is (its SHA-256 is on the site).
+name: Move release
+
+on:
+  push:
+    tags: ['move-v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'The tag, move-vX.Y.Z'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04-arm
+    container: debian:bookworm-slim
+    env:
+      TAG: ${{ github.event.inputs.tag || github.ref_name }}
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Tools
+        run: apt-get update && apt-get install -y --no-install-recommends gcc libc6-dev binutils file git ca-certificates gh
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - name: Build
+        run: MOVE_NATIVE=1 sh move/build.sh
+      - name: The version matches the tag
+        run: |
+          v=$(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' move/module.json)
+          [ "move-v$v" = "$TAG" ] || { echo "module.json says $v, the tag is $TAG"; exit 1; }
+      - name: Release
+        run: |
+          if gh release view "$TAG" --json assets -q '.assets[].name' 2>/dev/null | grep -qx mono2k-module.tar.gz; then
+            echo "$TAG already has mono2k-module.tar.gz: left as it is"; exit 0
+          fi
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh api "repos/$GH_REPO/releases" -f tag_name="$TAG" -f name="MONO2K for Move ${TAG#move-v}" \
+              -f body="MONO2K for the Ableton Move (a Schwung overtake module). Install: https://inigohernandez.github.io/mono2k/move/install.html" \
+              -f make_latest=false >/dev/null
+          fi
+          gh release upload "$TAG" build/move/mono2k-module.tar.gz
