@@ -85,15 +85,13 @@
 [data-c="vol"] .mg-knob__val { stroke: #cfcfca; }
 .mg-knob { cursor: ns-resize !important; }
 
-/* the jog: notches that turn with it, a cap that takes the click */
-.mg-jog__body { fill: #1d1d1d; stroke: var(--mg-cap-edge); stroke-width: 1.4; }
-.mg-jog__notch { stroke: #3c3c3c; stroke-width: 2; stroke-linecap: round; }
-.mg-jog__notch--mark { stroke: #9a9a96; }
-.mg-jog__rot { transition: transform 110ms ease-out; }
-.mg-jog__cap { fill: var(--mg-cap); stroke: var(--mg-cap-edge); stroke-width: 1.2; transform-box: fill-box; transform-origin: center; }
+/* the jog: one plain circle; a turn lights its edge, a press darkens it, a click springs */
+.mg-jog__body { fill: #1d1d1d; stroke: var(--mg-cap-edge); stroke-width: 1.4; transition: fill 120ms, stroke 160ms; }
 .mg-jog:hover .mg-jog__body { stroke: #5a5a5a; }
-.mg-jog.is-down .mg-jog__cap { fill: #303030; }
-.mg-jog.is-click .mg-jog__cap { animation: mg-click 220ms ease-out; }
+.mg-jog__body.is-turn { stroke: #9a9a96; transition-duration: 40ms; }
+.mg-jog.is-down .mg-jog__body { fill: #262626; }
+.mg-jog.is-click { animation: mg-jog-click 220ms ease-out; }
+@keyframes mg-jog-click { 40% { transform: scale(.96); } }
 @keyframes mg-click { 40% { transform: scale(.86); } }
 
 /* the line under it: the control under the pointer (or the keys), the sound */

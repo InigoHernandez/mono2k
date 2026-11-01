@@ -4,7 +4,7 @@
  *
  * Embed (the Move home is web/move/index.html, beside this file):
  *   <div id="move-gear"></div>
- *   <script src="gear.js?v=2"></script>
+ *   <script src="gear.js?v=3"></script>
  *   <script>MoveGear.init(document.getElementById("move-gear"));</script>
  * MoveGear.init(el, opts) builds the drawing into el and returns { start, mute }. opts (all optional):
  *   bar: false       no line under the drawing (the control under the pointer, the keys, the sound toggle)
@@ -20,7 +20,7 @@
  * piano's white keys), W..O the row over it, Z / X Down / Up, Space Play, Shift Shift. */
 window.MoveGear = (() => {
   "use strict";
-  const V = { css: 1, worklet: 1, wasm: 1 };      /* bump with each changed file (the site's ?v= rule) */
+  const V = { css: 2, worklet: 1, wasm: 1 };      /* bump with each changed file (the site's ?v= rule) */
   const BASE = (() => {
     const s = document.currentScript && document.currentScript.src;
     return s ? s.replace(/[^/]*$/, "") : "";
@@ -159,7 +159,7 @@ window.MoveGear = (() => {
     const ctl = {};                                      /* data-c -> its parts */
     const add = (key, g, parts) => { g.setAttribute("data-c", key); ctl[key] = Object.assign({ g }, parts); return g; };
 
-    el("rect", { class: "mg-body", x: 1, y: 1, width: W - 2, height: H - 2, rx: 26 }, svg);
+    el("rect", { class: "mg-body", x: 1, y: 1, width: W - 2, height: H - 2, rx: 16 }, svg);
     el("line", { class: "mg-rule", x1: LX, y1: (TY + TH + PY) / 2, x2: W - LX, y2: (TY + TH + PY) / 2 }, svg);
 
     /* the screen: a black bezel; the glass is a canvas laid over it */
@@ -180,18 +180,11 @@ window.MoveGear = (() => {
     for (let k = 0; k < 8; k++) knob("knob:" + k, padX(k) + PS / 2, KNOB_Y, KNOB_R);
     knob("vol", VOL.x, VOL.y, VOL.r);
 
-    /* the jog */
+    /* the jog: one plain circle (the owner's); a turn lights its edge a moment, a press darkens it */
     {
-      const g = add("jog", el("g", { class: "mg-jog" }, svg), {});
-      el("circle", { class: "mg-jog__body", cx: JOG.x, cy: JOG.y, r: JOG.r }, g);
-      const rot = el("g", { class: "mg-jog__rot", style: `transform-origin:${JOG.x}px ${JOG.y}px` }, g);
-      for (let i = 0; i < 24; i++) {
-        const a = i * 15 * Math.PI / 180, s = Math.sin(a), c = Math.cos(a);
-        el("line", { class: i ? "mg-jog__notch" : "mg-jog__notch mg-jog__notch--mark",
-          x1: JOG.x + s * (JOG.r - 13), y1: JOG.y - c * (JOG.r - 13), x2: JOG.x + s * (JOG.r - 5), y2: JOG.y - c * (JOG.r - 5) }, rot);
-      }
-      el("circle", { class: "mg-jog__cap", cx: JOG.x, cy: JOG.y, r: JOG.r * 0.42 }, g);
-      ctl.jog.rot = rot;
+      const g = add("jog", el("g", { class: "mg-jog", style: `transform-origin:${JOG.x}px ${JOG.y}px` }, svg), {});
+      ctl.jog.body = el("circle", { class: "mg-jog__body", cx: JOG.x, cy: JOG.y, r: JOG.r }, g);
+      ctl.jog.rot = el("g", {}, g);
     }
 
     /* the buttons */
@@ -677,7 +670,13 @@ window.MoveGear = (() => {
       }
     }
     let jogA = 0;
-    function jogTurn(d) { jogA += d * 15; ctl.jog.rot.style.transform = `rotate(${jogA}deg)`; }
+    let jogLit = 0;
+    function jogTurn(d) {
+      jogA += d * 15;
+      ctl.jog.body.classList.add("is-turn");
+      clearTimeout(jogLit);
+      jogLit = setTimeout(() => ctl.jog.body.classList.remove("is-turn"), 160);
+    }
     function jogClick() { const g = ctl.jog.g; g.classList.remove("is-click"); void g.getBBox(); g.classList.add("is-click"); }
 
     svg.addEventListener("pointerdown", down);
