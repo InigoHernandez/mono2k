@@ -1,0 +1,380 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
+<!-- MONO2K on the Move: the manual. The FM-1's manual's machinery (../manual.js: one page at a time, the contents, the
+     pager, the machines and bank A read off the firmware, the change log), with the Move's pages: getting in and out,
+     the pads, the controls, the pages and their knobs, PERFORM, the tempo, saving, the patterns. The machines are the
+     FM-1's, read from the same m2k.wasm; the screens are stills of the Move's own (screens/*.png). The change log is
+     the Move version's (changelog.js). From move/README.md, the controller's own table. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MONO2K Move Manual</title>
+<meta name="description" content="The MONO2K manual for the Ableton Move: getting in and out with Schwung, the pads, every control, the pages and their knobs, PERFORM, the tempo, saving and the patterns.">
+<script>try { const t = localStorage.getItem("mono2k.theme"); if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t); } catch (e) {}</script>
+<link rel="icon" href="../brand/mono2k-iso.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../style.css?v=59">
+</head>
+<body class="noscript-all">
+<!-- the controls' glitch (style.css): rows slipped sideways, in hard bands -->
+<svg class="gldefs" width="0" height="0" aria-hidden="true" focusable="false"><filter id="gl-a" x="-10%" y="0" width="120%" height="100%" color-interpolation-filters="sRGB"><feTurbulence type="fractalNoise" baseFrequency="0 0.22" numOctaves="1" seed="7" result="n"/><feComponentTransfer in="n" result="m"><feFuncR type="discrete" tableValues="0.5 0.5 0.15 0.5 0.85 0.5 0.5 0.3"/><feFuncG type="discrete" tableValues="0.5"/><feFuncA type="discrete" tableValues="1"/></feComponentTransfer><feDisplacementMap in="SourceGraphic" in2="m" scale="12" xChannelSelector="R" yChannelSelector="G"/></filter><filter id="gl-b" x="-10%" y="0" width="120%" height="100%" color-interpolation-filters="sRGB"><feTurbulence type="fractalNoise" baseFrequency="0 0.22" numOctaves="1" seed="23" result="n"/><feComponentTransfer in="n" result="m"><feFuncR type="discrete" tableValues="0.5 0.8 0.5 0.5 0.2 0.5 0.65 0.5"/><feFuncG type="discrete" tableValues="0.5"/><feFuncA type="discrete" tableValues="1"/></feComponentTransfer><feDisplacementMap in="SourceGraphic" in2="m" scale="18" xChannelSelector="R" yChannelSelector="G"/></filter></svg>
+<div class="rules" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+
+<header class="bar">
+  <a class="brand" href="./" aria-label="MONO2K for Move, home"><svg viewBox="0 0 372 323" aria-hidden="true" focusable="false" shape-rendering="crispEdges"><defs><pattern id="isotex" width="187.93" height="187.93" patternUnits="userSpaceOnUse"><rect width="187.93" height="187.93" fill="currentColor"/><g class="isodots"><rect x="0.00" y="70.47" width="23.49" height="23.49"/><rect x="93.96" y="70.47" width="23.49" height="23.49"/><rect x="0.00" y="164.44" width="23.49" height="23.49"/><rect x="93.96" y="164.44" width="23.49" height="23.49"/></g></pattern><pattern id="isotex-a" width="187.93" height="187.93" patternUnits="userSpaceOnUse"><rect width="187.93" height="187.93" fill="currentColor"/><g class="isodots"><rect x="0.00" y="46.98" width="46.98" height="46.98"/><rect x="93.97" y="140.95" width="46.98" height="46.98"/></g></pattern><pattern id="isotex-b" width="187.93" height="187.93" patternUnits="userSpaceOnUse"><rect width="187.93" height="187.93" fill="currentColor"/><g class="isodots"><rect x="93.97" y="0.00" width="93.97" height="93.97"/></g></pattern></defs><path class="iso" fill="url(#isotex)" d="M371.177 322.938C346.353 322.511 320.193 322.919 295.267 322.922L295.273 104.054C295.267 99.0664 294.898 83.9219 295.427 79.542L296.438 78.8486C320.811 79.2205 346.759 79.0906 371.157 78.835L371.177 322.938Z"/><path class="iso" fill="url(#isotex)" d="M0.669267 78.8184C25.8069 79.0513 50.9474 79.1065 76.0863 78.9844C76.3341 89.9106 76.2328 101.312 76.1214 112.248C75.4061 182.366 77.1693 252.854 76.0511 322.926L0.211259 322.914L0.239579 136.432C0.240178 128.986 -0.521935 82.3877 0.669267 78.8184Z"/><path class="iso" fill="url(#isotex)" d="M294.993 0.0126953L295.059 50.0684C295.073 58.1959 295.558 70.9773 294.282 78.6768C293.851 81.2748 286.387 92.4032 284.354 95.624C256.977 143.305 237.109 194.92 225.451 248.654C199.163 248.347 172.382 248.585 146.057 248.601C136.258 206.935 122.268 166.368 104.299 127.521C100.06 118.751 95.4768 110.151 90.5609 101.741C74.8422 74.5385 76.2209 83.3897 76.264 51.0928L76.3607 0.0556641L119.721 0.078125C146.678 50.4618 164.631 89.8462 185.732 143.171C204.51 94.0237 226.566 46.1929 251.748 0L294.993 0.0126953Z"/></svg></a>
+  <nav class="dev" aria-label="Device"><span class="label dev__on">Runs on</span><span class="seg" style="--on:1"><a class="seg__o" href="../manual.html">FM-1</a><a class="seg__o" href="manual.html" aria-current="page">Move</a></span></nav>
+  <span class="r acts"><a class="cta" href="https://ko-fi.com/sequencist" target="_blank" rel="noopener"><span class="long">Support on&nbsp;</span>Ko-fi</a><button id="theme" class="themebtn" type="button" aria-label="Colour theme">Auto</button></span>
+</header>
+<nav class="subnav" aria-label="Pages">
+  <a href="install.html">Install</a>
+  <a href="manual.html" aria-current="page">Manual</a>
+</nav>
+
+<div class="docs">
+<details class="docs__side" id="side" open>
+  <summary>Contents</summary>
+  <h4>Getting started</h4>
+  <ol>
+    <li><a href="#introduction">Introduction</a></li>
+    <li><a href="#status">Status and safety</a></li>
+    <li><a href="#in-out">Getting in and out</a></li>
+  </ol>
+  <h4>The instrument</h4>
+  <ol>
+    <li><a href="#pads">The pads</a></li>
+    <li><a href="#controls">Every control</a></li>
+    <li><a href="#pages">Pages and their knobs</a></li>
+    <li><a href="#tracks">Tracks and machines</a></li>
+  </ol>
+  <h4>Machines</h4>
+  <ol>
+    <li><a href="#machines">Machine reference</a></li>
+  </ol>
+  <h4>Sequencer</h4>
+  <ol>
+    <li><a href="#steps">Steps and locks</a></li>
+    <li><a href="#patterns">Patterns</a></li>
+  </ol>
+  <h4>Live</h4>
+  <ol>
+    <li><a href="#perform">PERFORM</a></li>
+    <li><a href="#sounds">SOUNDS</a></li>
+    <li><a href="#tempo">Tempo, SYNC, INT and Link</a></li>
+  </ol>
+  <h4>Saving</h4>
+  <ol>
+    <li><a href="#saving">Saving</a></li>
+  </ol>
+  <h4>Reference</h4>
+  <ol>
+    <li><a href="#credits">Credits and licence</a></li>
+  </ol>
+  <h4>Updates</h4>
+  <ol>
+    <li><a href="#changelog">Change log</a></li>
+  </ol>
+</details>
+
+<main class="doc" id="doc">
+
+<!-- ======================================================================================== getting started -->
+<article id="introduction" data-group="Getting started">
+  <h1>Introduction</h1>
+  <p class="sub">MONO2K on the Ableton Move: the FM-1's Monomachine-style groovebox, on eight tracks, every page one pad away.</p>
+  <div class="figs"><figure class="fig"><img class="oled" src="screens/02_home_play.png" width="128" height="64" alt="HOME on the Move: eight lanes playing"><figcaption>HOME: eight lanes, each playhead its own.</figcaption></figure></div>
+  <p>It is the same firmware core as the FM-1's, so the same machines, sequencer, PERFORM and bus, and the same sound, sample for sample. The Move gives it eight tracks, its 32 pads, 16 steps, 8 touch knobs and a screen of its own.</p>
+  <p>It runs on <a href="https://schwung.dev" target="_blank" rel="noopener">Schwung</a> as an overtake module: while it is open, MONO2K owns the pads, the steps, the knobs and the screen; Move's own sets keep playing beside it.</p>
+  <h2>Quick links</h2>
+  <div class="cards">
+    <a href="#in-out"><b>In and out</b><span>Open it, park it, close it, escape</span></a>
+    <a href="#pads"><b>The pads</b><span>Every page on the top two rows</span></a>
+    <a href="#controls"><b>Every control</b><span>Steps, knobs, jog and buttons</span></a>
+    <a href="#pages"><b>Pages</b><span>Sixteen pages and their eight knobs</span></a>
+    <a href="#perform"><b>PERFORM</b><span>Colours and moves on the keys</span></a>
+    <a href="#tempo"><b>Tempo</b><span>One Play, SYNC, INT and Link</span></a>
+  </div>
+</article>
+
+<article id="status" data-group="Getting started">
+  <h1>Status and safety</h1>
+  <p class="sub">0.1, the first version: running on the author's Move, not released yet.</p>
+  <p>MONO2K for the Move is not public yet: the <a href="install.html">install page</a> says how it installs once it is. It runs on Schwung, which is unofficial: not made, approved or supported by Ableton. Back up your sets before installing Schwung or anything on it.</p>
+  <p>MONO2K never touches Move's sets. Its own patterns are kept in one file, apart from Move's (<a href="#saving">Saving</a>).</p>
+  <div class="callout"><b>Note</b><p>MONO2K is not affiliated with Ableton, M-VAVE or Elektron. Move is Ableton's; Monomachine is Elektron's. Its machines are written from scratch and measured against a Monomachine's output.</p></div>
+</article>
+
+<article id="in-out" data-group="Getting started">
+  <h1>Getting in and out</h1>
+  <p class="sub">Schwung's Tools menu opens it; Back parks it; Shift + Back closes it.</p>
+  <table>
+    <thead><tr><th>Do</th><th>Press</th></tr></thead>
+    <tbody>
+      <tr><td>Open</td><td>Shift + touch the volume knob + step 13: Schwung's Tools. Then Overtake Modules, MONO2K.</td></tr>
+      <tr><td>Park</td><td>Back. Move is back; MONO2K plays on behind it, in time.</td></tr>
+      <tr><td>Return</td><td>Tools again (Shift + volume touch + step 13, twice), or Shift + a long press on step 13: the last parked tool comes back.</td></tr>
+      <tr><td>Close</td><td>Shift + Back. MONO2K saves and stops.</td></tr>
+      <tr><td>Escape</td><td>Shift + volume touch + jog click: back to Move, always.</td></tr>
+    </tbody>
+  </table>
+  <p>Before installing a new MONO2K, close the open one with Shift + Back: a parked MONO2K keeps the old one loaded.</p>
+</article>
+
+<!-- ========================================================================================== the instrument -->
+<article id="pads" data-group="The instrument">
+  <h1>The pads</h1>
+  <p class="sub">The top two rows are the pages, the bottom two the keyboard, the steps the sequencer.</p>
+  <figure class="fig" style="margin-top:var(--s3)"><img src="img/padmap.png" width="1406" height="1386" alt="The Move's pads under MONO2K, lit as it lights them: HOME in view; three keys held with the arp; PERFORM on" style="display:block;width:100%;height:auto;border:1px solid var(--ink)" loading="lazy"><figcaption style="max-width:none">The pads as MONO2K lights them: HOME in view; keys held on TRK; PERFORM on.</figcaption></figure>
+  <table>
+    <thead><tr><th>Row</th><th>Pads</th></tr></thead>
+    <tbody>
+      <tr><td>Top</td><td>The sound of the track in view: SYN AMP FILT EFX DSTR LFO1 LFO2 LFO3. Orange.</td></tr>
+      <tr><td>Second</td><td>HOME TRK PAT GRID MIX GLO in azure; SOUNDS and PERFORM, the two functions, in magenta.</td></tr>
+      <tr><td>Third</td><td>The black keys: C# D# · F# G# A# · ·</td></tr>
+      <tr><td>Bottom</td><td>The white keys: C D E F G A B C</td></tr>
+      <tr><td>Steps</td><td>The sequencer, on every page.</td></tr>
+    </tbody>
+  </table>
+  <p>The page in view is lit bright, the others dim. On the keys the root is lit orange and the notes played white, by hand or by the sequencer; a pad no key has stays dark. With PERFORM on, the keys are its effects (<a href="#perform">PERFORM</a>).</p>
+</article>
+
+<article id="controls" data-group="The instrument">
+  <h1>Every control</h1>
+  <p class="sub">What each of the Move's controls does under MONO2K.</p>
+  <h2>Knobs and jog</h2>
+  <table>
+    <tbody>
+      <tr><td>Knobs 1–8</td><td>The page's eight parameters. A touch or a turn shows the knob's full name and its value large. Two detents a value; a flick moves faster; a short list, 3.5 detents an option.</td></tr>
+      <tr><td>Shift + knob 1</td><td>The tempo, on every page (<a href="#tempo">Tempo</a>).</td></tr>
+      <tr><td>Jog</td><td>The lists, never the pages. Turned: the patterns' list. In SOUNDS, the catalogue.</td></tr>
+      <tr><td>Jog click</td><td>In a list, load or keep; otherwise it opens the patterns' list.</td></tr>
+      <tr><td>Shift + jog</td><td>The track's machine.</td></tr>
+      <tr><td>Menu</td><td>Closes a list (in SOUNDS, the track's own sound back).</td></tr>
+    </tbody>
+  </table>
+  <h2>Buttons</h2>
+  <table>
+    <tbody>
+      <tr><td>Track buttons</td><td>Tracks 1–4; Shift + a button, tracks 5–8.</td></tr>
+      <tr><td>Up / Down</td><td>The track's octave, −3 to +3. With PERFORM on, the moves' page.</td></tr>
+      <tr><td>Left / Right</td><td>The bars of a pattern longer than 16 steps; both together, follow the playhead again.</td></tr>
+      <tr><td>Shift + Left / Right</td><td>The bank, A–D.</td></tr>
+      <tr><td>Play</td><td>Move's and MONO2K's: one press starts both.</td></tr>
+      <tr><td>Rec</td><td>Live record: keys, and knobs as locks on the step playing.</td></tr>
+      <tr><td>Shift + Rec</td><td>Save.</td></tr>
+      <tr><td>Loop</td><td>The track's arp HOLD.</td></tr>
+      <tr><td>Mute</td><td>Tapped: the track in view. Held: steps 1–8 and the track buttons mute and unmute tracks.</td></tr>
+      <tr><td>Copy / Delete</td><td>Held, with steps, tracks or patterns (<a href="#steps">Steps and locks</a>).</td></tr>
+      <tr><td>Undo</td><td>Undo; Shift + Undo, redo.</td></tr>
+      <tr><td>Back</td><td>Parks MONO2K; Shift + Back closes it (<a href="#in-out">In and out</a>).</td></tr>
+    </tbody>
+  </table>
+  <p>A gesture with a modifier (Shift, Mute, Copy, Delete) needs the modifier held first.</p>
+  <div class="figs">
+    <figure class="fig"><img class="oled" src="screens/15_touch_base.png" width="128" height="64" alt="FILT's BASE touched: its name and value large" loading="lazy"><figcaption>A knob touched: its name, its value large, a ruler.</figcaption></figure>
+    <figure class="fig"><img class="oled" src="screens/17_toast_oct.png" width="128" height="64" alt="OCT +1, a moment" loading="lazy"><figcaption>Up: the octave, a moment.</figcaption></figure>
+  </div>
+</article>
+
+<article id="pages" data-group="The instrument">
+  <h1>Pages and their knobs</h1>
+  <p class="sub">Sixteen pads, sixteen pages and functions, eight knobs each.</p>
+  <table>
+    <thead><tr><th>Page</th><th>Knobs 1–8</th></tr></thead>
+    <tbody>
+      <tr><td>SYN</td><td>The machine's A–H</td></tr>
+      <tr><td>AMP</td><td>ATCK · HOLD · DEC · REL · DIST · VOL · PAN · PORT</td></tr>
+      <tr><td>FILT</td><td>BASE · WDTH · HPQ · LPQ · ATK · DEC · B-OF · W-OF</td></tr>
+      <tr><td>EFX</td><td>EQF · EQG · SRR · DTIM · DSND · DFB · DBAS · DWID</td></tr>
+      <tr><td>DSTR</td><td>BITS · FOLD · XOR · VERB · TYPE · RATE · DPTH · MIX</td></tr>
+      <tr><td>LFO1–3</td><td>TRCK · DEST · WAVE · TRIG · MULT · SPD · PHAS · DPTH</td></tr>
+      <tr><td>HOME</td><td>LEVL · PTCH · BPM · SWNG · TLEN · SPD · PROB · LANE</td></tr>
+      <tr><td>TRK</td><td>PTCH · LEVL · MODE · SPD · RNG · GATE · BANK (DIGI-WAV's wave bank)</td></tr>
+      <tr><td>PAT</td><td>BPM · SWNG · LEN · ACNT · TLEN · SPD · PROB · LANE</td></tr>
+      <tr><td>GRID</td><td>X · Y · CHAOS · RES · BD · SD · HH · LANE</td></tr>
+      <tr><td>MIX</td><td>The eight tracks' levels, a knob a track</td></tr>
+      <tr><td>GLO</td><td>DCAY · DAMP · ADPC · DRIV · MUTE (at the bar, or at once)</td></tr>
+      <tr><td>PERFORM</td><td>DCAY · DAMP · ADPC · DRIV</td></tr>
+    </tbody>
+  </table>
+  <p>SYN to LFO3 and TRK are the track's. TRK holds the arp (the FM-1's ARP). PAT is the pattern's time and the track's own length, speed, chance and lane (the FM-1's HOME 2). HOME is the FM-1's HOME 1 and 2 on one page. GLO is the bus. The FM-1's MIDI settings have no page here: the Move routes no MIDI to them.</p>
+  <div class="figs">
+    <figure class="fig"><img class="oled" src="screens/04_syn_0.png" width="128" height="64" alt="SYN: SWAV-ENS" loading="lazy"><figcaption>SYN: the machine's kind and name, A–H as pictures.</figcaption></figure>
+    <figure class="fig"><img class="oled" src="screens/05_amp.png" width="128" height="64" alt="AMP: the envelope" loading="lazy"><figcaption>AMP: the envelope, live.</figcaption></figure>
+    <figure class="fig"><img class="oled" src="screens/06_filt.png" width="128" height="64" alt="FILT: the response" loading="lazy"><figcaption>FILT: the response, live; the envelope's reach dotted.</figcaption></figure>
+    <figure class="fig"><img class="oled" src="screens/07_efx.png" width="128" height="64" alt="EFX: the EQ and the echoes" loading="lazy"><figcaption>EFX: the EQ's band; the echoes, ping-pong.</figcaption></figure>
+    <figure class="fig"><img class="oled" src="screens/08_dstr.png" width="128" height="64" alt="DSTR: the crush and the modulation" loading="lazy"><figcaption>DSTR: a sine through the crush; the modulation.</figcaption></figure>
+    <figure class="fig"><img class="oled" src="screens/09_lfo2.png" width="128" height="64" alt="LFO2: a sine to VOL" loading="lazy"><figcaption>LFO2: its wave as deep as it swings.</figcaption></figure>
+    <figure class="fig"><img class="oled" src="screens/10_trk.png" width="128" height="64" alt="TRK: the arp held" loading="lazy"><figcaption>TRK: the arp's notes, HOLD on.</figcaption></figure>
+    <figure class="fig"><img class="oled" src="screens/11_pat.png" width="128" height="64" alt="PAT: the tempo and the lengths" loading="lazy"><figcaption>PAT: the tempo, the bar, the lengths.</figcaption></figure>
+    <figure class="fig"><img class="oled" src="screens/12_grid.png" width="128" height="64" alt="GRID: Grids' map" loading="lazy"><figcaption>GRID: Grids' map and its three lanes.</figcaption></figure>
+    <figure class="fig"><img class="oled" src="screens/13_mix.png" width="128" height="64" alt="MIX: eight levels" loading="lazy"><figcaption>MIX: eight levels, live.</figcaption></figure>
+    <figure class="fig"><img class="oled" src="screens/14_glo.png" width="128" height="64" alt="GLO: the reverb's tail" loading="lazy"><figcaption>GLO: the bus, the reverb's tail.</figcaption></figure>
+  </div>
+</article>
+
+<article id="tracks" data-group="The instrument">
+  <h1>Tracks and machines</h1>
+  <p class="sub">Eight tracks, each one mono machine with its own sound, chain and steps.</p>
+  <p>The track buttons pick tracks 1–4; Shift + a button, 5–8. Every page shows the track in view. Shift + jog changes its machine; SOUNDS puts a sound from the library on it (<a href="#sounds">SOUNDS</a>).</p>
+  <p>The machines, their INIT sounds, the chain after each (amp, filters, EQ, distortion, delay, the bits, fold and XOR) and the three LFOs are the FM-1's: its <a href="../manual.html#tracks">manual</a> has them in full. An FX machine works on the track before it, as on the FM-1.</p>
+  <p>Patterns from the FM-1 have six tracks: on the Move, tracks 7 and 8 start empty.</p>
+</article>
+
+<!-- ============================================================================================== machines -->
+<article id="machines" data-group="Machines">
+  <h1>Machine reference</h1>
+  <p class="sub">The FM-1's nineteen machines in eight families, on any of the eight tracks. Each has eight knobs, A–H: SYN's knobs 1–8.</p>
+  <div class="mlist" data-machines><p>Loading the machines from the firmware…</p></div>
+</article>
+
+<!-- ============================================================================================= sequencer -->
+<article id="steps" data-group="Sequencer">
+  <h1>Steps and locks</h1>
+  <p class="sub">The 16 steps are the sequencer on every page.</p>
+  <table>
+    <tbody>
+      <tr><td>A step</td><td>Places a trig; a quick tap on a trig takes it away.</td></tr>
+      <tr><td>Hold + a knob</td><td>A parameter lock on that step.</td></tr>
+      <tr><td>Hold + jog</td><td>The step's note.</td></tr>
+      <tr><td>Hold + Shift + jog</td><td>Its condition.</td></tr>
+      <tr><td>Hold + Up / Down</td><td>Its ratchet.</td></tr>
+      <tr><td>Rec</td><td>Live record: the keys, and knobs as locks on the step playing. A key hit hard (velocity over 110) records an accent.</td></tr>
+    </tbody>
+  </table>
+  <h2>Copy and delete</h2>
+  <table>
+    <tbody>
+      <tr><td>Copy held</td><td>A step, then other steps: pasted there. A track button, then another: its steps and sound. Shift + a step (a pattern), then another: the pattern. Steps held when Copy is pressed are the source.</td></tr>
+      <tr><td>Delete held</td><td>A step: its trig away. A track button: its steps cleared. Shift + a step: that pattern's steps cleared. A knob: the held step's lock away, else the value back to its INIT. Steps held when Delete is pressed: their locks cleared.</td></tr>
+    </tbody>
+  </table>
+  <p>The conditions, ratchets, trig types, Grids' lanes and each track's own length, speed and chance are the FM-1's: see its <a href="../manual.html#conditions">manual</a>.</p>
+  <div class="figs">
+    <figure class="fig"><img class="oled" src="screens/16_plock.png" width="128" height="64" alt="A step held: its locks marked" loading="lazy"><figcaption>A step held: its locks marked over their knobs.</figcaption></figure>
+    <figure class="fig"><img class="oled" src="screens/16_plock_touch.png" width="128" height="64" alt="A locked knob touched" loading="lazy"><figcaption>A locked knob touched: STEP 1, LOCK.</figcaption></figure>
+  </div>
+</article>
+
+<article id="patterns" data-group="Sequencer">
+  <h1>Patterns</h1>
+  <p class="sub">Four banks of 16; Shift + a step picks one.</p>
+  <table>
+    <tbody>
+      <tr><td>Shift + a step</td><td>The bank's 16 patterns: at the bar's end while playing; again before it, at once.</td></tr>
+      <tr><td>Shift + Left / Right</td><td>The bank, A–D.</td></tr>
+      <tr><td>Jog</td><td>The patterns' list, open at the one playing; a click loads the one under the cursor (at the bar's end while playing, a second click at once). Left alone 3 s, it closes.</td></tr>
+      <tr><td>Left / Right</td><td>The bars of a pattern longer than 16 steps.</td></tr>
+    </tbody>
+  </table>
+  <div class="figs">
+    <figure class="fig"><img class="oled" src="screens/19_pats.png" width="128" height="64" alt="The patterns' list" loading="lazy"><figcaption>The jog turned: the patterns.</figcaption></figure>
+    <figure class="fig"><img class="oled" src="screens/19_pats_next.png" width="128" height="64" alt="A04 queued" loading="lazy"><figcaption>A04 queued for the bar's end: NEXT.</figcaption></figure>
+  </div>
+  <h2>Bank A</h2>
+  <p>The FM-1's four demos, A05–A16 blank.</p>
+  <div data-bank></div>
+</article>
+
+<!-- =================================================================================================== live -->
+<article id="perform" data-group="Live">
+  <h1>PERFORM</h1>
+  <p class="sub">Its pad turns the keys into the bus's effects: colours that stack over moves that take turns.</p>
+  <table>
+    <thead><tr><th>Row</th><th>Keys, left to right</th></tr></thead>
+    <tbody>
+      <tr><td>Top: colours</td><td>LPF · DUB · HPF · GATE · CRUSH · DRIVE · WOW · SHIMMER. Held with anything; they stack.</td></tr>
+      <tr><td>Bottom: moves</td><td>RPT 1/4 · RPT 1/8 · RPT 1/16 · RPT 1/32 · ROLL · STUTTER · REVERSE · STOP. One at a time: the next takes over.</td></tr>
+      <tr><td>Up: moves 2</td><td>FREEZE · SCATTER · OCT DN · OCT UP · SPIN · KILL. Down: back. The colours stay.</td></tr>
+    </tbody>
+  </table>
+  <p>Each column is a pair that plays together. PERFORM stays on across pages; its pad again gives the keyboard back. Its page's knobs are the bus's four: DCAY, DAMP, ADPC, DRIV.</p>
+  <div class="figs">
+    <figure class="fig"><img class="oled" src="screens/20_perf_one.png" width="128" height="64" alt="PERFORM: RPT 1/8 held" loading="lazy"><figcaption>RPT 1/8 held: named, its key lit.</figcaption></figure>
+    <figure class="fig"><img class="oled" src="screens/20_perf_three.png" width="128" height="64" alt="PERFORM: three at once" loading="lazy"><figcaption>Three at once.</figcaption></figure>
+  </div>
+</article>
+
+<article id="sounds" data-group="Live">
+  <h1>SOUNDS</h1>
+  <p class="sub">The library's 96 sounds, a pad away: the FM-1's catalogue.</p>
+  <table>
+    <tbody>
+      <tr><td>SOUNDS pad</td><td>Opens the catalogue on the track in view.</td></tr>
+      <tr><td>Jog, or knob 1</td><td>Each sound landed on is put on the track and heard.</td></tr>
+      <tr><td>Knob 2</td><td>A category.</td></tr>
+      <tr><td>Jog click, or Up</td><td>Keeps it (undoable).</td></tr>
+      <tr><td>The pad again, Menu or Down</td><td>The track's own sound back, as it was.</td></tr>
+    </tbody>
+  </table>
+  <div class="figs">
+    <figure class="fig"><img class="oled" src="screens/18_cat.png" width="128" height="64" alt="SOUNDS: the library" loading="lazy"><figcaption>The library, the one heard lit.</figcaption></figure>
+    <figure class="fig"><img class="oled" src="screens/18_cat_cat.png" width="128" height="64" alt="SOUNDS: a category" loading="lazy"><figcaption>Knob 2: a category.</figcaption></figure>
+  </div>
+</article>
+
+<article id="tempo" data-group="Live">
+  <h1>Tempo, SYNC, INT and Link</h1>
+  <p class="sub">In time with the Move: one Play starts both, at Move's tempo.</p>
+  <h2>SYNC: Move's tempo</h2>
+  <p>Play goes to Move, and Move starts and stops MONO2K, locked to its bar. Following goes on while MONO2K is parked; if Move is already playing when MONO2K opens, MONO2K joins at Move's next start.</p>
+  <h2>The tempo from MONO2K</h2>
+  <p>Shift + knob 1 on any page (PAT's knob 1 and HOME's knob 3 too) shows the tempo large: a tenth of a BPM turned slowly, whole BPM turned fast. MONO2K moves at once and asks Move to follow; when Move reaches it, MONO2K locks to Move's bar again, without a jump. Delete + the tempo knob: Move's tempo again.</p>
+  <h2>INT: MONO2K alone</h2>
+  <p>If Move doesn't follow within 2.5 s, MONO2K plays on alone at its own tempo: INT in the header, and a moment's MOVE: LINK OFF. With no clock from Move at all, Play still starts MONO2K on its own. A change of Move's tempo, or Delete + the knob, brings SYNC back.</p>
+  <div class="figs">
+    <figure class="fig"><img class="oled" src="screens/22_tempo_shift.png" width="128" height="64" alt="Shift + knob 1: the tempo with SYNC" loading="lazy"><figcaption>Shift + knob 1: the tempo, SYNC.</figcaption></figure>
+    <figure class="fig"><img class="oled" src="screens/22_tempo_alone.png" width="128" height="64" alt="INT: Move's Link is off" loading="lazy"><figcaption>Move didn't follow: INT.</figcaption></figure>
+  </div>
+  <h2>To let MONO2K set Move's tempo</h2>
+  <ol class="steps">
+    <li>Turn Link on in Move's settings.</li>
+    <li>In Schwung's Global Settings, Audio, turn Move->Schwung on.</li>
+    <li>Keep Move alone in its Link session: with Live or another peer on the network, the tempo isn't passed on.</li>
+  </ol>
+  <div class="callout"><b>Its cost</b><p>Move->Schwung rebuilds Move's own tracks from Link Audio streams: they sound some 16–29 ms later than MONO2K, Move's metronome and speaker EQ are replaced, and a busy Move can drop out. Without it, MONO2K follows Move's tempo and sets its own under INT.</p></div>
+</article>
+
+<!-- ================================================================================================= saving -->
+<article id="saving" data-group="Saving">
+  <h1>Saving</h1>
+  <p class="sub">Shift + Rec saves; closing saves too.</p>
+  <table>
+    <tbody>
+      <tr><td>Shift + Rec</td><td>Saves: the open pattern's reload point first, then everything, as the FM-1's SAVE.</td></tr>
+      <tr><td>Shift + Back</td><td>Closes MONO2K and saves.</td></tr>
+      <tr><td>A setting</td><td>Saved once it stands.</td></tr>
+    </tbody>
+  </table>
+  <p>Everything is in one file, <code>/data/UserData/schwung/mono2k/mono2k.m2ks</code>: the patterns, the kits, the settings, the projects and the sound library. It sits outside the module's folder, so an update keeps it. A file MONO2K can't read is kept as <code>mono2k.m2ks.bad</code>, and the factory's patterns play.</p>
+  <p>The <a href="../editor.html">Patch Editor</a> is the FM-1's for now: it edits six tracks.</p>
+</article>
+
+<!-- ============================================================================================= reference -->
+<article id="credits" data-group="Reference">
+  <h1>Credits and licence</h1>
+  <p class="sub">Free software, on Schwung.</p>
+  <p>MONO2K is by Sequencist, and free software under the GNU General Public License, version 3 only. Its source and this site are on <a href="https://github.com/InigoHernandez/mono2k" target="_blank" rel="noopener">GitHub</a>.</p>
+  <p>On the Move it runs on <a href="https://github.com/charlesvestal/schwung" target="_blank" rel="noopener">Schwung</a> (MIT), an unofficial framework for Move's modules, not made, approved or supported by Ableton. Type: Elektron Pixel Font by savingaurora (FontStruct), CC BY-SA 3.0; MONO2K's adaptation is under CC BY-SA 4.0. Orbitron (the wordmark) and Inter Tight are under the SIL Open Font License. GRIDS is Émilie Gillet's Grids (Mutable Instruments), its map and rules ported from its source (GPL-3.0). The DRM- drums' voice design is after the Erica Synths LXR drum voices (GPL-3.0-only; originally Julian Schmidt's Sonic Potions LXR): their laws, not their code or samples. The digital waves are the author's own.</p>
+  <p>The machines were measured against a Monomachine: the FM-1 manual's <a href="../manual.html#credits">credits</a> say how. Ableton and Move are trademarks of Ableton; Monomachine and Machinedrum of Elektron; M-VAVE and FM-1 of their owners. MONO2K is not affiliated with Ableton, M-VAVE or Elektron. If it is useful to you, you can <a href="https://ko-fi.com/sequencist" target="_blank" rel="noopener">support it on Ko-fi</a>.</p>
+</article>
+
+<!-- =============================================================================================== updates -->
+<article id="changelog" data-group="Updates">
+  <h1>Change log</h1>
+  <p class="sub">What each update of the Move version brought, newest first. The FM-1's is in its <a href="../manual.html#changelog">manual</a>.</p>
+  <div data-changelog><p>The change log could not be shown here.</p></div>
+</article>
+
+<nav class="pager" id="pager" aria-label="Previous and next"></nav>
+</main>
+</div>
+
+<footer class="bar foot">
+  <span class="label nar">MONO2K for Move</span><span class="label wide">Not affiliated with Ableton, M-VAVE or Elektron; runs on Schwung (unofficial)</span><a class="label kofi" href="https://ko-fi.com/sequencist" target="_blank" rel="noopener">Support on Ko-fi</a><span class="label r nar">2026</span>
+</footer>
+<script src="../site.js?v=4"></script>
+<script src="../switch.js?v=1"></script>
+<script src="changelog.js?v=1"></script>
+<script src="../manual.js?v=57"></script>
+</body>
+</html>

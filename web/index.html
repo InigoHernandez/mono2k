@@ -10,7 +10,7 @@
 <meta name="description" content="MONO2K: six mono machines, a 64-step sequencer with parameter locks and trig conditions, and a lofi bus, for the M-VAVE FM-1. Running in your browser.">
 <script>try { const t = localStorage.getItem("mono2k.theme"); if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t); } catch (e) {}</script>
 <link rel="icon" href="brand/mono2k-iso.svg" type="image/svg+xml">
-<link rel="stylesheet" href="style.css?v=58">
+<link rel="stylesheet" href="style.css?v=59">
 </head>
 <body>
 <!-- the controls' glitch (style.css): rows slipped sideways, in hard bands -->
@@ -19,7 +19,7 @@
 
 <header class="bar">
   <a class="brand" href="./" aria-label="MONO2K, the emulator"><svg viewBox="0 0 372 323" aria-hidden="true" focusable="false" shape-rendering="crispEdges"><defs><pattern id="isotex" width="187.93" height="187.93" patternUnits="userSpaceOnUse"><rect width="187.93" height="187.93" fill="currentColor"/><g class="isodots"><rect x="0.00" y="70.47" width="23.49" height="23.49"/><rect x="93.96" y="70.47" width="23.49" height="23.49"/><rect x="0.00" y="164.44" width="23.49" height="23.49"/><rect x="93.96" y="164.44" width="23.49" height="23.49"/></g></pattern><pattern id="isotex-a" width="187.93" height="187.93" patternUnits="userSpaceOnUse"><rect width="187.93" height="187.93" fill="currentColor"/><g class="isodots"><rect x="0.00" y="46.98" width="46.98" height="46.98"/><rect x="93.97" y="140.95" width="46.98" height="46.98"/></g></pattern><pattern id="isotex-b" width="187.93" height="187.93" patternUnits="userSpaceOnUse"><rect width="187.93" height="187.93" fill="currentColor"/><g class="isodots"><rect x="93.97" y="0.00" width="93.97" height="93.97"/></g></pattern></defs><path class="iso" fill="url(#isotex)" d="M371.177 322.938C346.353 322.511 320.193 322.919 295.267 322.922L295.273 104.054C295.267 99.0664 294.898 83.9219 295.427 79.542L296.438 78.8486C320.811 79.2205 346.759 79.0906 371.157 78.835L371.177 322.938Z"/><path class="iso" fill="url(#isotex)" d="M0.669267 78.8184C25.8069 79.0513 50.9474 79.1065 76.0863 78.9844C76.3341 89.9106 76.2328 101.312 76.1214 112.248C75.4061 182.366 77.1693 252.854 76.0511 322.926L0.211259 322.914L0.239579 136.432C0.240178 128.986 -0.521935 82.3877 0.669267 78.8184Z"/><path class="iso" fill="url(#isotex)" d="M294.993 0.0126953L295.059 50.0684C295.073 58.1959 295.558 70.9773 294.282 78.6768C293.851 81.2748 286.387 92.4032 284.354 95.624C256.977 143.305 237.109 194.92 225.451 248.654C199.163 248.347 172.382 248.585 146.057 248.601C136.258 206.935 122.268 166.368 104.299 127.521C100.06 118.751 95.4768 110.151 90.5609 101.741C74.8422 74.5385 76.2209 83.3897 76.264 51.0928L76.3607 0.0556641L119.721 0.078125C146.678 50.4618 164.631 89.8462 185.732 143.171C204.51 94.0237 226.566 46.1929 251.748 0L294.993 0.0126953Z"/></svg></a>
-  <span class="label">Firmware for the M-VAVE FM-1</span>
+  <nav class="dev" aria-label="Device"><span class="label dev__on">Runs on</span><span class="seg"><a class="seg__o" href="./" aria-current="page">FM-1</a><a class="seg__o" href="move/">Move</a></span></nav>
   <span class="r acts"><a class="cta" href="https://ko-fi.com/sequencist" target="_blank" rel="noopener"><span class="long">Support on&nbsp;</span>Ko-fi</a><button id="theme" class="themebtn" type="button" aria-label="Colour theme">Auto</button></span>
 </header>
 <nav class="subnav" aria-label="Pages">
@@ -251,10 +251,12 @@
 
 <script src="panel.js?v=2"></script>
 <script src="help.js?v=9"></script>
-<script src="app.js?v=123"></script>
+<script src="wordmark.js?v=1"></script>
+<script src="app.js?v=124"></script>
 <script src="screens.js?v=3"></script>
 <script src="guide.js?v=3"></script>
 <script src="engines.js?v=4"></script>
 <script src="made.js?v=4"></script>
+<script src="switch.js?v=1"></script>
 </body>
 </html>

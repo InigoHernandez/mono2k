@@ -14,6 +14,7 @@ window.M2K_CHANGES = [
       ["sound", "1.6.2: VO-6 reaches its level within about 40 ms, so a short note is heard at its full level; a note played over one still sounding keeps the level and glides to its new vowel instead of fading in again."],
       ["fixes", "1.6.2: Long delay times (ping-pong from DTIM 48, or past 0.74 s) put their first echo on time; it came up to 19 ms early."],
       ["fixes", "1.6.2: FX-DYNMX keeps compressing evenly through a note played over one still sounding."],
+      ["web", "The site has a Move version: FM-1 | MOVE in every page's header switches to the same page for the other device."],
     ],
   },
   {
