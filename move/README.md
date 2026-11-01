@@ -22,6 +22,12 @@ node move/test/ui_test.mjs
 sh move/deploy.sh       # to move.local over SSH (MOVE_HOST=user@host for another)
 ```
 
+The screen's design sheets (step 3, `move/screen/DESIGN.md`), drawn by the renderer from real states into `build/move/sheets/`:
+
+```sh
+cc -O2 -DM2K_TRACKS=8 -Ifirmware/src -Ifirmware/gen -o build/move/screen_sheets move/screen/sheets.c && build/move/screen_sheets build/move/sheets && .venv/bin/python move/screen/sheets.py build/move/sheets
+```
+
 - **Build output:** the module in `build/move/modules/overtake/mono2k/` (`dsp.so`, `module.json`, `ui.js`), and `build/move/mono2k-move.tar.gz`, with `mono2k/` at its top.
 - **The container:** Docker on aarch64 (colima). The first build makes the image `mono2k-move-build:bookworm`: debian:bookworm-slim arm64 with gcc 12.
 - **What build.sh checks:** every glibc symbol is at or under 2.35, the Move's. Only `move_plugin_init_v2` is exported. Nothing that allocates, locks, logs or does I/O is imported.
