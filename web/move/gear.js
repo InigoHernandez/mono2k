@@ -4,7 +4,7 @@
  *
  * Embed (the Move home is web/move/index.html, beside this file):
  *   <div id="move-gear"></div>
- *   <script src="gear.js?v=4"></script>
+ *   <script src="gear.js?v=5"></script>
  *   <script>MoveGear.init(document.getElementById("move-gear"));</script>
  * MoveGear.init(el, opts) builds the drawing into el and returns { start, mute }. opts (all optional):
  *   bar: false       no line under the drawing (the control under the pointer, the keys, the sound toggle)
@@ -20,7 +20,7 @@
  * piano's white keys), W..O the row over it, Z / X Down / Up, Space Play, Shift Shift. */
 window.MoveGear = (() => {
   "use strict";
-  const V = { css: 2, worklet: 1, wasm: 1 };      /* bump with each changed file (the site's ?v= rule) */
+  const V = { css: 3, worklet: 1, wasm: 1 };      /* bump with each changed file (the site's ?v= rule) */
   const BASE = (() => {
     const s = document.currentScript && document.currentScript.src;
     return s ? s.replace(/[^/]*$/, "") : "";
@@ -163,7 +163,7 @@ window.MoveGear = (() => {
     el("line", { class: "mg-rule", x1: LX, y1: (TY + TH + PY) / 2, x2: W - LX, y2: (TY + TH + PY) / 2 }, svg);
 
     /* the screen: a black bezel; the glass is a canvas laid over it */
-    el("rect", { class: "mg-bezel", x: OLED.x - 6, y: OLED.y - 6, width: OLED.w + 12, height: OLED.h + 12, rx: 5 }, svg);
+    el("rect", { class: "mg-bezel", x: OLED.x - 6, y: OLED.y - 6, width: OLED.w + 12, height: OLED.h + 12, rx: 1 }, svg);
 
     /* the knobs, the volume */
     const knob = (key, cx, cy, r) => {
@@ -213,8 +213,8 @@ window.MoveGear = (() => {
     for (let i = 0; i < 32; i++) {
       const c = i % 8, r = 3 - (i >> 3), x = padX(c), y = rowY(r);
       const g = add("pad:" + i, el("g", { class: "mg-pad", style: `transform-origin:${x + PS / 2}px ${y + PS / 2}px` }, svg), {});
-      ctl["pad:" + i].led = el("rect", { class: "mg-pad__face", x, y, width: PS, height: PS, rx: 7 }, g);
-      el("rect", { class: "mg-pad__flash", x, y, width: PS, height: PS, rx: 7 }, g);
+      ctl["pad:" + i].led = el("rect", { class: "mg-pad__face", x, y, width: PS, height: PS, rx: 2 }, g);
+      el("rect", { class: "mg-pad__flash", x, y, width: PS, height: PS, rx: 2 }, g);
     }
 
     /* the steps, round, a beat's tick under every fourth */

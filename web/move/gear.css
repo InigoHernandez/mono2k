@@ -28,7 +28,7 @@
 .mg__svg [data-c] { touch-action: none; cursor: pointer; }
 .mg__oled, .mg__zoom { image-rendering: pixelated; image-rendering: crisp-edges; display: block; }
 .mg__oled { position: absolute; pointer-events: none; background: #000; }
-.mg__zoom { display: none; margin: 0 auto 12px; background: #000; border: 6px solid #000; border-radius: 6px; box-sizing: content-box; }
+.mg__zoom { display: none; margin: 0 auto 12px; background: #000; border: 6px solid #000; border-radius: 1px; box-sizing: content-box; }
 .mg--narrow .mg__zoom { display: block; }
 
 /* the body */
