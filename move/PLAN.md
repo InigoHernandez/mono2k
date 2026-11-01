@@ -84,13 +84,16 @@ The files live in `move/`, a fourth platform beside `fm1/`, `web/` and `host/`:
 - **Step 2, hands on** (2026-11-01): the controls, the screen's page state with a plain renderer, saving to `/data/UserData/schwung/mono2k/mono2k.m2ks`, the LEDs. The table is in README.md.
 - **The screen, calmer; the pads** (owner, 2026-11-01, on step 3's sheets): "names on touch only", "good but calmer"; "use the 2 rows pads of move for pages and functions too", "to avoid eternal pagination on the main wheel knob"; "sequencer is always available as there is a dedicated row in the bottom". Built: every page a pad (the top row the sound, the second the rest and SOUNDS and PERFORM), the jog for lists only, the keyboard a two-row piano, PERFORM's effects on it while on, the knob names gone from the screen until touched, dsp.so drawing step 3's renderer through the controller's page state, 28.7 frames a second (README, The screen). MIX (the eight levels) is a proposal for the owner.
 
+- **The tempo** (owner, 2026-11-01): "It sets the Move's tempo too": turning BPM in MONO2K changes both, MONO2K at once, Move catching up; "Shift + knob 1, any page", the BPM shown large. Built: the DSP plays the tempo asked at once and names it in its frame. ui.js writes Schwung's `desired-tempo` (at most once a second, the last value at rest). MONO2K follows Move again when Move reaches it, re-locking on Move's bar without a jump. Not followed in 2.5 s: MONO2K alone (INT, MOVE: LINK OFF) until Move's tempo next changes, Move's next start, or Delete + the tempo knob. Needs Link on Move and Schwung's Global Settings → Audio → Move->Schwung (README, The tempo from MONO2K).
+- **The knobs' feel** (owner, 2026-11-01: "the knobs are too sensitive"): MONO2K's own curve in ui.js instead of Schwung's ×10 acceleration. Half a step a detent up to a brisk turn, 2.5 at most on a flick; short lists 3.5 detents an option; the tempo 0.1 BPM slow, whole BPM fast. 0–127 in ~1.2 turns at a brisk turn (README, The knobs' feel).
+
 ## Open questions
 
 - **The pads:** MIX on the freed pad (a proposal); PERFORM's 22 effects on the keyboard's 16 keys, 8 + 8 at a time (Up shows each bank's 9–11); the jog click, free outside the lists, opens the patterns' list; Menu closes a list; the FM-1's MIDI settings have no page (the Move routes no MIDI to them).
 
 - **Name:** the catalog already has "Mono" (timncox/schwung-mono, MIT), a six-track Elektron-style machine synth. MONO2K keeps its full name. Read its code only for its API use, never copy it.
 - **Move's own audio under MONO2K:** mixed for now (ui.js `MUTE_MOVE`), muting is one flag.
-- **Move's tempo from MONO2K:** a module cannot set it (the APIs only read it). The only route is Schwung's internal `desired-tempo` file through its Link sidecar (Link on, Move alone, once a second at most): not used.
+- **Move's tempo from MONO2K:** built (below, Decided since). Still to hear on the device: whether Move takes tenths of BPM through Link, and how late Move's tracks sit once Move->Schwung rebuilds them (~16–29 ms against MONO2K: `clock_lag`).
 - **Aftertouch:** the core takes none. It could drive a parameter (a filter, an LFO's depth) if the owner wants one.
 - **Saving on close:** on (`save_on_close`), unlike the FM-1, which keeps only what SAVE kept.
 - **The clock's lag:** 64 samples (half a block) matches the model. Check by ear against Move's own tracks on the device (`clock_lag`).

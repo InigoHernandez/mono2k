@@ -20,7 +20,8 @@ T4 ┃  C      D      E      F      G      A      B      C        white keys (PE
 | **Top pad row** | The sound of the track in view, a page a pad: SYN AMP FILT EFX DSTR LFO1 LFO2 LFO3. |
 | **Second pad row** | HOME (the pattern), TRK (the track's pitch, level and arp), PAT (the time), GRID, MIX (a proposal: the 8 levels), GLO (the bus, mutes at the bar), then the functions: **SOUNDS** (the catalogue) and **PERFORM**. |
 | **Page pads' lights** | A family a colour: the sound orange, the rest azure, the functions magenta. The page in view (or a function on) bright, the rest dim. |
-| **Knobs 1–8** | The page's 8 parameters, relative, accelerated. A touch (or a turn) shows the knob's full name and its value large. |
+| **Knobs 1–8** | The page's 8 parameters. A touch (or a turn) shows the knob's full name and its value large. MONO2K's own feel (ui.js, below): two detents a value, slow or brisk; up to 2.5 values a detent on a flick; a short list (a wave, a mode) 3.5 detents an option. |
+| **Shift + knob 1** | The tempo, on every page (PAT's knob 1 and HOME's knob 3 too). Shown large while touched or turned, with SYNC or INT. 0.1 BPM a step turned slowly, whole BPM turned fast. Under SYNC it is Move's and MONO2K's: MONO2K moves at once, Move catches up (below, In time with Move). **Delete +** it: Move's tempo again. |
 | **Bottom two pad rows** | The keyboard, a two-row piano: the white keys C D E F G A B C on the bottom row, the black keys over theirs (C# D# · F# G# A# · ·). The pads no key has are dark, the root is lit orange, the notes played (by hand or by the sequencer) white. Velocity: an accent when REC records (over 110). |
 | **Up / Down** | The track's octave (−3 … +3), said on the screen a moment. With PERFORM on: its keys' page (each bank's 1–8, or its 9–11). |
 | **SOUNDS** (pad) | The sound catalogue (the FM-1's EDIT held). The jog or knob 1 previews each sound on the track, knob 2 the category. A click or Up keeps it (undoable); the pad again, Menu or Down puts the track's own sound back. |
@@ -45,7 +46,15 @@ T4 ┃  C      D      E      F      G      A      B      C        white keys (PE
 | **Back** | Parks MONO2K (it plays on). **Shift + Back** closes it. Both the host's. |
 | **Shift + volume touch + jog click** | Back to Move, always (the host's). |
 
-Gone since step 2: the jog turning pages and its page list (every page has a pad), Shift + pads for PERFORM (its pad), Menu held for the catalogue (SOUNDS' pad).
+Gone since step 2: the jog turning pages and its page list (every page has a pad), Shift + pads for PERFORM (its pad), Menu held for the catalogue (SOUNDS' pad). Shift + a knob did nothing of its own before the tempo came (the page's knob, as without Shift): only knob 1 changed; Shift + knobs 2–8 are still the page's.
+
+**The knobs' feel** (the owner: "too sensitive"; ui.js, its constants together at the top to retune):
+- A Move knob sends ~210 detents a turn (Schwung's `docs/EC4_SURFACE.md`, counted). Schwung's `decodeAcceleratedDelta` gave up to 10 steps a detent whenever they came 25 ms apart or closer, which any steady turn does.
+- MONO2K's curve, a knob each: the speed is the detents a second over the last 4 messages. Up to 250 a second (~1.2 turns a second) a detent is half a step; it rises smoothly to 2.5 steps by 900 a second (a flick).
+- The fractions carry over. A fresh turn's first detent always moves one step. A reversal or a 400 ms pause starts fresh.
+- 0–127 at a brisk turn (a turn a second): ~1.2 turns (253 detents). A short list (32 options or fewer, flagged by the DSP in the frame) moves 1/1.75 as fast: 3.5 detents an option.
+- The tempo: 0.05 BPM a detent (0.1 BPM in two) under 150 detents a second; above, whole BPM at 0.3 of the curve (~0.15 BPM a detent brisk, 0.75 a flick), landing on whole numbers.
+- The DSP adds each step once (`mv_knob`; a list moves as many options as it is sent): no second acceleration. The jog stays a step a detent.
 
 ### The pages
 
@@ -65,7 +74,7 @@ Gone since step 2: the jog turning pages and its page list (every page has a pad
 | GLO | DCAY | DAMP | ADPC | DRIV | MUTE⁴ | – | – | – |
 | PERFORM | DCAY | DAMP | ADPC | DRIV | – | – | – | – |
 
-¹ DIGI-WAV's wave bank only. ² Move's tempo while following Move (turning it does nothing). ³ A proposal for the owner: one knob a track, the eight levels (no locks: MIX edits the kits). ⁴ MUTES: a mute made while playing comes at the next bar, or at once (a setting, kept with the store).
+¹ DIGI-WAV's wave bank only. ² The tempo, as Shift + knob 1: Move's and MONO2K's under SYNC (turning it asks Move for it), the pattern's own (whole BPM) under INT. ³ A proposal for the owner: one knob a track, the eight levels (no locks: MIX edits the kits). ⁴ MUTES: a mute made while playing comes at the next bar, or at once (a setting, kept with the store).
 
 SYN to LFO3, TRK's are the track's (m2k.h's Monomachine pages); TRK holds the arp (the FM-1's ARP). PAT is the pattern's time and the track's own (the FM-1's HOME 2 and SEQ: there is no SEQ pad), HOME the FM-1's HOME 1 and 2 on one page, GRID the pattern's Grids and the track's lane, GLO the bus (the FM-1's GLO > BUS) and the one setting that matters on the Move (GLO > PLAY's MUTE). The FM-1's MIDI settings have no use here (the Move's glue routes no MIDI out or in), so they have no page.
 
@@ -79,11 +88,36 @@ Gestures that depend on a modifier (Shift, Mute, Copy, Delete) need it held firs
   - Each pulse goes to the core at the 16-sample block where it falls.
   - The core's period is pinned to `host->get_bpm()` (Move's own tempo, held steady by Schwung). So the tempo, swing, gates, LFOs and synced delays never wobble.
   - Without a host tempo, the pulses are measured (a least-squares line over 4 beats) and held.
-- **No clock from Move** (no set, a setting): a Play press with no answer from Move within ~70 ms plays MONO2K on its own clock. The screen says **INT** and shows the pattern's own tempo. Move's next start brings back **SYNC**.
+- **No clock from Move** (no set, a setting): a Play press with no answer from Move within ~70 ms plays MONO2K on its own clock. The screen says **INT** (in the header, and beside the tempo) and shows the pattern's own tempo. Move's next start brings back **SYNC**.
 - **Join:** following works while MONO2K is parked behind Move. Move playing when MONO2K opens: MONO2K joins at Move's next start.
-- **Move's tempo can't be set from a module.** The plugin and JS APIs only read it (`get_bpm`, `move_info`). The tempo knob shows Move's BPM and says MOVE SETS IT.
-  - The one route is Schwung's internal `desired-tempo` file, which its Link sidecar reads. It needs Link on and Move alone in the session, and changes at most once a second. Not used.
 - `clock_lag` (module.json `defaults`, samples, 64 by default) moves MONO2K's steps against Move's pulses, if the ear says they sit early or late on the device.
+
+### The tempo from MONO2K (the owner: "it sets the Move's tempo too")
+
+A module cannot set Move's tempo through any API (the plugin and JS APIs only read it). Schwung's one route is its Link sidecar: it reads `/data/UserData/schwung/desired-tempo` and gives that tempo to the Link session, which Move follows.
+
+- **Turning the tempo under SYNC** (Shift + knob 1, PAT's knob 1, HOME's knob 3):
+  - MONO2K moves at once. The core plays the tempo asked, its phase running free of Move's pulses (`m2k_move.c` `tq_ask`, `ck.free`).
+  - The DSP names the tempo in its frame (its number and tenths). ui.js writes it as `120.5000\n` with `host_write_file`. The DSP touches no file.
+  - **The writes:** the sidecar sees a change by the file's mtime, in whole seconds. So ui.js writes at least 1.05 s apart, at most once a second while the knob turns, and the last value once it rests 250 ms. Then it tells the DSP (`W n ok`).
+  - **Move follows:** when Move's `get_bpm()` reaches the tempo (within 0.05 BPM), MONO2K follows Move again. Its phase goes back to Move's bar nearest it with a capped nudge (1/16 of a pulse a pulse, ~6 %). No jump, so no step glitch. In the bench, 120 → 130 re-locks in 1.9 s and ends within 12 samples of Move's pulses.
+  - **Move does not follow** within 2.5 s of the write: no Link, Move->Schwung off, or another Link peer. MONO2K plays on alone at its tempo: **INT** in the header, a moment's **INT / MOVE: LINK OFF**. Stopped, there is nothing to keep: the hint says so and Move's tempo stays.
+  - **Back to SYNC:** when Move's tempo next changes (its own knob, or Link), at Move's next start (Play), or with Delete + the tempo knob. A tempo change on Move is what the owner does to fix it, so MONO2K follows. The re-lock lands on Move's bar nearest MONO2K's phase (at most half a bar away), so a long run alone takes up to ~15 s to glide in (the bench: 5.6 s).
+  - Under INT (Move sent no clock) the tempo knob is the pattern's own, whole BPM, as on the FM-1.
+- **What the owner switches on:**
+  1. **Move:** Link on, in Move's settings (`"isLinkEnabled": true` in `/data/UserData/settings/Settings.json`; Schwung warns "requires Link enabled in Move System Settings").
+  2. **Schwung:** Global Settings → Audio → **Move->Schwung** (key `link_audio_routing`, saved in `/data/UserData/schwung/shadow_config.json`; off by default). Its monitor starts the sidecar `/data/UserData/schwung/link-subscriber` only while this is on, and `"link_audio_enabled": true` stands in `/data/UserData/schwung/config/features.json`. The installer writes that one true. Schwung Manager's web Settings → Audio → Move->Schwung is that features.json key, not the device's toggle: both must be on.
+  3. **Move alone in the Link session:** with another peer (Live on the network) the sidecar skips the tempo.
+- **What Move->Schwung costs** (Schwung faebd16, read in the source):
+  - **CPU:** the `link-subscriber` process on cores 0–2 (SCHED_OTHER), awake every 10 ms. It is listed on Schwung Manager's System → CPU page; the source gives no figure for it. Move publishes its four tracks for it. Schwung measured that publisher breaking up under any sustained real-time load on cores 0–2 (`docs/plans/2026-08-27-osirus-linkaudio-breakup-HANDOFF.md`).
+  - **Network:** Move's four tracks as Link Audio, UDP/IPv6 packets of 574 bytes (125 frames). That is ~353 a second a track, ~0.8 MB/s for the four, to the sidecar on the Move itself. Link also joins the network's session (Move's own Link does that already).
+  - **The sound:** the shim drops Move's own mix and rebuilds it from the four track streams.
+    - Move's tracks reach the output ~16–29 ms later than now. MONO2K, an overtake module, is mixed undelayed, so Move's tracks sit later than MONO2K's (Latency Comp delays Schwung's slots, not an overtake module). Check by ear; `clock_lag` moves MONO2K's steps.
+    - Move's metronome is not in the rebuilt mix (Schwung's Metronome: Follow plays its own).
+    - Move's speaker EQ is replaced by Schwung's emulation (Spkr EQ: Auto).
+    - Move's tracks can drop out if the stream starves.
+  - **Writes:** the sidecar keeps `/data/UserData/schwung/last-tempo` at every session tempo change.
+- **Known edges:** `host_write_file` truncates, then writes. A sidecar read in between would see an empty file in the same second and skip the value. It is rare; MONO2K then falls back to INT after 2.5 s, and a nudge of the knob asks again. Move's own tempo resolution is not known here: if Move rounds the Link tempo coarser than 0.05 BPM, a tenth asked would read as not followed.
 
 ## Saving
 
@@ -109,6 +143,7 @@ Gestures that depend on a modifier (Shift, Mute, Copy, Delete) need it held firs
   - `M2K1`, then the frame's number (8 hex).
   - 64 rows of 22 characters: 6 pixels each from `'0'`.
   - 63 LEDs as two hex digits: 16 steps, 32 pads, 4 track buttons, then Rec Mute Undo Copy Delete Left Right Up Down Menu Loop.
+  - How each knob turns, a character each (`MV_KK_*`: 0 a range, 1 a short list, 2 the tempo, 3 nothing), then the tempo asked of Move: its number (2 hex, 00 never) and its tenths (4 hex).
 - **ui.js** reads one frame every two of the OLED's frames, **34.83 ms (~28.7 a second)**, on a fractional clock that never drifts and never catches up after a stall. It repaints only the rows that changed, as runs of `fill_rect`, and sends at most 16 LEDs a tick.
 - **Why 28.7 a second** (Schwung faebd16, read in the source):
   - Overtake modules run in `src/shadow/shadow_ui.c`, whose loop ticks every **2 ms** for an overtake module (`overtake_mode >= 2`), and packs the display into shared memory whenever the JS drew.
@@ -156,9 +191,9 @@ cc -O2 -DM2K_TRACKS=8 -Ifirmware/src -Ifirmware/gen -o build/move/screen_sheets 
   | Mode | What it proves |
   |---|---|
   | `hash` | A01–A04 bit for bit against `m2k_draw`. |
-  | `rt` | 20 000 blocks of every control, Move's clock and saves asked for. Every allocation, file, thread, sleep and log call on the audio thread is counted: none. |
-  | `ctl` | Every control (78 checks): the page pads and their lights, the keyboard's keys, PERFORM's keys, SOUNDS, the jog's patterns' list, MIX's knobs. |
-  | `clock` | Synthetic Move clocks, each pulse seen at the next block boundary, 1 % of frames a block late: 120 BPM, a tempo change, stop, continue, start, stale, no host tempo, no clock, Play answered. |
+  | `rt` | 20 000 blocks of every control, Move's clock and saves asked for, the tempo turned and written, Move's tempo moving. Every allocation, file, thread, sleep and log call on the audio thread is counted: none. |
+  | `ctl` | Every control (92 checks): the page pads and their lights, the keyboard's keys, PERFORM's keys, SOUNDS, the jog's patterns' list, MIX's knobs, the knobs' kinds for ui.js, the tempo (asked, followed, not followed, landing on whole BPM, Delete, Shift + knob 1 on all 16 page pads, INT's whole BPM). |
+  | `clock` | Synthetic Move clocks, each pulse seen at the next block boundary, 1 % of frames a block late: 120 BPM, a tempo change, stop, continue, start, stale, no host tempo, no clock, Play answered; the tempo turned in MONO2K (Move following 0.55 s on; not following: alone, then re-synced by Move's tempo; Move's restart; Delete): every two steps timed, no glitch, back within 32 samples of Move's pulses. |
   | `save` | The round trip. |
   | `draw` | The screens as PBM, in `build/move/proof/screens/`. |
   | `time` | The render's cost; the screen's a frame (publish, draw). |
@@ -173,7 +208,7 @@ cc -O2 -DM2K_TRACKS=8 -Ifirmware/src -Ifirmware/gen -o build/move/screen_sheets 
   - One instance: the core is a set of statics.
   - One core: `m2k_par_begin` stays unset.
 - **The audio thread** runs render, on_midi, set_param and get_param. Nothing there allocates, locks, logs or touches a file.
-  - Pads, steps and Move's transport (on_midi), and ui.js's controls (`set_param("in", "K i d;J d;B cc v;T i v")`), go into one queue. The next render drains it in order.
+  - Pads, steps and Move's transport (on_midi), and ui.js's controls (`set_param("in", "K i d;P i d c;J d;B cc v;T i v;W n ok")`: K a knob's steps, P the tempo in tenths (c: whole BPM), W the tempo written), go into one queue. The next render drains it in order.
   - The render runs the core 16 samples at a time, with Move's pulses between.
 - **create / destroy** run on Schwung's loader thread. They load the store, start and join the two threads, and save on closing.
 - **Other params:**

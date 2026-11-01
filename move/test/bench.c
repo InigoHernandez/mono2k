@@ -368,9 +368,17 @@ static int do_ctl(void)
     check(kv(5) == 68, "Delete + a knob: the value back to its start (DRM-KICK's INIT VOL, 68)");
     page(MS_SYN);
     int w0 = dump_kit(0);
-    knob(0, 7); blocks(1);
-    check((dump_kit(0) * 4) >> 7 == ((w0 * 4) >> 7) + 1, "SYN's knob 1 on a choice (the kick's WAVE): one choice a turn");
-    knob(0, -7); blocks(1);
+    knob(0, 1); blocks(1);
+    check((dump_kit(0) * 4) >> 7 == ((w0 * 4) >> 7) + 1, "SYN's knob 1 on a choice (the kick's WAVE): a step one choice");
+    char kk[16], kk2[16], kk3[16], kk4[16];
+    vstr(view(), "kk", kk, sizeof kk);
+    knob(0, -1); blocks(1);
+    page(MS_AMP); vstr(view(), "kk", kk2, sizeof kk2);
+    page(MS_PAT); vstr(view(), "kk", kk3, sizeof kk3);
+    page(MS_HOME); vstr(view(), "kk", kk4, sizeof kk4);
+    check(kk[0] == '0' + MV_KK_CHOICE && !strcmp(kk2, "00000000") && kk3[0] == '0' + MV_KK_TEMPO && kk4[2] == '0' + MV_KK_TEMPO,
+          "ui.js told how each knob turns: the kick's WAVE a short list, AMP ranges, PAT's knob 1 and HOME's 3 the tempo");
+    page(MS_SYN);
     in("T 2 1"); blocks(1);
     v = view();
     check(vint(v, "focus") == 2 && vint(v, "tk") == 2, "knob 3 touched: its full name and value large");
@@ -514,10 +522,76 @@ static int do_ctl(void)
     check(vint(view(), "follow") == 1, "Left and Right together: following again");
     knob(2, len0 - kv(2)); blocks(1);
     btn(49, 127); step(0, 1); blocks(1); step(0, 0); btn(49, 0); blocks(1);     /* (A01 again) */
-    /* the tempo knob while Move's clock is the source */
-    int g0 = kv(0);
-    knob(0, 5); blocks(1);
-    check(kv(0) != g0 + 5 && (kf(0) & 16), "the tempo knob shows Move's tempo and Move keeps it");
+    /* the tempo under SYNC (Move's, 120, Move stopped): PAT's knob 1 asks Move for it, MONO2K at it at once */
+    {
+        char tv[32], w[32];
+        int tqv[3];
+        const int g0 = vint(dump(), "glob");
+        in("P 0 15 0"); blocks(1);
+        v = view();
+        vlist(v, "tq", tqv, 3);
+        check(vint(v, "bpm10") == 1215 && tqv[0] == MV_TQ_WAIT && tqv[2] == 1215 && (kf(0) & MV_K_MOVE) &&
+              !strcmp(vstr(v, "tval", tv, sizeof tv), "121.5:SYNC") && vint(dump(), "glob") == g0,
+              "PAT's knob 1, 15 tenths: MONO2K at 121.5 at once, asked of Move, shown large (SYNC); the pattern's own kept");
+        static char fr[4096];
+        blocks(6);                                           /* (published) */
+        const int fn = A_get("frame", fr, sizeof fr);
+        char want[16];
+        snprintf(want, sizeof want, "%02X04BF", tqv[1]);
+        check(fn == 4 + 8 + 64 * 22 + 2 * 63 + 8 + 6 && !strcmp(fr + fn - 6, want) && fr[fn - 14] == '0' + MV_KK_TEMPO,
+              "the frame's tail: knob 1 the tempo, the request's number and 121.5 (04BF) for ui.js to write");
+        snprintf(w, sizeof w, "W %d 1", tqv[1]);
+        in(w); blocks(800);                                  /* (ui.js wrote it; 2.3 s: still waiting) */
+        int still = vint(view(), "bpm10") == 1215;
+        blocks(100);
+        v = view();
+        vlist(v, "tq", tqv, 3);
+        check(still && tqv[0] == MV_TQ_NONE && vint(v, "bpm10") == 1200 && strstr(v, " toast=MOVE: LINK OFF|MOVE KEEPS ITS TEMPO") != NULL,
+              "Move did not follow in 2.5 s (stopped): Move's 120 again, MOVE: LINK OFF");
+        in("P 0 100 1"); blocks(1);
+        const int asked = vint(view(), "bpm10");
+        host_bpm = 130.0f; blocks(2);                        /* (Link: Move took it) */
+        v = view();
+        vlist(v, "tq", tqv, 3);
+        check(asked == 1300 && tqv[0] == MV_TQ_NONE && vint(v, "bpm10") == 1300, "fast (whole BPM) +10: Move followed, MONO2K follows it at 130");
+        host_bpm = 120.0f; blocks(2);
+        check(vint(view(), "bpm10") == 1200, "Move's tempo turned on Move: followed");
+        in("P 0 5 0"); blocks(1); in("P 0 10 1"); blocks(1);
+        check(vint(view(), "bpm10") == 1210, "120.5, then a whole BPM fast: lands on 121.0");
+        btn(119, 127); in("P 0 3 0"); blocks(1); btn(119, 0); blocks(1);
+        vlist(view(), "tq", tqv, 3);
+        check(tqv[0] == MV_TQ_NONE && vint(view(), "bpm10") == 1200, "Delete + the tempo knob: Move's tempo again");
+        /* Shift + knob 1 on every page: the tempo, shown large */
+        int every_t = 1, b = 1200;
+        for (int j = 0; j < 16; j++) {
+            const int pg = MS_PAD_PAGE[j];
+            page(pg);
+            btn(49, 127); in("P 0 1 0"); blocks(1);
+            v = view();
+            char tk[32], kk5[16];
+            vstr(v, "tk", tk, sizeof tk);
+            vstr(v, "kk", kk5, sizeof kk5);
+            b++;
+            if (vint(v, "tfocus") != 1 || strcmp(tk, "0:TEMPO") || vint(v, "bpm10") != b || kk5[0] != '0' + MV_KK_TEMPO) {
+                every_t = 0;
+                printf("  (Shift + knob 1 on page %d: tfocus %d tk %s bpm10 %d kk %s)\n", pg, vint(v, "tfocus"), tk, vint(v, "bpm10"), kk5);
+            }
+            btn(49, 0); blocks(1);
+            if (pg == MS_CAT || pg == MS_PERF) page(pg);
+        }
+        check(every_t, "Shift + knob 1 on all 16 page pads (SOUNDS and PERFORM too): the tempo, a tenth a step, shown large");
+        page(MS_AMP);
+        const int atk = kv(0);
+        knob(0, 1); blocks(1);
+        check(kv(0) == atk + 1 && vint(view(), "tfocus") == 0, "Shift let go: knob 1 its page's again (AMP's ATCK)");
+        knob(0, -1); blocks(1);
+        btn(49, 127); in("T 0 1"); blocks(1);
+        check(vint(view(), "tfocus") == 1, "Shift + knob 1 touched: the tempo shown large while held");
+        in("T 0 0"); btn(49, 0); blocks(500);
+        check(vint(view(), "focus") == -1, "let go: gone a moment later");
+        page(MS_PAT);
+        btn(119, 127); in("P 0 1 0"); blocks(1); btn(119, 0); blocks(1);    /* (Move's tempo again) */
+    }
     /* PAT holds the track's sequencing too (the FM-1's SEQ): its own length */
     knob(4, 8); blocks(1);
     check(step_flags(15) & 8, "PAT's TLEN to 8: steps 9-16 past the track's end");
@@ -658,6 +732,19 @@ static int do_ctl(void)
     int lit = 0;
     for (int k = 0; k < 16; k++) lit += led[k] == 120;
     check(lit >= 1, "playing: the playhead's step LED white");
+    /* INT: the tempo knob is the pattern's own, whole BPM (the tenths add up), the header and the value say INT */
+    page(MS_PAT);
+    {
+        char tv[32];
+        const int g1 = kv(0);
+        in("P 0 25 0"); blocks(1);
+        const int g2 = kv(0);
+        in("P 0 5 0"); blocks(1);
+        v = view();
+        check(g2 == g1 + 2 && kv(0) == g1 + 3 && vint(v, "int") == 1 && strstr(vstr(v, "tval", tv, sizeof tv), ":INT"),
+              "INT: the tempo knob the pattern's own, whole BPM (25 tenths +2, 5 more +1); INT in the header and the value");
+        in("P 0 -30 0"); blocks(1);
+    }
     tap(85);
     check(vint(view(), "play") == 0, "Play again (INT): stops at once");
     api->destroy_instance(inst);
@@ -739,6 +826,67 @@ static void clk_tempo(double bpm)                /* from the next pulse on */
     mv_clk.spt = 44100.0 * 60.0 / (24.0 * bpm);
     mv_clk.t0 = t - mv_clk.next * mv_clk.spt;
     host_bpm = (float)bpm;
+}
+
+/* the tempo turned in MONO2K: each block of the synthetic Move as clock_block's, every step the core fires recorded
+ * (its count and sample), the clock's fields kept (ck[]: clock_string's 24) */
+#define TS_MAX 8192
+static struct { long n; long k[TS_MAX]; double at[TS_MAX]; int ck[24]; long relock_blocks; } ts;
+static void tempo_block(void)
+{
+    const double bs = (double)nblk * 128.0;
+    const int late = rnd01() < 0.01;
+    while (!late && mv_clk.run && mv_clk.tnext <= bs) {
+        A_rt(0xF8);
+        mv_clk.next++;
+        mv_clk.tnext = mv_clk.t0 + mv_clk.next * mv_clk.spt;
+    }
+    A_render();
+    A_get("clock", cbuf, sizeof cbuf);
+    int *a = ts.ck;
+    if (sscanf(cbuf, "%d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d", &a[0], &a[1], &a[2],
+               &a[3], &a[4], &a[5], &a[6], &a[7], &a[8], &a[9], &a[10], &a[11], &a[12], &a[13], &a[14], &a[15], &a[16],
+               &a[17], &a[18], &a[19], &a[20], &a[21], &a[22], &a[23]) != 24) return;
+    if (a[17]) ts.relock_blocks++;
+    if (a[6] != seen_steps && a[6] > 0) {
+        if (ts.n < TS_MAX) { ts.k[ts.n] = a[6] - 1; ts.at[ts.n] = a[7]; ts.n++; }
+        seen_steps = a[6];
+    }
+}
+
+/* no step glitch: every two steps (no swing between) as long as a tempo between LO and HI makes them, nudged by a
+ * re-lock's CK_SLEW (1/16) at most, give or take the 16-sample grid the pulses fall on */
+static int pairs_ok(double lo, double hi, const char *what)
+{
+    const double pmin = 12 * 44100.0 * 60.0 / (24.0 * hi) * (1 - 1.0 / 16 - 0.01) - 40;
+    const double pmax = 12 * 44100.0 * 60.0 / (24.0 * lo) * (1 + 1.0 / 16 + 0.01) + 40;
+    double most = 0, least = 1e9;
+    int ok = 1;
+    for (long i = 0; i + 1 < ts.n; i++) {
+        if (ts.k[i] & 1) continue;
+        long j = i + 1;
+        while (j < ts.n && ts.k[j] != ts.k[i] + 2) j++;
+        if (j >= ts.n) continue;
+        const double p = ts.at[j] - ts.at[i];
+        if (p > most) most = p;
+        if (p < least) least = p;
+        if (p < pmin || p > pmax) ok = 0;
+        if (ts.k[j] - ts.k[i] != 2) ok = 0;
+    }
+    printf("  %-44s %ld steps, two steps %.0f..%.0f samples (allowed %.0f..%.0f)\n", what, ts.n, least, most, pmin, pmax);
+    return ok && ts.n > 4;
+}
+
+/* the steps since FROM against Move's pulses (step k on pulse 6k - OFF: MONO2K's count runs OFF ahead): most off */
+static double steps_off(long from, int off)
+{
+    double most = 0;
+    for (long i = from; i < ts.n; i++) {
+        if (ts.k[i] & 1) continue;
+        const double d = fabs(ts.at[i] - (mv_clk.t0 + (6.0 * ts.k[i] - off) * mv_clk.spt));
+        if (d > most) most = d;
+    }
+    return most;
 }
 
 static void cstat_print(const char *what, const cstat_t *c)
@@ -862,6 +1010,93 @@ static int do_clock(int lag)
     for (int i = 0; i < 200; i++) clock_block(&c7, 0, &per);
     v = view();
     check(vint(v, "sync") == 1 && vint(v, "fol") == 1 && vint(v, "bpm10") == 900, "then Move starts: SYNC, following at 90");
+    api->destroy_instance(inst);
+
+    /* 8: the tempo turned in MONO2K while it follows Move at 120: 130 at once; ui.js writes it 250 ms on, Move (Link)
+     * takes it 300 ms later; MONO2K follows Move again, back on its phase without a jump */
+    char w[32];
+    inst = open_js(js);
+    host.get_bpm = get_bpm;
+    blocks(8);
+    clk_start(120.0, 0xFA);
+    for (int i = 0; i < 600; i++) tempo_block();
+    ts.n = 0; ts.relock_blocks = 0;
+    for (int i = 0; i < 344; i++) tempo_block();
+    in("B 49 127;P 0 100 1;B 49 0");
+    tempo_block();
+    const int per_now = ts.ck[4], seq = ts.ck[19], state_now = ts.ck[15];
+    for (int i = 0; i < 86; i++) tempo_block();
+    snprintf(w, sizeof w, "W %d 1", seq);
+    in(w);
+    for (int i = 0; i < 104; i++) tempo_block();
+    const int waited = ts.ck[15] == MV_TQ_WAIT && ts.ck[16] == 1;
+    if (!waited) printf("  (meanwhile: %s)\n", cbuf);
+    clk_tempo(130.0);
+    for (int i = 0; i < 12 * 344; i++) tempo_block();
+    const int *a = ts.ck;
+    check(per_now == (int)(28224000.0 / 130 + 0.5) && state_now == MV_TQ_WAIT,
+          "turned to 130: the core's period at once (217108), Move asked");
+    check(waited, "meanwhile MONO2K free at 130, waiting for Move");
+    check(a[15] == MV_TQ_NONE && a[22] == 1 && a[16] == 0 && a[17] == 0 && a[18] == 0 && a[4] == 217108,
+          "Move followed: MONO2K follows it again, re-locked in its own bar");
+    if (a[22] != 1 || a[18]) printf("  (after: %s)\n", cbuf);
+    printf("  re-lock took %.2f s\n", ts.relock_blocks * 128 / 44100.0);
+    check(ts.relock_blocks * 128 < 4 * 44100, "the re-lock within 4 s");
+    check(pairs_ok(120, 130, "120 -> 130 in MONO2K, Move following"), "no step glitch: every two steps between 120's and 130's, nudged 6 % at most");
+    long from = 0;
+    while (from < ts.n && ts.at[from] < (double)(nblk - 4 * 344) * 128) from++;
+    const double off8 = steps_off(from, 0);
+    printf("  the last 4 s: steps within %.1f samples of Move's pulses\n", off8);
+    check(off8 <= 32, "then each step within 32 samples (0.73 ms) of Move's pulse, as before");
+
+    /* 9: Move does not follow (no Link): 2.5 s after the write MONO2K plays on alone at 125 (INT, a hint); then
+     * Move's tempo changes on Move (138): MONO2K follows it again, into Move's bar without a jump */
+    ts.n = 0; ts.relock_blocks = 0;
+    in("B 49 127;P 0 -50 1;B 49 0");
+    tempo_block();
+    snprintf(w, sizeof w, "W %d 1", ts.ck[19]);
+    for (int i = 0; i < 86; i++) tempo_block();
+    in(w);
+    for (int i = 0; i < 850; i++) tempo_block();
+    const int before = ts.ck[15];
+    for (int i = 0; i < 30; i++) tempo_block();
+    v = view();
+    check(before == MV_TQ_WAIT && ts.ck[15] == MV_TQ_ALONE && vint(v, "sync") == 0 && vint(v, "int") == 1 &&
+          vint(v, "bpm10") == 1250 && strstr(v, " toast=INT|MOVE: LINK OFF") != NULL,
+          "not followed in 2.5 s: MONO2K on alone at 125, INT, MOVE: LINK OFF");
+    for (int i = 0; i < 5 * 344; i++) tempo_block();
+    check(pairs_ok(125, 125, "alone at 125 (Move at 130)"), "alone: its own 125, steadily");
+    ts.n = 0;
+    clk_tempo(138.0);
+    for (int i = 0; i < 25 * 344; i++) tempo_block();
+    a = ts.ck;
+    printf("  re-lock took %.2f s, into the bar %d pulses on\n", ts.relock_blocks * 128 / 44100.0, a[18]);
+    check(a[15] == MV_TQ_NONE && a[16] == 0 && a[17] == 0 && a[18] % 96 == 0 && vint(view(), "sync") == 1,
+          "Move's tempo changed: MONO2K follows Move again (SYNC), in Move's bar");
+    check(pairs_ok(125, 138, "re-synced from 125 alone to Move's 138"), "no step glitch while it gets there");
+    from = 0;
+    while (from < ts.n && ts.at[from] < (double)(nblk - 4 * 344) * 128) from++;
+    const double off9 = steps_off(from, a[18]);
+    printf("  the last 4 s: steps within %.1f samples of Move's pulses\n", off9);
+    check(off9 <= 32, "then each step within 32 samples of Move's pulse");
+
+    /* 10: alone again, then Move stops and starts: in time with it at its start; Delete + the tempo knob re-syncs too */
+    in("B 49 127;P 0 20 1;B 49 0");
+    for (int i = 0; i < 1500; i++) tempo_block();
+    const int alone10 = ts.ck[15] == MV_TQ_ALONE;
+    mv_clk.run = 0;
+    A_rt(0xFC);
+    blocks(20);
+    clk_start(138.0, 0xFA);
+    for (int i = 0; i < 400; i++) tempo_block();
+    check(alone10 && ts.ck[15] == MV_TQ_NONE && ts.ck[4] == (int)(28224000.0 / 138 + 0.5) && vint(view(), "sync") == 1,
+          "alone, then Move stopped and started: Move's tempo, in time from its start");
+    in("B 49 127;P 0 30 1;B 49 0");
+    for (int i = 0; i < 200; i++) tempo_block();
+    in("B 119 127;B 49 127;P 0 1 0;B 49 0;B 119 0");
+    for (int i = 0; i < 6 * 344; i++) tempo_block();
+    check(ts.ck[15] == MV_TQ_NONE && ts.ck[17] == 0 && ts.ck[4] == (int)(28224000.0 / 138 + 0.5),
+          "asked, then Delete + the tempo knob: Move's tempo again, re-locked");
     api->destroy_instance(inst);
     printf("  clock: %d checks, %d failed\n", checks, fails);
     return fails != 0;
@@ -994,7 +1229,8 @@ static int do_draw(const char *d)
     int n = A_get("frame", fr, sizeof fr);
     int lit = 0;
     for (int i = 12; i < 12 + 7 * 22; i++) lit += fr[i] != '0';            /* (the header: rows 0..6) */
-    check(n == 4 + 8 + 64 * 22 + 2 * 63 && !strncmp(fr, "M2K1", 4) && lit > 10, "a frame: M2K1, 64 rows, the LEDs; the header lit");
+    check(n == 4 + 8 + 64 * 22 + 2 * 63 + 14 && !strncmp(fr, "M2K1", 4) && lit > 10,
+          "a frame: M2K1, 64 rows, the LEDs, the knobs' kinds and the tempo asked; the header lit");
     in("T 3 1"); blocks(8); shot(d, "2_focus"); in("T 3 0");
     blocks(500);
     page(MS_AMP); blocks(8); shot(d, "3_amp");
@@ -1009,6 +1245,7 @@ static int do_draw(const char *d)
     page(MS_PAT); blocks(600); shot(d, "9_pat");
     page(MS_MIX); blocks(60); shot(d, "10_mix");
     page(MS_PERF); pad(1, 1, 100); blocks(60); shot(d, "11_perform"); pad(1, 0, 0); page(MS_PERF);
+    page(MS_AMP); btn(49, 127); in("P 0 5 0"); blocks(8); shot(d, "12_tempo_shift"); btn(49, 0);
     api->destroy_instance(inst);
     return fails != 0;
 }
@@ -1068,6 +1305,16 @@ static int do_rt(void)
         if (i % 1000 == 700) A_rt(0xFC);
         if (i % 1000 < 700 && i % 7 == 0) A_rt(0xF8);
         if (i % 3001 == 0) { in("T 1 1"); in("T 1 0"); calls++; }
+        if (i % 211 == 0) {            /* the tempo: Shift + knob 1, PAT's, ui.js's writes, a re-sync asked */
+            char s[48];
+            snprintf(s, sizeof s, "B 49 127;P 0 %d %d;B 49 0", (i / 211) % 2 ? 7 : -7, (i / 211) % 3 == 0);
+            in(s);
+            snprintf(s, sizeof s, "W %d %d", (i / 211) % 256, (i / 211) % 5 != 0);
+            in(s);
+            if (i % 2110 == 0) in("B 119 127;B 49 127;P 0 1 0;B 49 0;B 119 0");
+            calls += 3;
+        }
+        if (i % 977 == 0) host_bpm = (float)(100 + (i / 977) % 40);   /* (Move's tempo moving: followed, re-synced) */
         A_render();
         nb++;
     }

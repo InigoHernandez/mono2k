@@ -44,7 +44,7 @@ static const host_api_v1_t *host;
 /* every press and turn, from on_midi and set_param to the next render, in the order they came. All three run on the
  * audio thread, one after another, so the queue needs no atomics; 256 is more than hands make in a block, and a press
  * past it is dropped and counted */
-enum { EV_STEP, EV_PAD, EV_KNOB, EV_JOG, EV_BTN, EV_TOUCH, EV_RT };
+enum { EV_STEP, EV_PAD, EV_KNOB, EV_JOG, EV_BTN, EV_TOUCH, EV_RT, EV_TEMPO, EV_WROTE };
 #define EV_N 256u
 static struct {
     uint8_t kind[EV_N], a[EV_N];
@@ -93,12 +93,19 @@ static struct {
 #define CK_PLAY_WAIT 24                /* blocks (70 ms) for Move to answer PLAY */
 #define CK_ANSWERED (SR * 0.15)        /* a transport message this recent answered the PLAY just seen */
 #define CK_WIN 97                      /* pulses measured, when the host gives no tempo (4 beats) */
+#define CK_SLEW (1.0 / 16)             /* a re-lock's correction a pulse at most: MONO2K ~6 % off Move's tempo meanwhile */
+#define CK_BAR 96                      /* a bar's pulses (4/4): a re-lock after a free run lands on Move's bar */
+#define CK_LOCKED 0.05                 /* pulses off: the re-lock is done, the gentle lock again */
 static struct {
     uint8_t sync, run, anchored;       /* MV_SYNC_*; Move's transport running; its first pulse seen */
+    uint8_t free;                      /* the phase runs free at MONO2K's own tempo (the tempo asked of Move, or alone) */
+    uint8_t relock;                    /* back to Move's phase after a free run: 1 to begin (the bar picked), 2 under way */
+    int32_t off;                       /* MONO2K's pulses ahead of Move's, whole bars (a re-lock's: 0 otherwise) */
     int32_t nrx, ntx;                  /* Move's pulses since its start: seen, and given to the core */
     double ph, fc, inc;                /* Move's pulses since its start now; the integrator; pulses a sample */
     double lag;                        /* samples a pulse is seen after it happened, on average (half a block) */
-    double bpm, err;                   /* the tempo followed; the last phase error, in pulses */
+    double bpm, err;                   /* the tempo played (Move's, or the one asked of it); the last phase error, pulses */
+    double move_bpm;                   /* Move's own tempo now (the host's, else measured), 0 none */
     uint32_t per_q8;                   /* the core's period pinned (Q8 samples a pulse), 0 none */
     uint64_t last_rx, last_tr;         /* the last pulse, the last start / continue / stop (tr_any: one came) */
     uint8_t tr_any;
@@ -113,10 +120,32 @@ static struct {
     uint64_t step_at;
 } ck;
 
+/* the tempo asked of Move (the tempo knob under SYNC: tq_ask). MONO2K plays it at once, its phase free, and ui.js
+ * writes it to /data/UserData/schwung/desired-tempo, which Schwung's Link sidecar gives the Link session (Move alone in
+ * it), so Move follows. When Move's tempo reaches it MONO2K follows Move again, its phase brought back to Move's
+ * gently (ck.relock). If Move has not followed TQ_WAIT_S after the write (no Link on Move, Move->Schwung off, another
+ * peer in the session) MONO2K stays at it alone (INT) until Move's tempo next changes, Move starts again, or Delete +
+ * the tempo knob: then it follows Move again */
+#define TQ_TOL 0.05                    /* BPM: Move has followed */
+#define TQ_WAIT_S 2.5                  /* seconds after ui.js wrote it */
+#define TQ_NOWRITE_S 4.0               /* seconds after the last turn, if ui.js said nothing of a write */
+#define TQ_MIN 200                     /* tenths: the tempo asked between 20.0 */
+#define TQ_MAX 3000                    /* and 300.0 BPM */
+static struct {
+    uint8_t state, seq, wseq;          /* MV_TQ_*; the request's number (1..255, 0 never); the one ui.js wrote */
+    uint8_t nofile;                    /* ui.js could not write it */
+    uint16_t b10;                      /* the tempo asked, tenths */
+    uint64_t at, wrote;                /* samples: the last change; ui.js's write of it (0 not yet) */
+    double move0;                      /* Move's tempo when MONO2K was left alone (a change re-syncs) */
+    int32_t acc10;                     /* tenths turned under INT, towards the pattern's whole BPM */
+    uint32_t asks, follows, alones;    /* (the bench's counts) */
+} tq;
+
 static int mv_following(void) { return ck.run && mx.ext; }
-static int mv_sync(void) { return ck.sync; }
+static int mv_sync(void) { return ck.sync == MV_SYNC_INT || tq.state == MV_TQ_ALONE ? MV_SYNC_INT : MV_SYNC_MOVE; }
 static uint32_t mv_bpm10(void)
 {
+    if (ck.sync == MV_SYNC_MOVE && tq.state != MV_TQ_NONE) return tq.b10;
     if (ck.sync == MV_SYNC_MOVE && ck.bpm > 0) return (uint32_t)(ck.bpm * 10 + 0.5);
     return seq_bpm() * 10u;
 }
@@ -164,6 +193,10 @@ static void ck_start(int st, uint64_t now)
     ck.anchored = 0;
     ck.nrx = ck.ntx = 0;
     ck.fc = 0;
+    ck.off = 0;
+    ck.relock = 0;
+    if (tq.state == MV_TQ_ALONE) tq.state = MV_TQ_NONE;   /* (Move's start: in time with it again) */
+    ck.free = tq.state != MV_TQ_NONE;  /* (still waiting for Move: MONO2K at the tempo asked, from the start) */
     ck.play_wait = 0;
     ck.last_rx = ck.last_tr = now;
     ck.tr_any = 1;
@@ -175,6 +208,8 @@ static void ck_stop(void)
 {
     ck.run = 0;
     ck.anchored = 0;
+    ck.relock = 0;
+    if (tq.state == MV_TQ_ALONE) { tq.state = MV_TQ_NONE; ck.free = 0; }   /* (stopped with Move: its tempo again) */
     ck.play_wait = 0;
     ck_measure_reset();
     m2k_midi_from(M2K_USB, 0xFC, 0, 0);
@@ -191,21 +226,35 @@ static void ck_rt(int st, uint64_t now)
     if (!ck.run) return;               /* (a clock without a start: its tempo, but nothing starts) */
     ck.nrx++;
     const double obs = (ck.nrx - 1) + ck.lag * ck.inc * (1 + ck.fc);   /* pulse nrx - 1, seen about lag ago */
-    if (!ck.anchored) { ck.anchored = 1; ck.ph = obs; ck.err = 0; return; }
-    const double e = obs - ck.ph;
+    if (!ck.anchored) { ck.anchored = 1; ck.ph = obs + ck.off; ck.err = 0; return; }
+    if (ck.relock == 1) {              /* after a free run: Move's bar nearest MONO2K's phase (at most half a bar away) */
+        const double bars = (ck.ph - obs) / CK_BAR;
+        ck.off = CK_BAR * (int32_t)(bars < 0 ? bars - 0.5 : bars + 0.5);
+        ck.relock = 2;
+    }
+    const double e = obs + ck.off - ck.ph;
     ck.err = e;
-    if (e > CK_SNAP || e < -CK_SNAP) { ck.ph = obs; return; }
+    if (ck.free) return;               /* (MONO2K's own tempo: Move's pulses only counted) */
+    if (ck.relock) {                   /* back to Move's phase without a jump: a capped nudge a pulse, no integrator */
+        ck.ph += CLAMP(CK_KP * e, -CK_SLEW, CK_SLEW);
+        if (e < CK_LOCKED && e > -CK_LOCKED) ck.relock = 0;
+        return;
+    }
+    if (e > CK_SNAP || e < -CK_SNAP) { ck.ph = obs + ck.off; return; }
     ck.ph += CK_KP * e;
     ck.fc += CK_KI * e;
     ck.fc = ck.fc > 0.02 ? 0.02 : ck.fc < -0.02 ? -0.02 : ck.fc;
 }
 
-/* the tempo followed, each block: the host's (steady by its contract), else the pulses measured */
+/* the tempo played, each block: the one asked of Move while it is (MONO2K's at once), else Move's: the host's (steady
+ * by its contract), else the pulses measured */
 static void ck_tempo(void)
 {
     double b = 0;
     if (host && host->get_bpm) { const float f = host->get_bpm(); if (f >= 20.0f && f <= 999.0f) b = f; }
     if (b <= 0) b = ck.held;
+    ck.move_bpm = b;
+    if (ck.sync == MV_SYNC_MOVE && tq.state != MV_TQ_NONE) b = tq.b10 / 10.0;
     if (b <= 0) { ck.inc = 0; ck.per_q8 = 0; return; }
     if (b != ck.bpm) { ck.bpm = b; ck.per_q8 = (uint32_t)(28224000.0 / b + 0.5); }
     ck.inc = b * 24.0 / (60.0 * SR);
@@ -228,9 +277,97 @@ static void ck_pulses(void)
         for (; ck.ntx < ck.nrx; ck.ntx++) m2k_midi_from(M2K_USB, 0xF8, 0, 0);
         return;
     }
-    const double half = 8.0 * ck.inc * (1 + ck.fc);
-    for (int k = 0; k < 3 && ck.ntx <= ck.nrx + 1 && ck.ph + half >= ck.ntx; k++, ck.ntx++)
+    const double half = 8.0 * ck.inc * (ck.free ? 1 : 1 + ck.fc);
+    const int32_t cap = ck.free || ck.relock ? INT32_MAX - 1 : ck.nrx + ck.off + 1;   /* (locked: never ahead of Move) */
+    for (int k = 0; k < 3 && ck.ntx <= cap && ck.ph + half >= ck.ntx; k++, ck.ntx++)
         m2k_midi_from(M2K_USB, 0xF8, 0, 0);
+}
+
+/* ------------------------------------------------------------------------------------- the tempo asked of Move */
+
+/* MONO2K's phase back to Move's: at the next pulse its bar is picked, then nudged there (ck_rt) */
+static void tq_relock(void)
+{
+    if (!ck.free) return;
+    ck.free = 0;
+    if (ck.run && ck.anchored) ck.relock = 1;
+}
+
+/* the tempo knob under SYNC: d10 tenths (coarse: whole BPM, landing on one). MONO2K at it now; ui.js asks Move */
+static void tq_ask(int d10, int coarse)
+{
+    const int base = (int)mv_bpm10();
+    int b = base + d10;
+    if (coarse) b = (d10 > 0 ? base / 10 * 10 : (base + 9) / 10 * 10) + d10;
+    b = CLAMP(b, TQ_MIN, TQ_MAX);
+    if (b == base && tq.state == MV_TQ_NONE) return;
+    tq.b10 = (uint16_t)b;
+    tq.seq = (uint8_t)(tq.seq == 255 ? 1 : tq.seq + 1);
+    tq.at = mv.samples;
+    tq.wrote = 0;
+    tq.nofile = 0;
+    tq.state = MV_TQ_WAIT;
+    tq.asks++;
+    ck.free = 1;                       /* (MONO2K's phase its own until Move has followed) */
+    ck.relock = 0;
+    ck_tempo();
+}
+
+/* Delete + the tempo knob: Move's tempo again (the user asks) */
+static void tq_cancel(void)
+{
+    if (tq.state == MV_TQ_NONE) return;
+    tq.state = MV_TQ_NONE;
+    tq_relock();
+    ck_tempo();
+}
+
+/* ui.js wrote request SEQ (ok: the write worked) */
+static void tq_written(int seq, int ok)
+{
+    if (tq.state != MV_TQ_WAIT || seq != tq.seq) return;
+    tq.wseq = (uint8_t)seq;
+    tq.wrote = mv.samples + 1;         /* (0: not yet) */
+    tq.nofile = (uint8_t)!ok;          /* (no file written: Move cannot follow, no wait) */
+}
+
+/* each block: Move has followed (MONO2K follows it again), or not in time (alone, if playing), or, alone, Move's tempo
+ * moved (follow it again) */
+static void tq_tick(void)
+{
+    if (ck.sync != MV_SYNC_MOVE || tq.state == MV_TQ_NONE) return;
+    const double mb = ck.move_bpm, want = tq.b10 / 10.0;
+    if (tq.state == MV_TQ_WAIT) {
+        if (mb > 0 && mb - want <= TQ_TOL && want - mb <= TQ_TOL) {
+            tq.state = MV_TQ_NONE;
+            tq.follows++;
+            tq_relock();
+            ck_tempo();
+            return;
+        }
+        const int late = tq.nofile || (tq.wrote ? mv.samples + 1 - tq.wrote > (uint64_t)(TQ_WAIT_S * SR)
+                                                : mv.samples - tq.at > (uint64_t)(TQ_NOWRITE_S * SR));
+        if (!late) return;
+        tq.alones++;
+        mv.touched = 1;
+        if (sq.playing && ck.run) {    /* playing: on alone at it, INT */
+            tq.state = MV_TQ_ALONE;
+            tq.move0 = mb;
+            toast("INT", "MOVE: LINK OFF");
+        } else {                       /* stopped: nothing to keep; Move's tempo (its start brings it) */
+            tq.state = MV_TQ_NONE;
+            ck.free = 0;
+            ck_tempo();
+            toast("MOVE: LINK OFF", "MOVE KEEPS ITS TEMPO");
+        }
+        return;
+    }
+    if (mb > 0 && (mb - tq.move0 > TQ_TOL || tq.move0 - mb > TQ_TOL)) {   /* ALONE: Move's tempo changed */
+        tq.state = MV_TQ_NONE;
+        tq_relock();
+        ck_tempo();
+        mv.touched = 1;
+    }
 }
 
 /* ------------------------------------------------------------------------------------------------ the saver */
@@ -521,8 +658,9 @@ static char *ap_hex8(char *e, uint32_t v) { for (int sh = 28; sh >= 0; sh -= 4) 
 
 /* "M2K1", the frame's number (8 hex), its 64 rows of 22 characters (6 pixels each from '0', MSB first, the last
  * character's low two bits past the edge), then the LEDs as two hex digits each: 16 steps, 32 pads, 4 track buttons
- * and MV_NBTN buttons (MV_BTN_CC's order) */
-#define FRAME_LEN (4 + 8 + 64 * 22 + 2 * (16 + 32 + 4 + MV_NBTN))
+ * and MV_NBTN buttons (MV_BTN_CC's order); then how each knob turns ('0' + MV_KK_*, 8), the tempo asked of Move: its
+ * number (2 hex, 00 never) and the tempo (4 hex, tenths of BPM) */
+#define FRAME_LEN (4 + 8 + 64 * 22 + 2 * (16 + 32 + 4 + MV_NBTN) + 8 + 2 + 4)
 static int frame_string(char *o)
 {
     if (atomic_load_explicit(&fb_mid, memory_order_acquire) & 4u)
@@ -546,6 +684,9 @@ static int frame_string(char *o)
     const int len[4] = {16, 32, 4, MV_NBTN};
     for (int g = 0; g < 4; g++)
         for (int k = 0; k < len[g]; k++) { *e++ = HEX[seq[g][k] >> 4 & 15]; *e++ = HEX[seq[g][k] & 15]; }
+    for (int k = 0; k < 8; k++) *e++ = (char)('0' + (vw_now.kkind[k] & 3));
+    *e++ = HEX[vw_now.tq_seq >> 4 & 15]; *e++ = HEX[vw_now.tq_seq & 15];
+    for (int sh = 12; sh >= 0; sh -= 4) *e++ = HEX[vw_now.tq_b10 >> sh & 15];
     *e = 0;
     return (int)(e - o);
 }
@@ -628,6 +769,13 @@ static int view_string(char *o)
     e = ap(e, " cat="); e = ap(e, v.cat_slot); *e++ = ':'; e = ap(e, v.cat_name);
     e = ap(e, " spg="); e = s_int(e, v.scr.page);
     e = ap(e, " tk="); e = s_int(e, v.scr.touch.k); *e++ = ':'; e = ap(e, v.scr.touch.name);
+    e = ap(e, " tval="); e = ap(e, v.scr.touch.val[0] ? v.scr.touch.val : "-"); *e++ = ':';
+    e = ap(e, v.scr.touch.unit[0] ? v.scr.touch.unit : "-");
+    e = ap(e, " tfocus="); e = s_int(e, v.tempo_focus);
+    e = ap(e, " kk="); for (int k = 0; k < 8; k++) *e++ = (char)('0' + v.kkind[k]);
+    *e = 0;
+    e = ap(e, " tq="); e = s_int(e, v.tq_state); *e++ = ','; e = s_int(e, v.tq_seq); *e++ = ','; e = s_int(e, v.tq_b10);
+    e = ap(e, " int="); e = s_int(e, v.scr.clk_int);
     e = ap(e, " toast="); e = ap(e, v.toast); *e++ = '|'; e = ap(e, v.toast2);
     return (int)(e - o);
 }
@@ -658,7 +806,7 @@ static int dump_string(char *o)
 }
 
 /* Move's clock as followed, for the bench: "SYNC RUN NRX NTX PER_Q8 BPM10 STEPS STEP_AT ERR_MILLI FC_PPM EXT
- * PLAYING SAVES SAVE_FAILS SAVE_STATE" */
+ * PLAYING SAVES SAVE_FAILS SAVE_STATE TQ_STATE FREE RELOCK OFF TQ_SEQ TQ_B10 ASKS FOLLOWS ALONES" */
 static int clock_string(char *o)
 {
     char *e = o;
@@ -676,7 +824,16 @@ static int clock_string(char *o)
     e = s_int(e, sq.playing); *e++ = ' ';
     e = s_int(e, (int)atomic_load(&sv.done)); *e++ = ' ';
     e = s_int(e, (int)atomic_load(&sv.failed)); *e++ = ' ';
-    e = s_int(e, atomic_load(&sv.state));
+    e = s_int(e, atomic_load(&sv.state)); *e++ = ' ';
+    e = s_int(e, tq.state); *e++ = ' ';
+    e = s_int(e, ck.free); *e++ = ' ';
+    e = s_int(e, ck.relock); *e++ = ' ';
+    e = s_int(e, ck.off); *e++ = ' ';
+    e = s_int(e, tq.seq); *e++ = ' ';
+    e = s_int(e, tq.b10); *e++ = ' ';
+    e = s_int(e, (int)tq.asks); *e++ = ' ';
+    e = s_int(e, (int)tq.follows); *e++ = ' ';
+    e = s_int(e, (int)tq.alones);
     return (int)(e - o);
 }
 
@@ -771,6 +928,7 @@ static void *v2_create(const char *module_dir, const char *json_defaults)
     m_set(&evq, 0, sizeof evq);
     m_set(&mv, 0, sizeof mv);
     m_set(&ck, 0, sizeof ck);
+    m_set(&tq, 0, sizeof tq);
     mv.want_play = mv.want_track = -1;
     if (!json_str(json_defaults, "\"data_dir\"", mv.dir, sizeof mv.dir)) p_cat(mv.dir, "/data/UserData/schwung/mono2k", mv.dir + sizeof mv.dir - 1);
     mv.save_on_close = (uint8_t)(json_int(json_defaults, "\"save_on_close\"", 1) != 0);
@@ -845,8 +1003,9 @@ static void v2_on_midi(void *inst, const uint8_t *msg, int len, int source)
     else if (n >= NOTE_PAD1 && n < NOTE_PAD1 + PADS) ev_push(EV_PAD, n - NOTE_PAD1, on ? v : -1);
 }
 
-/* "in": ui.js's controls, ';'-separated: "K i d" knob i turned d (accelerated), "J d" the jog, "B cc v" a button's
- * CC, "T i v" knob i touched (1) or let go (0) */
+/* "in": ui.js's controls, ';'-separated: "K i d" knob i turned d steps (ui.js's curve), "P i d c" knob i turned as the
+ * tempo, d tenths of BPM (c 1: whole BPM, landing on one), "J d" the jog, "B cc v" a button's CC, "T i v" knob i
+ * touched (1) or let go (0), "W n ok" ui.js wrote the tempo asked number n for Move (ok 0: it could not) */
 static void in_parse(const char *s)
 {
     while (*s) {
@@ -854,9 +1013,12 @@ static void in_parse(const char *s)
         const char c = *s;
         if (!c) break;
         s++;
-        int ok1 = 0, ok2 = 0, a = s_snum(&s, &ok1), b = 0;
+        int ok1 = 0, ok2 = 0, ok3 = 0, a = s_snum(&s, &ok1), b = 0, e = 0;
         if (c != 'J') b = s_snum(&s, &ok2);
+        if (c == 'P') e = s_snum(&s, &ok3);
         if (c == 'K' && ok1 && ok2) ev_push(EV_KNOB, a, b);
+        else if (c == 'P' && ok1 && ok2 && a >= 0 && a < 8) ev_push(EV_TEMPO, a | (ok3 && e ? 16 : 0), b);
+        else if (c == 'W' && ok1 && ok2) ev_push(EV_WROTE, a & 255, b);
         else if (c == 'J' && ok1) ev_push(EV_JOG, 0, a);
         else if (c == 'B' && ok1 && ok2 && a >= 0 && a < 128) ev_push(EV_BTN, a, b);
         else if (c == 'T' && ok1 && ok2) ev_push(EV_TOUCH, a, b);
@@ -916,12 +1078,14 @@ static void ev_drain(void)
     for (; evq.r != evq.w; evq.r++) {
         const int k = evq.kind[evq.r % EV_N], a = evq.a[evq.r % EV_N], b = evq.b[evq.r % EV_N];
         if (k == EV_RT) { ck_rt(a, mv.samples); continue; }
+        if (k == EV_WROTE) { tq_written(a, b != 0); continue; }
         mv.touched = 1;
         syn_sub_check();
         switch (k) {
         case EV_STEP: mv_step(a, b); break;
         case EV_PAD: mv_pad(a, b < 0 ? 0 : b, b >= 0); break;
         case EV_KNOB: mv_knob(a, b); break;
+        case EV_TEMPO: mv_tempo_knob(a & 15, b, a >> 4); break;
         case EV_JOG: mv_jog(b); break;
         case EV_BTN: mv_button(a, b); break;
         case EV_TOUCH: mv_touch(a, b); break;
@@ -944,15 +1108,18 @@ static void v2_render(void *inst, int16_t *out, int frames)
     if (mv.want_play >= 0) { seq_play(mv.want_play); mv.want_play = -1; }
     ck_tempo();
     ev_drain();
+    tq_tick();
     mv_tick();
     if (ck.run && mv.samples - ck.last_rx > (uint64_t)CK_STALE) ck_stop();
     if (ck.play_wait && --ck.play_wait == 0) {          /* no answer from Move: MONO2K's own clock */
         ck.sync = MV_SYNC_INT;
+        tq.state = MV_TQ_NONE;                          /* (a tempo asked of Move meanwhile: moot, no clock) */
+        ck.free = 0;
         seq_play(!sq.playing);
         mv.touched = 1;
     }
     const int n = frames / M2K_SUB * M2K_SUB;   /* (Schwung's blocks are 128 frames: 8 of the core's) */
-    const double inc = ck.inc * (1 + ck.fc);
+    const double inc = ck.inc * (ck.free ? 1 : 1 + ck.fc);   /* (free: MONO2K's own tempo, exactly) */
     for (int f = 0; f < n; f += M2K_SUB) {
         ck_pulses();
         if (ck.run && ck.per_q8 && mx.ext) mx.per_q8 = ck.per_q8;   /* (Move's tempo: steady, not the pulses' times) */

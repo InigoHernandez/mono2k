@@ -43,8 +43,8 @@ Rows 8–11 and 44–49 stay black: the calm.
 - **The pad map** (x 0–22): the two page rows of pads as two rows of eight dots, the top row (the sound) over the second (the rest). The pad that leads to the page in view is a 2 x 2 block, and PERFORM's too while its keys are on. The eye goes from the lit pad to the same place on the screen.
 - **The tag:** filled for the sound pages (the top row, orange on the pads), the word underlined for the rest (azure, and the functions magenta). The same split as the pads' colours.
 - **The track** on the pages that are a track's, then its machine's icon and a mute, if there is room.
-- **The right:** the transport, REC, the pattern (`>A04` when one is queued; `BANK A` while Shift is held, `MUTE` while Mute is), and the bars as 2 x 3 cells when the track runs past 16 steps (the one the steps show filled).
-- The right is drawn first and the left's extras give way to it (the audit holds the fullest header on every page: track 8 muted, REC, a pattern queued, four bars).
+- **The right:** the transport, **INT** beside it when MONO2K plays its own tempo (SYNC, Move's, is the rule and says nothing), REC, the pattern (`>A04` when one is queued; `BANK A` while Shift is held, `MUTE` while Mute is), and the bars as 2 x 3 cells when the track runs past 16 steps (the one the steps show filled) and there is room.
+- The right is drawn first and the left's extras give way to it, the bars too (the audit holds the fullest header on every page: track 8 muted, REC, INT, a pattern queued, four bars).
 - The header is dark with a small lit tag rather than a lit bar: a static lit band would age an OLED.
 
 ## The type
@@ -94,7 +94,8 @@ Calm: pages cut, no transitions, no glitches. What moves is the sound: HOME's pl
 | top 6–8 | LFO1–3 | TRK DES WAV TRG MUL SPD PHS DPT | where it goes and its cycle, small; the wave as deep as it swings, live |
 | 2nd 1 | HOME | LEVL PTCH BPM SWNG TLEN SPD PROB LANE (no pictures) | 8 lanes: the number (the track in view's marked), 16 steps by the beat, a trig a block, one that may not play framed, a muted lane's dashes, each playhead a line under its step |
 | 2nd 2 | TRK | PCH LEV ARP SPD RNG GAT (BNK) | the arp's notes as a staircase, the one sounding lit; HOLD |
-| 2nd 3 | PAT | BPM SW LEN ACC TLN SPD PRB LAN | the tempo at x3 (SYNC's link when the Move's), the bar's beats; the pattern's length and the track's, each playhead a marker |
+| 2nd 3 | PAT | BPM SW LEN ACC TLN SPD PRB LAN | the tempo at x3 (SYNC's link when the Move's, INT when MONO2K's own), the bar's beats; the pattern's length and the track's, each playhead a marker |
+| (Shift + knob 1) | any | the tempo | as a knob touched: TEMPO, its value at x3 with its tenths, SYNC or INT beside it, a ruler from 30 to 285 |
 | 2nd 4 | GRID | X Y CHA RES BD SD HH LAN | Grids' map; the three lanes' cycles, the track's in a tag |
 | 2nd 5 | MIX (a proposal) | the 8 tracks' LEVL, a knob a track | a strip a track: its number, its level live, a muted one's speaker |
 | 2nd 6 | GLO | DCY DMP ADP DRV MUTE | the reverb's tail across the width |
