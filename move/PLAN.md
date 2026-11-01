@@ -76,6 +76,9 @@ The files live in `move/`, a fourth platform beside `fm1/`, `web/` and `host/`:
 
 - **8 tracks on the Move** (owner, 2026-10-31). `M2K_TRACKS` becomes a build option; the FM-1 stays at 6. A 6-track pattern loads on the Move with tracks 7–8 empty, and the FM-1 takes the first 6 tracks of an 8-track pattern.
 - **Open source** (owner, 2026-11-01): the Move version is GPL-3.0-only like the FM-1's, with Grids and the DRM- drums as they are, in the same public repo.
+- **In time with the Move** (owner): Move's tempo, one Play starts both.
+- **The pads** (owner): every page one pad press away (the top two rows), the keyboard the bottom two, the steps the sequencer on every page; the jog scrolls lists, never pages. MIX kept (knobs 1–8 the tracks' volumes); PERFORM's 16 main effects on the keyboard rows, Up swaps in WOW DRIVE KILL DUB SHIMMER SPIN.
+- **The screen** (owner): calmer; the knob names only on touch.
 - **Builds go on the Move over Wi-Fi** (the SSH key from Schwung's installer, `move.local`): a copy to a temp name, then a rename.
 - **In time with Move** (owner, 2026-11-01): MONO2K takes Move's tempo and transport, one Play starts both, and Move's own tracks play along. Built in step 2 (README, In time with Move): Move's pulses through the core's own clock in, a gentle phase lock, the period pinned to Move's tempo. MONO2K plays alone (INT) only when Move sends no clock.
 - **Step 2, hands on** (2026-11-01): the controls, the screen's page state with a plain renderer, saving to `/data/UserData/schwung/mono2k/mono2k.m2ks`, the LEDs. The table is in README.md.
