@@ -4,7 +4,7 @@
  *
  * Embed (the Move home is web/move/index.html, beside this file):
  *   <div id="move-gear"></div>
- *   <script src="gear.js?v=1"></script>
+ *   <script src="gear.js?v=2"></script>
  *   <script>MoveGear.init(document.getElementById("move-gear"));</script>
  * MoveGear.init(el, opts) builds the drawing into el and returns { start, mute }. opts (all optional):
  *   bar: false       no line under the drawing (the control under the pointer, the keys, the sound toggle)
@@ -224,13 +224,13 @@ window.MoveGear = (() => {
       el("rect", { class: "mg-pad__flash", x, y, width: PS, height: PS, rx: 7 }, g);
     }
 
-    /* the steps, a beat's tick under every fourth */
+    /* the steps, round, a beat's tick under every fourth */
     const pitch = (8 * PS + 7 * PG) / 16;
     for (let i = 0; i < 16; i++) {
       const cx = PX + pitch * (i + 0.5);
       const g = add("step:" + i, el("g", { class: "mg-step", style: `transform-origin:${cx}px ${SY}px` }, svg), {});
       el("rect", { class: "mg-hit", x: cx - pitch / 2, y: SY - 16, width: pitch, height: 32 }, g);
-      ctl["step:" + i].led = el("rect", { class: "mg-step__face", x: cx - 14, y: SY - 10, width: 28, height: 20, rx: 4 }, g);
+      ctl["step:" + i].led = el("rect", { class: "mg-step__face", x: cx - 11, y: SY - 11, width: 22, height: 22, rx: 11 }, g);   /* round (the owner's) */
       if (i % 4 === 0) el("rect", { class: "mg-step__tick", x: cx - 6, y: SY + 15, width: 12, height: 2, rx: 1 }, svg);
     }
 
