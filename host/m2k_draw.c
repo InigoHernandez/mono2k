@@ -280,6 +280,81 @@ static int render_hash(int skip, int len)
     return 0;
 }
 
+/* --guard DIR [P] [LOAD]: the FM-1's CPU guard (1.7) heard. Bank A's demo P (0..3, or DENSE 4) on an FM-1 pretended
+ * LOAD % short of it (default 115: its wall, two cores as --cpu counts them, that much over a render's real time): the
+ * loop renders 128 frames at a time into a ring of 6 while it is not full, the interrupt takes 2 every 2 renders' real
+ * time and leaves silence for any it finds missing (the glue's app_audio), and the guard is called as the glue calls
+ * it (m2k_fm1.c render_ahead), on the tracks' estimates (no clock: each reading a system call here). Writes DIR/before.wav (no guard: the sound runs
+ * short) and after.wav, 30 s each as the speaker plays them, and how many halves ran short and how many fades */
+static void wav16(const char *path, const int16_t *s, int frames)
+{
+    FILE *f = fopen(path, "wb");
+    if (!f) { perror(path); exit(1); }
+    uint32_t n = (uint32_t)frames * 4u, v;
+    fwrite("RIFF", 1, 4, f); v = 36 + n; fwrite(&v, 4, 1, f); fwrite("WAVEfmt ", 1, 8, f);
+    v = 16; fwrite(&v, 4, 1, f);
+    uint16_t h[2] = {1, 2}; fwrite(h, 2, 2, f);
+    v = 44100; fwrite(&v, 4, 1, f); v = 44100 * 4; fwrite(&v, 4, 1, f);
+    h[0] = 4; h[1] = 16; fwrite(h, 2, 2, f);
+    fwrite("data", 1, 4, f); fwrite(&n, 4, 1, f); fwrite(s, 4, (size_t)frames, f);
+    fclose(f);
+}
+static int guard_sim(const char *dir, int p, int load)
+{
+    enum { BLK = 128, RING = 6, SECS = 30 };
+    static int16_t ring[RING][2 * BLK], out[2 * SECS * 44100];
+    const int nout = SECS * 44100 / BLK;
+    double budget = 0;
+    m2k_par_begin = cpu_begin; m2k_par_end = cpu_end;
+    for (int g = -1; g < 2; g++) {     /* -1: the pattern's wall measured, for the budget; 0 before, 1 after */
+        play_from(p);
+        for (int f = 0; f < 44100; f += BLK) { static int16_t w[2 * BLK]; m2k_render(w, BLK); }
+        uint32_t ring_w = 0, ring_r = 0, shorts = 0, shed_shorts = 0, fades = 0, per[M2K_TRACKS] = {0};
+        double t = 0, ravg = 0, wsum = 0;
+        int got = 0, isr = 1, k = 0;
+        while (got < nout) {
+            if (g >= 0 && t >= 2.0 * isr) {          /* the interrupt: two renders' worth, or silence for what is missing */
+                for (int j = 0; j < 2 && got < nout; j++, got++) {
+                    if (ring_w == ring_r) { shorts++; m_set(out + 2 * BLK * got, 0, 4 * BLK); continue; }
+                    m_cpy(out + 2 * BLK * got, ring[ring_r % RING], 4 * BLK);
+                    ring_r++;
+                }
+                isr++;
+                continue;
+            }
+            if (g >= 0 && ring_w - ring_r >= RING) { t = 2.0 * isr; k = 0; continue; }   /* full: wait for it */
+            if (g == 1) {
+                const double pct = ravg / budget * 100;
+                int tf = m2k_guard((int)pct, (ring_w - ring_r <= RING / 3 && pct > 95) || (shorts != shed_shorts && pct > 70));
+                shed_shorts = shorts;
+                if (tf >= 0) { fades++; per[tf]++; }
+            }
+            double w = 0;
+            for (int f = 0; f < BLK; f += M2K_SUB) {   /* a render, its wall as --cpu counts it */
+                job_i = 0;
+                uint64_t x = wall_x, s = instr();
+                m2k_render(ring[ring_w % RING] + 2 * f, M2K_SUB);
+                uint64_t c = instr() - s - base_cost;
+                if (job_i) c -= job_i + 4 * base_cost;
+                w += (double)c + (double)(wall_x - x);
+            }
+            ring_w++;
+            ravg += (w - ravg) / 8;
+            if (g < 0) { wsum += w; if (++got == 2000) budget = wsum / 2000 * 100 / load; continue; }
+            t += w / budget + (++k % 3 == 0 ? 0.05 : 0);   /* (and the loop's own: the panel, a strip, every third) */
+        }
+        if (g < 0) continue;
+        char path[512];
+        snprintf(path, sizeof path, "%s/%s.wav", dir, g ? "after" : "before");
+        wav16(path, out, nout * BLK);
+        printf("  %s: %u halves ran short, %u tracks faded", g ? "after (the guard)" : "before", shorts / 2, fades);
+        for (int i = 0; i < M2K_TRACKS && fades; i++) printf(" T%d %u", i + 1, per[i]);
+        printf("\n");
+    }
+    m2k_par_begin = 0; m2k_par_end = 0;
+    return 0;
+}
+
 int main(int argc, char **argv)
 {
     for (int r = 0; r < 20; r++) { uint64_t a = instr(); uint64_t b = instr() - a; if (!base_cost || b < base_cost) base_cost = b; }
@@ -287,6 +362,7 @@ int main(int argc, char **argv)
     if (argc > 1 && !strcmp(argv[1], "--library")) return library_cpu(argc > 2 ? argv[2] : 0);
     if (argc > 1 && !strcmp(argv[1], "--cpu")) return cpu_yard();
     if (argc > 1 && !strcmp(argv[1], "--split")) return split_cmp();
+    if (argc > 2 && !strcmp(argv[1], "--guard")) return guard_sim(argv[2], argc > 3 ? atoi(argv[3]) : 3, argc > 4 ? atoi(argv[4]) : 115);
     if (argc > 1 && !strcmp(argv[1], "--hash")) return render_hash(argc > 2 ? atoi(argv[2]) : 0, argc > 3 ? atoi(argv[3]) : 10 * 44100);
     if (argc > 1 && !strcmp(argv[1], "--splash")) {
         /* every splash frame at 60 a second, as the host draws them */

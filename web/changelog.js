@@ -7,6 +7,14 @@ window.M2K_KINDS = {
 };
 window.M2K_CHANGES = [
   {
+    date: "2026-11-02", title: "MONO2K 1.7: no more dropouts when the FM-1's CPU is full",
+    items: [
+      ["sound", "1.7: When a pattern asks the FM-1 for more than it has, the sound no longer cracks or drops out: the quietest track for what it costs fades out in 3 ms and rests, and plays again from its next note once there is room. The track you are on is never kept resting. Anything that fits plays exactly as before."],
+      ["workflow", "1.7: CPU FULL names the track that rested and the heaviest track, the one to lighten (\"T2 FADED, T4 HEAVIEST\"). On GLO > PLAY a resting track's cell says REST."],
+      ["web", "1.7: The manual says what costs the FM-1 the most (The FM-1's load)."],
+    ],
+  },
+  {
     date: "2026-11-01", title: "MONO2K 1.6.2: no clicks on legato notes and accents, VO-6 heard on short notes",
     items: [
       ["sound", "1.6.2: A note played over one still sounding no longer clicks on GND-SIN, FM+STAT, FM+DYN, FM+PAR, DIGI-WAV, SWAV-PULS and SWAV-ENS (and SID-6581 with PWRS): the old note passes into the new in 3 ms. A note from silence, and a hit (ATK 0) over a quiet tail, start exactly as before; the drums too."],

@@ -679,9 +679,9 @@ static void keys_home(void)
  * plays the note new trigs take */
 static int track_root(const m2k_pattern_t *p, int t) { int r = pat_root(p, t); return r < 0 ? ui.note[t] : r; }
 
-/* the platform's meter (m2k_cpu, the FM-1's every half second): GLO > PLAY shows it; a short more than the last asks
- * for CPU FULL (m2k_frame: at most every 5 s) */
-static struct { int16_t c1, c2; uint32_t shorts, short_t, full_t; uint8_t on, full; } cpu;
+/* the platform's meter (m2k_cpu, the FM-1's every half second): GLO > PLAY shows it; a short more than the last, or
+ * a track the guard faded (m2k_shed), asks for CPU FULL (m2k_frame: at most every 5 s) */
+static struct { int16_t c1, c2; uint32_t shorts, short_t, full_t; uint8_t on, full, shed; int8_t faded; } cpu;
 void m2k_cpu(int core1_pct, int core2_pct, int shorts)
 {
     cpu.c1 = (int16_t)CLAMP(core1_pct, 0, 999);
@@ -691,10 +691,71 @@ void m2k_cpu(int core1_pct, int core2_pct, int shorts)
     cpu.on = 1;
 }
 
+/* the platform's CPU guard (m2k.h; the FM-1's), a call a render. In danger, the track sounding quietest for what it
+ * costs fades out over a block and rests, its trigs silent (the track in view the last to go); with no danger and room
+ * for the last to rest (the load over the last ~0.2 s and what it cost under 90 %: the loop's own work, the screen's,
+ * needs the rest), it plays again from its next trig; the track in view never rests. Then nothing for 8 renders after
+ * a fade (the load's fall seen first), 32 after a return. CPU FULL says which, and the dearest track */
+static struct { uint8_t wait, n; int8_t rest[M2K_TRACKS]; int32_t slow; } grd;   /* resting, in the order they went;
+                                                                                   * the load followed, Q8 */
+
+static char *s_trk(char *d, int t) { d[0] = 'T'; d[1] = (char)('1' + t); d[2] = 0; return d + 2; }
+
+/* a track's cost as a share of real time, % (the FM-1's measure; elsewhere the estimate against the yardstick, 1570
+ * Mac instructions a sample) */
+static int cost_pct(int32_t c)
+{
+    if (m2k_clock && m2k_clock_per_ms) {
+        uint32_t tpb = m2k_clock_per_ms * 160u / 441u;      /* ticks a block of real time (16 samples) */
+        return (int)((uint32_t)(c >> 4) * 100u / (tpb ? tpb : 1u));
+    }
+    return (int)(c * 100 / 1570);
+}
+
+static void grd_back(int t)
+{
+    trk[t].held = 0;
+    int j = 0;
+    for (int i = 0; i < grd.n; i++) if (grd.rest[i] != t) grd.rest[j++] = grd.rest[i];
+    grd.n = (uint8_t)j;
+}
+
+int m2k_guard(int load_pct, int danger)
+{
+    grd.slow += ((CLAMP(load_pct, 0, 999) << 8) - grd.slow) / 64;   /* (~64 renders) */
+    if (trk[ui.trk].held) grd_back(ui.trk);
+    if (grd.wait) { grd.wait--; return -1; }
+    if (!danger) {
+        if (grd.n) {
+            const int t = grd.rest[grd.n - 1];
+            if ((grd.slow >> 8) + cost_pct(trk[t].park_cost) < 90) { grd_back(t); grd.wait = 32; }
+        }
+        return -1;
+    }
+    grd.wait = 8;
+    int best = -1;
+    uint32_t bs = 0;
+    for (int pass = 0; pass < 2 && best < 0; pass++)
+        for (int t = 0; t < M2K_TRACKS; t++) {
+            const trk_t *k = &trk[t];
+            if (!k->sounding || k->held || (t == ui.trk) != pass) continue;
+            uint32_t v = ((uint32_t)CLAMP(k->lvl, 0, 65535) << 12) / ((uint32_t)trk_cost(t) + 1u);   /* (2^28 at most) */
+            if (best < 0 || v < bs) { best = t; bs = v; }
+        }
+    if (best >= 0) {
+        trk_park(best, trk_cost(best));
+        grd.rest[grd.n++] = (int8_t)best;
+        cpu.faded = (int8_t)best;
+        cpu.shed = 1;
+    }
+    return best;
+}
+
 static void ui_init(void)
 {
     m_set(&ui, 0, sizeof ui);
     m_set(&cpu, 0, sizeof cpu);
+    m_set(&grd, 0, sizeof grd);
     ui_forget();
     for (int k = 0, w = 0, b = 0; k < M2K_KEYS; k++) {
         int black = (0x54a >> ((k + 5) % 12)) & 1;
@@ -3653,8 +3714,9 @@ static void play_picture(int busy)
         if (heard) rect(x, y, w, 24, 1); else if (muted) frame(x, y, w, 24, 1); else dots_frame(x, y, w, 24);
         tx_b(&F_S, x + 4, y + 16, (const char[]){'T', (char)('1' + i), 0}, !heard);
         /* its load (the FM-1's measure: m2k_clock): its share of real time, full at 50 %, on a dotted track (the track
-         * alone where nothing measures: the browser, the host) */
+         * alone where nothing measures: the browser, the host); REST while the CPU guard keeps it silent */
         int lc = !heard, lx = x + 28, ly = y + 16, ld = track_load(i);
+        if (trk[i].held) { tx_b(&F_S, lx, ly, "REST", lc); continue; }
         for (int j = 0; j < 40; j += 2) px(lx + j, ly + 1, lc);
         if (ld > 0) rect(lx, ly, (ld > 50 ? 50 : ld) * 40 / 50, 2, lc);
     }
@@ -4367,10 +4429,21 @@ const uint8_t *m2k_frame(uint32_t ms)
     if (ui.boot_t0 == 0xFFFFFFFFu) ui.boot_t0 = ms;
     ui.now = ms;
     if (sq.full) { sq.full = 0; toast("PATTERNS FULL", "THE NEXT DID NOT OPEN"); }
-    if (cpu.full) {                     /* the sound ran short: never a mystery, never a nag */
-        cpu.full = 0;
-        cpu.short_t = ms | 1u;
-        if (!cpu.full_t || ms - cpu.full_t >= 5000) { cpu.full_t = ms | 1u; toast("CPU FULL", "SOUND DROPPED"); }
+    if (cpu.full || cpu.shed) {         /* the sound ran short, or a track faded so it would not: never a mystery, never
+                                         * a nag; the dearest track named, the one to lighten */
+        if (cpu.full) cpu.short_t = ms | 1u;
+        if (!cpu.full_t || ms - cpu.full_t >= 5000) {
+            char o[24], *e = o;
+            const int d = trk_dearest();
+            if (cpu.shed) {
+                e = s_cpy(s_cpy(s_trk(e, cpu.faded), " FADED, "), d == cpu.faded ? "THE" : "");
+                if (d != cpu.faded) e = s_trk(e, d);
+            } else e = s_trk(s_cpy(e, "DROPPED, "), d);
+            s_cpy(e, " HEAVIEST");
+            cpu.full_t = ms | 1u;
+            toast("CPU FULL", o);
+        }
+        cpu.full = cpu.shed = 0;
     }
     /* what the audio did */
     int boost = 0;

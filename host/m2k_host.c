@@ -5776,6 +5776,85 @@ static int selftest(void)
               "ACCENT: an accent on a sounding note ramps in across a block (no step), as loud; none, nothing moves");
     }
     {
+        /* 1.7, the FM-1's CPU guard (m2k_guard, its glue's call a render; never elsewhere, so the renders above are the
+         * same): in danger the track sounding quietest for what it costs fades out and rests, its trigs silent, the
+         * track in view the last to go and never kept resting, nothing faded for 8 calls after; with room for the last
+         * to rest (the load and its cost under 85 %) it plays again from its next trig. The fade a straight ramp over
+         * PARK_N blocks (no step: a held sine's own sample step at most 1.5 x; a cut at its crest ~27 x). CPU FULL names
+         * the track faded and the dearest, once in 5 s */
+        m2k_pattern_t *q = eng_pat(43);
+        for (int t = 0; t < 2; t++) {
+            kit_default(q, t, M_GSIN);
+            q->kit[t][P_HOLD] = 127;
+            q->kit[t][P_DEC] = 127;
+            q->kit[t][P_LEVL] = t ? 40 : 110;                    /* T2 the quieter */
+            m_cpy(trk[t].eff, q->kit[t], P_COUNT);
+        }
+        ui.trk = 2;
+        voice_on(0, 60, 100, 0);
+        voice_on(1, 64, 100, 0);
+        eng_run(0.3);
+        int pick = m2k_guard(100, 1) == 1 && trk[1].held && trk[1].park == PARK_N + 1;
+        for (int i = 0; i < 8; i++) pick &= m2k_guard(100, 1) == -1;   /* (the load's fall seen first) */
+        pick &= m2k_guard(100, 1) == 0;                           /* T1 next */
+        for (int i = 0; i < 8; i++) m2k_guard(100, 0);
+        pick &= m2k_guard(100, 1) == -1;                          /* none sounding left */
+        m2k_frame(10000);
+        int said = !strcmp(ui.toast, "CPU FULL") && !strcmp(ui.toast2, "T1 FADED, THE HEAVIEST");
+        uint32_t tt = ui.toast_t;
+        eng_run(0.1);
+        voice_on(1, 64, 100, 0);                                  /* a trig while it rests: silent */
+        eng_run(0.05);
+        int rest = !trk[0].sounding && !trk[1].sounding && trk[0].peak == 0 && trk[1].peak == 0;
+        int back = 1;
+        grd.slow = 80 << 8;                                       /* (the load followed as if it had been 80 % a while) */
+        for (int i = 0; i < 400; i++) back &= m2k_guard(80, 0) == -1 && trk[0].held;   /* no room at 80 % */
+        for (int i = 0; i < 400 && trk[0].held; i++) m2k_guard(10, 0);
+        back &= !trk[0].held && trk[1].held;                      /* the last to go, back first, as the load fell */
+        for (int i = 0; i < 32; i++) m2k_guard(10, 0);
+        back &= trk[1].held;                                      /* (32 renders after a return) */
+        m2k_guard(10, 0);
+        back &= !trk[1].held;
+        voice_on(0, 60, 100, 0);
+        eng_run(0.05);
+        back &= trk[0].sounding && trk[0].peak > 0;
+        ui.trk = 1;                                               /* in view, alone: it goes, and is back at once */
+        voice_on(1, 64, 100, 0);
+        trk[0].sounding = 0; trk[0].astage = 0;
+        for (int i = 0; i < 40; i++) m2k_guard(10, 0);
+        eng_run(0.3);
+        pick &= m2k_guard(100, 1) == 1;
+        m2k_guard(100, 0);
+        pick &= !trk[1].held;
+        m2k_frame(12000);
+        said &= ui.toast_t == tt;                                 /* (2 s on: not said again) */
+        /* the fade itself: T1 alone, held, faded in the middle of the run */
+        q = eng_pat(44);
+        kit_default(q, 0, M_GSIN);
+        q->kit[0][P_HOLD] = 127;
+        q->kit[0][P_DEC] = 127;
+        m_cpy(trk[0].eff, q->kit[0], P_COUNT);
+        ui.trk = 2;
+        voice_on(0, 60, 100, 0);
+        const int nb = M2K_SR / 2 / M2K_SUB, at = nb / 2;
+        int16_t *a = malloc((size_t)nb * M2K_SUB * 4);
+        int down = 1, gone = 1;
+        int32_t a_prev = 0;
+        for (int k = 0; k < nb; k++) {
+            if (k == at) { down &= m2k_guard(100, 1) == 0; a_prev = trk[0].amp1; }
+            m2k_render(a + 2 * k * M2K_SUB, M2K_SUB);
+            if (k >= at && k < at + PARK_N) { down &= trk[0].amp1 <= a_prev; a_prev = trk[0].amp1; }
+            if (k == at + PARK_N - 1) down &= trk[0].amp1 == 0;
+            if (k > at + PARK_N) gone &= !trk[0].sounding && trk[0].peak == 0;
+        }
+        double own = step_max(a, (at - 200) * M2K_SUB, at * M2K_SUB), fade = step_max(a, at * M2K_SUB, (at + PARK_N + 2) * M2K_SUB);
+        free(a);
+        printf("     the guard's fade: its sample step %.2f x the held sine's own\n", fade / own);
+        CHECK(pick && said && rest && back && down && gone && fade < 1.5 * own,
+              "GUARD: the CPU guard rests the track sounding quietest for what it costs (the track in view the last, "
+              "never kept), with no step, its trigs silent until there is room; CPU FULL names it and the dearest");
+    }
+    {
         /* 1.6.2: VO-6 faded in from near silence at every trig, as the Monomachine's (~150 ms to its level at C3): a
          * legato note was cut and a 1/16 came out quiet. A fresh note now rises 4 x as fast (VO_UPT), so from 50 ms each
          * 20 ms is within 3 dB of the held level on the vowels and notes that took longest (it was 6 .. 35 dB under);

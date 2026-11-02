@@ -241,7 +241,7 @@
     const load = () => {
       if (loaded) return;
       loaded = true;
-      const bytes = fetch("../m2k.wasm?v=112").then((r) => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); });
+      const bytes = fetch("../m2k.wasm?v=113").then((r) => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); });
       window.M2K_CORE = window.M2K_CORE || { bytes, module: bytes.then((b) => WebAssembly.compile(b)) };
       const chain = ["../help.js?v=9", "../screens.js?v=3", "../engines.js?v=4"];
       const next = (i) => { if (i >= chain.length) return; const s = document.createElement("script"); s.src = chain[i]; s.onload = () => next(i + 1); document.body.appendChild(s); };

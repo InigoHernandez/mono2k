@@ -1303,6 +1303,10 @@ static void run_track(int t, int32_t *L, int32_t *R, int32_t *rs, int32_t *ds)
         trk[t].dsent = 0;
         b->dt = (uint8_t)(t + 1);
     } else delay_block(t, ds, L, R);
+    trk_t *k = &trk[t];                /* how loud it is heard (its peak by its LEVL), for the CPU guard; falling at least
+                                        * a step a block, to 0 (the peak under T_CLIP, the level 2^15: a word) */
+    int32_t h = (int32_t)(((uint32_t)k->peak * tq_u16(T_VOL, P8(k, P_LEVL))) >> 15), f = k->lvl - (k->lvl >> 8) - (k->lvl > 0);
+    k->lvl = h > f ? h : f;
     if (m2k_clock) { par_note(t, m2k_clock() - c0); par_mcc[t] = trk[t].ccost; }
 }
 
@@ -1403,6 +1407,22 @@ static uint8_t par_split(void)
     uint8_t m = 0;
     for (int k = 0; k < n; k++) if (pick >> k & 1) m |= ub[k];
     return m;
+}
+
+/* a track's cost a block, for the CPU guard and CPU FULL: what it measured where a clock is (Q4 ticks: the FM-1's),
+ * else its estimate (par_split's) */
+static int32_t trk_cost(int t)
+{
+    if (m2k_clock && par_meas[t]) return par_meas[t];
+    return (trk[t].sounding ? trk[t].ccost : C_IDLE) + (trk[t].dsleep ? 0 : trk[t].dmode ? C_DLY2 : C_DLY);
+}
+
+/* the dearest track (CPU FULL names it: the one to lighten) */
+static int trk_dearest(void)
+{
+    int best = 0;
+    for (int t = 1; t < M2K_TRACKS; t++) if (trk_cost(t) > trk_cost(best)) best = t;
+    return best;
 }
 
 void m2k_render(int16_t *lr, int frames)

@@ -54,13 +54,24 @@ static uint32_t load_ticks, load_frames;        /* render time against the frame
 static uint32_t busy_ticks, busy_t0;            /* and the same over each quarter second, for the screen's pace */
 static uint32_t frame_gap = 33u;                /* ms between frames: 33 (30 a second) to 100, as the first core has room */
 
+/* the CPU guard (1.7): rather than the sound running short, the core rests its quietest track for what it costs
+ * (m2k_guard, a call a render) when a third of the ring is left and the render alone takes over 95 % of a block's real
+ * time (it cannot catch up), or when the interrupt found the ring short again and the render takes over 70 % (what is
+ * left of the loop could not); the core brings it back when there is room */
+#define BLK_TICKS (BLK * 10000u / 441u * FM1_TICKS_PER_US)   /* a render's real time: 2.9 ms */
+static uint32_t ravg, shed_shorts;              /* the render's time, followed over ~8 renders */
+
 static void render_ahead(void)
 {
     uint32_t k;
     for (k = 0; k < RING / 2u && ring_w - ring_r < RING; k++) {
+        uint32_t pct = ravg / (BLK_TICKS / 100u);
+        m2k_guard((int)pct, (ring_w - ring_r <= RING / 3u && pct > 95u) || (ring_short != shed_shorts && pct > 70u));
+        shed_shorts = ring_short;
         uint32_t t0 = fm1_ticks(), dt;
         m2k_render(ring[ring_w % RING], (int)BLK);
         dt = fm1_ticks() - t0;
+        ravg = ravg - (ravg >> 3) + (dt >> 3);
         load_ticks += dt;
         busy_ticks += dt;
         load_frames += BLK;
