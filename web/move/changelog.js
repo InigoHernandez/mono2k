@@ -7,6 +7,15 @@ window.M2K_KINDS = window.M2K_KINDS || {
 };
 window.M2K_CHANGES = [
   {
+    date: "2026-11-02", title: "MONO2K for the Move 0.3: PADS, Capture, a cleaner knob row",
+    items: [
+      ["workflow", "PADS on the Sample button: the bottom row plays the eight tracks at their own notes, the row above mutes them. Sample again for the piano. REC records each hit into its track."],
+      ["sequencer", "Capture: MONO2K always listens to the keys. Press Capture and the last whole bars you played go into the steps, where you played them (stopped: from bar 1). It adds, never more than the track's length; one Undo takes it back. In PADS every track gets its own hits."],
+      ["screen", "The knob row: every knob in the same box, apart from its neighbours, solid shapes instead of dots, every line picture from the box's top to its foot. Resonance shows as a solid corner."],
+      ["web", "The playable Move on the site has Sample and Capture."],
+    ],
+  },
+  {
     date: "2026-11-01", title: "MONO2K for the Move 0.2: the first release",
     items: [
       ["machines", "The FM-1's nineteen machines, its sequencer, PERFORM and the bus, on eight tracks. The same core as the FM-1's, so the same sound, sample for sample."],

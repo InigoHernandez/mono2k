@@ -2,7 +2,7 @@
     "id": "mono2k",
     "name": "MONO2K",
     "abbrev": "M2K",
-    "version": "0.2.0",
+    "version": "0.3.0",
     "description": "Eight mono machines, a 64-step sequencer with locks, and a lofi bus, in time with Move",
     "author": "Sequencist",
     "ui": "ui.js",

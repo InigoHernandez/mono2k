@@ -20,7 +20,7 @@
  * piano's white keys), W..O the row over it, Z / X Down / Up, Space Play, Shift Shift. */
 window.MoveGear = (() => {
   "use strict";
-  const V = { css: 4, worklet: 1, wasm: 1 };      /* bump with each changed file (the site's ?v= rule) */
+  const V = { css: 4, worklet: 1, wasm: 2 };      /* bump with each changed file (the site's ?v= rule) */
   const BASE = (() => {
     const s = document.currentScript && document.currentScript.src;
     return s ? s.replace(/[^/]*$/, "") : "";
@@ -44,15 +44,15 @@ window.MoveGear = (() => {
   const VOL = { x: FX + FW / 2 + 18, y: KNOB_Y, r: 29 };
 
   /* the Move's buttons: CC, where, its picture; lit: a white LED's brightness from MONO2K (MV_BTN_CC's slot), "rec"
-   * the palette, "play" MONO2K's transport, "shift" this page's own, 0 none (the host's, or not used by MONO2K) */
-  const BTN_SLOT = { 86: 0, 88: 1, 56: 2, 60: 3, 119: 4, 62: 5, 63: 6, 55: 7, 54: 8, 50: 9, 58: 10 };
+   * and Sample the palette, "play" MONO2K's transport, "shift" this page's own, 0 none (the host's) */
+  const BTN_SLOT = { 86: 0, 88: 1, 56: 2, 60: 3, 119: 4, 62: 5, 63: 6, 55: 7, 54: 8, 50: 9, 58: 10, 118: 11, 52: 12 };
   const BUTTONS = [
     { cc: 51, x: JOG.x - 32, y: rowC(2), r: 21, ic: "back", name: "Back" },
     { cc: 50, x: JOG.x + 32, y: rowC(2), r: 21, ic: "menu", name: "Menu · closes a list" },
     { cc: 85, x: JOG.x - 32, y: SY, r: 21, ic: "play", name: "Play · Space" },
     { cc: 86, x: JOG.x + 32, y: SY, r: 21, ic: "rec", name: "Rec · records live" },
-    { cc: 52, x: FX + FW * 0.25, y: rowC(0), r: 22, ic: "capture", name: "Capture · not used here", inert: 1 },
-    { cc: 118, x: FX + FW * 0.75, y: rowC(0), r: 22, ic: "sample", name: "Sample · not used here", inert: 1 },
+    { cc: 52, x: FX + FW * 0.25, y: rowC(0), r: 22, ic: "capture", name: "Capture · what you just played into the steps" },
+    { cc: 118, x: FX + FW * 0.75, y: rowC(0), r: 22, ic: "sample", name: "Sample · PADS: the 8 tracks, their mutes above" },
     { cc: 58, x: FX + FW * 0.25, y: rowC(1), r: 22, ic: "loop", name: "Loop · the arp's hold" },
     { cc: 88, x: FX + FW * 0.75, y: rowC(1), r: 22, ic: "mute", name: "Mute · tap: the track · hold: steps mute tracks" },
     { cc: 119, x: FX + FW * 0.25, y: rowC(2), r: 22, ic: "delete", name: "Delete · click to latch, then a step or knob", latch: 1 },
@@ -463,7 +463,7 @@ window.MoveGear = (() => {
         if (P[j] === L[j]) continue;
         P[j] = L[j];
         const ic = ctl["btn:" + cc].icon;
-        const col = +cc === 86 ? (lit[L[j]] || "") : white(L[j]);
+        const col = +cc === 86 || +cc === 118 ? (lit[L[j]] || "") : white(L[j]);
         ic.style.stroke = col || ""; if (ic.classList.contains("mg-btn__icon--fill")) ic.style.fill = col || "";
       }
       const st = f.st, ps = shown.st;

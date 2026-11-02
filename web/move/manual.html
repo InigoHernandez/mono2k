@@ -123,7 +123,7 @@
 <article id="pads" data-group="The instrument">
   <h1>The pads</h1>
   <p class="sub">The top two rows are the pages, the bottom two the keyboard, the steps the sequencer.</p>
-  <figure class="fig" style="margin-top:var(--s3)"><img src="img/padmap.png" width="1406" height="1386" alt="The Move's pads under MONO2K, lit as it lights them: HOME in view; three keys held with the arp; PERFORM on" style="display:block;width:100%;height:auto;border:1px solid var(--ink)" loading="lazy"><figcaption style="max-width:none">The pads as MONO2K lights them: HOME in view; keys held on TRK; PERFORM on.</figcaption></figure>
+  <figure class="fig" style="margin-top:var(--s3)"><img src="img/padmap.png?v=2" width="1406" height="1818" alt="The Move's pads under MONO2K, lit as it lights them: HOME in view; three keys held with the arp; PADS; PERFORM on" style="display:block;width:100%;height:auto;border:1px solid var(--ink)" loading="lazy"><figcaption style="max-width:none">The pads as MONO2K lights them: HOME in view; keys held on TRK; PADS; PERFORM on.</figcaption></figure>
   <table>
     <thead><tr><th>Row</th><th>Pads</th></tr></thead>
     <tbody>
@@ -135,6 +135,14 @@
     </tbody>
   </table>
   <p>The page in view is lit bright, the others dim. On the keys the root is lit orange and the notes played white, by hand or by the sequencer; a pad no key has stays dark. With PERFORM on, the keys are its effects (<a href="#perform">PERFORM</a>).</p>
+  <h2>PADS: every track on one row</h2>
+  <p>Press <b>Sample</b>: the bottom row plays the eight tracks, each at its own note (its trigs' most common), and the row above mutes them (at the bar when GLO says so; a mute waiting blinks). Sample again: the piano. REC records each hit into its own track. A small mark in the header while PADS is on.</p>
+  <h2>Capture</h2>
+  <p>MONO2K always listens to what you play on the keys, REC or not. Press <b>Capture</b> and the last whole bars you played go into the steps: while playing, each note on the bar and step it fell on; stopped, your first note becomes bar 1. It adds to what is there, never more than the track's length; in PADS every track gets its own hits. One Undo takes it all back.</p>
+  <div class="figs">
+    <figure class="fig"><img class="oled" src="screens/23_pads.png" width="128" height="64" alt="HOME with PADS on: the mark of four pads in the header" loading="lazy"><figcaption>PADS on: its mark in the header.</figcaption></figure>
+    <figure class="fig"><img class="oled" src="screens/24_capture.png" width="128" height="64" alt="CAPTURED 1 BAR, T1 T2 T3" loading="lazy"><figcaption>Capture: the bars taken, and where.</figcaption></figure>
+  </div>
 </article>
 
 <article id="controls" data-group="The instrument">
@@ -162,6 +170,8 @@
       <tr><td>Rec</td><td>Live record: keys, and knobs as locks on the step playing.</td></tr>
       <tr><td>Shift + Rec</td><td>Save.</td></tr>
       <tr><td>Loop</td><td>The track's arp HOLD.</td></tr>
+      <tr><td>Sample</td><td>PADS on and off: the eight tracks on the bottom row, their mutes above (<a href="#pads">Pads</a>).</td></tr>
+      <tr><td>Capture</td><td>What you just played on the keys, into the steps in whole bars; lit when there is something to take.</td></tr>
       <tr><td>Mute</td><td>Tapped: the track in view. Held: steps 1–8 and the track buttons mute and unmute tracks.</td></tr>
       <tr><td>Copy / Delete</td><td>Held, with steps, tracks or patterns (<a href="#steps">Steps and locks</a>).</td></tr>
       <tr><td>Undo</td><td>Undo; Shift + Undo, redo.</td></tr>
@@ -374,7 +384,7 @@
 </footer>
 <script src="../site.js?v=4"></script>
 <script src="../switch.js?v=1"></script>
-<script src="changelog.js?v=2"></script>
+<script src="changelog.js?v=3"></script>
 <script src="../manual.js?v=58"></script>
 </body>
 </html>
