@@ -83,8 +83,8 @@ typedef struct {
     uint8_t n, c;                         /* a choice's count, the one chosen */
     uint8_t lock;                         /* the value is a held step's lock */
     uint16_t q;                           /* where the value sits, 0..256 */
-    char val[8];                          /* the value as its column writes it (14 px) */
-    int8_t wy[14];                        /* a wave's rows about its middle */
+    char val[8];                          /* the value as its column writes it (13 px; a name 14) */
+    int8_t wy[13];                        /* a wave's rows about its middle, -6..6, a column of the box each */
 } ms_knob_t;
 
 typedef struct {

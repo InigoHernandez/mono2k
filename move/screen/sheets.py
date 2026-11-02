@@ -11,6 +11,9 @@
 #                       them, beside the screen, in three states (HOME in view; keys held; PERFORM on)
 #   motion_*.gif        the motions (a knob touched, the page pads pressed, the playhead), the screen beside the pads
 #                       and the steps as they light, at the screen's pace (34.8 ms a frame)
+#   knob_rows.png       every page's knob row (SYN on every machine, a step's locks, a knob touched), rows 45..63 x6
+#   knobs_before_after.png   with --before OLD (another build's sheets): each row as it was over as it is
+#   .venv/bin/python move/screen/sheets.py build/move/sheets [--before build/move/sheets_before]
 # The labels are set in the owner's pixel font (assets/fonts/mono2k-pixel, CC BY-SA), as the screen is. The LED colours
 # are the Move's palette entries MONO2K uses (Schwung's constants.mjs, MIT).
 import os
@@ -134,8 +137,60 @@ def padmap_of(path):
     return leds, labels, screen
 
 
+ROW0, ROW1 = 45, 64                           # the knob row's band: a lock's line, the boxes, the touched line
+
+
+def rows_of(src):
+    """sheets.c's knob rows: (name, label, the frame's rows 45..63) in its order"""
+    d = os.path.join(src, "rows")
+    if not os.path.exists(os.path.join(d, "manifest.tsv")):
+        return []
+    out = []
+    for l in open(os.path.join(d, "manifest.tsv")):
+        f = l.rstrip("\n").split("\t")
+        if len(f) == 2:
+            out.append((f[0], f[1], load(os.path.join(d, f[0] + ".pbm")).crop((0, ROW0, W, ROW1))))
+    return out
+
+
+def strips(path, title, blocks, font, z=6, cols=2):
+    """blocks of labelled strips (each a list of (tag, image)), in columns, x z, white on black in a bezel"""
+    sw, sh, tagw, lab, pad = W * z + 12, (ROW1 - ROW0) * z + 12, 120, 34, 30
+    bh = lab + max(len(b[1]) for b in blocks) * (sh + 8) + pad
+    rows = (len(blocks) + cols - 1) // cols
+    sheet = Image.new("L", (pad + cols * (tagw + sw + pad), 80 + rows * bh), BG)
+    d = ImageDraw.Draw(sheet)
+    d.fontmode = "1"
+    d.text((pad, 26), title, font=font, fill=200)
+    for i, (label, items) in enumerate(blocks):
+        x = pad + (i % cols) * (tagw + sw + pad)
+        y = 80 + (i // cols) * bh
+        d.text((x, y), label.upper(), font=font, fill=170)
+        for j, (tag, im) in enumerate(items):
+            yy = y + lab + j * (sh + 8)
+            d.text((x, yy + sh // 2), tag, font=font, fill=120, anchor="lm")
+            sheet.paste(framed(scaled(im, z), 6), (x + tagw, yy))
+    sheet.save(path)
+
+
+def knob_sheets(src, before):
+    font = ImageFont.truetype(FACE, 16)
+    rows = rows_of(src)
+    if not rows:
+        return
+    strips(os.path.join(src, "knob_rows.png"), "MONO2K ON THE MOVE  THE KNOB ROWS, ROWS 45-63, X6",
+           [(lb, [("", im)]) for _, lb, im in rows], font)
+    if before:
+        old = {n: im for n, _, im in rows_of(before)}
+        blocks = [(lb, [("BEFORE", old[n]), ("AFTER", im)]) for n, lb, im in rows if n in old]
+        strips(os.path.join(src, "knobs_before_after.png"),
+               "MONO2K ON THE MOVE  THE KNOB ROW, BEFORE AND AFTER (ROWS 45-63, X6)", blocks, font)
+
+
 def main():
     src = sys.argv[1]
+    before = sys.argv[sys.argv.index("--before") + 1] if "--before" in sys.argv else None
+    knob_sheets(src, before)
     man = [l.rstrip("\n").split("\t") for l in open(os.path.join(src, "manifest.tsv")) if "\t" in l]
     os.makedirs(os.path.join(src, "png"), exist_ok=True)
     frames = {}

@@ -15,8 +15,9 @@
  *   0..6     header: the pad that leads here (a map of the two page rows), the page's tag (filled: a sound page;
  *            framed: the rest), the track and its machine | the pattern, REC, the transport
  *   12..43   the stage: the page's one live picture; a knob touched, its full name and its value large
- *   47       a held step's lock, a dash over the knob's picture
- *   50..61   the knobs' pictures, 8 columns of 16 for the Move's 8 knobs; row 63 marks the knob touched
+ *   47       a held step's lock, a line over the knob's box
+ *   49..61   the knobs' pictures, 8 columns of 16 for the Move's 8 knobs, each in a 13 x 13 box at 2..14 of its
+ *            column (a 3 px gutter between two); row 63 marks the knob touched, a line under its box
  * HOME, MIX's strips, SOUNDS and the patterns lay the middle out their own way under the same header.
  * Integer only, nothing allocated; the meters' fall is the one state kept between gathers. */
 #include "m2k_screen.h"
@@ -28,11 +29,14 @@ static uint8_t *ms_fb = ms_own;         /* the frame being drawn (m2k_screen_dra
 #define MS_HB      6                   /* the header's baseline */
 #define MS_ST_T    12                  /* the stage */
 #define MS_ST_B    43
-#define MS_KP      50                  /* the knobs' pictures, 12 rows */
-#define MS_LOCK_Y  (MS_KP - 3)         /* a lock's dash */
+#define MS_KS      13                  /* a knob's picture: 13 x 13, the same box for every kind */
+#define MS_KX      2                   /* its first column in its 16 (a 3 px gutter between two) */
+#define MS_KP      49                  /* its first row */
+#define MS_KW      13                  /* a value written in a column: at most the box's width */
+#define MS_LOCK_Y  (MS_KP - 2)         /* a lock: a line over the box */
 #define MS_CAP     5                   /* the capitals' rows at x1 */
 #define MS_FROWS   7                   /* a glyph's rows with its descenders */
-#define MS_LW      15                  /* a column's text at most */
+#define MS_NW      14                  /* a name written in a column (an LFO's destination): its 16 less a pixel a side */
 #define MS_FREE    0xFF                /* a knob with nothing on it */
 
 /* ------------------------------------------------------------------------------------------------ drawing */
@@ -350,20 +354,24 @@ static int ms_vfit(char *o, int w)                   /* 1: it had to be cut */
 static const char *ms_dest_name(const pi_t *pi, char *o)
 {
     const char *lb = ms_label(pi);
-    if (ms_tw(lb) <= 14) return lb;
+    if (ms_tw(lb) <= MS_NW) return lb;
     s_cpyn(o, pi->s4, 4);
-    for (int n = 3; n > 1 && ms_tw(o) > 14; n--) o[n - 1] = 0;
+    for (int n = 3; n > 1 && ms_tw(o) > MS_NW; n--) o[n - 1] = 0;
     return o;
 }
 
-/* a kind writes its value in its column only if every value it takes fits there whole (else its word would come and
- * go as the knob turns): worked out once a kind, through fmt, by m2k_screen_init (off the audio thread). The ones
- * read off the moment always fit: a destination's name, a track, a channel */
+/* the kinds whose values are names read off the moment (a destination, a track, a channel): always written, in up to
+ * MS_NW (a name is not a number to draw); every other written value fits the box, MS_KW */
+static int ms_named(int k) { return k == K_DEST || k == K_TRK || k == K_MCH; }
+
+/* a kind writes its value in its column only if every value it takes fits the box whole (else its word would come and
+ * go as the knob turns): worked out once a kind, through fmt, by m2k_screen_init (off the audio thread). The names
+ * read off the moment always do */
 static uint8_t ms_kfit[128];                          /* 0 not yet, 1 written, 2 drawn */
 static int ms_writes(const pi_t *pi, int t)
 {
     const int k = pi->kind;
-    if (k == K_DEST || k == K_TRK || k == K_MCH) return 1;
+    if (ms_named(k)) return 1;
     if (k >= 128) return 0;
     if (!ms_kfit[k]) {
         int ok = 1;
@@ -371,7 +379,7 @@ static int ms_writes(const pi_t *pi, int t)
             char o[32];
             const char *u;
             fmt(pi, t, v, o, &u);
-            if (ms_vfit(o, 14)) ok = 0;
+            if (ms_vfit(o, MS_KW)) ok = 0;
         }
         ms_kfit[k] = (uint8_t)(ok ? 1 : 2);
     }
@@ -379,7 +387,7 @@ static int ms_writes(const pi_t *pi, int t)
 }
 
 /* the column a knob's picture takes (m2k_ui.c's icon_of, at 16 px): what it is, drawn; a value written where its
- * kind's every value fits, else drawn (a choice's segments, a dial) */
+ * kind's every value fits the box, else drawn (a choice of up to 6 its places, more a dial) */
 enum { MP_DIAL, MP_BIDIAL, MP_SLIDER, MP_ENV, MP_FILT, MP_WAVE, MP_DWAV, MP_PAN, MP_CHOICE, MP_SEGS, MP_TOGGLE,
        MP_TEXT, MP_NUM };
 static int ms_pic_of(const pi_t *pi, int t)
@@ -398,7 +406,7 @@ static int ms_pic_of(const pi_t *pi, int t)
     default:
         if (n == 2) return MP_TOGGLE;
         if (ms_writes(pi, t)) return n && n <= 8 ? MP_CHOICE : icon_of(pi) == IC_BOX ? MP_TEXT : MP_NUM;
-        return n && n <= 8 ? MP_SEGS : bipolar(k) ? MP_BIDIAL : MP_DIAL;
+        return n && n <= 6 ? MP_SEGS : bipolar(k) ? MP_BIDIAL : MP_DIAL;   /* (7 or 8: rates, a dial) */
     }
 }
 
@@ -427,6 +435,37 @@ void m2k_screen_init(void)
     ms_pic_of(pinfo(0, SETTING(S_MUTQ)), 0);
 }
 
+/* a knob's picture from its value, o its text (as fmt writes it; a destination's name, a channel's number) */
+static void g_pic(ms_knob_t *kn, const pi_t *pi, int t, int val, char *o)
+{
+    const int pic = ms_pic_of(pi, t);
+    kn->pic = (uint8_t)pic;
+    kn->q = (uint16_t)ms_q(pi, val);
+    kn->n = (uint8_t)kind_choices(pi->kind);
+    kn->c = (uint8_t)choice_of(pi->kind, val);
+    switch (pic) {
+    case MP_ENV: kn->sub = (uint8_t)(pi->kind == K_AHLD ? 2 : pi->s4[0] == 'A' && pi->s4[1] == 'T' ? 1 : 0); break;
+    case MP_FILT: kn->sub = (uint8_t)(pi->kind == K_FOCT ? 0 : pi->kind == K_FWID ? 1 : pi->s4[0] == 'H' ? 2 : 3); break;
+    case MP_WAVE:
+        kn->sub = (uint8_t)((o[0] == 'S' && o[1] == 'Q') || s_is(o, "PULS"));
+        for (int i = 0; i < MS_KS; i++)                  /* (a cycle, end to end; wave_at's -6..7 held to the box's -6..6,
+                                                          * its +7 only at the very foot: every other row kept, no step) */
+            kn->wy[i] = (int8_t)CLAMP(wave_at(o, i, MS_KS - 1), -6, 6);
+        break;
+    case MP_DWAV: {                                    /* DIGI-WAV's wave itself, from the bank it plays */
+        const int big = (PAT(cur_pat)->kit[t][P_WBNK] * 2) >> 7, w = big ? (val >> 1 > 63 ? 63 : val >> 1) : (val * 31) / 127;
+        const int16_t *wv = big ? &T_WAVES64[w * 256] : &T_WAVES[w * 256];
+        for (int i = 0; i < MS_KS; i++) kn->wy[i] = (int8_t)((-wv[i * 256 / MS_KS] * 6 + 16384) >> 15);   /* (-6..6, rounded) */
+        break;
+    }
+    case MP_CHOICE: case MP_TEXT: case MP_NUM:
+        ms_vfit(o, ms_named(pi->kind) ? MS_NW : MS_KW);
+        s_cpyn(kn->val, o, sizeof kn->val);
+        break;
+    default: break;
+    }
+}
+
 static void g_knob(ms_view_t *v, const m2k_scr_t *s, int k)
 {
     ms_knob_t *kn = &v->knob[k];
@@ -442,33 +481,11 @@ static void g_knob(ms_view_t *v, const m2k_scr_t *s, int k)
     fmt(pi, t, val, o, &u);
     if (pi->kind == K_DEST && val) s_cpyn(o, ms_dest_name(pinfo(t, val - 1), dn), sizeof o);
     if (pi->kind == K_MCH) { char c[32]; s_cpyn(c, o + 2, sizeof c); s_cpy(o, c); }   /* (CH10: the channel's number) */
-    const int pic = ms_pic_of(pi, t);
-    kn->pic = (uint8_t)pic;
-    kn->q = (uint16_t)ms_q(pi, val);
-    kn->n = (uint8_t)kind_choices(pi->kind);
-    kn->c = (uint8_t)choice_of(pi->kind, val);
+    const int tempo = ms_move_tempo(s, code);
+    if (tempo) ms_bpm_text(o, s->bpm10);
+    g_pic(kn, pi, t, val, o);
+    if (tempo) kn->q = (uint16_t)CLAMP((s->bpm10 / 10 - 30) * 256 / 255, 0, 256);
     kn->lock = (uint8_t)ms_locked(s, t, code);
-    if (ms_move_tempo(s, code)) { ms_bpm_text(o, s->bpm10); kn->q = (uint16_t)CLAMP((s->bpm10 / 10 - 30) * 256 / 255, 0, 256); }
-    switch (pic) {
-    case MP_ENV: kn->sub = (uint8_t)(pi->kind == K_AHLD ? 2 : pi->s4[0] == 'A' && pi->s4[1] == 'T' ? 1 : 0); break;
-    case MP_FILT: kn->sub = (uint8_t)(pi->kind == K_FOCT ? 0 : pi->kind == K_FWID ? 1 : pi->s4[0] == 'H' ? 2 : 3); break;
-    case MP_WAVE:
-        kn->sub = (uint8_t)((o[0] == 'S' && o[1] == 'Q') || s_is(o, "PULS"));
-        for (int i = 0; i < 14; i++) kn->wy[i] = (int8_t)((wave_at(o, i, 13) * 5) / 7);
-        break;
-    case MP_DWAV: {                                    /* DIGI-WAV's wave itself, from the bank it plays */
-        const int big = (PAT(cur_pat)->kit[t][P_WBNK] * 2) >> 7, w = big ? (val >> 1 > 63 ? 63 : val >> 1) : (val * 31) / 127;
-        const int16_t *wv = big ? &T_WAVES64[w * 256] : &T_WAVES[w * 256];
-        for (int i = 0; i < 14; i++) kn->wy[i] = (int8_t)(-(wv[i * 256 / 14] * 5) / 32768);
-        break;
-    }
-    case MP_CHOICE: case MP_TEXT: case MP_NUM:
-        ms_vfit(o, 14);
-        s_cpyn(kn->val, o, sizeof kn->val);
-        kn->sub = (uint8_t)(bipolar(pi->kind) | (action(pi->kind) ? 2 : 0));
-        break;
-    default: break;
-    }
 }
 
 /* the tempo shown large (Shift + knob 1 on any page, or the page's BPM): its tenths, SYNC (Move's and MONO2K's) or INT
@@ -769,153 +786,131 @@ void m2k_screen_gather(ms_view_t *v, const m2k_scr_t *s)
 
 /* ========================================================================================== the draw (view) */
 
-/* where each of the eight columns' texts goes: centred in its column, then pushed right where it comes within 2 px of
- * the one before, then left where the next pushes back, never out of its own column. xs: each one's x */
-static void ms_label_x(const char *const *lb, int *xs)
+/* ---------------------------------------------------------------------------------------- the knobs' pictures */
+
+/* The knob row: 8 columns of 16, each knob's picture in the same 13 x 13 box, at columns 2..14 of its 16 and rows
+ * 49..61: every box shares one top row and one bottom row, and two boxes are 3 px apart. One language: a thin line is
+ * the range or the shape, solid is the value (a dial's band, a fader's fill, a choice's place, a switch on, a pan's
+ * handle); nothing dotted. A value written instead (a name, a short number, a choice that fits) sits centred in the
+ * box, its capitals on its middle rows, alone. */
+
+/* where (dx, dy) from a centre points: clockwise from 12 o'clock, 1024 a turn (atan to within a degree, integers) */
+static int ms_ang(int dx, int dy)
 {
-    int w[8];
-    for (int k = 0; k < 8; k++) w[k] = lb[k] ? ms_tw(lb[k]) : 0;
-    for (int g = 3; g >= 2; g--) {
-        for (int k = 0; k < 8; k++) xs[k] = k * 16 + (16 - w[k]) / 2;
-        for (int k = 1; k < 8; k++)
-            if (lb[k] && lb[k - 1] && xs[k] < xs[k - 1] + w[k - 1] + g)
-                xs[k] = CLAMP(xs[k - 1] + w[k - 1] + g, k * 16, k * 16 + 16 - w[k]);
-        for (int k = 6; k >= 0; k--)
-            if (lb[k] && lb[k + 1] && xs[k] + w[k] + g > xs[k + 1])
-                xs[k] = CLAMP(xs[k + 1] - g - w[k], k * 16, k * 16 + 16 - w[k]);
-        int ok = 1;
-        for (int k = 0; k < 7; k++) if (lb[k] && lb[k + 1] && xs[k + 1] - xs[k] - w[k] < 2) ok = 0;
-        if (ok) return;
-    }
+    const int ax = dx < 0 ? -dx : dx, ay = dy < 0 ? -dy : dy, mn = ax < ay ? ax : ay, mx = ax < ay ? ay : ax;
+    const int t = mx ? (mn << 8) / mx : 0;                         /* (the octant's tan, Q8) */
+    const int o = (t >> 1) + ((89 * t * (256 - t)) >> 17);        /* (its angle, 128 the octant) */
+    const int a = ax <= ay ? o : 256 - o;
+    if (dx >= 0) return dy <= 0 ? a : 512 - a;
+    return dy > 0 ? 512 + a : (1024 - a) & 1023;
 }
 
-/* the dial: a 12 px ring, 270 degrees in 24 points from the lower left round over the top, and where the pointer
- * starts toward its middle */
-static const int8_t MS_DIAL[24][4] = {
-    {1, 9, 4, 7}, {1, 8, 4, 7}, {0, 7, 3, 6}, {0, 6, 3, 6}, {0, 5, 3, 5}, {0, 4, 3, 5}, {1, 3, 4, 4}, {1, 2, 4, 4},
-    {2, 1, 4, 4}, {3, 1, 4, 4}, {4, 0, 5, 3}, {5, 0, 5, 3}, {6, 0, 6, 3}, {7, 0, 6, 3}, {8, 1, 7, 4}, {9, 1, 7, 4},
-    {10, 2, 7, 4}, {10, 3, 7, 4}, {11, 4, 8, 5}, {11, 5, 8, 5}, {11, 6, 8, 6}, {11, 7, 8, 6}, {10, 8, 7, 7},
-    {10, 9, 7, 7}};
-
-/* a knob's 14 x 12 picture: column x0 + 1 .. x0 + 14, rows y .. y + 11; its text written from tx (centred: tx < 0) */
-static void ms_pic(const ms_knob_t *kn, int x0, int y, int tx)
+/* the dial, a knob seen from above: its ring whole (r 6); inside it the band, solid, from where the sweep starts (7:30,
+ * round 270 degrees to 4:30) to the value, a two-sided one's from 12 o'clock; the pointer from the middle out */
+static void ms_dial(int X, int Y, int q, int bip)
 {
-    const int n = kn->n, c = kn->c, X = x0 + 1, pic = kn->pic, q = CLAMP(kn->q, 0, 256);
-    switch (pic) {
-    case MP_DIAL: case MP_BIDIAL: {          /* the arc to the value lit, the rest dotted, the pointer in */
-        const int dx = x0 + 2, at = (q * 23 + 128) >> 8, from = pic == MP_BIDIAL ? (at < 12 ? at : 12) : 0;
-        const int to = pic == MP_BIDIAL ? (at < 12 ? 11 : at) : at;
-        for (int i = 0; i < 24; i++) {
-            int lit = i >= from && i <= to;
-            if (pic == MP_BIDIAL && at == 11) lit = i == 11;     /* (the middle) */
-            if (lit || !(i & 1)) ms_px(dx + MS_DIAL[i][0], y + MS_DIAL[i][1], 1);
+    const int c = MS_KS / 2, pv = q * 3;                           /* (the value along the sweep, 0..768) */
+    const int lo = bip && pv > 384 ? 384 : bip ? pv : 0, hi = bip && pv < 384 ? 384 : pv;
+    for (int j = 0; j < MS_KS; j++)
+        for (int i = 0; i < MS_KS; i++) {
+            const int dx = i - c, dy = j - c, d2 = dx * dx + dy * dy;
+            if (d2 > 30 && d2 <= 40) ms_px(X + i, Y + j, 1);         /* (the ring) */
+            else if (d2 > 20 && d2 <= 29) {                         /* (the band's ring, just inside) */
+                const int p = (ms_ang(dx, dy) - 640) & 1023;
+                if (p >= lo && p <= hi) ms_px(X + i, Y + j, 1);
+            }
         }
-        ms_line(dx + MS_DIAL[at][2], y + MS_DIAL[at][3], dx + MS_DIAL[at][0], y + MS_DIAL[at][1], 1);
-        if (pic == MP_BIDIAL) { ms_px(dx + 5, y + 2, 1); ms_px(dx + 6, y + 2, 1); }   /* (the middle's notch) */
+    const uint32_t ph = (uint32_t)((640 + pv) & 1023) << 22;
+    ms_line(X + c, Y + c, X + c + ((sinp(ph) * 5 + 16384) >> 15), Y + c - ((sinp(ph + 0x40000000u) * 5 + 16384) >> 15), 1);
+}
+
+/* a knob's picture in its box (X, Y its top left) */
+static void ms_pic(const ms_knob_t *kn, int X, int Y)
+{
+    const int n = kn->n, c = kn->c, pic = kn->pic, sub = kn->sub, q = CLAMP(kn->q, 0, 256), e = MS_KS - 1, m = MS_KS / 2;
+    switch (pic) {
+    case MP_DIAL: case MP_BIDIAL: ms_dial(X, Y, q, pic == MP_BIDIAL); break;
+    case MP_SLIDER: {                        /* a fader: its slot, solid from the floor to the level */
+        const int f = (q * 9 + 128) >> 8;
+        ms_rframe(X + 3, Y, 7, MS_KS, 1);
+        if (f) ms_rect(X + 5, Y + e - 1 - f, 3, f, 1);
         break;
     }
-    case MP_SLIDER: {                        /* a fader: its slot, lit from the floor to the level */
-        ms_rframe(x0 + 5, y, 6, 12, 1);
-        int f = (q * 10 + 128) >> 8;
-        if (f) ms_rect(x0 + 7, y + 11 - f, 2, f, 1);
+    case MP_ENV: {                           /* the segment, its run the value: a rise then held, a hold, a fall then out */
+        const int L = (q * e + 128) >> 8;
+        if (sub == 2) { ms_vline(X, Y, MS_KS, 1); ms_hline(X, Y, L + 1, 1); ms_vline(X + L, Y, MS_KS, 1); }
+        else if (sub == 1) { ms_line(X, Y + e, X + L, Y, 1); ms_hline(X + L, Y, MS_KS - L, 1); }
+        else { ms_line(X, Y, X + L, Y + e, 1); ms_hline(X + L, Y + e, MS_KS - L, 1); }
         break;
     }
-    case MP_ENV: {                           /* the segment, its run the value: a rise, a hold, a fall */
-        const int top = y + 1, bot = y + 10, L = 1 + ((q * 12) >> 8), x1 = X + 13;
-        if (kn->sub == 2) { ms_line(X, bot, X, top, 1); ms_line(X, top, X + L, top, 1); ms_line(X + L, top, X + L, bot, 1); }
-        else if (kn->sub == 1) { ms_line(X, bot, X + L, top, 1); if (X + L < x1) ms_line(X + L, top, x1, top, 1); }
-        else { ms_line(X, top, X + L, bot, 1); if (X + L < x1) ms_line(X + L, bot, x1, bot, 1); }
-        ms_dots_h(X, y + 11, 14);
+    case MP_FILT: {                          /* the band: its edges (an open one runs out flat), a resonance a peak */
+        const int top = Y + 3, bot = Y + e;
+        int lo = 2, hi = e, pl = 0, ph = 0;
+        if (sub == 0) lo = 2 + ((q * 8 + 128) >> 8);
+        else if (sub == 1) hi = 4 + ((q * 8 + 128) >> 8);
+        else if (sub == 2) { lo = 4; pl = (q * 3 + 128) >> 8; }
+        else { lo = 0; hi = 8; ph = (q * 3 + 128) >> 8; }
+        const int a = lo + (pl ? 2 : 1), b = hi - (ph ? 2 : 1);      /* (the flat top, a peak's fall and rise aside) */
+        if (lo >= 2) ms_line(X + lo - 2, bot, X + lo, top - pl, 1); else ms_hline(X, top, lo + 1, 1);
+        if (pl) ms_line(X + lo, top - pl, X + a, top, 1);
+        if (b >= a) ms_hline(X + a, top, b - a + 1, 1);
+        if (ph) ms_line(X + b, top, X + hi, top - ph, 1);
+        if (hi <= e - 2) ms_line(X + hi, top - ph, X + hi + 2, bot, 1); else ms_hline(X + hi, top, MS_KS - hi, 1);
         break;
     }
-    case MP_FILT: {                          /* the band: its edges, a resonance's peak */
-        const int x1 = X + 13, top = y + 3, bot = y + 10;
-        int lo = X + 1, hi = x1 - 1, pk = 0, at = 0;
-        if (kn->sub == 0) lo = X + 1 + ((q * 7) >> 8);
-        else if (kn->sub == 1) { lo = X + 2; hi = lo + 2 + ((q * 8) >> 8); }
-        else if (kn->sub == 2) { lo = X + 4; pk = (q * 3) >> 8; at = 1; }
-        else { hi = x1 - 4; pk = (q * 3) >> 8; at = 2; }
-        if (lo > X + 1) ms_line(lo - 2, bot, lo, top - (at == 1 ? pk : 0), 1); else ms_line(X, top, lo, top, 1);
-        ms_line(lo, top - (at == 1 ? pk : 0), lo + 1, top, 1);
-        ms_line(lo + 1, top, hi - 1, top, 1);
-        ms_line(hi - 1, top, hi, top - (at == 2 ? pk : 0), 1);
-        if (hi < x1 - 1) ms_line(hi, top - (at == 2 ? pk : 0), hi + 2 > x1 ? x1 : hi + 2, bot, 1); else ms_line(hi, top, x1, top, 1);
-        ms_dots_h(X, y + 11, 14);
-        break;
-    }
-    case MP_WAVE: case MP_DWAV: {            /* a cycle of the wave (its name's, or DIGI-WAV's own) */
-        int py = 0;
-        const int sq = pic == MP_WAVE && (kn->sub & 1);
-        for (int i = 0; i < 14; i++) {
-            int wy = y + 5 + kn->wy[i];
-            if (i && !sq) ms_line(X + i - 1, py, X + i, wy, 1);
-            else if (i) { ms_line(X + i - 1, py, X + i, py, 1); ms_line(X + i, py, X + i, wy, 1); }
-            else ms_px(X, wy, 1);
+    case MP_WAVE: case MP_DWAV: {            /* a cycle of the wave (its name's, or DIGI-WAV's own) across the box */
+        const int sq = pic == MP_WAVE && (sub & 1);
+        int py = Y + m + kn->wy[0];
+        ms_px(X, py, 1);
+        for (int i = 1; i < MS_KS; i++) {
+            const int wy = Y + m + kn->wy[i];
+            if (sq) { ms_px(X + i, py, 1); ms_vline(X + i, wy < py ? wy : py, (wy < py ? py - wy : wy - py) + 1, 1); }
+            else ms_line(X + i - 1, py, X + i, wy, 1);
             py = wy;
         }
         break;
     }
-    case MP_PAN: {                           /* a dotted line, its middle, the place a handle */
-        ms_dots_h(X, y + 6, 14);
-        ms_vline(x0 + 7, y + 4, 5, 1);
-        int p = X + ((q * 12 + 128) >> 8);
-        ms_rect(p - 1, y + 2, 4, 9, 0);
-        ms_rframe(p - 1, y + 2, 4, 9, 1);
+    case MP_PAN: {                           /* a line, its middle marked; the place a solid handle in a dark ring */
+        const int p = CLAMP((q * e + 128) >> 8, 1, e - 1);
+        ms_hline(X, Y + m, MS_KS, 1);
+        ms_vline(X + m, Y + m - 3, 7, 1);
+        ms_rect(X + p - 2, Y + 1, 5, MS_KS - 2, 0);
+        ms_rect(X + p - 1, Y + 2, 3, MS_KS - 4, 1);
         break;
     }
-    case MP_SEGS: {                          /* a choice too wide to write: its places, the one chosen standing up */
+    case MP_SEGS: {                          /* a choice too wide to write (up to 6): a floor, a tick a place on it, the
+                                              * one chosen standing solid, the box's height and at least 3 wide */
         if (!n) break;
-        const int cw = (15 - (n - 1)) / n, x1 = X + (14 - (n * cw + n - 1)) / 2;
+        const int pt = (MS_KS + 1) / n, cw = pt - 1, x1 = X + (MS_KS - (n * pt - 1)) / 2, w = cw < 3 ? 3 : cw;
+        ms_hline(X, Y + e, MS_KS, 1);
         for (int i = 0; i < n; i++) {
-            int a = x1 + i * (cw + 1);
-            if (i == c) ms_rect(a, y + 2, cw, 8, 1); else ms_hline(a, y + 9, cw, 1);
+            const int a = x1 + i * pt, mid = a + (cw - 1) / 2;
+            if (i == c) ms_rect(cw < 3 ? mid - 1 : a, Y, w, MS_KS, 1); else ms_vline(mid, Y + e - 2, 2, 1);
         }
         break;
     }
-    case MP_TOGGLE: {                        /* a switch: off, a dot at its left; on, lit with a dark dot at its right */
-        if (c) { ms_rfill(x0 + 2, y + 3, 12, 7, 1); ms_rect(x0 + 9, y + 5, 3, 3, 0); }
-        else { ms_rframe(x0 + 2, y + 3, 12, 7, 1); ms_rect(x0 + 4, y + 5, 3, 3, 1); }
+    case MP_TOGGLE:                          /* a switch: off, its frame and its knob at the left; on, solid, the knob
+                                              * dark at the right */
+        if (c) { ms_rfill(X, Y + m - 3, MS_KS, 7, 1); ms_rect(X + e - 4, Y + m - 1, 3, 3, 0); }
+        else { ms_rframe(X, Y + m - 3, MS_KS, 7, 1); ms_rect(X + 2, Y + m - 1, 3, 3, 1); }
         break;
-    }
-    case MP_CHOICE: case MP_TEXT: case MP_NUM: {   /* the value's word, and where it is among its kind's */
-        if (tx < 0) ms_text_c(x0 + 8, y + 6, kn->val, 1); else ms_text(tx, y + 6, kn->val, 1);
-        if (pic == MP_CHOICE && n) {
-            const int cw = (15 - (n - 1)) / n, x1 = X + (14 - (n * cw + n - 1)) / 2;
-            for (int i = 0; i < n; i++) {
-                int a = x1 + i * (cw + 1);
-                if (i == c) ms_rect(a, y + 9, cw, 3, 1); else ms_hline(a, y + 11, cw, 1);
-            }
-        } else if (!(kn->sub & 2)) {
-            const int f = (q * 13 + 128) >> 8;
-            ms_dots_h(X, y + 11, 14);
-            if (kn->sub & 1) { int m = X + 7; if (X + f > m) ms_hline(m, y + 11, X + f - m, 1); else ms_hline(X + f, y + 11, m - X - f, 1);
-                               ms_vline(m, y + 10, 2, 1); }
-            else ms_hline(X, y + 11, f, 1);
-            ms_rect(X + f - (f > 12), y + 9, 2, 3, 1);
-        }
+    case MP_CHOICE: case MP_TEXT: case MP_NUM:   /* the value's word, alone, centred: its capitals the box's rows 4..8 */
+        ms_text_c(X + m, Y + m + MS_CAP - 2, kn->val, 1);
         break;
-    }
     }
 }
 
-/* the eight knobs' pictures, alone in their row (their names show only while touched): a held step's lock a dash over
- * its picture, the knob touched a line under it */
+/* the eight knobs' pictures, alone in their row (their names show only while touched): a held step's lock a line over
+ * its box, the knob touched a line under it, each as wide as the box */
 static void d_knobs(const ms_view_t *v)
 {
-    const char *vp[8];
-    int vx[8];
-    for (int k = 0; k < 8; k++) {
-        const int p = v->knob[k].pic;
-        vp[k] = p == MP_CHOICE || p == MP_TEXT || p == MP_NUM ? v->knob[k].val : 0;
-    }
-    ms_label_x(vp, vx);
     for (int k = 0; k < 8; k++) {
         const ms_knob_t *kn = &v->knob[k];
-        const int x0 = k * 16;
+        const int X = k * 16 + MS_KX;
         if (kn->pic == MS_FREE) continue;
-        ms_pic(kn, x0, MS_KP, vp[k] ? vx[k] : -1);
-        if (kn->lock) ms_hline(x0 + 5, MS_LOCK_Y, 6, 1);
-        if (v->touch.k == k) ms_hline(x0 + 2, MS_H - 1, 12, 1);
+        ms_pic(kn, X, MS_KP);
+        if (kn->lock) ms_hline(X, MS_LOCK_Y, MS_KS, 1);
+        if (v->touch.k == k) ms_hline(X, MS_H - 1, MS_KS, 1);
     }
 }
 

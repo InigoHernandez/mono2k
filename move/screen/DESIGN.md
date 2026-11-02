@@ -2,13 +2,25 @@
 
 MONO2K's pages for the Ableton Move's OLED, white on black, and the pads that lead to them. Elektron-style pixel type, thin 1 px line pictures in Ableton's spirit, all MONO2K's own drawings. dsp.so's own code draws the sheets from real states, so they are the real screen and the real LEDs.
 
-**Look first:** `build/move/sheets/overview.png` (every page), `padmap.png` (the pads, lit), then `motion_pages.gif` (the page pads pressed), `motion_knob.gif` (a knob touched and turned), `motion_play.gif` (the playhead). `png/*.png` are each frame x6 (`*_grid.png` with the pixel grid).
+**Look first:** `build/move/sheets/overview.png` (every page), `knob_rows.png` (every page's knob row, SYN on every machine, x6), `padmap.png` (the pads, lit), then `motion_pages.gif` (the page pads pressed), `motion_knob.gif` (a knob touched and turned), `motion_play.gif` (the playhead). `png/*.png` are each frame x6 (`*_grid.png` with the pixel grid).
 
 ```sh
 cc -O2 -DM2K_TRACKS=8 -Ifirmware/src -Ifirmware/gen -o build/move/screen_sheets move/screen/sheets.c
-build/move/screen_sheets build/move/sheets          # frames, LEDs, the audits, the cost a frame
-.venv/bin/python move/screen/sheets.py build/move/sheets
+build/move/screen_sheets build/move/sheets          # frames, LEDs, the knob rows, the audits, the cost a frame
+.venv/bin/python move/screen/sheets.py build/move/sheets [--before OLD]   # OLD: another build's sheets: knobs_before_after.png
 ```
+
+## The owner's ask on the knob row (2026-11-02), and what changed
+
+"Align better and refresh the icons to fill more on grid and less messy crowded... manage better the space. I like the icons but it is not very clean." The family stays (dials, faders, segments, filter bands, waves, pan, switches, choices, values); the row is rebuilt on one box.
+
+| On the device | Now |
+|---|---|
+| Neighbours 1–2 px apart: one noisy strip | Every picture in the same 13 x 13 box at columns 2–14 of its 16: a 3 px gutter between any two |
+| Mixed heights and baselines | One top row (49) and one bottom row (61) for every box; a written value's capitals on the box's middle rows |
+| Dials as scattered dots | A solid ring, the value a solid band inside it, a pointer from the middle |
+| Dotted floors and rulers under segments, filters, numbers, pan | No dots in the row. One language: a thin line is the range or the shape, solid is the value |
+| Values pushed out of their columns, touching the next | A value is written only if every value of its kind fits the box (13 px), centred in it; else it is drawn. Names (an LFO's destination) up to 14, within their column |
 
 ## The owner's verdict on step 3 (2026-11-01), and what changed
 
@@ -21,17 +33,17 @@ build/move/screen_sheets build/move/sheets          # frames, LEDs, the audits, 
 
 ## The grid: 2 px
 
-The FM-1's 4 px grid at the type's x1: every box and rule sits on even rows and columns, text on a baseline (the row under its 5-row capitals).
+The FM-1's 4 px grid at the type's x1: every box and rule sits on even rows and columns, text on a baseline (the row under its 5-row capitals). The knob row is the exception: its boxes are 13 px, odd, so every dial, fader, pan and word has a middle column and a middle row.
 
 | Rows | Band |
 |---|---|
 | 0–7 | Header: the pad map, the page's tag, the track and its machine; the bars, the pattern, REC, the transport |
 | 12–43 | Stage: the page's one live picture. A touched knob takes it over: full name, value at x3 (x2 if long), unit, a ruler |
-| 47 | A held step's lock: a dash over its knob's picture |
-| 50–61 | The 8 knob pictures, 16 px columns, 14 x 12 each. Nothing under them |
-| 63 | The knob touched, a line under its picture |
+| 47 | A held step's lock: a line over its knob's box, as wide as the box |
+| 49–61 | The 8 knob pictures: 16 px columns, each picture in a 13 x 13 box at columns 2–14 of its column (a 3 px gutter between two; the screen's left edge 2 px, its right 1) |
+| 63 | The knob touched: a line under its box, as wide as the box |
 
-Rows 8–11 and 44–49 stay black: the calm.
+Rows 8–11, 44–46, 48 and 62 stay black: the calm.
 
 ## The header
 
@@ -53,26 +65,28 @@ The owner's "Elektron Pixel Font" by savingaurora (CC BY-SA 3.0; MONO2K's adapta
 - Capitals 5 rows, 2 descender rows, glyphs 1–5 px wide, 1 px tracking. O is round and 0 square; S and 5, B and 8, I and 1 differ. No lowercase.
 - **One weight.** Large values are the same glyphs at x2 or x3, never bold.
 - **Names on touch only.** A knob's full name (A–H before a machine's, the track before MIX's), or its four letters where the full one will not fit beside LOCK and STEP 64.
-- **The audit** (`sheets.c`): every page, on every machine, every value: what a column writes fits its 14 px whole; a touched name fits; a touched value and its unit fit at x2.
+- **The audit** (`sheets.c`): every page, on every machine, every value: what a column writes fits its box whole (13 px; a name 14, its column less a pixel a side); every knob's picture stays in its 13 x 13 box; a touched name fits; a touched value and its unit fit at x2.
 
 ## The knobs' pictures
 
-Each value drawn as what it is, in 1 px lines, 14 x 12 (m2k_ui.c's `icon_of` kinds at 16 px). A free knob draws nothing.
+Each value drawn as what it is (m2k_ui.c's `icon_of` kinds), in one 13 x 13 box, so every picture shares the row's top and bottom and its gutter. One language, the same on every kind: **a thin 1 px line is the range or the shape, solid is the value**; nothing dotted. A free knob draws nothing.
 
-| Picture | Used for |
-|---|---|
-| Dial (270° arc lit to the value, the rest dotted, a pointer) | Amounts |
-| Bipolar dial (arc from the top) | Tunes, intervals |
-| Fader (rounded slot, lit to the level) | Levels (all of MIX's) |
-| Envelope segment (a rise, hold or fall as long as its time) | Times |
-| Filter band (its edges, a resonance's peak) | Filter |
-| Wave | Wave choices; DIGI-WAV draws its own wavetable's cycle |
-| Pan (a handle on a dotted line) | Pan |
-| Switch | On/off |
-| Value over a ruler, or over the choices' cells | Choices and numbers whose every value fits 14 px |
-| Cells alone | Choices that don't fit |
+| Picture (`MP_*`) | In the box | Used for |
+|---|---|---|
+| Dial (`DIAL`) | A knob from above: its 13 px ring whole; inside it a solid band from the sweep's start (7:30, 270° round to 4:30) to the value; a pointer from the middle to the ring | Amounts |
+| Bipolar dial (`BIDIAL`) | The same, the band from 12 o'clock to either side; at the middle the pointer alone, straight up | Tunes, intervals, bipolar amounts |
+| Fader (`SLIDER`) | A rounded slot 7 wide, the box's height; solid inside it from the floor to the level, 3 wide | Levels (all of MIX's) |
+| Envelope segment (`ENV`) | A rise then held (ATK), a hold (HLD), a fall then out (DEC, REL): its run across the box the time | Times |
+| Filter band (`FILT`) | The band's edges and its top (row 3; an open side runs out flat): BASE moves the low edge, WDTH the high one, HPQ and LPQ a peak up to 3 rows on their edge | The filter |
+| Wave (`WAVE`, `DWAV`) | A cycle across the box, its swing the box's height | Wave choices; DIGI-WAV draws its own wavetable's cycle |
+| Pan (`PAN`) | A line across the middle, its middle marked; the place a solid handle 3 x 9 in a dark ring | Pan |
+| Switch (`TOGGLE`) | A pill the box's width, 7 tall: off, its frame and a solid knob at the left; on, solid with the knob dark at the right | On/off |
+| Places (`SEGS`) | A floor, a tick a place on it, the one chosen standing solid, the box's height and at least 3 wide | Choices of up to 6 that don't fit the box (7 or 8, rates and multipliers: a dial) |
+| Value (`CHOICE`, `TEXT`, `NUM`) | The word alone, centred, its capitals the box's rows 4–8; no ruler, no cells | Choices, names and numbers whose every value fits 13 px (a name 14) |
 
-Stage pictures share one language: 1 px curves, an area as a tint (a dot every 4th column and 2nd row), the touched part in hairlines, dotted floors and zero lines, 3 x 3 handles and markers in a dark ring.
+A held step's lock is a line over the box (row 47), the knob touched a line under it (row 63), each the box's width.
+
+Stage pictures share one language: 1 px curves, an area as a tint (a dot every 4th column and 2nd row), the touched part in hairlines, dotted floors and zero lines, 3 x 3 handles and markers in a dark ring. (The dots stay on the stage's large pictures, where they read as a tint; the knob row has none.)
 
 ## Icons
 
@@ -130,4 +144,4 @@ The top two rows lead to the pages; the bottom two are the keyboard; the 16 step
   - `m2k_screen()` does both into its own frame (the sheets).
 - **Held to it:** every still in the sheets is drawn again at the end from its kept view, with the core in another pattern and state: the same frame, every time.
 - **Constraints:** integer only, nothing allocated. `m2k_screen_init` sweeps every kind's values once at create (which values a column can write), so no gather ever does. The gather reads `mon.peak` and clears it, as `m2k_frame` does.
-- **Cost a frame:** on the Mac (hot, -O2) a publish (the controller's state, the LEDs, the gather) 0.3–0.6 µs, 6–15 k instructions; a draw 0.3–2.3 µs, 10–55 k (FILT the most). In the Move's container paced to real time: a publish 11.8 µs mean, a draw 15.0 µs mean on the drawer thread (cold caches; the block's own render is 6x slower there than hot). `move/README.md` has the table.
+- **Cost a frame:** on the Mac (hot, -O2) a publish (the controller's state, the LEDs, the gather) 0.3–0.6 µs, 6–15 k instructions; a draw 0.4–2.4 µs, 10–59 k (FILT the most; a solid dial ~2.5 k). In the Move's container paced to real time: a publish 11.8 µs mean, a draw 15.0 µs mean on the drawer thread (cold caches; the block's own render is 6x slower there than hot). `move/README.md` has the table.

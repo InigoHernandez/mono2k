@@ -7,10 +7,12 @@
  *   NAME.pbm, manifest.tsv     each still (128 x 64, 1 = lit) and its label
  *   frames/NAME/NNNN.pbm, .led the motions' frames, each with its 63 LEDs (hex)
  *   padmap_*.tsv               the 32 pads, 16 steps and 4 track buttons of a state: their labels and palette colours
+ *   rows/NAME.pbm, manifest    every page's knob row (SYN on every machine, a step's locks, a knob touched), whole frames
  *   timing.txt                 the cost a frame: the publish (the audio thread's) and the drawing (the drawer's)
- * and checks: every value a column writes and every touched name and value fits; the header's two ends never meet; a
- * frame drawn later from the same view, with the core in another state, is the same frame (the drawing reads the view
- * alone). move/screen/sheets.py makes the PNGs, the overview, the pad map and the GIFs.
+ * and checks: every value a column writes and every touched name and value fits; every knob's picture, at every value,
+ * stays in its 13 x 13 box (a name in its column less a pixel a side); the header's two ends never meet; a frame drawn
+ * later from the same view, with the core in another state, is the same frame (the drawing reads the view alone).
+ * move/screen/sheets.py makes the PNGs, the overview, the knob rows, the pad map and the GIFs.
  *   cc -O2 -DM2K_TRACKS=8 -Ifirmware/src -Ifirmware/gen -o build/move/screen_sheets move/screen/sheets.c
  *   build/move/screen_sheets build/move/sheets */
 #include <stdio.h>
@@ -152,8 +154,31 @@ static void padmap(const char *name)
 static int bad;
 static void fail(const char *what) { printf("audit: %s\n", what); bad++; }
 
-/* every page of knobs on every machine, every value: what a column writes fits its 14 px whole; touched, the name (or
- * its four letters) fits beside LOCK and STEP 64, the value and its unit at x2 within the screen */
+/* a knob's picture at value v, drawn alone: its ink stays in its 13 x 13 box (a name: its column less a pixel a
+ * side), so every two columns keep their gutter; 0 if not */
+static int box_fits(const pi_t *pi, int t, int k, int v, const char *text)
+{
+    static uint8_t scratch[MS_BYTES];
+    ms_knob_t kn;
+    char o[32];
+    s_cpyn(o, text, sizeof o);
+    m_set(&kn, 0, sizeof kn);
+    g_pic(&kn, pi, t, v, o);
+    ms_fb = scratch;
+    m_set(scratch, 0, sizeof scratch);
+    const int X = k * 16 + MS_KX, named = ms_named(pi->kind) && (kn.pic == MP_TEXT || kn.pic == MP_CHOICE);
+    ms_pic(&kn, X, MS_KP);
+    const int x0 = named ? k * 16 + 1 : X, x1 = named ? k * 16 + 14 : X + MS_KS - 1;
+    for (int y = 0; y < MS_H; y++)
+        for (int x = 0; x < MS_W; x++)
+            if ((scratch[y * MS_RB + (x >> 3)] >> (7 - (x & 7))) & 1)
+                if (x < x0 || x > x1 || y < MS_KP || y >= MS_KP + MS_KS) return 0;
+    return 1;
+}
+
+/* every page of knobs on every machine, every value: what a column writes fits the box (a name its column) whole, and
+ * every picture stays in its box; touched, the name (or its four letters) fits beside LOCK and STEP 64, the value and
+ * its unit at x2 within the screen */
 static void text_audit(void)
 {
     open_at(0);
@@ -177,7 +202,9 @@ static void text_audit(void)
                     const char *u;
                     fmt(pi, t, v, o, &u);
                     s_cpyn(f, pi->kind == K_DEST && v ? ms_dest_name(pinfo(t, v - 1), dn) : pi->kind == K_MCH ? o + 2 : o, sizeof f);
-                    if ((pic == MP_CHOICE || pic == MP_TEXT || pic == MP_NUM) && ms_vfit(f, 14)) {
+                    if (!box_fits(pi, t, k, v, f)) {
+                        snprintf(w, sizeof w, "%s %s %s: at %s its picture leaves its box", MS_PAGE_N[pg], MI[m].name, pi->s4, o); fail(w); break; }
+                    if ((pic == MP_CHOICE || pic == MP_TEXT || pic == MP_NUM) && ms_vfit(f, ms_named(pi->kind) ? MS_NW : MS_KW)) {
                         snprintf(w, sizeof w, "%s %s %s: value %s cut to %s", MS_PAGE_N[pg], MI[m].name, pi->s4, o, f); fail(w); break; }
                     const int big = ms_tw_z(o, 2) + (*u ? ms_tw(u) + 4 : 0);
                     if (big > MS_W - 4) {
@@ -302,7 +329,30 @@ static void timing(FILE *f)
 
 /* ------------------------------------------------------------------------------------------- the specimens */
 
-/* the type at x1, every glyph the font has, and the line icons and the knobs' pictures, as two screens */
+/* the type at x1, every glyph the font has; the line icons; the knobs' pictures, every kind, as three screens */
+static void spec_box(int col, int row, const ms_knob_t *kn)
+{
+    ms_pic(kn, col * 16 + MS_KX, 1 + row * 16);
+}
+static void spec_kind(int col, int row, int pic, int q, int sub, int n, int c, const char *val)
+{
+    ms_knob_t kn;
+    m_set(&kn, 0, sizeof kn);
+    kn.pic = (uint8_t)pic; kn.q = (uint16_t)q; kn.sub = (uint8_t)sub; kn.n = (uint8_t)n; kn.c = (uint8_t)c;
+    if (val) s_cpyn(kn.val, val, sizeof kn.val);
+    spec_box(col, row, &kn);
+}
+/* a knob as the gather makes it: track 0's parameter code at value v */
+static void spec_real(ms_knob_t *kn, int code, int v)
+{
+    const pi_t *pi = pinfo(0, code);
+    char o[32];
+    const char *u;
+    fmt(pi, 0, v, o, &u);
+    m_set(kn, 0, sizeof *kn);
+    g_pic(kn, pi, 0, v, o);
+}
+
 static void specimens(void)
 {
     ms_fb = sfb;
@@ -322,38 +372,113 @@ static void specimens(void)
     pbm(p, sfb);
     fprintf(man, "zz_type\tTHE TYPE AT X1, X2, X3\n");
 
+    /* the icons; under them a row of knobs as a page shows them, each kind once (the plugin opened first: its render
+     * draws its own frame) */
+    open_at(0);
+    ms_fb = sfb;
     m_set(sfb, 0, sizeof sfb);
     for (int i = 0; i < I_COUNT; i++) ms_icon(i, 2 + (i % 10) * 12, 7 + (i / 10) * 9, 1);
-    open_at(0);
     static const struct { int code; int v; } K[8] = {{P_DIST, 90}, {P_VOL, 100}, {P_ATK, 40}, {P_DEC, 70},
                                                     {P_BASE, 40}, {P_LPQ, 100}, {P_PAN, 30}, {P_LFO + L_WAVE, 40}};
-    ms_view_t v;
-    m_set(&v, 0, sizeof v);
-    m2k_scr_t s;
-    m_set(&s, 0, sizeof s);
-    s.page = MS_AMP; s.touch = -1; s.held = 0xFF;
-    for (int k = 0; k < 8; k++) {
-        PAT(cur_pat)->kit[0][K[k].code] = (uint8_t)K[k].v;
-    }
-    for (int k = 0; k < 8; k++) {           /* (each kind once: a page's knob gathered, its code swapped in) */
-        const pi_t *pi = pinfo(0, K[k].code);
-        ms_knob_t *kn = &v.knob[k];
-        char o[32];
-        const char *u;
-        fmt(pi, 0, K[k].v, o, &u);
-        m_set(kn, 0, sizeof *kn);
-        kn->pic = (uint8_t)ms_pic_of(pi, 0);
-        kn->q = (uint16_t)ms_q(pi, K[k].v);
-        kn->n = (uint8_t)kind_choices(pi->kind);
-        kn->c = (uint8_t)choice_of(pi->kind, K[k].v);
-        if (kn->pic == MP_ENV) kn->sub = (uint8_t)(pi->kind == K_AHLD ? 2 : pi->s4[0] == 'A' && pi->s4[1] == 'T' ? 1 : 0);
-        if (kn->pic == MP_FILT) kn->sub = (uint8_t)(pi->kind == K_FOCT ? 0 : pi->kind == K_FWID ? 1 : pi->s4[0] == 'H' ? 2 : 3);
-        if (kn->pic == MP_WAVE) for (int i = 0; i < 14; i++) kn->wy[i] = (int8_t)((wave_at(o, i, 13) * 5) / 7);
-        ms_pic(kn, k * 16, MS_KP, -1);
-    }
+    for (int k = 0; k < 8; k++) { ms_knob_t kn; spec_real(&kn, K[k].code, K[k].v); ms_pic(&kn, k * 16 + MS_KX, MS_KP); }
     snprintf(p, sizeof p, "%s/zz_icons.pbm", out);
     pbm(p, sfb);
-    fprintf(man, "zz_icons\tTHE ICONS, THE KNOBS' PICTURES\n");
+    fprintf(man, "zz_icons\tTHE ICONS, A ROW OF KNOBS\n");
+
+    /* every kind of knob picture, at its ends and between: four rows of eight boxes */
+    m_set(sfb, 0, sizeof sfb);
+    static const int DQ[5] = {0, 64, 128, 192, 256};
+    for (int i = 0; i < 5; i++) spec_kind(i, 0, MP_DIAL, DQ[i], 0, 0, 0, 0);
+    for (int i = 0; i < 3; i++) spec_kind(5 + i, 0, MP_BIDIAL, DQ[i * 2], 0, 0, 0, 0);
+    for (int i = 0; i < 3; i++) spec_kind(i, 1, MP_SLIDER, DQ[i * 2], 0, 0, 0, 0);
+    spec_kind(3, 1, MP_ENV, 64, 1, 0, 0, 0);            /* (ATK, HOLD, DEC, DEC at INF, a short REL) */
+    spec_kind(4, 1, MP_ENV, 128, 2, 0, 0, 0);
+    spec_kind(5, 1, MP_ENV, 96, 0, 0, 0, 0);
+    spec_kind(6, 1, MP_ENV, 256, 0, 0, 0, 0);
+    spec_kind(7, 1, MP_ENV, 24, 0, 0, 0, 0);
+    spec_kind(0, 2, MP_FILT, 96, 0, 0, 0, 0);           /* (BASE, WDTH, HPQ, LPQ) */
+    spec_kind(1, 2, MP_FILT, 128, 1, 0, 0, 0);
+    spec_kind(2, 2, MP_FILT, 256, 2, 0, 0, 0);
+    spec_kind(3, 2, MP_FILT, 256, 3, 0, 0, 0);
+    ms_knob_t kn;
+    static const int LW[3] = {20, 40, 60};              /* (SIN SQR SAW) */
+    for (int i = 0; i < 3; i++) { spec_real(&kn, P_LFO + L_WAVE, LW[i]); spec_box(4 + i, 2, &kn); }
+    machine_to(0, M_WAV);
+    spec_real(&kn, P_SYN, 40);                          /* (DIGI-WAV's own wave) */
+    spec_box(7, 2, &kn);
+    spec_kind(0, 3, MP_PAN, 40, 0, 0, 0, 0);
+    spec_kind(1, 3, MP_PAN, 128, 0, 0, 0, 0);
+    spec_kind(2, 3, MP_TOGGLE, 0, 0, 2, 0, 0);
+    spec_kind(3, 3, MP_TOGGLE, 0, 0, 2, 1, 0);
+    spec_kind(4, 3, MP_SEGS, 0, 0, 3, 1, 0);
+    spec_kind(5, 3, MP_SEGS, 0, 0, 6, 4, 0);
+    spec_kind(6, 3, MP_TEXT, 0, 0, 0, 0, "VOL");
+    spec_kind(7, 3, MP_NUM, 0, 0, 0, 0, "-37");
+    snprintf(p, sizeof p, "%s/zz_knobs.pbm", out);
+    pbm(p, sfb);
+    fprintf(man, "zz_knobs\tTHE KNOBS' PICTURES, EVERY KIND\n");
+}
+
+/* ----------------------------------------------------------------------------------------------- the knob rows */
+
+/* every page's knob row (SYN on every machine), a step's locks, a knob touched: whole frames into DIR/rows, for
+ * sheets.py's knob_rows.png (their rows 45..63) and its before / after against another build's (--before DIR) */
+static FILE *rman;
+static void row_shot(const char *name, const char *label)
+{
+    now_view();
+    char p[700];
+    snprintf(p, sizeof p, "%s/rows/%s.pbm", out, name);
+    pbm(p, sfb);
+    fprintf(rman, "%s\t%s\n", name, label);
+}
+
+static void knob_rows(void)
+{
+    char p[700], nm[32], lb[64];
+    snprintf(p, sizeof p, "%s/rows", out);
+    mkdir(p, 0755);
+    snprintf(p, sizeof p, "%s/rows/manifest.tsv", out);
+    rman = fopen(p, "w");
+    if (!rman) { perror(p); exit(1); }
+    open_at(1);
+    static const struct { int page, t; const char *name, *label; } PG[] = {
+        {MS_AMP, 0, "a_amp", "AMP  A02 T1"}, {MS_FILT, 0, "b_filt", "FILT  A02 T1"}, {MS_EFX, 4, "c_efx", "EFX  A02 T5"},
+        {MS_EFX, 0, "c_efx1", "EFX  A02 T1"}, {MS_DSTR, 0, "d_dstr", "DSTR  A02 T1"}, {MS_LFO1, 0, "e_lfo1", "LFO1  A02 T1"},
+        {MS_LFO2, 0, "e_lfo2", "LFO2  A02 T1"}, {MS_TRK, 0, "f_trk", "TRK  A02 T1"}, {MS_PAT, 0, "g_pat", "PAT  A02 T1"},
+        {MS_GRID, 0, "h_grid", "GRID  A02 T1"}, {MS_MIX, 0, "i_mix", "MIX  A02"}, {MS_GLO, 0, "j_glo", "GLO  A02"},
+        {MS_PERF, 0, "k_perf", "PERFORM  A02"}};
+    for (unsigned i = 0; i < sizeof PG / sizeof PG[0]; i++) {
+        track(PG[i].t);
+        page_go(PG[i].page);
+        blocks(VW_EVERY);
+        row_shot(PG[i].name, PG[i].label);
+        if (PG[i].page == MS_PERF) page_go(MS_PERF);
+    }
+    track(0);
+    page_go(MS_EFX);
+    touch(3, 1); blocks(VW_EVERY);
+    row_shot("l_touch", "EFX  DTIM TOUCHED");
+    touch(3, 0); blocks(VW_EVERY);
+    int ls = -1;                                       /* (A02 T1's first step with locks, held) */
+    for (int i = 0; i < 16 && ls < 0; i++) if (has_locks(0, i)) ls = i;
+    if (ls >= 0) {
+        page_go(MS_SYN);
+        step(ls, 1); blocks(VW_EVERY);
+        row_shot("m_lock", "SYN  A STEP HELD: ITS LOCKS");
+        step(ls, 0); blocks(VW_EVERY);
+    }
+    open_at(0);
+    track(6);
+    for (int m = 0; m < M_COUNT; m++) {
+        machine_to(6, m);
+        page_go(MS_SYN);
+        blocks(VW_EVERY);
+        snprintf(nm, sizeof nm, "s_%02d", m);
+        snprintf(lb, sizeof lb, "SYN  %s", MI[m].name);
+        row_shot(nm, lb);
+    }
+    fclose(rman);
 }
 
 /* ------------------------------------------------------------------------------------------------- the scenes */
@@ -553,6 +678,7 @@ int main(int argc, char **argv)
     tq.state = MV_TQ_NONE;
 
     specimens();
+    knob_rows();
 
     /* the motions, at the screen's pace (two panel frames, 34.8 ms: 12 blocks a sfb) */
     /* a knob touched: A02 T1's DEC on AMP, touched, turned down and back, let go (shown a moment more) */
@@ -585,7 +711,7 @@ int main(int argc, char **argv)
     text_audit();
     header_audit();
     purity_audit();
-    printf("audit: %s\n", bad ? "FAILED" : "every value, name and header fits; the drawing reads the view alone");
+    printf("audit: %s\n", bad ? "FAILED" : "every value, name and header fits, every picture in its box; the drawing reads the view alone");
     snprintf(p, sizeof p, "%s/timing.txt", out);
     FILE *f = fopen(p, "w");
     timing(stdout);
