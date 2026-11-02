@@ -1,11 +1,12 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /* move/ui.js run in Node against a mock of Schwung's shadow UI and of dsp.so's params:
  *   node move/test/ui_test.mjs
- * The controls forwarded (knobs batched and summed, the jog, buttons at once, the knobs' touch; nothing of the host's,
- * the pads' or the steps': the pages, the keyboard and PERFORM are the DSP's), the frame read every two panel frames
- * (34.83 ms, ~28.7 a second, evenly, never caught up after a stall) and painted by rows and runs (only the rows that
- * changed, nothing for the same frame), the LEDs at most 16 a tick and to the right notes and CCs (the 32 pads on
- * 68.., the page pads among them), a failed send kept, the parked tick, the resume. The knobs' curve (MONO2K's own:
+ * The controls forwarded (knobs batched and summed, the jog, buttons at once, Sample and Capture among them, the
+ * knobs' touch; nothing of the host's, the pads' or the steps': the pages, the keyboard and PERFORM are the DSP's),
+ * the frame read every two panel frames (34.83 ms, ~28.7 a second, evenly, never caught up after a stall) and painted
+ * by rows and runs (only the rows that changed, nothing for the same frame), the LEDs at most 16 a tick and to the
+ * right notes and CCs (the 32 pads on 68.., the page pads among them; Sample on 118, Capture on 52), a failed send
+ * kept, the parked tick, the resume. The knobs' curve (MONO2K's own:
  * slow turns half a step a detent, a fast burst capped, a reversal starting fresh, a full sweep's detents, a short list
  * slower, the tempo in tenths and whole BPM, Shift + knob 1 the tempo); the tempo asked of Move written to
  * desired-tempo (host_write_file mocked): after the knob rests, at most once a second while turning, never two writes
@@ -20,10 +21,11 @@ let clock = 1000;
 const sets = [], gets = [], fills = [], leds = [], writes = [];
 let clears = 0, prints = 0, setOk = true, writeOk = true;
 
-/* the DSP's frame: "M2K1", its number, 64 rows of 22 characters, the LEDs (63, two hex digits each), the knobs' kinds
+/* the DSP's frame: "M2K1", its number, 64 rows of 22 characters, the LEDs (65, two hex digits each), the knobs' kinds
  * (8), the tempo asked: its number (2 hex), tenths (4 hex) */
 const blankRow = '0'.repeat(22);
-let frameRows = new Array(64).fill(blankRow), frameSeq = 1, frameLeds = new Array(63).fill(0);
+const NLED = 16 + 32 + 4 + 13;           /* steps, pads, track buttons, buttons (MV_NBTN: Sample and Capture last) */
+let frameRows = new Array(64).fill(blankRow), frameSeq = 1, frameLeds = new Array(NLED).fill(0);
 let frameKinds = '00000000', tqSeq = 5, tqB10 = 1200;
 function rowFrom(bits) {                 /* bits: a 128-character string of 0/1 */
     let r = '';
@@ -107,19 +109,21 @@ tick(36, 1);
 check(gets.length === 2, `after a 200 ms stall: one read at once, then the pace (${gets.length} in 36 ms)`);
 
 /* the LEDs: at most 16 a tick, each to its note or CC */
-frameLeds = Array.from({ length: 63 }, (_, i) => 1 + (i % 100));
+frameLeds = Array.from({ length: NLED }, (_, i) => 1 + (i % 100));
 frameSeq++;
 leds.length = 0;
 const per = [];
 for (let i = 0; i < 6; i++) { const n = leds.length; tick(1, 35); per.push(leds.length - n); }
 check(Math.max(...per) <= 16, `LEDs at most 16 a tick (${per.join(', ')})`);
-check(leds.length === 63, `every LED sent once over the ticks (${leds.length})`);
+check(leds.length === NLED, `every LED sent once over the ticks (${leds.length})`);
 const step1 = leds.find((l) => l[0] === 'n' && l[1] === 16), pad1 = leds.find((l) => l[0] === 'n' && l[1] === 68);
 const trk1 = leds.find((l) => l[0] === 'cc' && l[1] === 43), rec = leds.find((l) => l[0] === 'cc' && l[1] === 86);
 const pad17 = leds.find((l) => l[0] === 'n' && l[1] === 84), pad32 = leds.find((l) => l[0] === 'n' && l[1] === 99);
 check(step1 && step1[2] === 1 && pad1 && pad1[2] === 17 && trk1 && trk1[2] === 49 && rec && rec[2] === 53,
       'steps on notes 16.., pads on 68.., track 1 on CC 43, Rec on CC 86');
 check(pad17 && pad17[2] === 33 && pad32 && pad32[2] === 48, 'the page pads: the second row from note 84, the top row to 99');
+const sample = leds.find((l) => l[0] === 'cc' && l[1] === 118), capture = leds.find((l) => l[0] === 'cc' && l[1] === 52);
+check(sample && sample[2] === 64 && capture && capture[2] === 65, 'Sample on CC 118, Capture on CC 52 (the last two buttons)');
 check(!leds.some((l) => l[0] === 'cc' && l[1] === 85), "PLAY's LED left to Move");
 leds.length = 0;
 tick(3, 35);
@@ -149,6 +153,10 @@ check(lastIn() === 'B 85 127', 'PLAY goes to the DSP too (Move has it through bu
 ctx.onMidiMessageInternal([0xB0, 42, 127]);
 ctx.onMidiMessageInternal([0xB0, 42, 0]);
 check(lastIn() === 'B 42 0' && sets.length === 4, 'a track button, press and release');
+ctx.onMidiMessageInternal([0xB0, 118, 127]);
+check(lastIn() === 'B 118 127', 'Sample goes to the DSP at once (PADS)');
+ctx.onMidiMessageInternal([0xB0, 52, 127]);
+check(lastIn() === 'B 52 127' && sets.length === 6, 'Capture too');
 const before = sets.length;
 ctx.onMidiMessageInternal([0xB0, 51, 127]);
 ctx.onMidiMessageInternal([0xB0, 79, 1]);
@@ -291,7 +299,7 @@ ctx.onResume();
 fills.length = 0;
 leds.length = 0;
 tick(10, 35);
-check(fills.filter((x) => x[2] === 128).length === 64 && leds.length === 63, 'resumed: every row and LED again');
+check(fills.filter((x) => x[2] === 128).length === 64 && leds.length === NLED, 'resumed: every row and LED again');
 
 if (fails) { console.log(`${fails} failed`); process.exit(1); }
 console.log('ui.js: all passed');

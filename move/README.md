@@ -15,6 +15,14 @@ T4 ┃  C      D      E      F      G      A      B      C        white keys (PE
      [1 ][2 ][3 ][4 ][5 ][6 ][7 ][8 ][9 ][10][11][12][13][14][15][16]   the sequencer
 ```
 
+**PADS** (the **Sample** button; again: the piano back). The bottom two rows play the 8 tracks and mute them:
+
+```
+          1      2      3      4      5      6      7      8
+T3 ┃  MUTE   MUTE   MUTE   MUTE   MUTE   MUTE   MUTE   MUTE     each track's mute (heard azure, muted dark red)
+T4 ┃  T1     T2     T3     T4     T5     T6     T7     T8       each track at its root (dim azure, white sounding)
+```
+
 | Move | MONO2K |
 |---|---|
 | **Top pad row** | The sound of the track in view, a page a pad: SYN AMP FILT EFX DSTR LFO1 LFO2 LFO3. |
@@ -23,6 +31,8 @@ T4 ┃  C      D      E      F      G      A      B      C        white keys (PE
 | **Knobs 1–8** | The page's 8 parameters. A touch (or a turn) shows the knob's full name and its value large. MONO2K's own feel (ui.js, below): two detents a value, slow or brisk; up to 2.5 values a detent on a flick; a short list (a wave, a mode) 3.5 detents an option. |
 | **Shift + knob 1** | The tempo, on every page (PAT's knob 1 and HOME's knob 3 too). Shown large while touched or turned, with SYNC or INT. 0.1 BPM a step turned slowly, whole BPM turned fast. Under SYNC it is Move's and MONO2K's: MONO2K moves at once, Move catches up (below, In time with Move). **Delete +** it: Move's tempo again. |
 | **Bottom two pad rows** | The keyboard, a two-row piano: the white keys C D E F G A B C on the bottom row, the black keys over theirs (C# D# · F# G# A# · ·). The pads no key has are dark, the root is lit orange, the notes played (by hand or by the sequencer) white. Velocity: an accent when REC records (over 110). |
+| **Sample** | **PADS** (the FM-1's PADS, eight wide): the bottom row plays the 8 tracks, pad n track n, each at its root (its trigs' commonest note, else the note new trigs take), held as a piano key is (velocity as the piano's, its arp if its MODE is on); the row over it mutes them, a tap each (as Mute + steps: at the bar when GLO's MUTES says so, blinking until it comes). REC records each hit into its own track. Sample again: the piano. Said on the screen (PADS / KEYS); the header keeps a small mark of four pads while it is on; Sample's LED azure. PERFORM still takes the rows while it is on; off, they are what they were. |
+| **Capture** | Writes what was just played on the keyboard (the piano's track, or PADS' tracks) into the steps, in whole bars, as REC would have written it (the note, an accent over 110), keeping the tracks' other trigs. MONO2K hears every note, REC on or off. **Playing:** each note on the bar and step it fell on; on each track the bars from the one holding the last note played back, at most the track's length (TLEN, else LEN). **Stopped:** the latest phrase (no silence over 2 bars), its first note the downbeat of bar 1, the rest timed at the tempo; longer than the track, its last whole bars that fit. One Undo takes it all back. Says CAPTURED n BARS and the tracks, or NOTHING TO CAPTURE; a second press never writes the same notes. Its LED lit while there is something to capture. **Shift + Capture** is Schwung's (its skipback). |
 | **Up / Down** | The track's octave (−3 … +3), said on the screen a moment. With PERFORM on: the moves' page (MOVES 1, MOVES 2). |
 | **SOUNDS** (pad) | The sound catalogue (the FM-1's EDIT held). The jog or knob 1 previews each sound on the track, knob 2 the category. A click or Up keeps it (undoable); the pad again, Menu or Down puts the track's own sound back. |
 | **PERFORM** (pad) | Its effects on the keyboard rows while it is on. **Top row, the colours** (they stack, held with anything): LPF DUB HPF GATE CRUSH DRIVE WOW SHIMMER. **Bottom row, the moves** (one at a time, the next taking over): RPT 1/4 RPT 1/8 RPT 1/16 RPT 1/32 ROLL STUTTER REVERSE STOP. Each column a pair that plays together. Up: the moves' second page (FREEZE SCATTER OCT DN OCT UP SPIN KILL), the colours staying; Down: back. It stays on across pages; the pad again gives the keyboard back. Its page's knobs are the bus's four. |
@@ -79,6 +89,10 @@ Gone since step 2: the jog turning pages and its page list (every page has a pad
 SYN to LFO3, TRK's are the track's (m2k.h's Monomachine pages); TRK holds the arp (the FM-1's ARP). PAT is the pattern's time and the track's own (the FM-1's HOME 2 and SEQ: there is no SEQ pad), HOME the FM-1's HOME 1 and 2 on one page, GRID the pattern's Grids and the track's lane, GLO the bus (the FM-1's GLO > BUS) and the one setting that matters on the Move (GLO > PLAY's MUTE). The FM-1's MIDI settings have no use here (the Move's glue routes no MIDI out or in), so they have no page.
 
 Gestures that depend on a modifier (Shift, Mute, Copy, Delete) need it held first. The DSP hears the step or pad at once, but ui.js sends the modifier, so pressing both within a few ms may lose the order.
+
+**The two buttons' numbers** (Schwung's `src/shared/constants.mjs`, at faebd16 and at f288066, its main on 2026-11-02; its `docs/API.md` table): Sample is CC 118 (`MoveSample`, an alias of `MoveRecord`: an RGB LED), Capture CC 52 (`MoveCapture`: a white LED). In an overtake module both reach ui.js, which sends them on as any button (`B cc v`); `button_passthrough` lists only Play, so Move never sees them. Schwung's shim keeps one of them in an overtake: Shift + Capture (its skipback, swallowed); Shift + Sample (its sampler) is skipped there and reaches MONO2K, which treats it as Sample.
+
+**Capture, how it hears** (`m2k_move_ui.c`, the capture's section; the Move's alone, the FM-1 stays lighter): a ring of the last 256 notes played on the keyboard, each with its track, note, velocity and where it fell. Playing, that is the track's nearest step as REC rounds it (`rec_step`, its side effect put back), counted on from the run's start so a phrase over several loops keeps its bars; stopped, its time. A run is one stretch of one state: a start or stop, a pattern coming in or a track's length changed begins another, and a capture takes the latest run's notes alone.
 
 ## In time with Move
 
@@ -142,7 +156,7 @@ A module cannot set Move's tempo through any API (the plugin and JS APIs only re
 - **`get_param("frame")`:**
   - `M2K1`, then the frame's number (8 hex).
   - 64 rows of 22 characters: 6 pixels each from `'0'`.
-  - 63 LEDs as two hex digits: 16 steps, 32 pads, 4 track buttons, then Rec Mute Undo Copy Delete Left Right Up Down Menu Loop.
+  - 65 LEDs as two hex digits: 16 steps, 32 pads, 4 track buttons, then Rec Mute Undo Copy Delete Left Right Up Down Menu Loop Sample Capture.
   - How each knob turns, a character each (`MV_KK_*`: 0 a range, 1 a short list, 2 the tempo, 3 nothing), then the tempo asked of Move: its number (2 hex, 00 never) and its tenths (4 hex).
 - **ui.js** reads one frame every two of the OLED's frames, **34.83 ms (~28.7 a second)**, on a fractional clock that never drifts and never catches up after a stall. It repaints only the rows that changed, as runs of `fill_rect`, and sends at most 16 LEDs a tick.
 - **Why 28.7 a second** (Schwung faebd16, read in the source):
@@ -162,11 +176,12 @@ A module cannot set Move's tempo through any API (the plugin and JS APIs only re
   The paced numbers are cold caches in the VM: the render itself costs 6× its hot-loop time there, and the maxima are the VM's preemptions (a block's own most was 8.8 ms). Either way a publish is a few percent of one block's render, once in 6 blocks. On the Move's A72, measure with `bench time` on the device (step 4).
 - **The LEDs:**
   - **Steps:** trig azure, p-locked trig dimmer azure, playhead and held white, beats faint. With Shift held, the bank's patterns; with Mute held, the tracks.
-  - **Pads:** the page pads in their families' colours (the page in view bright); the keyboard's white keys grey, black keys darker, the root orange, notes playing white; PERFORM's keys magenta (bank A) and pink (bank B), the effects playing white.
+  - **Pads:** the page pads in their families' colours (the page in view bright); the keyboard's white keys grey, black keys darker, the root orange, notes playing white; PERFORM's keys magenta (bank A) and pink (bank B), the effects playing white. PADS: the tracks dim azure, white while sounding (by hand or by the sequencer); their mutes azure heard, dark red muted, a mute waiting for the bar blinking (dark, every 128 ms, as the FM-1's GLO > PLAY).
   - **Track buttons:** the track in view white, the others dim, muted ones dark red.
   - **Menu:** lit while a list is open (it closes it). **Up / Down:** the octave's side, or PERFORM's keys' page.
+  - **Sample** (RGB): azure while PADS is on, dark otherwise. **Capture:** lit while there is something to capture, dim otherwise.
   - **Play's LED** stays Move's.
-  - **The budget:** 63 LEDs, sent only when they change, at most 16 a 2 ms tick (Schwung's API: under ~60 a frame).
+  - **The budget:** 65 LEDs, sent only when they change, at most 16 a 2 ms tick (Schwung's API: under ~60 a frame).
 
 ## Build, prove, deploy
 
@@ -191,8 +206,8 @@ cc -O2 -DM2K_TRACKS=8 -Ifirmware/src -Ifirmware/gen -o build/move/screen_sheets 
   | Mode | What it proves |
   |---|---|
   | `hash` | A01–A04 bit for bit against `m2k_draw`. |
-  | `rt` | 20 000 blocks of every control, Move's clock and saves asked for, the tempo turned and written, Move's tempo moving. Every allocation, file, thread, sleep and log call on the audio thread is counted: none. |
-  | `ctl` | Every control (92 checks): the page pads and their lights, the keyboard's keys, PERFORM's keys, SOUNDS, the jog's patterns' list, MIX's knobs, the knobs' kinds for ui.js, the tempo (asked, followed, not followed, landing on whole BPM, Delete, Shift + knob 1 on all 16 page pads, INT's whole BPM). |
+  | `rt` | 20 000 blocks of every control (Sample and Capture among them), Move's clock and saves asked for, the tempo turned and written, Move's tempo moving. Every allocation, file, thread, sleep and log call on the audio thread is counted: none. |
+  | `ctl` | Every control (121 checks): the page pads and their lights, the keyboard's keys, PERFORM's keys, SOUNDS, the jog's patterns' list, MIX's knobs, the knobs' kinds for ui.js, the tempo (asked, followed, not followed, landing on whole BPM, Delete, Shift + knob 1 on all 16 page pads, INT's whole BPM). PADS: Sample on and off (said, its LED), each track at its root (worked out again from its trigs), the lights, a mute tap at once and at the bar (blinking, then steady), REC into each hit's own track with an accent, PERFORM over it and back. Capture: nothing to capture, stopped (the downbeat, the rest timed at 120, a lone note 4 s before left out), a phrase longer than the track (its last whole bar), playing (the bar and step each note fell on, 2 bars at most on a 32-step track), whole bars only, overdub over a trig placed by hand, a second press writing nothing, one Undo, PADS' three tracks in one capture and one Undo. |
   | `clock` | Synthetic Move clocks, each pulse seen at the next block boundary, 1 % of frames a block late: 120 BPM, a tempo change, stop, continue, start, stale, no host tempo, no clock, Play answered; the tempo turned in MONO2K (Move following 0.55 s on; not following: alone, then re-synced by Move's tempo; Move's restart; Delete): every two steps timed, no glitch, back within 32 samples of Move's pulses. |
   | `save` | The round trip. |
   | `draw` | The screens as PBM, in `build/move/proof/screens/`. |

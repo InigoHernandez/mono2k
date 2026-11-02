@@ -70,6 +70,7 @@ typedef struct {
     uint8_t shift, mute;        /* Shift, Mute held */
     uint8_t bank;               /* the bank Shift + steps pick from */
     uint8_t perf, perf_pg;      /* PERFORM's keys on the keyboard; their page (0 each bank's 1-8, 1 its 9-11) */
+    uint8_t pads;               /* the keyboard rows are PADS (the tracks, their mutes): the header marks it */
     const char *toast, *toast2; /* a message a moment after an action (0 or "" none) */
     uint32_t ms;                /* the time in ms: the meters' fall, the modulation's sweep */
 } m2k_scr_t;
@@ -124,6 +125,7 @@ typedef struct {
     uint8_t icon, muted, hold, mutes;            /* the track's machine icon, muted, its arp holding; every mute */
     uint8_t playing, rec, shift, mute, bank, spage, npage;
     uint8_t clk_int;                             /* MONO2K on its own tempo (INT), not Move's */
+    uint8_t pads;                                /* the keyboard rows are PADS */
     char slot[4], next[4], pname[9];
     char toast[24], toast2[28];
     uint32_t ms;
@@ -146,5 +148,9 @@ int m2k_screen_param(int page, int t, int k);
 int m2k_screen_knob_track(int page, int t, int k);
 /* a page's name, as the header writes it */
 const char *m2k_screen_page_name(int page);
+/* a line's width in the type at x1, and the most a message's line may take (its box less 4 px a side): a message
+ * composed to fit (Capture's tracks) asks; the sheets' audit holds every such message to it */
+#define MS_TOAST_TW (MS_W - 24)
+int m2k_screen_text_w(const char *s);
 
 #endif

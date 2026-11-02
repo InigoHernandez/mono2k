@@ -327,6 +327,224 @@ static char sdump[8][2000];
 static void save_steps(int slot) { vstr(dump(), "steps", sdump[slot], sizeof sdump[slot]); }
 static int same_steps(int slot) { char b[2000]; vstr(dump(), "steps", b, sizeof b); return !strcmp(b, sdump[slot]); }
 
+/* ------------------------------------------------------------- ctl: PADS and Capture (the owner's, 2026-11-02) */
+
+static void view_track(int t) { char s[8]; snprintf(s, sizeof s, "%d", t); A_set("track", s); blocks(1); }
+/* the track in view's root as the FM-1's PADS plays it, worked out again from the dump: the note its trigs sit on
+ * most within the pattern's LEN, the lowest of equals (m2k_proj.c pat_root); -1 without trigs */
+static int root_now(void)
+{
+    char b[2000];
+    int glob[8];
+    vstr(dump(), "steps", b, sizeof b);
+    vlist(dump(), "glob", glob, 8);
+    const int len = glob[2] < 1 ? 1 : glob[2] > 64 ? 64 : glob[2];   /* (G_LEN: the third global) */
+    int cnt[128] = {0}, best = -1;
+    const char *q = b;
+    for (int s = 0; s < len && q; s++) {
+        const int f = atoi(q);
+        const char *d = strchr(q, '.');
+        const int n = (d ? atoi(d + 1) : 0) & 127;
+        if (f & 1) { cnt[n]++; if (best < 0 || cnt[n] > cnt[best] || (cnt[n] == cnt[best] && n < best)) best = n; }
+        q = strchr(q, ',');
+        if (q) q++;
+    }
+    return best;
+}
+/* the track in view's step playing (get_param "ui"), -1 stopped */
+static int pos_now(void) { char b[256]; int pl = 0, tp = -1; A_get("ui", b, sizeof b); sscanf(b, "%d %d", &pl, &tp); return tp; }
+/* playing on until the track in view's step s has just begun: a pad pressed now falls on it (early in it) */
+static void until_step(int s) { for (int g = 0; g < 4000 && pos_now() != s; g++) A_render(); }
+/* a pad hit: pressed, held two blocks, let go (three blocks in all; the press is heard at the first) */
+static void hit(int i, int vel) { pad(i, 1, vel); blocks(2); pad(i, 0, 0); A_render(); }
+
+/* PADS (Sample): the bottom row the tracks at their roots, the row over it their mutes, the lights, REC, PERFORM over it */
+static void ctl_pads(void)
+{
+    inst = open_at(0, 2000);
+    blocks(4);
+    const char *v;
+    int pads[32], bl[MV_NBTN], tn[8], root[8];
+    for (int t = 0; t < 8; t++) { view_track(t); root[t] = root_now(); }
+    view_track(0);
+    tap(118);
+    v = view();
+    vlist(v, "btnled", bl, MV_NBTN);
+    check(vint(v, "kpads") == 1 && strstr(v, " toast=PADS|T1-T8, MUTES ABOVE") && bl[11] == 16,
+          "Sample (CC 118): PADS, said (PADS / T1-T8, MUTES ABOVE); Sample's LED azure");
+    vlist(v, "pads", pads, 32);
+    const int mutes = vint(v, "mutes");
+    int lit = 1;
+    for (int i = 0; i < 8; i++) lit &= pads[i] == 95 && pads[8 + i] == ((mutes >> i) & 1 ? 66 : 16);
+    check(lit, "PADS' lights: the tracks dim azure; their mutes over them azure (heard) or dark red (muted)");
+    int every = 1;
+    for (int t = 0; t < 8; t++) {
+        pad(t, 1, 100); blocks(2);
+        v = view();
+        vlist(v, "tnote", tn, 8);
+        vlist(v, "pads", pads, 32);
+        if (!((vint(v, "gates") >> t) & 1) || (root[t] >= 0 && tn[t] != root[t]) || pads[t] != 120 || vint(v, "trk") != 0) {
+            every = 0;
+            printf("  (pad %d: gates %d, note %d, root %d, LED %d, track in view %d)\n", t, vint(v, "gates"), tn[t], root[t],
+                   pads[t], vint(v, "trk"));
+        }
+        pad(t, 0, 0); blocks(2);
+    }
+    check(every, "the bottom row: pad n plays track n at its root (its trigs' commonest note), lit white while held; the track in view stays");
+    const int m3 = (mutes >> 3) & 1;
+    pad(11, 1, 100); blocks(1); pad(11, 0, 0); blocks(1);
+    v = view();
+    vlist(v, "pads", pads, 32);
+    check(((vint(v, "mutes") >> 3) & 1) == !m3 && pads[11] == (m3 ? 16 : 66) && strstr(v, m3 ? " toast=UNMUTED|T4" : " toast=MUTED|T4"),
+          "the row over it: its 4th pad mutes T4 (stopped: at once, said, its pad dark red), as Mute + step 4 does");
+    pad(11, 1, 100); blocks(1); pad(11, 0, 0); blocks(1);
+    check(((vint(view(), "mutes") >> 3) & 1) == m3, "tapped again: heard again");
+    A_set("play", "1"); blocks(60);                         /* (GLO's MUTES at its start: at the bar) */
+    const int m4 = (vint(view(), "mutes") >> 4) & 1;
+    pad(12, 1, 100); blocks(1); pad(12, 0, 0);
+    const int waits = strstr(view(), " toast=MUTE AT THE BAR|T5") != NULL;
+    int dark = 0, red = 0, steady = 1;
+    for (int i = 0; i < 90; i++) { A_render(); vlist(view(), "pads", pads, 32); dark += pads[12] == 0; red += pads[12] == 66; }
+    check(!m4 && waits && dark > 10 && red > 10, "playing, MUTES at the bar: the tap waits (MUTE AT THE BAR), its pad blinking dark and dark red");
+    blocks(1400);
+    for (int i = 0; i < 60; i++) { A_render(); vlist(view(), "pads", pads, 32); steady &= pads[12] == 66; }
+    check(steady && ((vint(view(), "mutes") >> 4) & 1), "the bar came: T5 muted, its pad steady dark red");
+    tap(86);                                                /* REC */
+    view_track(1);
+    int k = -1, nn = -1;
+    for (int s = 2; s < 14 && k < 0; s++) if (!(dump_step(s, 0) & 1)) k = s;
+    until_step(k);
+    pad(1, 1, 120); blocks(2); pad(1, 0, 0); blocks(2);
+    const int fk = dump_step(k, &nn);
+    check(k >= 0 && (fk & 3) == 3 && nn == root[1], "REC playing: T2's pad writes T2's step playing, at its root, an accent (velocity 120)");
+    tap(86);
+    page(MS_PERF);
+    pad(0, 1, 100); blocks(2);
+    v = view();
+    check(vint(v, "perf") == 1 && vint(v, "kpads") == 1, "PERFORM on: the rows are its effects over PADS (the bottom-left RPT 1/4)");
+    pad(0, 0, 0); blocks(2);
+    tap(118);
+    check(vint(view(), "kpads") == 0 && strstr(view(), " toast=KEYS|WHEN PERFORM IS OFF"), "Sample under PERFORM: the mode for after it, said");
+    tap(118);
+    page(MS_PERF);
+    pad(5, 1, 100); blocks(2);
+    v = view();
+    vlist(v, "pads", pads, 32);
+    char pk[16];
+    check(!strcmp(vstr(v, "pkeys", pk, sizeof pk), "0,0") && vint(v, "kpads") == 1 && pads[5] == 120,
+          "PERFORM off: PADS again (T6's pad held, white)");
+    pad(5, 0, 0); blocks(2);
+    A_set("play", "0"); blocks(4);
+    tap(118);
+    v = view();
+    vlist(v, "btnled", bl, MV_NBTN);
+    check(vint(v, "kpads") == 0 && strstr(v, " toast=KEYS|PLAY THE TRACK") && bl[11] == 0, "Sample again: the piano (KEYS, said), Sample's LED off");
+    pad(0, 1, 100); blocks(2);
+    vlist(view(), "tnote", tn, 8);
+    check((vint(view(), "gates") & 2) && tn[1] == 60 + 12 * vint(view(), "oct"), "the bottom-left pad: C on the track in view (T2) again");
+    pad(0, 0, 0); blocks(2);
+    api->destroy_instance(inst);
+}
+
+/* Capture (CC 52): stopped and playing, whole bars, the track's length, overdub, one Undo, PADS' several tracks */
+static void ctl_capture(void)
+{
+    const char *v;
+    int bl[MV_NBTN], tn[8];
+    inst = open_at(15, 2000);                               /* A16: a blank, 16 steps; Move's 120 BPM, stopped */
+    blocks(4);
+    const int c = 60 + 12 * vint(view(), "oct");           /* (the keyboard's C: the track's octave) */
+    tap(52);
+    v = view();
+    vlist(v, "btnled", bl, MV_NBTN);
+    check(strstr(v, " toast=NOTHING TO CAPTURE|") && bl[12] == 16, "Capture with nothing played: said so (NOTHING TO CAPTURE); its LED dim");
+    step_tap(9);                                            /* (a trig by hand: the capture overdubs) */
+    const int hand = dump_step(9, 0) & 1;
+    hit(7, 100);                                            /* (the C over, then over 2 bars' silence: 4.35 s) */
+    blocks(1500);
+    save_steps(0);
+    hit(0, 100); blocks(86 - 3);                            /* C the downbeat; E 2 sixteenths on (250 ms: 86 blocks); */
+    hit(2, 100); blocks(129 - 3);                           /* G 5 on, hard */
+    hit(4, 120); blocks(10);
+    v = view();
+    vlist(v, "btnled", bl, MV_NBTN);
+    check(vint(v, "capn") == 4 && bl[12] == 64, "stopped, REC off: every note kept for Capture (4); its LED lit");
+    tap(52);
+    int n0 = -1, n2 = -1, n5 = -1, stray = 0;
+    const int f0 = dump_step(0, &n0), f2 = dump_step(2, &n2), f5 = dump_step(5, &n5);
+    for (int s = 0; s < 64; s++) if (s != 0 && s != 2 && s != 5 && s != 9 && (dump_step(s, 0) & 1)) stray++;
+    v = view();
+    check((f0 & 3) == 1 && n0 == c && (f2 & 3) == 1 && n2 == c + 4 && (f5 & 3) == 3 && n5 == c + 7 && !stray,
+          "Capture stopped: the phrase's first note the downbeat, the rest at 120 (steps 1, 3, 6), the hard one accented; the note 4 s before left out");
+    check(hand && (dump_step(9, 0) & 1), "overdub: the trig placed by hand stays");
+    check(strstr(v, " toast=CAPTURED 1 BAR|T1") && vint(v, "capn") == 0, "said: CAPTURED 1 BAR / T1; the notes taken");
+    tap(52);
+    check(strstr(view(), " toast=NOTHING TO CAPTURE|") != NULL, "Capture again: nothing (the same notes never written twice)");
+    tap(56);
+    check(same_steps(0), "one Undo: the capture taken back, all of it");
+    hit(0, 100); blocks(431 - 3);                           /* sixteenths 0, 10, 20 on a track of 16 */
+    hit(2, 100); blocks(430 - 3);
+    hit(4, 100); blocks(4);
+    tap(52);
+    int n4 = -1;
+    const int f4 = dump_step(4, &n4);
+    check((f4 & 1) && n4 == c + 7 && !(dump_step(0, 0) & 1) && !(dump_step(10, 0) & 1) && strstr(view(), " toast=CAPTURED 1 BAR|T1"),
+          "stopped, a phrase of 21 sixteenths on a track of 16: its last whole bar from bar 1 (its note at 21 on step 5), no more");
+    tap(56);
+    page(MS_PAT);
+    knob(2, 16); blocks(1);
+    check(vint(view(), "np") == 2, "A16 made 32 long (two bars)");
+    save_steps(1);
+    A_set("play", "1"); blocks(2);
+    until_step(2); hit(0, 100);                             /* loop 1: steps 3 and 21 (bar 2) */
+    until_step(20); hit(1, 100);
+    until_step(6); hit(2, 100);                             /* loop 2: steps 7 and 26, hard */
+    until_step(25); hit(3, 120);
+    blocks(20);
+    tap(52);
+    int a6 = -1, a25 = -1;
+    const int g6 = dump_step(6, &a6), g25 = dump_step(25, &a25);
+    check((g6 & 3) == 1 && a6 == c + 4 && (g25 & 3) == 3 && a25 == c + 5,
+          "Capture playing: each note on the bar and step it fell on (bar 1 step 7, bar 2 step 10, accented)");
+    check(!(dump_step(2, 0) & 1) && !(dump_step(20, 0) & 1) && (dump_step(9, 0) & 1),
+          "the track's length at most: loop 1's notes (over 2 bars back) left out; the hand's trig kept");
+    check(strstr(view(), " toast=CAPTURED 2 BARS|T1") != NULL, "said: CAPTURED 2 BARS / T1");
+    tap(56);
+    check(same_steps(1), "Undo: as it was");
+    until_step(20); hit(4, 100);                            /* bar 2 step 5, then the next loop's bar 2 step 3: 30 */
+    until_step(18); hit(5, 100);                            /* sixteenths apart, but a bar before the last bar's loop */
+    blocks(10);
+    tap(52);
+    int a18 = -1;
+    const int h18 = dump_step(18, &a18);
+    check((h18 & 1) && a18 == c + 9 && !(dump_step(20, 0) & 1) && strstr(view(), " toast=CAPTURED 1 BAR|T1"),
+          "whole bars: the last note's bar back (1 bar); a note 30 sixteenths before it, in the bar before, left out");
+    tap(56);
+    A_set("play", "0"); blocks(4);
+    tap(118);                                               /* PADS, stopped: T1, T2, T3 a beat apart, T3 hard */
+    for (int t = 0; t < 3; t++) { view_track(t); save_steps(2 + t); }
+    view_track(0);
+    int r[3];
+    hit(0, 100); vlist(view(), "tnote", tn, 8); r[0] = tn[0]; blocks(172 - 3);
+    hit(1, 100); vlist(view(), "tnote", tn, 8); r[1] = tn[1]; blocks(172 - 3);
+    hit(2, 120); vlist(view(), "tnote", tn, 8); r[2] = tn[2]; blocks(4);
+    tap(52);
+    v = view();
+    const int said = strstr(v, " toast=CAPTURED 1 BAR|T1 T2 T3") != NULL;
+    int each = 1, nt = -1;
+    for (int t = 0; t < 3; t++) {
+        view_track(t);
+        const int f = dump_step(4 * t, &nt);
+        if (!(f & 1) || nt != r[t] || ((f & 2) != 0) != (t == 2)) { each = 0; printf("  (T%d: step %d flags %d note %d, root %d)\n", t + 1, 4 * t + 1, f, nt, r[t]); }
+    }
+    check(said && each, "PADS, Capture: each track's hits into its own track (T1 step 1, T2 step 5, T3 step 9, accented), CAPTURED 1 BAR / T1 T2 T3");
+    tap(56);
+    int undone = 1;
+    for (int t = 0; t < 3; t++) { view_track(t); undone &= same_steps(2 + t); }
+    check(undone, "one Undo takes all three tracks' back");
+    api->destroy_instance(inst);
+}
+
 static int do_ctl(void)
 {
     char s[64];
@@ -538,7 +756,7 @@ static int do_ctl(void)
         const int fn = A_get("frame", fr, sizeof fr);
         char want[16];
         snprintf(want, sizeof want, "%02X04BF", tqv[1]);
-        check(fn == 4 + 8 + 64 * 22 + 2 * 63 + 8 + 6 && !strcmp(fr + fn - 6, want) && fr[fn - 14] == '0' + MV_KK_TEMPO,
+        check(fn == 4 + 8 + 64 * 22 + 2 * (52 + MV_NBTN) + 8 + 6 && !strcmp(fr + fn - 6, want) && fr[fn - 14] == '0' + MV_KK_TEMPO,
               "the frame's tail: knob 1 the tempo, the request's number and 121.5 (04BF) for ui.js to write");
         snprintf(w, sizeof w, "W %d 1", tqv[1]);
         in(w); blocks(800);                                  /* (ui.js wrote it; 2.3 s: still waiting) */
@@ -748,6 +966,8 @@ static int do_ctl(void)
     tap(85);
     check(vint(view(), "play") == 0, "Play again (INT): stops at once");
     api->destroy_instance(inst);
+    ctl_pads();
+    ctl_capture();
     printf("  ctl: %d checks, %d failed\n", checks, fails);
     return fails != 0;
 }
@@ -1230,7 +1450,7 @@ static int do_draw(const char *d)
     int n = A_get("frame", fr, sizeof fr);
     int lit = 0;
     for (int i = 12; i < 12 + 7 * 22; i++) lit += fr[i] != '0';            /* (the header: rows 0..6) */
-    check(n == 4 + 8 + 64 * 22 + 2 * 63 + 14 && !strncmp(fr, "M2K1", 4) && lit > 10,
+    check(n == 4 + 8 + 64 * 22 + 2 * (52 + MV_NBTN) + 14 && !strncmp(fr, "M2K1", 4) && lit > 10,
           "a frame: M2K1, 64 rows, the LEDs, the knobs' kinds and the tempo asked; the header lit");
     in("T 3 1"); blocks(8); shot(d, "2_focus"); in("T 3 0");
     blocks(500);
@@ -1296,10 +1516,11 @@ static int do_rt(void)
         if (i % 11 == 0) { char s[32]; snprintf(s, sizeof s, "K %d %d", i % 8, (i % 5) - 2); in(s); calls++; }
         if (i % 97 == 0) { jog(i % 3 - 1); calls++; }
         if (i % 401 == 0) { in((i / 401) % 2 ? "B 42 127;B 42 0" : "B 43 127;B 43 0"); calls++; }
-        if (i % 613 == 0) { static const int cc[] = {88, 60, 119, 56, 62, 63, 55, 54, 58, 86, 3, 50};
-                            int c = cc[(i / 613) % 12]; btn(c, 127); calls++; }
-        if (i % 613 == 9) { static const int cc[] = {88, 60, 119, 56, 62, 63, 55, 54, 58, 86, 3, 50};
-                            int c = cc[(i / 613) % 12]; btn(c, 0); calls++; }
+        if (i % 613 == 0 || i % 613 == 9) {   /* (Sample: PADS on and off; Capture: what the pads played, written) */
+            static const int cc[] = {88, 60, 119, 56, 62, 63, 55, 54, 58, 86, 3, 50, 118, 52};
+            btn(cc[(i / 613) % (int)(sizeof cc / sizeof cc[0])], i % 613 ? 0 : 127);
+            calls++;
+        }
         if (i % 1777 == 0) { btn(49, 127); btn(86, 127); btn(86, 0); btn(49, 0); calls++; }   /* (a save asked: no dir, nothing) */
         if (i % 12 == 0) { A_get("frame", vbuf, sizeof vbuf); calls++; }
         if (i % 1000 == 0) A_rt(0xFA);

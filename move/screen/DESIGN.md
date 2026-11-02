@@ -55,8 +55,9 @@ Rows 8–11, 44–46, 48 and 62 stay black: the calm.
 - **The pad map** (x 0–22): the two page rows of pads as two rows of eight dots, the top row (the sound) over the second (the rest). The pad that leads to the page in view is a 2 x 2 block, and PERFORM's too while its keys are on. The eye goes from the lit pad to the same place on the screen.
 - **The tag:** filled for the sound pages (the top row, orange on the pads), the word underlined for the rest (azure, and the functions magenta). The same split as the pads' colours.
 - **The track** on the pages that are a track's, then its machine's icon and a mute, if there is room.
+- **PADS' mark** (the owner's, 2026-11-02): while the keyboard rows are PADS (the Sample button), four 2 x 2 pads, 5 px, after the track's icons (after the tag where a page has no track), before HOME's pattern name: short of room it goes before the track's icons do, and HOME's name before it.
 - **The right:** the transport, **INT** beside it when MONO2K plays its own tempo (SYNC, Move's, is the rule and says nothing), REC, the pattern (`>A04` when one is queued; `BANK A` while Shift is held, `MUTE` while Mute is), and the bars as 2 x 3 cells when the track runs past 16 steps (the one the steps show filled) and there is room.
-- The right is drawn first and the left's extras give way to it, the bars too (the audit holds the fullest header on every page: track 8 muted, REC, INT, a pattern queued, four bars).
+- The right is drawn first and the left's extras give way to it, the bars too (the audit holds the fullest header on every page: track 8 muted, REC, INT, a pattern queued, four bars, PADS).
 - The header is dark with a small lit tag rather than a lit bar: a static lit band would age an OLED.
 
 ## The type
@@ -90,7 +91,7 @@ Stage pictures share one language: 1 px curves, an area as a tint (a dot every 4
 
 ## Icons
 
-7 x 5, the capitals' height. 1 px strokes, original (`zz_icons` in the sheets): the pages, play, stop, REC, SYNC's link, mute, speaker, lock, hold, MIX's faders, and the machine families (GND sine, perc, noise; SID chip; FM operators; SWAV saw, pulse, chord; DIGI-WAV stepped wave; VOX speech bubble; DRM kick, snare, hats, cymbal; FX chorus, ring, dynamics).
+7 x 5, the capitals' height. 1 px strokes, original (`zz_icons` in the sheets): the pages, play, stop, REC, SYNC's link, mute, speaker, lock, hold, MIX's faders, PADS' four pads (5 wide), and the machine families (GND sine, perc, noise; SID chip; FM operators; SWAV saw, pulse, chord; DIGI-WAV stepped wave; VOX speech bubble; DRM kick, snare, hats, cymbal; FX chorus, ring, dynamics).
 
 ## Motion
 
@@ -117,11 +118,11 @@ Calm: pages cut, no transitions, no glitches. What moves is the sound: HOME's pl
 | 2nd 8 | PERFORM | DCY DMP ADP DRV | the keys as the pads lay them (bank B over bank A), the effects playing lit; what plays named |
 | (jog) | PATTERNS | | the patterns' rows, the one open with the transport's mark, the one queued NEXT |
 
-A message (the octave, a copy, a save) shows a moment in a dark box over the stage, its first line at x2. Changing patterns shows none: the header says it.
+A message (the octave, a copy, a save) shows a moment in a dark box over the stage, its first line at x2 where it fits (else x1), each line 104 px at most (`MS_TOAST_TW`). Changing patterns shows none: the header says it. PADS and Capture say theirs: PADS / T1-T8, MUTES ABOVE; KEYS / PLAY THE TRACK (under PERFORM: WHEN PERFORM IS OFF); CAPTURED 2 BARS / T1 T2 T3; NOTHING TO CAPTURE. Capture's tracks are written to fit (`m2k_screen_text_w`; runs, T1-T8, if a list were too wide), and the audit says every one of them, the fullest (4 bars, all 8 tracks) among them, fits.
 
 ## The pads
 
-The top two rows lead to the pages; the bottom two are the keyboard; the 16 steps are the sequencer. `padmap.png` shows three states as they light.
+The top two rows lead to the pages; the bottom two are the keyboard (or PADS); the 16 steps are the sequencer. `padmap.png` shows four states as they light: HOME, keys held, PERFORM, PADS.
 
 | Row | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | Colour (in view / not) |
 |---|---|---|---|---|---|---|---|---|---|
@@ -132,6 +133,7 @@ The top two rows lead to the pages; the bottom two are the keyboard; the 16 step
 
 - The keyboard's root is lit orange (the sound's colour), the notes played white, by hand or by the sequencer. The pads no key has are dark.
 - With PERFORM on, its 11 + 11 effects play from the keyboard rows 8 at a time (bank A on the bottom row, B on the top); Up shows each bank's 9–11, Down their 1–8.
+- **PADS** (the Sample button, the owner's, 2026-11-02): the bottom row the 8 tracks, each at its root, dim azure 95, white 120 while sounding; the row over it their mutes, azure 16 heard, dark red 66 muted (Mute's layer's colours), a mute waiting for the bar blinking dark every 128 ms (the FM-1's GLO > PLAY). PERFORM still takes both rows while it is on. Sample's own LED azure while PADS is on.
 - The steps keep step 2's colours: a trig azure, a locked trig dimmer, the playhead and a held step white, a beat's first step faint.
 - **Why these:** a pad a page puts every page one press away (the owner's "no eternal pagination"); the sound on the top row, the row nearest the screen and the knobs; HOME first on the row under it, where the hand starts; the two functions at the right end, apart in their own colour; MIX next to GLO (the mix and the bus). The piano's rows keep the Elektron trig-key shape the owner named; the root in the sound's orange ties the keyboard to the sound pages above it.
 

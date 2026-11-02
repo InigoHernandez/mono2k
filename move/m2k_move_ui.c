@@ -7,15 +7,19 @@
  *   pads 16..31    the pages, a pad each: the top row the sound of the track in view (SYN AMP FILT EFX DSTR LFO1-3),
  *                  the second the rest (HOME TRK PAT GRID MIX GLO, then SOUNDS and PERFORM): MS_PAD_PAGE
  *   pads 0..15     the keyboard, a two-row piano: the white keys C..C on the bottom row, the black over them; with
- *                  PERFORM on, its effects (the colours on the top row, the moves on the bottom; Up / Down the moves' page)
- *   8 knobs        the page's eight (m2k_screen_param); a held step's knobs lock it; Shift + knob 1 the tempo on
+ *                  PERFORM on, its effects (the colours on the top row, the moves on the bottom; Up / Down the moves'
+ *                  page); PADS (the Sample button, the owner's, 2026-11-02): the bottom row the 8 tracks, each at its
+ *                  root (the FM-1's PADS), the row over it their mutes (Mute + steps' rule); PERFORM over either
+ *   Capture        what was just played on the keyboard (the piano or PADS, REC or not, playing or not) written into
+ *                  the steps in whole bars, one undo (the capture's section below); the Move's alone (the FM-1 lighter)
+ *   8 knobs       the page's eight (m2k_screen_param); a held step's knobs lock it; Shift + knob 1 the tempo on
  *                  every page (Move's and MONO2K's under SYNC: m2k_move.c tq_ask)
  *   steps          the sequencer on every page: trigs (a press places one, a quick tap on one takes it away, held its
  *                  locks); Shift + steps the bank's patterns; Mute + steps the tracks' mutes
  *   jog            the lists: the catalogue in SOUNDS, else the patterns (a click loads one); a held step's note;
  *                  Shift + jog the machine
  *   track buttons  tracks 1-4, Shift 5-8; Mute + a button its mute
- *   Rec, Copy, Delete, Undo, Loop, arrows: README's table.
+ *   Rec, Copy, Delete, Undo, Loop, Sample, arrows: README's table.
  * Everything here runs on the audio thread, between blocks (m2k_move.c drains the events before each render). */
 
 /* the glue's (m2k_move.c): the clock, the saver */
@@ -45,6 +49,7 @@ static struct {
     uint8_t tempo_focus;               /* what is shown large is the tempo (Shift + knob 1) */
     uint32_t focus_t;
     uint8_t perf, perf_pg;             /* PERFORM's effects on the keyboard; the moves' page (Up: the rest) */
+    uint8_t kpads;                     /* the keyboard rows are PADS (Sample): kept under PERFORM, back after it */
     uint8_t plist, pat_sel;            /* the patterns' list (the jog's), its cursor */
     uint32_t plist_t;
     uint8_t sdown[16], sstep[16];      /* each step key: held, and the step it holds */
@@ -52,9 +57,31 @@ static struct {
     uint8_t pkind[32], parg[32], ptrk[32];   /* each pad: 1 a note (arg), 2 a PERFORM effect (arg); on which track */
 } mc;
 
+/* Capture's ring: every note played on the keyboard, the latest MV_CAP_N. A run is a stretch of one state (playing or
+ * stopped, one pattern, the tracks' lengths unchanged): a capture takes the latest run's notes alone */
+#define MV_CAP_N 256
+#define MV_CAP_GAP 32                  /* stopped: a silence longer than this many sixteenths (2 bars) ends a phrase */
+typedef struct {
+    uint8_t trk, note, acc, run, playing;
+    int32_t at;                        /* playing: the track's nearest step, counted from its run's start (cap.ab's);
+                                        * stopped: ui.now, ms */
+} cap_note_t;
+static struct {
+    cap_note_t n[MV_CAP_N];
+    uint16_t head, count;              /* the next slot; the notes kept */
+    uint8_t run, playing;              /* the run now: its number, and whether it is the sequencer's playing */
+    uint16_t pn;                       /* the pattern open */
+    uint8_t len[M2K_TRACKS];           /* each track's length in this run */
+    int16_t pos[M2K_TRACKS];           /* its step as last seen (track_pos) */
+    int32_t ab[M2K_TRACKS];            /* its steps since the run began, from its step then (ab = its step, mod len) */
+    int32_t end[M2K_TRACKS];           /* playing: each track's nearest step when the latest note came, */
+    uint8_t elen[M2K_TRACKS];          /* and its length then: a capture's last bar on every track */
+} cap;
+
 static void mv_ctl_init(void)
 {
     m_set(&mc, 0, sizeof mc);
+    m_set(&cap, 0, sizeof cap);
     mc.touch = -1;
     mc.focus = -1;
     mc.page = mc.prev = mc.cat_from = MS_HOME;
@@ -484,6 +511,162 @@ static int mv_perf_key(int i, int pg)
 /* PERFORM on the keyboard: the colours on the top row, the moves on the bottom */
 static int perf_of_key(int i) { return mc.perf ? mv_perf_key(i, mc.perf_pg) : -1; }
 
+/* --------------------------------------------------------------------------------------------- the capture */
+
+/* Capture (the owner's, 2026-11-02): Move's own Capture cannot hear MONO2K, so MONO2K keeps its own. Every note played
+ * on the keyboard (the piano's on the track in view, PADS' on each track) goes into a ring, REC on or off, playing or
+ * stopped, with where it fell: playing, the track's nearest step as REC would write it (rec_step), counted from the
+ * run's start so a phrase over several loops keeps its bars; stopped, its time. A Capture press writes the latest
+ * run's notes into the steps in whole bars and empties the ring:
+ *   playing  each note on the step it fell on; on each track the bars from the one holding the last note played (on any
+ *            track) back, at most the track's length (TLEN, else LEN), so nothing lands twice;
+ *   stopped  the latest phrase (no gap over 2 bars at the tempo), its first note the downbeat of bar 1, the rest timed
+ *            at the tempo and the track's speed, rounded as REC rounds; a phrase longer than the track: its last
+ *            whole bars that fit, from bar 1.
+ * Overdubbed as REC writes a note (the note, an accent over velocity 110), the track's other trigs kept; one undo. */
+
+/* each block, and before a note: every track's step count brought to now. A start or a stop, a pattern coming in or a
+ * track's length changed begins a new run */
+static void cap_sync(void)
+{
+    int fresh = sq.playing != cap.playing || cur_pat != cap.pn;
+    for (int t = 0; t < M2K_TRACKS && !fresh; t++) fresh = tlen_of(t) != cap.len[t];
+    if (fresh) {
+        cap.run++;
+        cap.playing = sq.playing;
+        cap.pn = (uint16_t)cur_pat;
+        for (int t = 0; t < M2K_TRACKS; t++) {
+            cap.len[t] = (uint8_t)tlen_of(t);
+            cap.pos[t] = (int16_t)track_pos(t);
+            cap.ab[t] = cap.pos[t];
+        }
+        return;
+    }
+    if (!sq.playing) return;
+    for (int t = 0; t < M2K_TRACKS; t++) {   /* (a block is far shorter than a step: never a whole loop between two) */
+        const int p = track_pos(t), len = cap.len[t], d = (p - cap.pos[t]) % len;
+        cap.ab[t] += d < 0 ? d + len : d;
+        cap.pos[t] = (int16_t)p;
+    }
+}
+
+/* track t's nearest step now, counted: REC's own rounding (rec_step: the step playing, or the next if nearer), without
+ * its one side effect (the next step marked not to play again, REC's when it writes there), put back as it was */
+static int32_t cap_near(int t)
+{
+    const int8_t keep = sq.rec_skip[t];
+    const int s = rec_step(t);
+    sq.rec_skip[t] = keep;
+    return cap.ab[t] + (s != cap.pos[t]);
+}
+
+/* a note played on track t: kept for Capture (after it sounded: a first note may have started the pattern, Ready) */
+static void cap_note(int t, int note, int vel)
+{
+    cap_sync();
+    cap_note_t *e = &cap.n[cap.head];
+    cap.head = (uint16_t)((cap.head + 1) % MV_CAP_N);
+    if (cap.count < MV_CAP_N) cap.count++;
+    e->trk = (uint8_t)t;
+    e->note = (uint8_t)note;
+    e->acc = (uint8_t)(vel > 110);
+    e->run = cap.run;
+    e->playing = cap.playing;
+    if (!cap.playing) { e->at = (int32_t)ui.now; return; }
+    for (int k = 0; k < M2K_TRACKS; k++) { cap.end[k] = cap_near(k); cap.elen[k] = cap.len[k]; }
+    e->at = cap.end[t];
+}
+
+/* a count of steps on a track of length len: its bar, counted on from the run's start in the track's own bars (a loop
+ * of len steps, a bar 16 of them, the last one shorter when len is not a multiple of 16) */
+static int cap_bar(int32_t a, int len) { return (int)(a / len) * ((len + 15) / 16) + (int)(a % len) / 16; }
+
+/* stopped: ms after the phrase's first note as track t's steps at the tempo and its speed, rounded as REC rounds */
+static int32_t cap_steps(uint32_t ms, int t)
+{
+    const int c = spd_of(t);
+    const int64_t per = 150000LL * SPD_NUM[c];                  /* (a sixteenth is 150000 / bpm10 ms; the speed's) */
+    return (int32_t)((2LL * ms * mv_bpm10() * SPD_DEN[c] + per) / (2 * per));
+}
+
+/* the tracks of a mask as the message says them: "T1 T3 T4"; runs ("T1-T8") if that is too wide for its box */
+static void cap_tracks(char *o, unsigned mask)
+{
+    char *e = o;
+    for (int t = 0; t < M2K_TRACKS; t++)
+        if ((mask >> t) & 1) { if (e > o) *e++ = ' '; *e++ = 'T'; *e++ = (char)('1' + t); }
+    *e = 0;
+    if (m2k_screen_text_w(o) <= MS_TOAST_TW) return;
+    e = o;
+    for (int t = 0; t < M2K_TRACKS; t++) {
+        if (!((mask >> t) & 1)) continue;
+        int u = t;
+        while (u + 1 < M2K_TRACKS && ((mask >> (u + 1)) & 1)) u++;
+        if (e > o) *e++ = ' ';
+        *e++ = 'T'; *e++ = (char)('1' + t);
+        if (u > t) { *e++ = '-'; *e++ = 'T'; *e++ = (char)('1' + u); }
+        t = u;
+    }
+    *e = 0;
+}
+
+/* Capture pressed: the latest run's notes (stopped: its latest phrase) written in whole bars, said; the ring emptied */
+static void capture(void)
+{
+    if (!cap.count) { toast("NOTHING TO CAPTURE", 0); return; }
+    m2k_pattern_t *p = PAT(cur_pat);
+    const int last = (cap.head + MV_CAP_N - 1) % MV_CAP_N;
+    const cap_note_t *L = &cap.n[last];
+    const int playing = L->playing;
+    const uint32_t gap = MV_CAP_GAP * 150000u / (mv_bpm10() ? mv_bpm10() : 1200u);
+    int n = 1;                         /* the notes taken, the latest n (a run's are together at the ring's end) */
+    for (; n < cap.count; n++) {
+        const cap_note_t *e = &cap.n[(last - n + MV_CAP_N) % MV_CAP_N];
+        const cap_note_t *nx = &cap.n[(last - n + 1 + MV_CAP_N) % MV_CAP_N];   /* (the one after it) */
+        if (e->run != L->run || (!playing && (uint32_t)nx->at - (uint32_t)e->at > gap)) break;
+    }
+    const int first = (last - n + 1 + MV_CAP_N) % MV_CAP_N;
+    const uint32_t t0 = (uint32_t)cap.n[first].at;
+    undo_mark(N_PAT, V_PASTE);         /* (a fresh copy each time: one Undo takes this capture back, all of it) */
+    unsigned mask = 0;
+    int bars = 0;
+    for (int t = 0; t < M2K_TRACKS; t++) {
+        int len, shift = 0, lo, end, low = -1;
+        if (playing) {                 /* back from the bar the last note fell in, the track's length at most */
+            len = cap.elen[t] ? cap.elen[t] : 1;
+            end = cap_bar(cap.end[t], len);
+            lo = end - (len + 15) / 16 + 1;
+        } else {                       /* the phrase from its first note; too long: its last whole bars that fit */
+            len = tlen_of(t);
+            const int32_t a_end = cap_steps((uint32_t)L->at - t0, t);
+            shift = a_end >= len ? (int)((a_end - len + 1 + 15) / 16) * 16 : 0;
+            end = (int)(a_end / 16);
+            lo = shift / 16;
+        }
+        for (int k = 0; k < n; k++) {
+            const cap_note_t *e = &cap.n[(first + k) % MV_CAP_N];
+            if (e->trk != t) continue;
+            const int32_t a = playing ? e->at : cap_steps((uint32_t)e->at - t0, t);
+            const int b = playing ? cap_bar(a, len) : (int)(a / 16);
+            if (b < lo) continue;
+            const int s = playing ? (int)(a % len) : (int)(a - shift);
+            if (s < 0 || s >= len) continue;
+            m2k_step_t *st = &p->step[t][s];   /* (as REC writes a played note: live_on_t) */
+            st->note = e->note;
+            st->flags = (uint8_t)(ST_TRIG | (e->acc ? ST_ACC : 0));
+            mask |= 1u << t;
+            if (low < 0 || b < low) low = b;
+        }
+        if (low >= 0 && end - low + 1 > bars) bars = end - low + 1;
+    }
+    cap.count = 0;
+    char a[24], o[28], *e = s_cpy(a, "CAPTURED ");
+    e = s_int(e, bars);
+    s_cpy(e, bars == 1 ? " BAR" : " BARS");
+    cap_tracks(o, mask);
+    toast(a, o);
+}
+
 static void mv_pad(int i, int vel, int down)
 {
     if (i < 0 || i >= 32) return;
@@ -505,10 +688,23 @@ static void mv_pad(int i, int vel, int down)
         else toast(PF_NAME[e], "NO DELAY FREE");
         return;
     }
+    if (mc.kpads) {                    /* PADS: the bottom row the tracks, the row over it their mutes */
+        const int t = i & 7;
+        if (t >= M2K_TRACKS) return;
+        if (i >= 8) { mute_flip(t); return; }   /* (Mute + steps' rule: at the bar when GLO's MUTES says so) */
+        const int n = track_root(PAT(cur_pat), t);   /* (where the FM-1's PADS plays it) */
+        live_on_t(t, n, vel);          /* (the piano's way: held with the pad, an accent recorded over 110, its arp) */
+        cap_note(t, n, vel);
+        mc.pkind[i] = 1;
+        mc.parg[i] = (uint8_t)n;
+        mc.ptrk[i] = (uint8_t)t;
+        return;
+    }
     const int t = ui.trk, n = key_note(i);
     if (n < 0) return;
     sq.ktrk = (uint8_t)t;
     live_on_t(t, n, vel);
+    cap_note(t, n, vel);
     ui.note[t] = (uint8_t)n;           /* (new trigs take the last note played, as from the FM-1's keys) */
     mc.pkind[i] = 1;
     mc.parg[i] = (uint8_t)n;
@@ -629,6 +825,12 @@ static void mv_button(int cc, int v)
         toast(sq.rec ? "REC" : "REC OFF", 0);
         break;
     case 56: undo_do(mc.shift); if (mc.shift) mc.used = 1; break;             /* Undo; Shift + Undo redoes */
+    case 118:                                                                  /* Sample: the keyboard, piano <-> PADS */
+        mc.kpads ^= 1;
+        toast(mc.kpads ? "PADS" : "KEYS",
+              mc.perf ? "WHEN PERFORM IS OFF" : mc.kpads ? "T1-T8, MUTES ABOVE" : "PLAY THE TRACK");
+        break;
+    case 52: capture(); break;                                                 /* Capture (Shift + it: the host's) */
     case 55: case 54: {                                                        /* Up, Down */
         int d = cc == 55 ? 1 : -1;
         if (cat.open) { if (d > 0) cat_keep(); else cat_back(); cat_left(); break; }
@@ -658,9 +860,10 @@ static void mv_button(int cc, int v)
 }
 
 /* each block: the bars follow the playhead; the patterns' list closes a while after its last turn; a knob turned
- * shows large a moment */
+ * shows large a moment; Capture's step counts kept up */
 static void mv_tick(void)
 {
+    cap_sync();
     if (ui.follow && sq.playing) {
         int s = track_pos(ui.trk);
         if (s >= 0) ui.spage = (uint8_t)(s / 16);
@@ -704,11 +907,21 @@ static void mv_leds(mv_view_t *v)
         l->step[k] = c;
     }
     const int root = track_root(p, t) % 12;
-    for (int i = 0; i < 16; i++) {     /* the keyboard, or PERFORM's keys */
+    for (int i = 0; i < 16; i++) {     /* the keyboard, or PERFORM's keys, or PADS */
         uint8_t c;
         if (mc.perf) {
             int e = perf_of_key(i);
             c = e < 0 ? C_OFF : perf.on[e] ? C_WHITE : i < 8 ? C_DMAGENTA : C_DPINK;   /* (the moves magenta, the colours pink) */
+        } else if (mc.kpads) {         /* PADS: a track dim, white while it sounds (as the piano's notes); its mute
+                                        * heard azure, muted dark red (as Mute's layer), waiting for the bar blinking
+                                        * (GLO > PLAY's way on the FM-1) */
+            const int tt = i & 7;
+            if (tt >= M2K_TRACKS) c = C_OFF;
+            else if (i < 8) {
+                int lit = trk[tt].gate;
+                for (int k = 0; k < 16; k++) if (mc.pkind[k] == 1 && mc.ptrk[k] == tt) lit = 1;
+                c = lit ? C_WHITE : C_DAZURE;
+            } else c = ((sq.mq_m >> tt) & 1) && !((ui.now >> 7) & 1) ? C_OFF : mute_will(tt) ? C_DRED : C_AZURE;
         } else {
             int n = key_note(i), lit = 0;
             if (n < 0) { l->pad[i] = C_OFF; continue; }
@@ -739,6 +952,8 @@ static void mv_leds(mv_view_t *v)
     l->btn[8] = mc.perf ? (mc.perf_pg ? W_DIM : W_ON) : ui.oct[t] < 0 ? W_ON : W_DIM;   /* Down */
     l->btn[9] = cat.open || mc.plist ? W_ON : W_OFF;                           /* Menu: a list to close */
     l->btn[10] = sq.arp_hold[t] ? W_ON : W_DIM;                                /* Loop */
+    l->btn[11] = mc.kpads ? C_AZURE : C_OFF;                                   /* Sample (RGB): PADS */
+    l->btn[12] = cap.count ? W_MID : W_DIM;                                    /* Capture: something to capture */
 }
 
 static void mv_view_build(mv_view_t *v)
@@ -815,6 +1030,8 @@ static void mv_view_build(mv_view_t *v)
     v->pat_sel = mc.pat_sel;
     v->perf = mc.perf;
     v->perf_pg = mc.perf_pg;
+    v->kpads = mc.kpads;
+    v->capn = cap.count;
     v->cat_slot[0] = 'S';
     s_num3(v->cat_slot + 1, ui.snd_sel + 1);
     str_n(v->cat_name, snd[ui.snd_sel].name[0] ? snd[ui.snd_sel].name : "INIT", sizeof v->cat_name);
@@ -844,6 +1061,7 @@ static void mv_view_build(mv_view_t *v)
     s.bank = mc.bank;
     s.perf = mc.perf;
     s.perf_pg = mc.perf_pg;
+    s.pads = mc.kpads;
     s.toast = v->toast;
     s.toast2 = v->toast2;
     s.ms = ui.now;

@@ -8,7 +8,7 @@
 #   png/NAME_grid.png   the same with a 1 px gap between the pixels (the grid visible)
 #   overview.png        every frame x3 on one sheet, labelled underneath (the owner's first look)
 #   padmap.png          the Move's 32 pads, 16 steps and 4 track buttons, labelled and lit as the controller lights
-#                       them, beside the screen, in three states (HOME in view; keys held; PERFORM on)
+#                       them, beside the screen, in four states (HOME in view; keys held; PERFORM on; PADS)
 #   motion_*.gif        the motions (a knob touched, the page pads pressed, the playhead), the screen beside the pads
 #                       and the steps as they light, at the screen's pace (34.8 ms a frame)
 #   knob_rows.png       every page's knob row (SYN on every machine, a step's locks, a knob touched), rows 45..63 x6
@@ -75,7 +75,7 @@ def framed(im, pad):
 
 
 def leds_of(path):
-    """63 LEDs: 16 steps, 32 pads, 4 track buttons, 11 buttons"""
+    """65 LEDs: 16 steps, 32 pads, 4 track buttons, 13 buttons"""
     s = open(path).read().strip()
     v = [int(s[i:i + 2], 16) for i in range(0, len(s), 2)]
     return {"step": v[0:16], "pad": v[16:48], "trk": v[48:52]}
@@ -218,9 +218,10 @@ def main():
         d.text((x, y + ch + 10), label.upper(), font=font, fill=170)
     sheet.save(os.path.join(src, "overview.png"))
 
-    # the pad map: three states, each the screen beside the device
+    # the pad map: four states, each the screen beside the device
     states = [("home", "HOME IN VIEW: THE PAGES, THE KEYBOARD"), ("keys", "TRK, THREE KEYS HELD (C E G), THE ARP"),
-              ("perform", "PERFORM ON: THE KEYS ARE ITS EFFECTS")]
+              ("perform", "PERFORM ON: THE KEYS ARE ITS EFFECTS"),
+              ("pads", "PADS (SAMPLE): THE TRACKS, THEIR MUTES OVER THEM (T4 MUTED, T1 HELD)")]
     states = [s for s in states if os.path.exists(os.path.join(src, "padmap_%s.tsv" % s[0]))]
     PADP, GAPP, SZ = 72, 10, 3
     dev_w = PADP // 3 + 2 * GAPP + 8 * PADP + 7 * GAPP
@@ -243,6 +244,8 @@ def main():
             lab = rowlab[r]
             if st == "perform" and r >= 2:
                 lab = ["BANK B", "BANK A"][r - 2]
+            if st == "pads" and r >= 2:
+                lab = ["MUTES", "TRACKS"][r - 2]
             d.text((dx + dev_w + 20, y0 + 34 + r * (PADP + GAPP) + PADP // 2), lab, font=font, fill=(150, 150, 150),
                    anchor="lm")
         d.text((dx + dev_w + 20, y0 + 34 + 4 * (PADP + GAPP) + GAPP + PADP // 6), "THE SEQUENCER", font=font,

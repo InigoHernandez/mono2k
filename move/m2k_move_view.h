@@ -46,10 +46,11 @@ enum { MV_TQ_NONE, MV_TQ_WAIT, MV_TQ_ALONE };
 #define MV_ST_COND 64u                 /* a condition or a ratchet */
 #define MV_ST_BEAT 128u                /* a beat's first sixteenth */
 
-/* the LEDs as palette indices (pads, steps, track buttons, Rec) or brightness 0..127 (the white buttons, MV_BTN_CC) */
-#define MV_NBTN 11
-static const uint8_t MV_BTN_CC[MV_NBTN] = {86, 88, 56, 60, 119, 62, 63, 55, 54, 50, 58};   /* Rec Mute Undo Copy Delete
-                                                                                            * Left Right Up Down Menu Loop */
+/* the LEDs as palette indices (pads, steps, track buttons, Rec, Sample: RGB) or brightness 0..127 (the white buttons,
+ * MV_BTN_CC). Sample and Capture last, so the slots before them stay where they were */
+#define MV_NBTN 13
+static const uint8_t MV_BTN_CC[MV_NBTN] = {86, 88, 56, 60, 119, 62, 63, 55, 54, 50, 58, 118, 52};   /* Rec Mute Undo Copy
+                                                                         * Delete Left Right Up Down Menu Loop Sample Capture */
 typedef struct {
     uint8_t step[16], pad[32], trk[4], btn[MV_NBTN];
 } mv_leds_t;
@@ -79,6 +80,8 @@ typedef struct {
     uint8_t overlay;                   /* MV_OV_* */
     uint8_t pat_sel;                   /* the patterns' list's cursor */
     uint8_t perf, perf_pg;             /* PERFORM's keys on the keyboard, their page */
+    uint8_t kpads;                     /* the keyboard rows are PADS (Sample): the tracks, their mutes over them */
+    uint16_t capn;                     /* notes played since the last Capture (what it would write from) */
     char cat_slot[6], cat_name[9];     /* the catalogue: "S012", its name ("INIT" empty) */
     uint32_t perf_on;                  /* PERFORM's effects on, a bit each (22) */
     char toast[24], toast2[28];        /* a message, a moment after an action ("" none) */

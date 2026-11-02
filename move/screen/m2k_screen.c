@@ -196,7 +196,7 @@ static int ms_tag(int x, int b, const char *s, int filled)
  * 1 px grid; drawn for MONO2K, after no one's set */
 enum { I_HOME, I_SYN, I_AMP, I_FILT, I_EFX, I_DSTR, I_ARP, I_LFO, I_GLO, I_GRID, I_SET, I_CAT, I_PERF, I_PLAY,
        I_STOP, I_REC, I_SYNC, I_MUTE, I_SPKR, I_LOCK, I_HOLD, I_PERC, I_NOIS, I_SID, I_FM, I_SAW, I_PULS, I_ENS,
-       I_WAV, I_VOX, I_KICK, I_SNAR, I_HATS, I_CYMB, I_CHOR, I_RING, I_DYN, I_MIX, I_COUNT };
+       I_WAV, I_VOX, I_KICK, I_SNAR, I_HATS, I_CYMB, I_CHOR, I_RING, I_DYN, I_MIX, I_PADS, I_COUNT };
 static const uint8_t MS_ICON[I_COUNT][5] = {
     {0x10, 0x28, 0x44, 0x44, 0x7C},   /* HOME  ___#___ __#_#__ _#___#_ _#___#_ _#####_ */
     {0x60, 0x90, 0x92, 0x0A, 0x04},   /* SYN   _##____ #__#___ #__#__# ____#_# _____#_ */
@@ -236,6 +236,7 @@ static const uint8_t MS_ICON[I_COUNT][5] = {
     {0x70, 0xD8, 0xA8, 0xD8, 0x70},   /* RING  _###___ ##_##__ #_#_#__ ##_##__ _###___ */
     {0x06, 0x18, 0x20, 0x40, 0x80},   /* DYN   _____## ___##__ __#____ _#_____ #______ */
     {0x48, 0x48, 0xEA, 0x4E, 0x4A},   /* MIX   _#__#__ _#__#__ ###_#_# _#__### _#__#_# */
+    {0xD8, 0xD8, 0x00, 0xD8, 0xD8},   /* PADS  ##_##__ ##_##__ _______ ##_##__ ##_##__ (four pads; 5 wide) */
 };
 static void ms_icon(int ic, int x, int b, int c) { for (int r = 0; r < 5; r++) ms_row8(x, b - 5 + r, MS_ICON[ic][r], c); }
 
@@ -763,6 +764,7 @@ void m2k_screen_gather(ms_view_t *v, const m2k_scr_t *s)
     v->shift = s->shift;
     v->mute = s->mute;
     v->clk_int = (uint8_t)!s->sync;
+    v->pads = s->pads;
     v->bank = s->bank;
     v->spage = s->spage;
     const int vl = seq_len() > tlen_of(t) ? seq_len() : tlen_of(t);
@@ -931,10 +933,11 @@ static void d_padmap(const ms_view_t *v)
 }
 
 /* the pad and the page's tag (filled for a sound page, underlined for the rest), the track where the page is a
- * track's, then what has room: its machine's icon, a mute, an extra word (HOME's pattern name); at the right the
- * transport, INT when MONO2K plays its own tempo (SYNC, Move's, is the rule and says nothing), REC, the pattern (the one
- * queued instead, after a >; Shift held, the bank; Mute held, MUTE), the bars when there are more than one (the one the
- * steps show filled) and there is room. The right is drawn first: the left's extras give way to it */
+ * track's, then what has room: its machine's icon, a mute, PADS' four pads (the keyboard rows are the tracks), an
+ * extra word (HOME's pattern name); at the right the transport, INT when MONO2K plays its own tempo (SYNC, Move's, is
+ * the rule and says nothing), REC, the pattern (the one queued instead, after a >; Shift held, the bank; Mute held,
+ * MUTE), the bars when there are more than one (the one the steps show filled) and there is room. The right is drawn
+ * first: the left's extras give way to it */
 static int ms_hdr_gap;                 /* (the audit's: the clear columns between the two ends) */
 static void d_header(const ms_view_t *v, const char *title, int show_track, const char *extra)
 {
@@ -967,6 +970,7 @@ static void d_header(const ms_view_t *v, const char *title, int show_track, cons
         if (x + 7 + 3 <= rl) { ms_icon(v->icon, x, MS_HB, 1); x += 7 + 3; }
         if (v->muted && x + 7 + 3 <= rl) { ms_icon(I_MUTE, x, MS_HB, 1); x += 7 + 3; }
     }
+    if (v->pads && x + 5 + 3 <= rl) { ms_icon(I_PADS, x, MS_HB, 1); x += 5 + 3; }
     if (extra && extra[0] && x + ms_tw(extra) + 3 <= rl) x += ms_text(x, MS_HB, extra, 1) + 3;
     ms_hdr_gap = rl - (x - 3);                               /* (each left item leaves 3 or 4 columns after it) */
 }
@@ -1362,13 +1366,14 @@ static void d_list(const ms_view_t *v, int pats)
 
 /* ---------------------------------------------------------------------------------------- a message */
 
-/* a moment's message over the stage: its first line large where it fits, framed in a dark box */
+/* a moment's message over the stage: its first line large where it fits, framed in a dark box (a line MS_TOAST_TW at
+ * most: 4 px clear of the frame each side) */
 static void d_toast(const ms_view_t *v)
 {
     const int x = 8, y = 17, w = MS_W - 16, h = 24;
     ms_rect(x - 2, y - 2, w + 4, h + 4, 0);
     ms_rframe(x, y, w, h, 1);
-    const int big = ms_tw_z(v->toast, 2) <= w - 8;
+    const int big = ms_tw_z(v->toast, 2) <= MS_TOAST_TW;
     if (!v->toast2[0]) {
         if (big) ms_text_z(64 - ms_tw_z(v->toast, 2) / 2, y + 17, v->toast, 2, 1); else ms_text_c(64, y + 15, v->toast, 1);
         return;
@@ -1426,6 +1431,8 @@ void m2k_screen_draw(const ms_view_t *v, uint8_t *fb)
     }
     if (v->toast[0]) d_toast(v);
 }
+
+int m2k_screen_text_w(const char *s) { return ms_tw(s ? s : ""); }
 
 const uint8_t *m2k_screen(const m2k_scr_t *s)
 {

@@ -421,6 +421,14 @@ static int view_string(char *o)
     e = ap(e, " focus="); e = s_int(e, v.focus);
     e = ap(e, " perf="); e = s_int(e, (int)v.perf_on);
     e = ap(e, " pkeys="); e = s_int(e, v.perf); *e++ = ','; e = s_int(e, v.perf_pg);
+    e = ap(e, " kpads="); e = s_int(e, v.kpads);
+    e = ap(e, " capn="); e = s_int(e, v.capn);
+    e = ap(e, " gates=");                                  /* (each track's gate open, a bit each; and its note) */
+    int gm = 0;
+    for (int k = 0; k < M2K_TRACKS; k++) gm |= trk[k].gate ? 1 << k : 0;
+    e = s_int(e, gm);
+    e = ap(e, " tnote=");
+    for (int k = 0; k < M2K_TRACKS; k++) { if (k) *e++ = ','; e = s_int(e, trk[k].note); }
     e = ap(e, " hold="); e = s_int(e, sq.arp_hold[v.trk]);
     e = ap(e, " k=");
     for (int k = 0; k < 8; k++) { if (k) *e++ = ','; e = s_int(e, v.knob[k].raw); }
@@ -434,6 +442,8 @@ static int view_string(char *o)
     for (int k = 0; k < 32; k++) { if (k) *e++ = ','; e = s_int(e, v.led.pad[k]); }
     e = ap(e, " trkled=");
     for (int k = 0; k < 4; k++) { if (k) *e++ = ','; e = s_int(e, v.led.trk[k]); }
+    e = ap(e, " btnled=");
+    for (int k = 0; k < MV_NBTN; k++) { if (k) *e++ = ','; e = s_int(e, v.led.btn[k]); }
     e = ap(e, " cat="); e = ap(e, v.cat_slot); *e++ = ':'; e = ap(e, v.cat_name);
     e = ap(e, " spg="); e = s_int(e, v.scr.page);
     e = ap(e, " tk="); e = s_int(e, v.scr.touch.k); *e++ = ':'; e = ap(e, v.scr.touch.name);

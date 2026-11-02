@@ -13,8 +13,8 @@
  * exactly two of the panel's, and keeps the channel 8 % busy. host_set_refresh_rate is not ours to call: shadow_ui.c
  * (where overtake modules run) has none, and schwung_host.c's ~11 Hz is a variable its loop never reads.
  *
- * The host keeps: Back (parks MONO2K; Shift + Back closes it), the master knob, and the escape (Shift + touching the
- * volume knob + jog click). PLAY reaches Move too (module.json's button_passthrough), so one press starts both and
+ * The host keeps: Back (parks MONO2K; Shift + Back closes it), the master knob, the escape (Shift + touching the
+ * volume knob + jog click) and Shift + Capture (Schwung's skipback). PLAY reaches Move too (module.json's button_passthrough), so one press starts both and
  * Move keeps its LED; MONO2K follows Move's start and stop, or plays alone if Move sends no clock. */
 import {
     MoveBack, MoveMainKnob, MoveMaster, MoveSteps, MovePads
@@ -56,8 +56,11 @@ const LED_BUDGET = 16;         /* LED messages a tick at most; the rest wait for
 const MUTE_MOVE = false;       /* Move's own audio under MONO2K: mixed (false) or muted (the owner's call) */
 const ROWS = 64, ROW_CH = 22, HEAD = 12;                  /* the frame: "M2K1", its number (8 hex), 64 rows of 22 */
 const TRACK_CC = [43, 42, 41, 40];                         /* tracks 1..4 (with Shift 5..8): the DSP's order */
-const BTN_CC = [86, 88, 56, 60, 119, 62, 63, 55, 54, 50, 58];   /* m2k_move_view.h MV_BTN_CC: Rec Mute Undo Copy
-                                                            * Delete Left Right Up Down Menu Loop */
+const BTN_CC = [86, 88, 56, 60, 119, 62, 63, 55, 54, 50, 58, 118, 52];   /* m2k_move_view.h MV_BTN_CC: Rec Mute Undo
+                                                            * Copy Delete Left Right Up Down Menu Loop, Sample (MoveSample,
+                                                            * an RGB LED: PADS), Capture (MoveCapture, white). Both reach
+                                                            * the DSP as any button ("B cc v"); Shift + Capture is the
+                                                            * host's (Schwung's skipback) and never comes */
 const HOST_CC = new Set([MoveBack, MoveMaster]);          /* the host's */
 const LED_N = 16 + 32 + 4 + BTN_CC.length;                /* the frame's LEDs, then its tail: the knobs' kinds (8), the
                                                             * tempo asked: its number (2 hex), tenths (4 hex) */

@@ -5,13 +5,14 @@
  * renders), so every frame is what the drawer draws from the published page state, and every LED what ui.js lights.
  * Writes, into DIR:
  *   NAME.pbm, manifest.tsv     each still (128 x 64, 1 = lit) and its label
- *   frames/NAME/NNNN.pbm, .led the motions' frames, each with its 63 LEDs (hex)
+ *   frames/NAME/NNNN.pbm, .led the motions' frames, each with its 65 LEDs (hex)
  *   padmap_*.tsv               the 32 pads, 16 steps and 4 track buttons of a state: their labels and palette colours
  *   rows/NAME.pbm, manifest    every page's knob row (SYN on every machine, a step's locks, a knob touched), whole frames
  *   timing.txt                 the cost a frame: the publish (the audio thread's) and the drawing (the drawer's)
  * and checks: every value a column writes and every touched name and value fits; every knob's picture, at every value,
- * stays in its 13 x 13 box (a name in its column less a pixel a side); the header's two ends never meet; a frame drawn
- * later from the same view, with the core in another state, is the same frame (the drawing reads the view alone).
+ * stays in its 13 x 13 box (a name in its column less a pixel a side); the header's two ends never meet; every message
+ * PADS and Capture say fits its box; a frame drawn later from the same view, with the core in another state, is the
+ * same frame (the drawing reads the view alone).
  * move/screen/sheets.py makes the PNGs, the overview, the knob rows, the pad map and the GIFs.
  *   cc -O2 -DM2K_TRACKS=8 -Ifirmware/src -Ifirmware/gen -o build/move/screen_sheets move/screen/sheets.c
  *   build/move/screen_sheets build/move/sheets */
@@ -138,6 +139,7 @@ static void padmap(const char *name)
         char lb[16] = "";
         if (i >= MS_PAD0) s_cpyn(lb, m2k_screen_page_name(MS_PAD_PAGE[i - MS_PAD0]), sizeof lb);
         else if (mc.perf) { int e = perf_of_key(i); if (e >= 0) s_cpyn(lb, PF_NAME[e], sizeof lb); }
+        else if (mc.kpads) { if (i < 8) ms_tname(lb, i); else s_cpy(lb, "MUTE"); }
         else { int n = key_note(i); if (n >= 0) s_note(lb, n); }
         fprintf(f, "pad\t%d\t%s\t%d\n", i, lb, v->led.pad[i]);
     }
@@ -215,8 +217,8 @@ static void text_audit(void)
     }
 }
 
-/* the fullest header on every page: track 8 muted, REC, INT, a pattern queued, four bars; its two ends never within
- * 3 px (its extras give way: ms_hdr_gap, as d_header laid it) */
+/* the fullest header on every page: track 8 muted, REC, INT, a pattern queued, four bars, PADS; its two ends never
+ * within 3 px (its extras give way: ms_hdr_gap, as d_header laid it) */
 static int hdr_gap(const ms_view_t *v)
 {
     uint8_t scratch[MS_BYTES];
@@ -234,6 +236,7 @@ static void header_audit(void)
     arp_hold_set(7, 1);
     mute_to(7, 1);
     tap(86);                           /* REC */
+    tap(118);                          /* PADS */
     play(1);
     run_ms(200);
     select_pattern(5);                 /* (queued: A06 after A04) */
@@ -249,6 +252,42 @@ static void header_audit(void)
         if (g < 3) { snprintf(w, sizeof w, "header on %s: its two ends %d px apart", MS_PAGE_N[PG[i]], g); fail(w); }
         if (PG[i] == MS_CAT) page_go(MS_CAT);
         if (PG[i] == MS_PERF) page_go(MS_PERF);
+    }
+}
+
+/* the message published now: there is one, and each of its lines fits its box at x1 (MS_TOAST_TW; the first is drawn
+ * x2 only where that fits too) */
+static void toast_fits(const char *what)
+{
+    const mv_view_t *v = now_view();
+    char w[160];
+    if (!v->scr.toast[0]) { snprintf(w, sizeof w, "%s: no message", what); fail(w); return; }
+    const char *l[2] = {v->scr.toast, v->scr.toast2};
+    for (int i = 0; i < 2; i++)
+        if (ms_tw(l[i]) > MS_TOAST_TW) { snprintf(w, sizeof w, "%s: \"%s\" is %d px, its box %d", what, l[i], ms_tw(l[i]), MS_TOAST_TW); fail(w); }
+}
+
+/* every message PADS and Capture say: the mode both ways (and under PERFORM), nothing to capture, and the fullest
+ * capture (4 bars, all 8 tracks) */
+static void toast_audit(void)
+{
+    open_at(15);
+    tap(118); toast_fits("PADS");
+    tap(118); toast_fits("KEYS");
+    page_go(MS_PERF);
+    tap(118); toast_fits("PADS under PERFORM");
+    tap(118); toast_fits("KEYS under PERFORM");
+    page_go(MS_PERF);
+    tap(52); toast_fits("nothing to capture");
+    PAT(cur_pat)->glob[G_LEN] = 64;
+    tap(118);
+    for (int t = 0; t < 8; t++) { tap_pad(t); blocks(380); }   /* (a hit every 1.1 s: across four bars at 120) */
+    tap(52);
+    toast_fits("captured, 4 bars, 8 tracks");
+    if (!strstr(ui.toast, "4 BARS") || !s_is(ui.toast2, "T1 T2 T3 T4 T5 T6 T7 T8")) {
+        char w[120];
+        snprintf(w, sizeof w, "the fullest capture said \"%s / %s\"", ui.toast, ui.toast2);
+        fail(w);
     }
 }
 
@@ -677,6 +716,28 @@ int main(int argc, char **argv)
     shot("22_tempo_alone_pat", "INT: THE HEADER, PAT");
     tq.state = MV_TQ_NONE;
 
+    /* PADS (Sample): said; the header's mark, the pads lit (T4 muted, T1 held); Capture's message, and HOME after it */
+    open_at(1);
+    mute_to(3, 1);
+    tap(118);
+    shot("23_pads_toast", "SAMPLE: PADS, SAID");
+    play(1);
+    run_ms(1800);
+    pad(0, 1); blocks(VW_EVERY);
+    shot("23_pads", "PADS  HOME, THE HEADER'S MARK");
+    padmap("pads");
+    pad(0, 0);
+    page_go(MS_SYN);
+    run_ms(100);
+    shot("23_pads_syn", "PADS  SYN, THE HEADER'S MARK");
+    open_at(15);
+    tap(118);
+    tap_pad(0); run_ms(500); tap_pad(1); run_ms(500); tap_pad(2); run_ms(250); tap_pad(0); blocks(4);
+    tap(52); blocks(VW_EVERY);
+    shot("24_capture", "CAPTURE  WHAT WAS PLAYED, IN WHOLE BARS");
+    run_ms(1700);
+    shot("24_capture_home", "HOME  THE CAPTURE: T1 T2 T3");
+
     specimens();
     knob_rows();
 
@@ -710,8 +771,9 @@ int main(int argc, char **argv)
 
     text_audit();
     header_audit();
+    toast_audit();
     purity_audit();
-    printf("audit: %s\n", bad ? "FAILED" : "every value, name and header fits, every picture in its box; the drawing reads the view alone");
+    printf("audit: %s\n", bad ? "FAILED" : "every value, name, header and message fits, every picture in its box; the drawing reads the view alone");
     snprintf(p, sizeof p, "%s/timing.txt", out);
     FILE *f = fopen(p, "w");
     timing(stdout);
