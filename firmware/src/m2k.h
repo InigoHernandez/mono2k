@@ -188,6 +188,12 @@ extern void (*m2k_par_end)(void);                              /* 1 while the se
  * audio interrupt found the ring empty). GLO > PLAY shows them (a dash where none came: the browser, the host); a short
  * one more says CPU FULL, at most every few seconds */
 void m2k_cpu(int core1_pct, int core2_pct, int shorts);
+/* the platform's CPU guard (the FM-1's), called before each render with the render's load (% of its real time) and
+ * whether the sound is about to run short. Then the track sounding quietest for what it costs fades out over a block
+ * and rests (its trigs silent; the track in view the last to go and never kept resting), and CPU FULL names it and the
+ * dearest track; with room for it again it plays from its next trig. Returns the track faded, or -1. Elsewhere never
+ * called: the sound as ever */
+int m2k_guard(int load_pct, int danger);
 /* the platform's clock (the FM-1's ticks; unset elsewhere): the render times each track, the bus and its own part where
  * they run, and shares the tracks between the cores by what they took (the host's and the browser's split stays the
  * estimates': the same every time); its ticks a millisecond, for the tracks' loads on GLO > PLAY */

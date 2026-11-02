@@ -447,16 +447,20 @@ static void g_pic(ms_knob_t *kn, const pi_t *pi, int t, int val, char *o)
     switch (pic) {
     case MP_ENV: kn->sub = (uint8_t)(pi->kind == K_AHLD ? 2 : pi->s4[0] == 'A' && pi->s4[1] == 'T' ? 1 : 0); break;
     case MP_FILT: kn->sub = (uint8_t)(pi->kind == K_FOCT ? 0 : pi->kind == K_FWID ? 1 : pi->s4[0] == 'H' ? 2 : 3); break;
-    case MP_WAVE:
-        kn->sub = (uint8_t)((o[0] == 'S' && o[1] == 'Q') || s_is(o, "PULS"));
-        for (int i = 0; i < MS_KS; i++)                  /* (a cycle, end to end; wave_at's -6..7 held to the box's -6..6,
-                                                          * its +7 only at the very foot: every other row kept, no step) */
-            kn->wy[i] = (int8_t)CLAMP(wave_at(o, i, MS_KS - 1), -6, 6);
-        break;
-    case MP_DWAV: {                                    /* DIGI-WAV's wave itself, from the bank it plays */
-        const int big = (PAT(cur_pat)->kit[t][P_WBNK] * 2) >> 7, w = big ? (val >> 1 > 63 ? 63 : val >> 1) : (val * 31) / 127;
-        const int16_t *wv = big ? &T_WAVES64[w * 256] : &T_WAVES[w * 256];
-        for (int i = 0; i < MS_KS; i++) kn->wy[i] = (int8_t)((-wv[i * 256 / MS_KS] * 6 + 16384) >> 15);   /* (-6..6, rounded) */
+    case MP_WAVE: case MP_DWAV: {                      /* a cycle (its name's end to end, or DIGI-WAV's own from the bank
+                                                        * it plays), its lowest and highest on the box's foot and top */
+        int32_t s[MS_KS], mn = 0, mx = 0;
+        if (pic == MP_WAVE) {
+            kn->sub = (uint8_t)((o[0] == 'S' && o[1] == 'Q') || s_is(o, "PULS"));
+            for (int i = 0; i < MS_KS; i++) s[i] = wave_at(o, i, MS_KS - 1);        /* (rows, down) */
+        } else {
+            const int big = (PAT(cur_pat)->kit[t][P_WBNK] * 2) >> 7, w = big ? (val >> 1 > 63 ? 63 : val >> 1) : (val * 31) / 127;
+            const int16_t *wv = big ? &T_WAVES64[w * 256] : &T_WAVES[w * 256];
+            for (int i = 0; i < MS_KS; i++) s[i] = -wv[i * 256 / MS_KS];
+        }
+        for (int i = 0; i < MS_KS; i++) { if (!i || s[i] < mn) mn = s[i]; if (!i || s[i] > mx) mx = s[i]; }
+        for (int i = 0; i < MS_KS; i++)                 /* (-6..6, rounded; a flat one on the middle row) */
+            kn->wy[i] = (int8_t)(mx > mn ? ((s[i] - mn) * 24 + (mx - mn)) / (2 * (mx - mn)) - 6 : 0);
         break;
     }
     case MP_CHOICE: case MP_TEXT: case MP_NUM:
@@ -845,22 +849,23 @@ static void ms_pic(const ms_knob_t *kn, int X, int Y)
         else { ms_line(X, Y, X + L, Y + e, 1); ms_hline(X + L, Y + e, MS_KS - L, 1); }
         break;
     }
-    case MP_FILT: {                          /* the band: its edges (an open one runs out flat), a resonance a peak */
-        const int top = Y + 3, bot = Y + e;
-        int lo = 2, hi = e, pl = 0, ph = 0;
-        if (sub == 0) lo = 2 + ((q * 8 + 128) >> 8);
-        else if (sub == 1) hi = 4 + ((q * 8 + 128) >> 8);
-        else if (sub == 2) { lo = 4; pl = (q * 3 + 128) >> 8; }
-        else { lo = 0; hi = 8; ph = (q * 3 + 128) >> 8; }
-        const int a = lo + (pl ? 2 : 1), b = hi - (ph ? 2 : 1);      /* (the flat top, a peak's fall and rise aside) */
-        if (lo >= 2) ms_line(X + lo - 2, bot, X + lo, top - pl, 1); else ms_hline(X, top, lo + 1, 1);
-        if (pl) ms_line(X + lo, top - pl, X + a, top, 1);
-        if (b >= a) ms_hline(X + a, top, b - a + 1, 1);
-        if (ph) ms_line(X + b, top, X + hi, top - ph, 1);
-        if (hi <= e - 2) ms_line(X + hi, top - ph, X + hi + 2, bot, 1); else ms_hline(X + hi, top, MS_KS - hi, 1);
+    case MP_FILT: {                          /* the band: the passband on the box's top row from lo to hi, each edge a
+                                              * slope 3 wide down to the foot (an open side runs out flat); a resonance
+                                              * a solid corner under its edge, as big as the Q (BASE moves the low edge,
+                                              * WDTH the high one, HPQ the low edge's corner, LPQ the high edge's) */
+        int lo = 3, hi = e, kl = 0, kh = 0;
+        if (sub == 0) lo = 3 + ((q * 9 + 128) >> 8);
+        else if (sub == 1) hi = 4 + ((q * 5 + 128) >> 8);
+        else if (sub == 2) kl = (q * 6 + 128) >> 8;
+        else { lo = 0; hi = e - 3; kh = (q * 6 + 128) >> 8; }
+        ms_hline(X + lo, Y, hi - lo + 1, 1);
+        if (lo) ms_line(X + lo - 3, Y + e, X + lo, Y, 1);
+        if (hi < e) ms_line(X + hi, Y, X + hi + 3, Y + e, 1);
+        for (int j = 1; j < kl; j++) ms_hline(X + lo - j / 4, Y + j, kl - j + j / 4, 1);   /* (from the slope in) */
+        for (int j = 1; j < kh; j++) ms_hline(X + hi - (kh - 1 - j), Y + j, kh - j + j / 4, 1);
         break;
     }
-    case MP_WAVE: case MP_DWAV: {            /* a cycle of the wave (its name's, or DIGI-WAV's own) across the box */
+    case MP_WAVE: case MP_DWAV: {            /* a cycle of the wave across the box, top to foot (g_pic fits it) */
         const int sq = pic == MP_WAVE && (sub & 1);
         int py = Y + m + kn->wy[0];
         ms_px(X, py, 1);
@@ -872,12 +877,13 @@ static void ms_pic(const ms_knob_t *kn, int X, int Y)
         }
         break;
     }
-    case MP_PAN: {                           /* a line, its middle marked; the place a solid handle in a dark ring */
+    case MP_PAN: {                           /* a line, its middle marked; the place a solid handle the box's height, in
+                                              * a dark ring */
         const int p = CLAMP((q * e + 128) >> 8, 1, e - 1);
         ms_hline(X, Y + m, MS_KS, 1);
         ms_vline(X + m, Y + m - 3, 7, 1);
-        ms_rect(X + p - 2, Y + 1, 5, MS_KS - 2, 0);
-        ms_rect(X + p - 1, Y + 2, 3, MS_KS - 4, 1);
+        ms_rect(X + p - 2, Y, 5, MS_KS, 0);
+        ms_rect(X + p - 1, Y, 3, MS_KS, 1);
         break;
     }
     case MP_SEGS: {                          /* a choice too wide to write (up to 6): a floor, a tick a place on it, the

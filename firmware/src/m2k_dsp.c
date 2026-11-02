@@ -164,6 +164,12 @@ typedef struct {
     uint8_t eff[P_COUNT];
     int32_t mod[P_COUNT];              /* the LFOs' modulation, set a block at a time (modq: only what they touch) */
     int32_t peak;
+    int32_t lvl;                       /* its blocks' peaks followed, falling ~93 ms: how loud it is heard (the CPU
+                                        * guard's: a hat between its hits still counts) */
+    uint8_t park;                      /* the CPU guard's fade (m2k_guard): blocks left of it and one, its note ended then */
+    uint8_t held;                      /* and the guard keeps it resting: its trigs silent until there is room for it */
+    uint32_t park_lv;                  /* the amp when the fade began (Q30) */
+    int32_t park_cost;                 /* what it cost sounding (trk_cost), to know when there is room */
     /* the modulation effect; its side (chorus and flanger across the stereo) high-passed and resampled as the mid */
     uint32_t mph;
     uint16_t mw;
@@ -1315,6 +1321,8 @@ static uint32_t atk_from(uint32_t lv)
     return lv >= (1u << 30) ? 1u << 30 : r << 15;
 }
 
+#define PARK_N 8                       /* the CPU guard's fade, blocks: 2.9 ms, one FM-1 render */
+
 static void env_block(trk_t *t)
 {
     /* amp (format 16, gen_tables.py): the attack a square of its time to full (an even swell to the ear), hold (127:
@@ -1351,6 +1359,15 @@ static void env_block(trk_t *t)
     default:
         t->aenv = 0;
         break;
+    }
+    if (t->park) {                     /* the CPU guard (m2k_guard): the amp straight down to nothing over PARK_N blocks,
+                                        * then the note ends as a release would */
+        if (t->park == 1) { t->aenv = 0; t->astage = 0; }
+        else {
+            uint32_t cap = (t->park_lv / PARK_N) * (uint32_t)(t->park - 2);   /* (2^30 at most) */
+            if (t->aenv > cap) t->aenv = cap;
+        }
+        t->park--;
     }
     if (t->astage == 0) t->sounding = 0;
     /* filter: a straight attack, a straight decay to zero (127: stays), timed as the Monomachine's (measured) */
@@ -1502,6 +1519,16 @@ static inline m2k_pattern_t *PAT(int i)
 static int pat_can_open(int j);                  /* (m2k_proj.c) may pattern j become the playing one */
 static uint8_t master_vol = 100;
 
+/* the CPU guard (m2k_guard): a sounding track faded out, its note ended (env_block), its trigs silent while it rests */
+static void trk_park(int ti, int32_t cost)
+{
+    trk_t *t = &trk[ti];
+    t->park = PARK_N + 1;
+    t->park_lv = t->aenv;
+    t->park_cost = cost;
+    t->held = 1;
+}
+
 /* a trig: the note always (a trigless trig moves the pitch too), then the amp (and the machine with it), the filter's
  * envelope and the LFOs, each unless SKIP masks it (ST_NOAMP, ST_NOFLT, ST_NOLFO) */
 static void voice_trig(int ti, int note, int vel, int slide, unsigned skip)
@@ -1517,6 +1544,7 @@ static void voice_trig(int ti, int note, int vel, int slide, unsigned skip)
     }
     t->slide = 0;
     if (!t->sounding || t->eff[P_PORT] == 0) t->pitch = t->ptarget;
+    if (t->held) return;               /* (resting for the CPU guard: the note moves, nothing sounds) */
     if (!(skip & ST_NOAMP)) {
         /* over a note still heard: a soft onset (ATK past 0) goes on from where it is, so any restart steps there; ATK
          * 0's hit masks one under XF_HIT (a hit over a quiet tail restarts as it always has, as the drums do) */
