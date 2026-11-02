@@ -155,8 +155,9 @@ static int bad;
 static void fail(const char *what) { printf("audit: %s\n", what); bad++; }
 
 /* a knob's picture at value v, drawn alone: its ink stays in its 13 x 13 box (a name: its column less a pixel a
- * side), so every two columns keep their gutter; 0 if not */
-static int box_fits(const pi_t *pi, int t, int k, int v, const char *text)
+ * side), so every two columns keep their gutter; a line picture (all but a switch and a word) touches the box's top
+ * row and its foot, so every one shares them. 0 if so, else what is wrong */
+static const char *box_fits(const pi_t *pi, int t, int k, int v, const char *text)
 {
     static uint8_t scratch[MS_BYTES];
     ms_knob_t kn;
@@ -167,13 +168,20 @@ static int box_fits(const pi_t *pi, int t, int k, int v, const char *text)
     ms_fb = scratch;
     m_set(scratch, 0, sizeof scratch);
     const int X = k * 16 + MS_KX, named = ms_named(pi->kind) && (kn.pic == MP_TEXT || kn.pic == MP_CHOICE);
+    const int line = kn.pic != MP_TOGGLE && kn.pic != MP_CHOICE && kn.pic != MP_TEXT && kn.pic != MP_NUM;
     ms_pic(&kn, X, MS_KP);
     const int x0 = named ? k * 16 + 1 : X, x1 = named ? k * 16 + 14 : X + MS_KS - 1;
+    int top = 0, foot = 0;
     for (int y = 0; y < MS_H; y++)
         for (int x = 0; x < MS_W; x++)
-            if ((scratch[y * MS_RB + (x >> 3)] >> (7 - (x & 7))) & 1)
-                if (x < x0 || x > x1 || y < MS_KP || y >= MS_KP + MS_KS) return 0;
-    return 1;
+            if ((scratch[y * MS_RB + (x >> 3)] >> (7 - (x & 7))) & 1) {
+                if (x < x0 || x > x1 || y < MS_KP || y >= MS_KP + MS_KS) return "leaves its box";
+                top |= y == MS_KP;
+                foot |= y == MS_KP + MS_KS - 1;
+            }
+    if (line && !top) return "misses the box's top row";
+    if (line && !foot) return "misses the box's foot";
+    return 0;
 }
 
 /* every page of knobs on every machine, every value: what a column writes fits the box (a name its column) whole, and
@@ -202,8 +210,15 @@ static void text_audit(void)
                     const char *u;
                     fmt(pi, t, v, o, &u);
                     s_cpyn(f, pi->kind == K_DEST && v ? ms_dest_name(pinfo(t, v - 1), dn) : pi->kind == K_MCH ? o + 2 : o, sizeof f);
-                    if (!box_fits(pi, t, k, v, f)) {
-                        snprintf(w, sizeof w, "%s %s %s: at %s its picture leaves its box", MS_PAGE_N[pg], MI[m].name, pi->s4, o); fail(w); break; }
+                    const char *why = box_fits(pi, t, k, v, f);
+                    if (!why && pic == MP_DWAV) {                /* (DIGI-WAV's waves: both banks) */
+                        uint8_t *bk = &PAT(cur_pat)->kit[t][P_WBNK], was = *bk;
+                        *bk = (uint8_t)(was ? 0 : 127);
+                        why = box_fits(pi, t, k, v, f);
+                        *bk = was;
+                    }
+                    if (why) {
+                        snprintf(w, sizeof w, "%s %s %s: at %s its picture %s", MS_PAGE_N[pg], MI[m].name, pi->s4, o, why); fail(w); break; }
                     if ((pic == MP_CHOICE || pic == MP_TEXT || pic == MP_NUM) && ms_vfit(f, ms_named(pi->kind) ? MS_NW : MS_KW)) {
                         snprintf(w, sizeof w, "%s %s %s: value %s cut to %s", MS_PAGE_N[pg], MI[m].name, pi->s4, o, f); fail(w); break; }
                     const int big = ms_tw_z(o, 2) + (*u ? ms_tw(u) + 4 : 0);
@@ -398,7 +413,7 @@ static void specimens(void)
     spec_kind(7, 1, MP_ENV, 24, 0, 0, 0, 0);
     spec_kind(0, 2, MP_FILT, 96, 0, 0, 0, 0);           /* (BASE, WDTH, HPQ, LPQ) */
     spec_kind(1, 2, MP_FILT, 128, 1, 0, 0, 0);
-    spec_kind(2, 2, MP_FILT, 256, 2, 0, 0, 0);
+    spec_kind(2, 2, MP_FILT, 128, 2, 0, 0, 0);
     spec_kind(3, 2, MP_FILT, 256, 3, 0, 0, 0);
     ms_knob_t kn;
     static const int LW[3] = {20, 40, 60};              /* (SIN SQR SAW) */

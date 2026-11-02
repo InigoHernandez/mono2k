@@ -17,7 +17,7 @@ build/move/screen_sheets build/move/sheets          # frames, LEDs, the knob row
 | On the device | Now |
 |---|---|
 | Neighbours 1–2 px apart: one noisy strip | Every picture in the same 13 x 13 box at columns 2–14 of its 16: a 3 px gutter between any two |
-| Mixed heights and baselines | One top row (49) and one bottom row (61) for every box; a written value's capitals on the box's middle rows |
+| Mixed heights and baselines | One top row (49) and one bottom row (61) for every box, and every line picture (dial, fader, segment, filter, wave, pan, places) touches both at every value; a switch and a written value centred on the box's middle rows. (The owner's "good but align this", 2026-11-02: the filters had sat 3 rows low) |
 | Dials as scattered dots | A solid ring, the value a solid band inside it, a pointer from the middle |
 | Dotted floors and rulers under segments, filters, numbers, pan | No dots in the row. One language: a thin line is the range or the shape, solid is the value |
 | Values pushed out of their columns, touching the next | A value is written only if every value of its kind fits the box (13 px), centred in it; else it is drawn. Names (an LFO's destination) up to 14, within their column |
@@ -65,7 +65,7 @@ The owner's "Elektron Pixel Font" by savingaurora (CC BY-SA 3.0; MONO2K's adapta
 - Capitals 5 rows, 2 descender rows, glyphs 1–5 px wide, 1 px tracking. O is round and 0 square; S and 5, B and 8, I and 1 differ. No lowercase.
 - **One weight.** Large values are the same glyphs at x2 or x3, never bold.
 - **Names on touch only.** A knob's full name (A–H before a machine's, the track before MIX's), or its four letters where the full one will not fit beside LOCK and STEP 64.
-- **The audit** (`sheets.c`): every page, on every machine, every value: what a column writes fits its box whole (13 px; a name 14, its column less a pixel a side); every knob's picture stays in its 13 x 13 box; a touched name fits; a touched value and its unit fit at x2.
+- **The audit** (`sheets.c`): every page, on every machine, every value: what a column writes fits its box whole (13 px; a name 14, its column less a pixel a side); every knob's picture stays in its 13 x 13 box, and a line picture touches its top row and its foot (DIGI-WAV's waves in both banks); a touched name fits; a touched value and its unit fit at x2.
 
 ## The knobs' pictures
 
@@ -77,9 +77,9 @@ Each value drawn as what it is (m2k_ui.c's `icon_of` kinds), in one 13 x 13 box,
 | Bipolar dial (`BIDIAL`) | The same, the band from 12 o'clock to either side; at the middle the pointer alone, straight up | Tunes, intervals, bipolar amounts |
 | Fader (`SLIDER`) | A rounded slot 7 wide, the box's height; solid inside it from the floor to the level, 3 wide | Levels (all of MIX's) |
 | Envelope segment (`ENV`) | A rise then held (ATK), a hold (HLD), a fall then out (DEC, REL): its run across the box the time | Times |
-| Filter band (`FILT`) | The band's edges and its top (row 3; an open side runs out flat): BASE moves the low edge, WDTH the high one, HPQ and LPQ a peak up to 3 rows on their edge | The filter |
-| Wave (`WAVE`, `DWAV`) | A cycle across the box, its swing the box's height | Wave choices; DIGI-WAV draws its own wavetable's cycle |
-| Pan (`PAN`) | A line across the middle, its middle marked; the place a solid handle 3 x 9 in a dark ring | Pan |
+| Filter band (`FILT`) | The passband on the box's top row, each edge a slope 3 wide down to the foot (an open side runs out flat): BASE moves the low edge, WDTH the high one; HPQ and LPQ a solid corner under their edge, up to 6 rows as the Q rises (a peak cannot rise past the top row) | The filter |
+| Wave (`WAVE`, `DWAV`) | A cycle across the box, its lowest and highest on the box's foot and top (a quiet wavetable's shape shown whole) | Wave choices; DIGI-WAV draws its own wavetable's cycle |
+| Pan (`PAN`) | A line across the middle, its middle marked; the place a solid handle 3 wide, the box's height, in a dark ring | Pan |
 | Switch (`TOGGLE`) | A pill the box's width, 7 tall: off, its frame and a solid knob at the left; on, solid with the knob dark at the right | On/off |
 | Places (`SEGS`) | A floor, a tick a place on it, the one chosen standing solid, the box's height and at least 3 wide | Choices of up to 6 that don't fit the box (7 or 8, rates and multipliers: a dial) |
 | Value (`CHOICE`, `TEXT`, `NUM`) | The word alone, centred, its capitals the box's rows 4–8; no ruler, no cells | Choices, names and numbers whose every value fits 13 px (a name 14) |
