@@ -424,6 +424,7 @@ static int view_string(char *o)
     e = ap(e, " hnote="); e = ap(e, v.scr.held.n ? v.scr.held.note : "-");
     e = ap(e, " hrt="); e = s_int(e, v.scr.held.rtrg);
     e = ap(e, " hlen="); e = s_int(e, v.scr.held.len);
+    e = ap(e, " hjog="); e = s_int(e, v.scr.held.jog);
     e = ap(e, " focus="); e = s_int(e, v.focus);
     e = ap(e, " perf="); e = s_int(e, (int)v.perf_on);
     e = ap(e, " pkeys="); e = s_int(e, v.perf); *e++ = ','; e = s_int(e, v.perf_pg);

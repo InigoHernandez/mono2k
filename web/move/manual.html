@@ -97,7 +97,7 @@
 
 <article id="status" data-group="Getting started">
   <h1>Status and safety</h1>
-  <p class="sub">0.4: from Schwung Manager or the install page.</p>
+  <p class="sub">0.4.1: from Schwung Manager or the install page.</p>
   <p>The <a href="install.html">install page</a> says how it installs. It runs on Schwung, which is unofficial: not made, approved or supported by Ableton. Back up your sets before installing Schwung or anything on it.</p>
   <p>MONO2K never touches Move's sets. Its own patterns are kept in one file, apart from Move's (<a href="#saving">Saving</a>).</p>
   <div class="callout"><b>Note</b><p>MONO2K is not affiliated with Ableton, M-VAVE or Elektron. Move is Ableton's; Monomachine is Elektron's. Its machines are written from scratch and measured against a Monomachine's output.</p></div>
@@ -154,7 +154,7 @@
       <tr><td>Knobs 1–8</td><td>The page's eight parameters. A touch or a turn shows the knob's full name and its value large. Two detents a value; a flick moves faster; a short list, 3.5 detents an option.</td></tr>
       <tr><td>Shift + knob 1</td><td>The tempo, on every page (<a href="#tempo">Tempo</a>).</td></tr>
       <tr><td>Jog</td><td>The lists, never the pages. Turned: the patterns' list. In SOUNDS, the catalogue.</td></tr>
-      <tr><td>Jog click</td><td>In a list, load or keep; otherwise it opens the patterns' list.</td></tr>
+      <tr><td>Jog click</td><td>In a list, load or keep. With a step held, the jog goes between its note and its chance. Otherwise it opens the patterns' list.</td></tr>
       <tr><td>Shift + jog</td><td>The track's machine.</td></tr>
       <tr><td>Menu</td><td>Closes a list (in SOUNDS, the track's own sound back).</td></tr>
     </tbody>
@@ -246,9 +246,10 @@
       <tr><td>A step</td><td>Places a trig; a quick tap on a trig takes it away.</td></tr>
       <tr><td>Hold + a knob</td><td>A parameter lock on that step.</td></tr>
       <tr><td>Hold + jog</td><td>The step's note.</td></tr>
-      <tr><td>Hold + Shift + jog</td><td>Its condition: a chance of 100 90 75 60 50 40 33 25 12 or 10 %, then A:B, 1ST, PRE and FILL. Hold the step first: Shift first picks a pattern.</td></tr>
+      <tr><td>Hold + jog click, then jog</td><td>Its condition: a chance of 100 90 75 60 50 40 33 25 12 or 10 %, then A:B, 1ST, PRE and FILL. The jog stays on it for the next step you hold; click again for the note. The screen tags what the jog sets.</td></tr>
+      <tr><td>Hold + Shift + jog</td><td>Its condition too. Hold the step first: Shift first picks a pattern.</td></tr>
       <tr><td>Hold + Up / Down</td><td>Its ratchet.</td></tr>
-      <tr><td>Held a moment</td><td>The screen shows the step: its condition, note and ratchet, each over what turns it. Hold several and they change together; the first is the one shown.</td></tr>
+      <tr><td>Held a moment</td><td>The screen shows the step: its condition, note and ratchet, each over what changes it: JOG under what the jog sets, CLICK under the other. Hold several and they change together; the first is the one shown.</td></tr>
       <tr><td>Held a moment + a later empty step</td><td>The note lasts to that step, up to 8 steps: LEN on the screen, the steps it lasts over dim. A nearer step shortens it; the same last step again gives the sound's own length back. The next trig on the track still cuts it.</td></tr>
       <tr><td>Rec</td><td>Live record: the keys, and knobs as locks on the step playing. A key hit hard (velocity over 110) records an accent.</td></tr>
     </tbody>
@@ -388,7 +389,7 @@
 </footer>
 <script src="../site.js?v=4"></script>
 <script src="../switch.js?v=1"></script>
-<script src="changelog.js?v=6"></script>
-<script src="../manual.js?v=59"></script>
+<script src="changelog.js?v=7"></script>
+<script src="../manual.js?v=60"></script>
 </body>
 </html>

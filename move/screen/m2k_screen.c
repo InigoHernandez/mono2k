@@ -551,6 +551,7 @@ static void g_held(ms_view_t *v, const m2k_scr_t *s)
     h->step = (uint8_t)(s->held + 1);
     h->rtrg = (uint8_t)(st.rtrg ? st.rtrg : 1);
     h->len = s->span;
+    h->jog = s->hjog;
     s_cpyn(h->cond, COND_N[st.cond < C_COUNT ? st.cond : C_ALWAYS], sizeof h->cond);
     s_note(h->note, st.note);
     if (st.flags & ST_TTYPE) s_cpyn(h->tag[0], TTYPE_N[ttype_of(st.flags)], sizeof h->tag[0]);
@@ -1348,7 +1349,7 @@ static void d_touched(const ms_view_t *v, int y0, int y1)
 
 /* the stage gives way to a step held past a tap, as to a knob touched: which step (and how many more) and its length
  * if it has one, its trig type, accent and slide in tags where they fit; at x2 what the first holds, each over what
- * turns it */
+ * turns it: the jog's own tagged, a click takes the jog to the other */
 static void d_held(const ms_view_t *v, int y0, int y1)
 {
     const ms_held_t *h = &v->held;
@@ -1368,8 +1369,8 @@ static void d_held(const ms_view_t *v, int y0, int y1)
     ms_text_z(MS_HC0, vb, h->cond, 2, 1);
     ms_text_z(MS_HC1, vb, h->note, 2, 1);
     ms_text_z(MS_HC2, vb, r, 2, 1);
-    ms_text(MS_HC0, hb, "SHIFT+JOG", 1);
-    ms_text(MS_HC1, hb, "JOG", 1);
+    ms_tag((h->jog ? MS_HC0 : MS_HC1) - 2, hb, "JOG", 1);   /* (its letters under the value's) */
+    ms_text(h->jog ? MS_HC1 : MS_HC0, hb, "CLICK", 1);
     ms_text(MS_HC2, hb, "UP/DN", 1);
 }
 

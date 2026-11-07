@@ -7,6 +7,12 @@ window.M2K_KINDS = window.M2K_KINDS || {
 };
 window.M2K_CHANGES = [
   {
+    date: "2026-11-07", title: "MONO2K for the Move 0.4.1: a step's chance with one hand",
+    items: [
+      ["workflow", "Hold a step and click the jog: the jog now sets the step's chance instead of its note, so one hand holds and the other turns. It stays on the chance for the next step you hold; click again for the note. The screen tags JOG under what it sets. Shift + jog still works."],
+    ],
+  },
+  {
     date: "2026-11-07", title: "MONO2K for the Move 0.4: a held step says what it holds, and a note can last",
     items: [
       ["screen", "Hold a step and the screen shows its condition, note and ratchet, each over what turns it: Shift + jog, the jog, Up and Down. They were being set unseen. A tap stays quiet, and a knob touched keeps the screen."],

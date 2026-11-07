@@ -64,6 +64,7 @@ typedef struct {
     uint8_t held;               /* the first step held (0..63): the knobs show its locks; 0xFF none */
     uint8_t nheld;              /* the steps held, for the stage's card; 0 no card (a step tapped, not held) */
     uint8_t span;               /* the first's length set by a step tapped, in steps; 0 none */
+    uint8_t hjog;               /* the jog on a step held: 0 its note, 1 its condition */
     uint8_t spage;              /* the bar the 16 steps show (0..3) */
     uint8_t cat_sel, cat_cat;   /* MS_CAT: the slot shown (0..127), the category (CAT_*, 0 all) */
     uint8_t pat_sel;            /* MS_PATS: the pattern under the cursor */
@@ -98,6 +99,7 @@ typedef struct {
 } ms_touch_t;
 
 typedef struct {
+    uint8_t jog;                          /* what the jog turns: 0 the note, 1 the condition */
     uint8_t n, step, rtrg, len;           /* the steps held (0: no card), the first's number from 1, its hits, its
                                            * length in steps (0 the sound's own) */
     char cond[6], note[6], tag[3][8];     /* its condition, its note; its trig type, accent, slide ("" none) */

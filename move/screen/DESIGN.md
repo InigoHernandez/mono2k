@@ -38,7 +38,7 @@ The FM-1's 4 px grid at the type's x1: every box and rule sits on even rows and 
 | Rows | Band |
 |---|---|
 | 0–7 | Header: the pad map, the page's tag, the track and its machine; the bars, the pattern, REC, the transport |
-| 12–43 | Stage: the page's one live picture. A touched knob takes it over: full name, value at x3 (x2 if long), unit, a ruler. A step held past a tap takes it too (HOME: to row 60), unless a knob is touched: STEP n, how many more and LEN n if it has a length, tags for its trig type, accent and slide, then its condition, note and ratchet at x2 at columns 2, 62 and 102, each over what turns it |
+| 12–43 | Stage: the page's one live picture. A touched knob takes it over: full name, value at x3 (x2 if long), unit, a ruler. A step held past a tap takes it too (HOME: to row 60), unless a knob is touched: STEP n, how many more and LEN n if it has a length, tags for its trig type, accent and slide, then its condition, note and ratchet at x2 at columns 2, 62 and 102, each over what turns it: JOG in a tag under what the jog sets, its letters under the value's, CLICK under the other |
 | 47 | A held step's lock: a line over its knob's box, as wide as the box |
 | 49–61 | The 8 knob pictures: 16 px columns, each picture in a 13 x 13 box at columns 2–14 of its column (a 3 px gutter between two; the screen's left edge 2 px, its right 1) |
 | 63 | The knob touched: a line under its box, as wide as the box |

@@ -710,6 +710,42 @@ static int do_ctl(void)
     step_tap(hs);
     check(!trig_at(hs), "tapped away: the trig and its condition go");
 
+    /* the jog's two jobs with a step held, one hand on it: a click turns it to the condition at once, and it stays for
+     * the next step held; a click turns it back; no list opens, no step goes; let go, a click is the list's again */
+    step(hs, 1); blocks(2);
+    tap(3); blocks(1);
+    check(vint(view(), "hn") == 1 && vint(view(), "hjog") == 1 && vint(view(), "ov") == 0,
+          "Hold + a click: the card at once, the jog on the chance, no list");
+    vstr(view(), "hnote", hn0, sizeof hn0);
+    jog(1); blocks(1);
+    check(!strcmp(vstr(view(), "hcond", hv, sizeof hv), "90%") && !strcmp(vstr(view(), "hnote", hn1, sizeof hn1), hn0),
+          "Hold, a click, the jog: the chance moves, the note does not");
+    step(hs, 0); blocks(2);
+    int hj = hs + 1;
+    while (hj < 16 && trig_at(hj)) hj++;
+    step(hj, 1); blocks(2);
+    jog(1); blocks(1);
+    check(vint(view(), "hjog") == 1 && vint(view(), "hstep") == hj + 1 && !strcmp(vstr(view(), "hcond", hv, sizeof hv), "90%"),
+          "the next step held: the jog still on the chance, no click needed");
+    tap(3); blocks(1);
+    vstr(view(), "hnote", hn0, sizeof hn0);
+    jog(1); blocks(1);
+    check(vint(view(), "hjog") == 0 && strcmp(vstr(view(), "hnote", hn1, sizeof hn1), hn0) != 0
+          && !strcmp(vstr(view(), "hcond", hv, sizeof hv), "90%"), "a second click: the jog on the note again");
+    step(hj, 0); blocks(2);
+    step(hs, 1); blocks(2); tap(3); blocks(1); step(hs, 0); blocks(2);
+    check(trig_at(hs), "a quick tap with a click in it: the trig stays");
+    tap(3); blocks(1);
+    check(vint(view(), "ov") == MV_OV_PATS, "no step held: a click opens the patterns' list, whatever the jog was on");
+    tap(50); blocks(1);
+    step(hs, 1); blocks(110);          /* (hjog is the card's: read it while there is one) */
+    check(vint(view(), "hn") == 1 && vint(view(), "hjog") == 1 && vint(view(), "ov") == 0, "the list come and gone: the jog still on the chance");
+    tap(3); blocks(1);
+    check(vint(view(), "hjog") == 0, "a click: back on the note");
+    step(hs, 0); blocks(2);
+    step_tap(hs); step_tap(hj);
+    check(!trig_at(hs) && !trig_at(hj), "(both tapped away)");
+
     /* a note's length, on a blank pattern: two fingers together still place two trigs; held past a tap, a later empty
      * step sets it (two locks, no trig there), a nearer one changes it, the last again clears it, past 8 says so; a
      * trig or an earlier step does as ever; Undo takes it back; it plays that long */

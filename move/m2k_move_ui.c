@@ -16,8 +16,8 @@
  *                  every page (Move's and MONO2K's under SYNC: m2k_move.c tq_ask)
  *   steps          the sequencer on every page: trigs (a press places one, a quick tap on one takes it away, held its
  *                  locks); Shift + steps the bank's patterns; Mute + steps the tracks' mutes
- *   jog            the lists: the catalogue in SOUNDS, else the patterns (a click loads one); a held step's note;
- *                  Shift + jog the machine
+ *   jog            the lists: the catalogue in SOUNDS, else the patterns (a click loads one); a held step's note, or
+ *                  its condition (a click turns it); Shift + jog the machine
  *   track buttons  tracks 1-4, Shift 5-8; Mute + a button its mute
  *   Rec, Copy, Delete, Undo, Loop, Sample, arrows: README's table.
  * Everything here runs on the audio thread, between blocks (m2k_move.c drains the events before each render). */
@@ -51,6 +51,7 @@ static struct {
     uint8_t perf, perf_pg;             /* PERFORM's effects on the keyboard; the moves' page (Up: the rest) */
     uint8_t kpads;                     /* the keyboard rows are PADS (Sample): kept under PERFORM, back after it */
     uint8_t plist, pat_sel;            /* the patterns' list (the jog's), its cursor */
+    uint8_t hjog;                      /* the jog on a held step: 0 its note, 1 its condition (a click turns it; it stays) */
     uint32_t plist_t;
     uint8_t sdown[16], sstep[16];      /* each step key: held, and the step it holds */
     uint32_t st0[16];
@@ -714,14 +715,15 @@ static void mv_pad(int i, int vel, int down)
 
 /* ----------------------------------------------------------------------------------- the jog and the buttons */
 
-/* the jog: SOUNDS' list; a held step's note (Shift: its condition); Shift + jog the machine; else the patterns' list,
+/* the jog: SOUNDS' list; a held step's note or condition (mc.hjog, Shift too); Shift + jog the machine; else the patterns' list,
  * opened by the turn at the pattern open, the cursor moved by it (nothing loads until a click) */
 static void mv_jog(int d)
 {
     if (!d) return;
     if (cat.open) { mv_cat_slot(sgn(d)); return; }
     if (ui.nheld) {
-        if (mc.shift) { mc.used = 1; held_step_edit(sgn(d), 0); }
+        if (mc.shift) mc.used = 1;
+        if (mc.shift || mc.hjog) held_step_edit(sgn(d), 0);
         else held_note(d);
         return;
     }
@@ -738,11 +740,14 @@ static void mv_jog(int d)
     focus_off();
 }
 
-/* a click: SOUNDS keeps the sound shown; the patterns' list loads the one under the cursor; else it opens the list */
+/* a click: SOUNDS keeps the sound shown; the patterns' list loads the one under the cursor; a step held, the jog goes
+ * between its note and its condition, one hand on it (Shift is too far from the jog to hold with a step); else it opens
+ * the list */
 static void jog_click(void)
 {
     if (cat.open) { cat_keep(); cat_left(); return; }
     if (mc.plist) { mc.plist = 0; pattern_key(mc.pat_sel); return; }
+    if (ui.nheld) { mc.hjog ^= 1; ui.held_edit = 1; focus_off(); return; }
     mc.plist = 1;
     mc.pat_sel = (uint8_t)cur_pat;
     mc.plist_t = ui.now | 1u;
@@ -1056,6 +1061,7 @@ static void mv_view_build(mv_view_t *v)
     s.held = ui.nheld ? ui.held[0] : 0xFF;
     s.nheld = (uint8_t)(ui.held_edit || ui.now - ui.held_t >= MV_TAP_MS ? ui.nheld : 0);   /* (a tap stays quiet) */
     s.span = (uint8_t)(s.nheld ? span_of(t, ui.held[0]) : 0);
+    s.hjog = mc.hjog;
     s.spage = ui.spage;
     s.cat_sel = ui.snd_sel;
     s.cat_cat = ui.snd_cat;

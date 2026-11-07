@@ -316,8 +316,8 @@ static void held_audit(void)
         s_note(o, n);
         if (ms_tw_z(o, 2) > MS_HC2 - MS_HC1 - 3) { snprintf(w, sizeof w, "the card: %s at x2 is too wide", o); fail(w); }
     }
-    if (ms_tw("SHIFT+JOG") > MS_HC1 - MS_HC0 - 3) fail("the card: SHIFT+JOG is too wide");
-    if (ms_tw("JOG") > MS_HC2 - MS_HC1 - 3) fail("the card: JOG is too wide");
+    if (ms_tw("CLICK") > MS_HC2 - MS_HC1 - 3) fail("the card: CLICK is too wide");
+    if (ms_tw("JOG") + 2 > MS_HC2 - MS_HC1 - 3) fail("the card: JOG's tag is too wide");
     if (ms_tw("STEP 64 +7 LEN 8") > MS_W - 4) fail("the card: its top line is too wide");
     if (ms_tw("UP/DN") > MS_W - MS_HC2 - 1 || ms_tw_z("X4", 2) > MS_W - MS_HC2 - 1) fail("the card: the ratchet's column is too narrow");
 }
@@ -775,11 +775,11 @@ int main(int argc, char **argv)
     page_go(MS_AMP);
     step(2, 1); run_ms(400);
     shot("25_held", "A STEP HELD  WHAT IT HOLDS, WHAT TURNS IT");
-    btn(49, 127);
+    tap(3);
     for (int i = 0; i < 4; i++) { jog(1); blocks(1); }
     blocks(VW_EVERY);
-    shot("25_held_cond", "HOLD, SHIFT + JOG  THE CHANCE");
-    btn(49, 0);
+    shot("25_held_cond", "HOLD, A CLICK, THE JOG  THE CHANCE");
+    tap(3);
     tap(55); tap(55); blocks(VW_EVERY);
     shot("25_held_ratchet", "HOLD, UP  THE RATCHET");
     PAT(cur_pat)->step[ui.trk][2].flags |= ST_ACC | ST_SLD;   /* (staged: the tags) */
