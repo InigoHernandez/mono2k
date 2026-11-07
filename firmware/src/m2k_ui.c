@@ -570,6 +570,7 @@ static struct {
     uint8_t note[M2K_TRACKS];          /* the last note played on each track: new trigs take it */
     /* steps held in GRID */
     uint8_t held[8], nheld, held_added[8], held_edit;
+    uint32_t held_t;                   /* when the first of the steps held went down */
     uint8_t btn[B_COUNT], glo_used, keys[M2K_KEYS];
     /* what each key's press did (KA_*, and its note, track, effect, page or step), so that its release undoes that
      * whatever is held by then; when it was pressed */
@@ -1206,6 +1207,37 @@ static void held_remove(int s)
     ui.nheld = (uint8_t)j;
 }
 
+/* a note's length (the OP-XY's gesture, the owner's): one step held past a tap, a later empty step pressed: the note
+ * lasts to it. Two of the step's locks, nothing new in the pattern: GATE the length (16 a step, so 8 steps at most) and
+ * HOLD 127, the amp open that long whatever the sound's own HOLD and DEC, then its REL. The same last step again gives
+ * the sound's own length back. Within a tap it is two steps pressed together, as ever. The Move's controller too */
+#define TAP_MS 300
+#define SPAN_MAX 8
+static int span_of(int t, int s)       /* a step's length so set, in steps; 0 none (a GATE alone is the sound's) */
+{
+    const m2k_pattern_t *p = PAT(cur_pat);
+    const int g = lock_find(t, s, P_GATE), h = lock_find(t, s, P_HOLD);
+    return g < 0 || h < 0 || p->lock[h].val != 127 ? 0 : (p->lock[g].val + 8) >> 4;
+}
+
+static int span_tap(int end)           /* step end pressed: 1 if it set the length of the step held */
+{
+    m2k_pattern_t *p = PAT(cur_pat);
+    const int t = ui.trk, s = ui.held[0], n = end - s + 1;
+    if (ui.nheld != 1 || end <= s || (p->step[t][end].flags & ST_TRIG) || ui.now - ui.held_t < TAP_MS) return 0;
+    ui.held_edit = 1;
+    ui.focus_t = 0;
+    if (n > SPAN_MAX) { toast("LENGTH", "8 STEPS AT MOST"); return 1; }
+    undo_mark(N_STEP, 20);
+    if (span_of(t, s) == n) {
+        p->lock[lock_find(t, s, P_GATE)].trk = 0xFF;
+        p->lock[lock_find(t, s, P_HOLD)].trk = 0xFF;
+        lockmap_build();
+    } else if (!lock_set(t, s, P_GATE, n * 16 > 127 ? 127 : n * 16) || !lock_set(t, s, P_HOLD, 127))
+        toast("LOCKS FULL", "SOME LOCKS LOST");
+    return 1;
+}
+
 /* the steps the track in view reaches, for its pages: the pattern's, or its own length when longer */
 static int view_len(void) { int a = seq_len(), b = tlen_of(ui.trk); return a > b ? a : b; }
 
@@ -1387,7 +1419,7 @@ static void key_release(int k)
         int added = 1, was = 0;
         for (int i = 0; i < ui.nheld; i++) if (ui.held[i] == arg) { added = ui.held_added[i]; was = 1; }
         held_remove(arg);
-        if (was && !added && !ui.held_edit && ui.now - ui.kt0[k] < 300) step_remove(ui.trk, arg);
+        if (was && !added && !ui.held_edit && ui.now - ui.kt0[k] < TAP_MS) step_remove(ui.trk, arg);
         break;
     }
     default: break;
@@ -1517,6 +1549,7 @@ static void key_event(int k, int down)
     }
     int s = ui.spage * 16 + w;
     if (ui.nheld >= 8 || s >= tlen_of(ui.trk)) return;   /* (past the track's end: no trig placed there unheard) */
+    if (span_tap(s)) return;
     m2k_step_t *st = &p->step[ui.trk][s];
     int added = 0;
     if (!(st->flags & ST_TRIG)) {
@@ -1525,7 +1558,7 @@ static void key_event(int k, int down)
         added = 1;
         step_pop(ui.trk, s);
     }
-    if (!ui.nheld) ui.held_edit = 0;
+    if (!ui.nheld) { ui.held_edit = 0; ui.held_t = ui.now; }
     ui.held[ui.nheld] = (uint8_t)s;
     ui.held_added[ui.nheld] = (uint8_t)added;
     ui.nheld++;
@@ -2857,7 +2890,15 @@ static int step_held(int t, int s)
     return 0;
 }
 
-/* a step's cell (a ring pops round it as it is toggled): empty its outline; a trig solid; with locks a checker in its
+/* is step s under the note of the one step held, its length? (the track in view, only while held) */
+static int span_over(int t, int s)
+{
+    if (!ui.grid || ui.nheld != 1 || t != ui.trk || s <= ui.held[0] || s >= ui.held[0] + SPAN_MAX) return 0;
+    return s < ui.held[0] + span_of(t, ui.held[0]);
+}
+
+/* a step's cell (a ring pops round it as it is toggled): empty its outline, a dash through it under a held note;
+ * a trig solid; with locks a checker in its
  * outline; on a condition (a chance, A:B, PRE, FILL ...) framed, its block inset; on some of its trig tracks a third
  * filled for each (AMP, FILTER, LFO, left to right), NONE a dot; accent a notch, slide a dotted edge, ratchets dots
  * along the foot; past the track's end (its own length's, or the pattern's) a dot at its centre. The playing step
@@ -2895,7 +2936,8 @@ static void step_cell(int x, int y, int w, int h, int t, int s)
         if (st.flags & ST_SLD) for (int j = 0; j < h; j += 2) px(x + w - 2, y + j, 0);
         const int d = (w - 2) / 3;                      /* (ratchets: a dot each along the foot) */
         for (int i = 1; i < st.rtrg && i < 4; i++) rect(x + 1 + (i - 1) * d, y + h - 2, d - 1 > 0 ? d - 1 : 1, 1, 2);
-    } else frame(x, y, w, h, 1);
+    } else if (span_over(t, s)) rect(x, y + h / 2 - 1, w, 2, 1);
+    else frame(x, y, w, h, 1);
     if (playing) frame(x - 2, y - 2, w + 4, h + 4, 1);   /* (the playhead: 2 px round) */
     if (step_entry() && t == ui.trk && s == ui.cursor && ((ui.now >> 8) & 1)) frame(x - 2, y - 2, w + 4, h + 4, 1);
     if (ui.pop_t && t == ui.pop_trk && s == ui.pop_s && ui.now - ui.pop_t < 160) rect(x - 1, y - 1, w + 2, h + 2, 2);   /* toggled */
@@ -2992,7 +3034,8 @@ static void focus_info(int code)
     lite_fit(SX0, INFO_B, text_w(&F_S, o, 0) <= xr - 8 - SX0 ? o : pi->name, pi->s4, xr - 8 - SX0);
 }
 
-/* a held step: its number (and how many more), its condition, ratchet, trig type, accent and slide solid; its note */
+/* a held step: its number (and how many more), its condition, ratchet, length, trig type, accent and slide solid; its
+ * note */
 static void step_info(void)
 {
     m2k_step_t st = PAT(cur_pat)->step[ui.trk][ui.held[0]];
@@ -3004,10 +3047,13 @@ static void step_info(void)
     int xr = SX1 - tx_br(&F_S, SX1, INFO_B, nt, 1) - 8;
     int x = SX0 + tx_b(&F_S, SX0, INFO_B, o, 1) + 10;
     char r[4] = {'X', (char)('0' + (st.rtrg ? st.rtrg : 1)), 0, 0};
-    const char *tg[5] = {st.cond != C_ALWAYS ? COND_N[st.cond] : 0, st.rtrg > 1 ? r : 0,
+    const int sp = span_of(ui.trk, ui.held[0]);
+    char ln[8];
+    s_int(s_cpy(ln, "LEN "), sp);
+    const char *tg[6] = {st.cond != C_ALWAYS ? COND_N[st.cond] : 0, st.rtrg > 1 ? r : 0, sp ? ln : 0,
                          (st.flags & ST_TTYPE) ? TTYPE_N[ttype_of(st.flags)] : 0, (st.flags & ST_ACC) ? "ACC" : 0,
                          (st.flags & ST_SLD) ? "SLD" : 0};
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < 6; i++) {
         if (!tg[i] || x + text_w(&F_S, tg[i], 0) > xr) continue;
         x += inv_tag(&F_S, x, INFO_B, tg[i]) + 8;
     }

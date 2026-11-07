@@ -271,6 +271,9 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   XFAIL, 3.2 dB on a 3 dB tolerance). Self-test: LEGATO (the high band about a trig against the same trig without its
   AMP part), ACCENT, VO-6, DELAY. Bank A: its legato tracks' clicks gone (A04's GND-SIN bass 18 dB less over 2 kHz),
   levels and the rest as they were, the drums and hits sample for sample.
+  A note's length (the OP-XY's gesture, the owner's 2026-11-07; `span_tap`, `span_of`, m2k_ui.c, the FM-1's GRID and the
+  Move's steps alike): a step held past a tap (`TAP_MS`), a later empty step pressed: two of the step's locks, GATE
+  (16 a step, 8 steps at most) and HOLD 127, the amp open that long whatever the kit's HOLD and DEC. No format change.
   A step's flags bits 3..5 are its trig types (`ST_NOAMP`, `ST_NOFLT`, `ST_NOLFO`; clear is ALL, as every older pattern
   has them: no format change). FM+'s 24 ratio steps decode as the Monomachine's sound does, `fr24` (v * 24 + 8) >> 7,
   not as its screen labels them (`chain_fmstep43`, FM+STAT's 2FRQ `chain_fmstep44`). The owner's sheet (FM MACHINE

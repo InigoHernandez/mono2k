@@ -89,7 +89,7 @@ The files live in `move/`, a fourth platform beside `fm1/`, `web/` and `host/`:
 - **The knobs' feel** (owner, 2026-11-01: "the knobs are too sensitive"): MONO2K's own curve in ui.js instead of Schwung's ×10 acceleration. Half a step a detent up to a brisk turn, 2.5 at most on a flick; short lists 3.5 detents an option; the tempo 0.1 BPM slow, whole BPM fast. 0–127 in ~1.2 turns at a brisk turn (README, The knobs' feel).
 
 - **A held step's card** (owner, 2026-11-07: "yes", on the screen saying nothing of a step's condition, ratchet or note while they were set): the stage gives way to a step held past a tap, or the moment it is edited: the step, its condition, note and ratchet at x2, each over the gesture that turns it. A tap stays quiet; a knob touched keeps the stage (`d_held`, README, The controls).
-- **A note's length** (owner, 2026-11-07: "like opxy holding the step and tap in another step"): built on the step's own locks, GATE and HOLD 127, so no format change and nothing in `firmware/src`. Measured through the gesture on a plucky sound at 120 BPM: full level for 1.97 steps at 2, 2.97 at 3 ... 6.97 at 7, 7.89 at 8. The first step must be held past a tap, so two fingers still place two trigs (README, The controls).
+- **A note's length** (owner, 2026-11-07: "like opxy holding the step and tap in another step"): built on the step's own locks, GATE and HOLD 127, so no format change; the FM-1's GRID has it too (owner, the same day), one code in m2k_ui.c. Measured through the gesture on a plucky sound at 120 BPM: full level for 1.97 steps at 2, 2.97 at 3 ... 6.97 at 7, 7.89 at 8. The first step must be held past a tap, so two fingers still place two trigs (README, The controls).
 
 ## Open questions
 

@@ -31,7 +31,7 @@ static void mv_save_request(int why);
 static void tq_ask(int d10, int coarse);
 static void tq_cancel(void);
 
-#define MV_TAP_MS 300                  /* a step tapped quicker takes its trig away */
+#define MV_TAP_MS TAP_MS               /* a step tapped quicker takes its trig away */
 #define MV_FOCUS_MS 1200               /* a knob turned shows large so long */
 #define MV_TOAST_MS 1600
 #define MV_LIST_MS 3000                /* the patterns' list stays so long after its last turn */
@@ -54,7 +54,6 @@ static struct {
     uint32_t plist_t;
     uint8_t sdown[16], sstep[16];      /* each step key: held, and the step it holds */
     uint32_t st0[16];
-    uint32_t held_t;                   /* when the first of the steps held went down */
     uint8_t pkind[32], parg[32], ptrk[32];   /* each pad: 1 a note (arg), 2 a PERFORM effect (arg); on which track */
 } mc;
 
@@ -288,7 +287,7 @@ static void mv_touch(int k, int on)
 static void held_add(int s, int added)
 {
     if (ui.nheld >= 8) return;
-    if (!ui.nheld) { ui.held_edit = 0; mc.held_t = ui.now; }
+    if (!ui.nheld) { ui.held_edit = 0; ui.held_t = ui.now; }
     ui.held[ui.nheld] = (uint8_t)s;
     ui.held_added[ui.nheld] = (uint8_t)added;
     ui.nheld++;
@@ -372,33 +371,6 @@ static void pattern_key(int n)
     if (!s_is(ui.toast, "PATTERNS FULL")) ui.toast_t = 0;   /* (the header names it, the one queued framed: no message) */
 }
 
-/* a note's length (the OP-XY's gesture): a step held past a tap, a later empty step tapped: the note lasts to it. Two of
- * the step's locks, nothing new in the pattern: GATE the length (16 a step, so 8 steps at most) and HOLD 127, the amp
- * open that long whatever the sound's own HOLD and DEC, then its REL. The last step tapped again: its own length back */
-#define MV_SPAN_MAX 8
-static int mv_span(int t, int s)       /* a step's length so set, in steps; 0 none (a GATE alone is the sound's) */
-{
-    const m2k_pattern_t *p = PAT(cur_pat);
-    const int g = lock_find(t, s, P_GATE), h = lock_find(t, s, P_HOLD);
-    return g < 0 || h < 0 || p->lock[h].val != 127 ? 0 : (p->lock[g].val + 8) >> 4;
-}
-
-static void step_span(int end)
-{
-    m2k_pattern_t *p = PAT(cur_pat);
-    const int t = ui.trk, s = ui.held[0], n = end - s + 1;
-    ui.held_edit = 1;
-    focus_off();
-    if (n > MV_SPAN_MAX) { toast("LENGTH", "8 STEPS AT MOST"); return; }
-    undo_mark(N_STEP, 20);
-    if (mv_span(t, s) == n) {
-        p->lock[lock_find(t, s, P_GATE)].trk = 0xFF;
-        p->lock[lock_find(t, s, P_HOLD)].trk = 0xFF;
-        lockmap_build();
-    } else if (!lock_set(t, s, P_GATE, n * 16 > 127 ? 127 : n * 16) || !lock_set(t, s, P_HOLD, 127))
-        toast("LOCKS FULL", "SOME LOCKS LOST");
-}
-
 static void mv_step(int k, int down)
 {
     if (k < 0 || k > 15) return;
@@ -440,8 +412,7 @@ static void mv_step(int k, int down)
         } else steps_paste(s);
         return;
     }
-    /* (only past a tap: two fingers landing together still place two trigs) */
-    if (ui.nheld == 1 && s > ui.held[0] && !(st->flags & ST_TRIG) && ui.now - mc.held_t >= MV_TAP_MS) { step_span(s); return; }
+    if (span_tap(s)) { focus_off(); return; }   /* (a note's length: m2k_ui.c) */
     if (ui.nheld >= 8) return;
     int added = 0;
     if (!(st->flags & ST_TRIG)) {
@@ -922,7 +893,7 @@ static void mv_leds(mv_view_t *v)
     const m2k_pattern_t *p = PAT(cur_pat);
     const int t = ui.trk;
     mv_leds_t *l = &v->led;
-    const int hs = ui.nheld == 1 ? ui.held[0] : -1, hn = hs >= 0 ? mv_span(t, hs) : 0;   /* a note's length, while held */
+    const int hs = ui.nheld == 1 ? ui.held[0] : -1, hn = hs >= 0 ? span_of(t, hs) : 0;   /* a note's length, while held */
     for (int k = 0; k < 16; k++) {
         const int s = ui.spage * 16 + k;
         uint8_t c;
@@ -1083,8 +1054,8 @@ static void mv_view_build(mv_view_t *v)
     s.touch = (int8_t)(mc.plist && !v->tempo_focus ? -1 : v->focus);
     s.tempo = v->tempo_focus;
     s.held = ui.nheld ? ui.held[0] : 0xFF;
-    s.nheld = (uint8_t)(ui.held_edit || ui.now - mc.held_t >= MV_TAP_MS ? ui.nheld : 0);   /* (a tap stays quiet) */
-    s.span = (uint8_t)(s.nheld ? mv_span(t, ui.held[0]) : 0);
+    s.nheld = (uint8_t)(ui.held_edit || ui.now - ui.held_t >= MV_TAP_MS ? ui.nheld : 0);   /* (a tap stays quiet) */
+    s.span = (uint8_t)(s.nheld ? span_of(t, ui.held[0]) : 0);
     s.spage = ui.spage;
     s.cat_sel = ui.snd_sel;
     s.cat_cat = ui.snd_cat;

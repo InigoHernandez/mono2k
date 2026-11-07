@@ -376,11 +376,12 @@ static int text_sweep(void)
         }
         ui.btn[LAY[l]] = 0;
     }
-    /* a held step in GRID with every tag: a condition, a ratchet, a trig type, accent and slide */
+    /* a held step in GRID with every tag: a condition, a ratchet, a length, a trig type, accent and slide */
     m2k_init(2001);
     ui.page = PG_HOME; ui.grid = 1;
     m2k_step_t *st = &PAT(cur_pat)->step[0][3];
     st->flags = ST_TRIG | ST_ACC | ST_SLD | ST_NOFLT; st->cond = C_NFILL; st->rtrg = 4; st->note = 61;
+    lock_set(0, 3, P_GATE, 127); lock_set(0, 3, P_HOLD, 127);
     ui.trk = 0; ui.held[0] = 3; ui.nheld = 1;
     now += 4000; ui.trans_t = 0; ui.toast_t = 0;
     m2k_frame(now); ta_check((int)now);
@@ -3926,6 +3927,64 @@ static int selftest(void)
         m2k_key(ux_white(s), 1); ux_ms(100); m2k_key(ux_white(s), 0);
         int tapped = !(q->step[t][s].flags & ST_TRIG) && lock_find(t, s, P_DEC) < 0;
         CHECK(s >= 0 && kept && tapped, "GRID: a trig held 2 s and let go keeps itself and its locks; a quick tap removes it");
+    }
+    /* a note's length (the OP-XY's gesture): two keys within a tap are two trigs; held past one, a later empty step sets
+     * it (GATE and HOLD 127, no trig there), a nearer one changes it, the same one clears it, past 8 says so and does
+     * nothing, a trig or an earlier step does as ever; Undo takes it back; on a sound that decays the amp stays open
+     * that long, then lets go */
+    {
+        ux_init(7);
+        ux_tap(B_SEQ);
+        m2k_pattern_t *q = PAT(cur_pat);
+        const int t = ui.trk;
+#define LT(k) (q->step[t][k].flags & ST_TRIG)
+        for (int i = 0; i < M2K_STEPS; i++) { q->step[t][i].flags = 0; lock_clear_step(t, i); }
+        ui.spage = 0;
+        const int k0 = ux_white(0), k2 = ux_white(2), k3 = ux_white(3), k4 = ux_white(4), k5 = ux_white(5), k7 = ux_white(7), k8 = ux_white(8);
+        m2k_key(k0, 1); ux_ms(40); m2k_key(k3, 1); ux_ms(40); m2k_key(k3, 0); m2k_key(k0, 0); ux_ms(40);
+        CHECK(LT(0) && LT(3) && !span_of(t, 0) && !ux_locks(t, 0, 15), "LENGTH: two keys within a tap, two trigs, as ever");
+        ux_ms(400);
+        m2k_key(k3, 1); ux_ms(100); m2k_key(k3, 0); ux_ms(400);
+        m2k_key(k0, 1); ux_ms(100); m2k_key(k0, 0); ux_ms(400);
+        CHECK(!LT(0) && !LT(3), "LENGTH: and tapped away");
+        m2k_key(k0, 1); ux_ms(400);
+        m2k_key(k3, 1); ux_ms(40); m2k_key(k3, 0); ux_ms(40);
+        CHECK(LT(0) && !LT(3) && ui.nheld == 1 && span_of(t, 0) == 4 && ux_locks(t, 0, 15) == 2 && lock_find(t, 0, P_GATE) >= 0 &&
+              q->lock[lock_find(t, 0, P_GATE)].val == 64 && q->lock[lock_find(t, 0, P_HOLD)].val == 127,
+              "LENGTH: held past a tap, a later empty step: 4 steps, two locks, no trig there");
+        CHECK(span_over(t, 1) && span_over(t, 3) && !span_over(t, 4) && !span_over(t, 0), "LENGTH: the steps it lasts over are drawn while held");
+        m2k_key(k5, 1); ux_ms(40); m2k_key(k5, 0); ux_ms(40);
+        CHECK(span_of(t, 0) == 6 && ux_locks(t, 0, 15) == 2, "LENGTH: further: longer, the same two locks");
+        m2k_key(k2, 1); ux_ms(40); m2k_key(k2, 0); ux_ms(40);
+        CHECK(span_of(t, 0) == 3 && !LT(2), "LENGTH: nearer: shorter");
+        m2k_key(k2, 1); ux_ms(40); m2k_key(k2, 0); ux_ms(40);
+        CHECK(!span_of(t, 0) && !ux_locks(t, 0, 15), "LENGTH: the same step again: the sound's own, the locks gone");
+        ui.toast_t = 0;
+        m2k_key(k8, 1); ux_ms(40); m2k_key(k8, 0); ux_ms(40);
+        CHECK(!span_of(t, 0) && !LT(8) && s_is(ui.toast2, "8 STEPS AT MOST"), "LENGTH: past 8: said, nothing set, no trig");
+        m2k_key(k7, 1); ux_ms(40); m2k_key(k7, 0); ux_ms(40);
+        CHECK(span_of(t, 0) == 8 && q->lock[lock_find(t, 0, P_GATE)].val == 127, "LENGTH: 8 steps, the most: GATE 127");
+        undo_do(0);
+        CHECK(!span_of(t, 0) && !ux_locks(t, 0, 15), "LENGTH: Undo takes it back");
+        m2k_key(k2, 1); ux_ms(40); m2k_key(k2, 0); ux_ms(40);
+        m2k_key(k0, 0); ux_ms(400);
+        CHECK(LT(0) && span_of(t, 0) == 3 && !ui.nheld, "LENGTH: let go: the trig stays, its length with it");
+        m2k_key(k4, 1); ux_ms(400);
+        m2k_key(k2, 1); ux_ms(40);
+        CHECK(LT(2) && ui.nheld == 2, "LENGTH: an earlier empty step: a trig, held too, as ever");
+        m2k_key(k2, 0); m2k_key(k4, 0); ux_ms(400);
+        m2k_key(k2, 1); ux_ms(100); m2k_key(k2, 0); ux_ms(400);
+        m2k_key(k4, 1); ux_ms(100); m2k_key(k4, 0); ux_ms(400);
+        q->kit[t][P_HOLD] = 6; q->kit[t][P_DEC] = 62;       /* a sound that would decay inside the first step or two */
+        const int spt = sps_q8 >> 8;
+        ux_tap(B_PLAY);
+        ux_audio(spt * 5 / 2);
+        const int open = trk[t].gate && trk[t].astage == 2;
+        ux_audio(spt);
+        const int let = !trk[t].gate && trk[t].astage != 2 && trk[t].astage != 1;
+        ux_tap(B_PLAY);
+        CHECK(open && let, "LENGTH: played on a sound that decays: the amp open past 2.5 steps, let go by 3.5");
+#undef LT
     }
     /* a trig taken away takes its condition and ratchet with it: tapped again, the new trig is plain (100 %, no
      * ratchet); step entry's rest the same (the owner: "the probability should be removed too") */

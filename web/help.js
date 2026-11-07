@@ -147,7 +147,7 @@ window.M2K_HELP = (() => {
     { g: "Modes", id: "mPADS", tag: "PADS", hi: ["b5", "b6", "b8", ...ALLW], short: "White 1–6 and 9–14 hit tracks 1–6.", screen: "B GLO; w 100; b HOME; u GLO; w 400",
       long: "Each track at its root, so a drum stays in key. With REC, hits are written.", where: "GLO + HOME, or GLO + ARP" },
     { g: "Modes", id: "mSTEP", tag: "Held step", hi: ["e0", "e1", "e2", "e3", "e4", "e5", "e6", "e7", "b12", "b13", ...ALLB], short: "Its note, condition, ratchet, trig type, locks.", screen: "b SEQ; w 2300; kd 0; w 700",
-      long: "Every knob edits it: note, accent, condition, ratchet, trig type, locks. Hold several to edit all.", where: "GRID, hold a white key" },
+      long: "Every knob edits it: note, accent, condition, ratchet, trig type, locks. Hold several to edit all. Held a moment, a later empty key: the note lasts to it, up to 8 steps.", where: "GRID, hold a white key" },
     { g: "Recording", id: "rLIVE", tag: "REC live", hi: ["b10", "b11"], short: "PLAY, then REC: notes land on the nearest step.", screen: "b PLAY; w 300; b REC; w 600",
       long: "Notes land on the nearest step; knobs turned after a trig lock to it. REC held + SEQ: undo the take.", where: "PLAY, REC" },
     { g: "Recording", id: "rENTRY", tag: "Step entry", hi: ["b11", "b4", "e2"], short: "Stopped, REC: each note the next step.", screen: "b REC; w 400",

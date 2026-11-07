@@ -7,6 +7,12 @@ window.M2K_KINDS = {
 };
 window.M2K_CHANGES = [
   {
+    date: "2026-11-07", title: "A note's length, the OP-XY's way",
+    items: [
+      ["sequencer", "In GRID, hold a step a moment and press a later empty key: the note lasts to it, up to 8 steps, even on a sound that would have decayed sooner. The held step's line says LEN and the steps it lasts over show a dash. The same key again gives the sound's own length back."],
+    ],
+  },
+  {
     date: "2026-11-02", title: "MONO2K 1.7: no more dropouts when the FM-1's CPU is full",
     items: [
       ["sound", "1.7: When a pattern asks the FM-1 for more than it has, the sound no longer cracks or drops out: the quietest track for what it costs fades out in 3 ms and rests, and plays again from its next note once there is room. The track you are on is never kept resting. Anything that fits plays exactly as before."],

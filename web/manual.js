@@ -142,7 +142,7 @@
   };
   const cstr = (x, p) => { const m = new Uint8Array(x.memory.buffer); let s = ""; while (m[p]) s += String.fromCharCode(m[p++]); return s; };
   async function firmware() {
-    const r = await fetch(at("m2k.wasm?v=113"));
+    const r = await fetch(at("m2k.wasm?v=114"));
     const x = new WebAssembly.Instance(new WebAssembly.Module(await r.arrayBuffer()), {}).exports;
     if (x._initialize) x._initialize();
     x.w_init(2000);
