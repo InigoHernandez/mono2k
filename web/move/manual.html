@@ -246,8 +246,10 @@
       <tr><td>A step</td><td>Places a trig; a quick tap on a trig takes it away.</td></tr>
       <tr><td>Hold + a knob</td><td>A parameter lock on that step.</td></tr>
       <tr><td>Hold + jog</td><td>The step's note.</td></tr>
-      <tr><td>Hold + Shift + jog</td><td>Its condition.</td></tr>
+      <tr><td>Hold + Shift + jog</td><td>Its condition: a chance of 100 90 75 60 50 40 33 25 12 or 10 %, then A:B, 1ST, PRE and FILL. Hold the step first: Shift first picks a pattern.</td></tr>
       <tr><td>Hold + Up / Down</td><td>Its ratchet.</td></tr>
+      <tr><td>Held a moment</td><td>The screen shows the step: its condition, note and ratchet, each over what turns it. Hold several and they change together; the first is the one shown.</td></tr>
+      <tr><td>Held a moment + a later empty step</td><td>The note lasts to that step, up to 8 steps: LEN on the screen, the steps it lasts over dim. A nearer step shortens it; the same last step again gives the sound's own length back. The next trig on the track still cuts it.</td></tr>
       <tr><td>Rec</td><td>Live record: the keys, and knobs as locks on the step playing. A key hit hard (velocity over 110) records an accent.</td></tr>
     </tbody>
   </table>
@@ -258,6 +260,8 @@
       <tr><td>Delete held</td><td>A step: its trig away. A track button: its steps cleared. Shift + a step: that pattern's steps cleared. A knob: the held step's lock away, else the value back to its INIT. Steps held when Delete is pressed: their locks cleared.</td></tr>
     </tbody>
   </table>
+  <div class="figs"><figure class="fig"><img class="oled" src="screens/25_held_cond.png" width="128" height="64" alt="A step held: 50 %, its note, its ratchet" loading="lazy"><figcaption>A step held: its condition, note and ratchet, each over what turns it.</figcaption></figure><figure class="fig"><img class="oled" src="screens/25_held_len.png" width="128" height="64" alt="A step held with its length: LEN 4" loading="lazy"><figcaption>A later step tapped: the note's length, LEN 4.</figcaption></figure></div>
+  <p>A step's condition is its own. PROB (knob 7 on HOME and PAT) is the whole track's chance, on top of it: at 50 % there, a step at 50 % plays one time in four.</p>
   <p>The conditions, ratchets, trig types, Grids' lanes and each track's own length, speed and chance are the FM-1's: see its <a href="../manual.html#conditions">manual</a>.</p>
   <div class="figs">
     <figure class="fig"><img class="oled" src="screens/16_plock.png" width="128" height="64" alt="A step held: its locks marked" loading="lazy"><figcaption>A step held: its locks marked over their knobs.</figcaption></figure>
@@ -384,7 +388,7 @@
 </footer>
 <script src="../site.js?v=4"></script>
 <script src="../switch.js?v=1"></script>
-<script src="changelog.js?v=3"></script>
+<script src="changelog.js?v=5"></script>
 <script src="../manual.js?v=58"></script>
 </body>
 </html>

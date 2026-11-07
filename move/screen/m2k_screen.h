@@ -62,6 +62,8 @@ typedef struct {
     int8_t touch;               /* the knob shown large (touched, or turned a moment ago), -1 none */
     uint8_t tempo;              /* what is shown large is the tempo, whatever the knob is on the page (Shift + knob 1) */
     uint8_t held;               /* the first step held (0..63): the knobs show its locks; 0xFF none */
+    uint8_t nheld;              /* the steps held, for the stage's card; 0 no card (a step tapped, not held) */
+    uint8_t span;               /* the first's length set by a step tapped, in steps; 0 none */
     uint8_t spage;              /* the bar the 16 steps show (0..3) */
     uint8_t cat_sel, cat_cat;   /* MS_CAT: the slot shown (0..127), the category (CAT_*, 0 all) */
     uint8_t pat_sel;            /* MS_PATS: the pattern under the cursor */
@@ -94,6 +96,12 @@ typedef struct {
     uint16_t q;
     char name[24], s4[8], val[16], unit[12];
 } ms_touch_t;
+
+typedef struct {
+    uint8_t n, step, rtrg, len;           /* the steps held (0: no card), the first's number from 1, its hits, its
+                                           * length in steps (0 the sound's own) */
+    char cond[6], note[6], tag[3][8];     /* its condition, its note; its trig type, accent, slide ("" none) */
+} ms_held_t;
 
 typedef struct {
     uint8_t idx, icon, flags;             /* a slot or a pattern; its machine's icon; MS_ROW_* */
@@ -131,6 +139,7 @@ typedef struct {
     uint32_t ms;
     ms_knob_t knob[8];
     ms_touch_t touch;
+    ms_held_t held;
     ms_stage_t st;
 } ms_view_t;
 

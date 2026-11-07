@@ -88,6 +88,9 @@ The files live in `move/`, a fourth platform beside `fm1/`, `web/` and `host/`:
 - **PADS and Capture** (owner, 2026-11-02; the Move's alone, the FM-1 stays lighter): the **Sample** button (CC 118) turns the keyboard rows into PADS, the 8 tracks at their roots on the bottom row and their mutes over them (REC records each hit into its own track; PERFORM still takes the rows); **Capture** (CC 52) writes what was just played on the keyboard into the steps in whole bars ("quantized by bars?": yes), each note on the bar and step it fell on while playing, the phrase from bar 1's downbeat while stopped, overdubbed, one Undo (README, The controls).
 - **The knobs' feel** (owner, 2026-11-01: "the knobs are too sensitive"): MONO2K's own curve in ui.js instead of Schwung's ×10 acceleration. Half a step a detent up to a brisk turn, 2.5 at most on a flick; short lists 3.5 detents an option; the tempo 0.1 BPM slow, whole BPM fast. 0–127 in ~1.2 turns at a brisk turn (README, The knobs' feel).
 
+- **A held step's card** (owner, 2026-11-07: "yes", on the screen saying nothing of a step's condition, ratchet or note while they were set): the stage gives way to a step held past a tap, or the moment it is edited: the step, its condition, note and ratchet at x2, each over the gesture that turns it. A tap stays quiet; a knob touched keeps the stage (`d_held`, README, The controls).
+- **A note's length** (owner, 2026-11-07: "like opxy holding the step and tap in another step"): built on the step's own locks, GATE and HOLD 127, so no format change and nothing in `firmware/src`. Measured through the gesture on a plucky sound at 120 BPM: full level for 1.97 steps at 2, 2.97 at 3 ... 6.97 at 7, 7.89 at 8. The first step must be held past a tap, so two fingers still place two trigs (README, The controls).
+
 ## Open questions
 
 - **The pads:** MIX on the freed pad (a proposal); PERFORM's 22 effects on the keyboard's 16 keys, 8 + 8 at a time (Up shows each bank's 9–11); the jog click, free outside the lists, opens the patterns' list; Menu closes a list; the FM-1's MIDI settings have no page (the Move routes no MIDI to them).
@@ -97,6 +100,9 @@ The files live in `move/`, a fourth platform beside `fm1/`, `web/` and `host/`:
 - **Move's tempo from MONO2K:** built (below, Decided since). Still to hear on the device: whether Move takes tenths of BPM through Link, and how late Move's tracks sit once Move->Schwung rebuilds them (~16–29 ms against MONO2K: `clock_lag`).
 - **Aftertouch:** the core takes none. It could drive a parameter (a filter, an LFO's depth) if the owner wants one.
 - **Saving on close:** on (`save_on_close`), unlike the FM-1, which keeps only what SAVE kept.
+- **Notes over 8 steps:** GATE stops at 127 (7.9 steps). Longer needs a length of its own in the step, a new pattern format the FM-1 shares; the gesture would stay the same.
+- **FILL:** the Move has no gesture for it (the FM-1's GLO + white 7), so a step on FILL never plays and one on !FIL always does. A button if the owner wants one.
+- **The machine changed:** Shift + jog puts the new machine's A–H on the track and takes no undo, so a machine passed through loses the track's A–H edits (the FM-1's ALGO does the same).
 - **The clock's lag:** 64 samples (half a block) matches the model. Check by ear against Move's own tracks on the device (`clock_lag`).
 
 ## Risks

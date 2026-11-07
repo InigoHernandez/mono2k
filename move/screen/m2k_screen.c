@@ -539,6 +539,25 @@ static void g_touch(ms_view_t *v, const m2k_scr_t *s)
     tc->step = (uint8_t)(t == s->track && s->held < M2K_STEPS ? s->held + 1 : 0);
 }
 
+/* the steps held, for their card: what the first holds (the FM-1's step_info). A knob touched keeps the stage: it is
+ * what is being locked */
+static void g_held(ms_view_t *v, const m2k_scr_t *s)
+{
+    ms_held_t *h = &v->held;
+    m_set(h, 0, sizeof *h);
+    if (!s->nheld || s->held >= M2K_STEPS || s->page >= MS_PAGES || v->touch.k >= 0) return;
+    const m2k_step_t st = PAT(cur_pat)->step[s->track][s->held];
+    h->n = s->nheld;
+    h->step = (uint8_t)(s->held + 1);
+    h->rtrg = (uint8_t)(st.rtrg ? st.rtrg : 1);
+    h->len = s->span;
+    s_cpyn(h->cond, COND_N[st.cond < C_COUNT ? st.cond : C_ALWAYS], sizeof h->cond);
+    s_note(h->note, st.note);
+    if (st.flags & ST_TTYPE) s_cpyn(h->tag[0], TTYPE_N[ttype_of(st.flags)], sizeof h->tag[0]);
+    if (st.flags & ST_ACC) s_cpyn(h->tag[1], "ACC", sizeof h->tag[1]);
+    if (st.flags & ST_SLD) s_cpyn(h->tag[2], "SLD", sizeof h->tag[2]);
+}
+
 /* a machine's model as the screen names it: its voice after the family, the whole name where that is a letter */
 static const char *ms_model(int m)
 {
@@ -787,6 +806,7 @@ void m2k_screen_gather(ms_view_t *v, const m2k_scr_t *s)
     ss.page = v->page;
     for (int k = 0; k < 8; k++) g_knob(v, &ss, k);
     g_touch(v, &ss);
+    g_held(v, &ss);
     g_stage(v, &ss);
 }
 
@@ -1319,6 +1339,40 @@ static void d_touched(const ms_view_t *v, int y0, int y1)
     ms_rect(CLAMP(fx - 1, 2, 124), ry - 2, 2, 4, 1);
 }
 
+/* ---------------------------------------------------------------------------------------- a step held */
+
+/* the card's columns: the condition, the note, the ratchet */
+#define MS_HC0 2
+#define MS_HC1 62
+#define MS_HC2 102
+
+/* the stage gives way to a step held past a tap, as to a knob touched: which step (and how many more) and its length
+ * if it has one, its trig type, accent and slide in tags where they fit; at x2 what the first holds, each over what
+ * turns it */
+static void d_held(const ms_view_t *v, int y0, int y1)
+{
+    const ms_held_t *h = &v->held;
+    ms_rect(0, y0, MS_W, y1 - y0 + 1, 0);
+    const int b0 = y0 + 6, vb = y0 + 21, hb = y0 + 30;
+    char o[20], r[3] = {'X', (char)('0' + h->rtrg), 0};
+    char *e = s_int(s_cpy(o, "STEP "), h->step);
+    if (h->n > 1) { e = s_cpy(e, " +"); e = s_int(e, h->n - 1); }
+    if (h->len) s_int(s_cpy(e, " LEN "), h->len);
+    ms_text(2, b0, o, 1);
+    const int xl = 2 + ms_tw(o) + 4;
+    int xr = MS_W - 1;
+    for (int i = 2; i >= 0; i--) {
+        if (!h->tag[i][0] || xr - ms_tw(h->tag[i]) - 4 < xl) continue;
+        xr -= ms_tag(xr - ms_tw(h->tag[i]) - 4, b0, h->tag[i], 1) + 2;
+    }
+    ms_text_z(MS_HC0, vb, h->cond, 2, 1);
+    ms_text_z(MS_HC1, vb, h->note, 2, 1);
+    ms_text_z(MS_HC2, vb, r, 2, 1);
+    ms_text(MS_HC0, hb, "SHIFT+JOG", 1);
+    ms_text(MS_HC1, hb, "JOG", 1);
+    ms_text(MS_HC2, hb, "UP/DN", 1);
+}
+
 /* ------------------------------------------------------------------------------------------------- HOME */
 
 /* the eight tracks as lanes, Hortator's and the S4's calm: each its number (the track in view's marked by a bar at the
@@ -1400,6 +1454,7 @@ void m2k_screen_draw(const ms_view_t *v, uint8_t *fb)
         d_header(v, "HOME", 0, v->pname);
         d_home(v);
         if (v->touch.k >= 0) d_touched(v, MS_ST_T, MS_H - 4);
+        if (v->held.n) d_held(v, MS_ST_T, MS_H - 4);
         break;
     }
     case MS_CAT: {
@@ -1433,6 +1488,7 @@ void m2k_screen_draw(const ms_view_t *v, uint8_t *fb)
         }
         d_knobs(v);
         if (v->touch.k >= 0) d_touched(v, MS_ST_T, MS_ST_B + 1);
+        if (v->held.n) d_held(v, MS_ST_T, MS_ST_B + 1);
         break;
     }
     if (v->toast[0]) d_toast(v);

@@ -20,7 +20,7 @@
  * piano's white keys), W..O the row over it, Z / X Down / Up, Space Play, Shift Shift. */
 window.MoveGear = (() => {
   "use strict";
-  const V = { css: 4, worklet: 1, wasm: 2 };      /* bump with each changed file (the site's ?v= rule) */
+  const V = { css: 4, worklet: 1, wasm: 4 };      /* bump with each changed file (the site's ?v= rule) */
   const BASE = (() => {
     const s = document.currentScript && document.currentScript.src;
     return s ? s.replace(/[^/]*$/, "") : "";

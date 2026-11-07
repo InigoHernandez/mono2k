@@ -306,6 +306,22 @@ static void toast_audit(void)
     }
 }
 
+/* a held step's card: every condition and note fits its column at x2, what turns each its own, the ratchet the last */
+static void held_audit(void)
+{
+    char w[160], o[8];
+    for (int c = 0; c < C_COUNT; c++)
+        if (ms_tw_z(COND_N[c], 2) > MS_HC1 - MS_HC0 - 3) { snprintf(w, sizeof w, "the card: %s at x2 is too wide", COND_N[c]); fail(w); }
+    for (int n = 12; n <= 120; n++) {
+        s_note(o, n);
+        if (ms_tw_z(o, 2) > MS_HC2 - MS_HC1 - 3) { snprintf(w, sizeof w, "the card: %s at x2 is too wide", o); fail(w); }
+    }
+    if (ms_tw("SHIFT+JOG") > MS_HC1 - MS_HC0 - 3) fail("the card: SHIFT+JOG is too wide");
+    if (ms_tw("JOG") > MS_HC2 - MS_HC1 - 3) fail("the card: JOG is too wide");
+    if (ms_tw("STEP 64 +7 LEN 8") > MS_W - 4) fail("the card: its top line is too wide");
+    if (ms_tw("UP/DN") > MS_W - MS_HC2 - 1 || ms_tw_z("X4", 2) > MS_W - MS_HC2 - 1) fail("the card: the ratchet's column is too narrow");
+}
+
 /* the drawing reads the view alone: each still drawn again now, the core long since elsewhere, is the same frame */
 static void purity_audit(void)
 {
@@ -753,6 +769,38 @@ int main(int argc, char **argv)
     run_ms(1700);
     shot("24_capture_home", "HOME  THE CAPTURE: T1 T2 T3");
 
+    /* a step held: past a tap its card, on a page of knobs and on HOME; its condition set, a ratchet; two held, with
+     * tags; a knob touched keeps the stage */
+    open_at(0);
+    page_go(MS_AMP);
+    step(2, 1); run_ms(400);
+    shot("25_held", "A STEP HELD  WHAT IT HOLDS, WHAT TURNS IT");
+    btn(49, 127);
+    for (int i = 0; i < 4; i++) { jog(1); blocks(1); }
+    blocks(VW_EVERY);
+    shot("25_held_cond", "HOLD, SHIFT + JOG  THE CHANCE");
+    btn(49, 0);
+    tap(55); tap(55); blocks(VW_EVERY);
+    shot("25_held_ratchet", "HOLD, UP  THE RATCHET");
+    PAT(cur_pat)->step[ui.trk][2].flags |= ST_ACC | ST_SLD;   /* (staged: the tags) */
+    step(6, 1); blocks(VW_EVERY);
+    shot("25_held_two", "TWO HELD  THE FIRST'S, ITS TAGS");
+    step(6, 0);
+    page_go(MS_HOME); blocks(VW_EVERY);
+    shot("25_held_home", "HOME  A STEP HELD");
+    page_go(MS_AMP);
+    touch(2, 1); blocks(VW_EVERY);
+    shot("25_held_knob", "A KNOB TOUCHED KEEPS THE STAGE");
+    touch(2, 0);
+    step(2, 0);
+    open_at(4);                        /* (a blank pattern: a step's length) */
+    page_go(MS_AMP);
+    step(0, 1); run_ms(400);
+    step(3, 1); blocks(1); step(3, 0); blocks(VW_EVERY);
+    shot("25_held_len", "HOLD, A LATER STEP TAPPED  ITS LENGTH");
+    padmap("held_len");
+    step(0, 0);
+
     specimens();
     knob_rows();
 
@@ -787,6 +835,7 @@ int main(int argc, char **argv)
     text_audit();
     header_audit();
     toast_audit();
+    held_audit();
     purity_audit();
     printf("audit: %s\n", bad ? "FAILED" : "every value, name, header and message fits, every picture in its box; the drawing reads the view alone");
     snprintf(p, sizeof p, "%s/timing.txt", out);

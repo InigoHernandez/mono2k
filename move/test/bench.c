@@ -666,6 +666,117 @@ static int do_ctl(void)
     check(placed && !trig_at(e2) && vint(view(), "pg") == MS_FILT, "on FILT the steps are the sequencer still (a trig, and away)");
     page(MS_SYN);
 
+    /* a held step's card: a tap stays quiet; held past one, or edited, it says what the step holds, the moment it
+     * changes; a knob touched keeps the stage; let go, it is gone and the step keeps what was set */
+    int hs = 0;
+    char hv[16];
+    while (hs < 16 && trig_at(hs)) hs++;
+    step(hs, 1); blocks(2);
+    check(vint(view(), "hn") == 0 && (step_flags(hs) & 16), "a step just pressed: no card yet");
+    blocks(110);
+    check(vint(view(), "hn") == 1 && vint(view(), "hstep") == hs + 1 && !strcmp(vstr(view(), "hcond", hv, sizeof hv), "100%")
+          && vint(view(), "hrt") == 1, "held past a tap: its card (step, 100 %, one hit)");
+    static const char *const HC[5] = {"90%", "75%", "60%", "50%", "40%"};
+    btn(49, 127); blocks(1);
+    for (int i = 0; i < 5; i++) {
+        jog(1); blocks(1);
+        check(!strcmp(vstr(view(), "hcond", hv, sizeof hv), HC[i]), "Hold + Shift + jog: each chance named as it is set");
+    }
+    jog(-1); blocks(1);
+    check(!strcmp(vstr(view(), "hcond", hv, sizeof hv), "50%"), "the jog back: the chance before");
+    btn(49, 0); blocks(1);
+    char hn0[8], hn1[8];
+    vstr(view(), "hnote", hn0, sizeof hn0);
+    jog(1); blocks(1);
+    check(strcmp(vstr(view(), "hnote", hn1, sizeof hn1), hn0) != 0, "Hold + jog: the note named as it is set");
+    in("B 55 127;B 55 0"); blocks(1);
+    check(vint(view(), "hrt") == 2, "Hold + Up: the ratchet named as it is set");
+    in("T 0 1"); blocks(1);
+    check(vint(view(), "hn") == 0 && vint(view(), "focus") == 0 && vint(view(), "held") == 1, "a knob touched keeps the stage (what is being locked)");
+    in("T 0 0"); blocks(1000);
+    check(vint(view(), "hn") == 1, "the knob let go: the card again");
+    int hs2 = 0;
+    while (hs2 < 16 && (hs2 == hs || !trig_at(hs2))) hs2++;   /* (a step with a trig: a later empty one is a length) */
+    step(hs2, 1); blocks(2);
+    check(vint(view(), "hn") == 2 && vint(view(), "hstep") == hs + 1, "a second held: counted, the first's values shown");
+    step(hs2, 0); blocks(1);
+    step(hs, 0); blocks(2);
+    check(vint(view(), "hn") == 0, "let go: the card gone");
+    step(hs, 1); blocks(2);
+    check(vint(view(), "hn") == 0, "pressed again: quiet until held");
+    blocks(110);
+    check(!strcmp(vstr(view(), "hcond", hv, sizeof hv), "50%") && vint(view(), "hrt") == 2, "held again: the step kept its chance and ratchet");
+    step(hs, 0); blocks(2);
+    step_tap(hs);
+    check(!trig_at(hs), "tapped away: the trig and its condition go");
+
+    /* a note's length, on a blank pattern: two fingers together still place two trigs; held past a tap, a later empty
+     * step sets it (two locks, no trig there), a nearer one changes it, the last again clears it, past 8 says so; a
+     * trig or an earlier step does as ever; Undo takes it back; it plays that long */
+    btn(49, 127); step(4, 1); blocks(1); step(4, 0); btn(49, 0); blocks(2);
+    check(!strcmp(vstr(view(), "pat", hv, sizeof hv), "A05") && !trig_at(0) && !trig_at(3), "a blank pattern to try lengths on");
+    const int lk0 = vint(dump(), "locks");
+    step(0, 1); blocks(2);
+    step_tap(3); blocks(2);
+    check(trig_at(0) && trig_at(3) && vint(view(), "hlen") == 0 && vint(dump(), "locks") == lk0, "two fingers within a tap: two trigs, as ever");
+    step(0, 0); blocks(2);
+    step_tap(3); step_tap(0); blocks(2);
+    check(!trig_at(0) && !trig_at(3), "and both tapped away");
+    step(0, 1); blocks(110);
+    step_tap(3); blocks(2);
+    check(trig_at(0) && !trig_at(3) && vint(view(), "hlen") == 4 && vint(view(), "held") == 1, "held past a tap, a later empty step tapped: the note lasts to it, no trig there");
+    check(vint(dump(), "locks") == lk0 + 2, "its length is two locks");
+    {
+        int led[16];
+        vlist(view(), "led", led, 16);
+        check(led[1] == 95 && led[2] == 95 && led[3] == 95 && led[4] != 95, "the steps it lasts over dim azure while held");
+    }
+    step_tap(5); blocks(2);
+    check(vint(view(), "hlen") == 6 && vint(dump(), "locks") == lk0 + 2, "a further step: longer, the same two locks");
+    step_tap(2); blocks(2);
+    check(vint(view(), "hlen") == 3 && !trig_at(2), "a nearer step: shorter");
+    step_tap(2); blocks(2);
+    check(vint(view(), "hlen") == 0 && vint(dump(), "locks") == lk0, "the last step again: its own length back, the locks gone");
+    step_tap(8); blocks(2);
+    check(vint(view(), "hlen") == 0 && !trig_at(8), "past 8 steps: said, nothing set, no trig");
+    step_tap(7); blocks(2);
+    check(vint(view(), "hlen") == 8, "8 steps, the most");
+    tap(56);
+    check(vint(view(), "hlen") == 0 && vint(dump(), "locks") == lk0, "Undo takes the length back");
+    step_tap(2); blocks(2);
+    step(0, 0); blocks(2);
+    check(trig_at(0) && vint(dump(), "locks") == lk0 + 2, "let go: the trig stays, its length with it");
+    step(4, 1); blocks(110);
+    step_tap(2); blocks(2);
+    check(trig_at(2) && vint(view(), "held") == 1, "an earlier empty step: a trig, as ever");
+    step(4, 0); blocks(2);
+    step_tap(2); step_tap(4); blocks(2);
+    step(0, 1); blocks(110);
+    step(6, 1); blocks(2);
+    int two = trig_at(6);
+    step(6, 0); blocks(2);
+    check(!two && vint(view(), "hlen") == 7, "the first held alone: still the length");
+    step_tap(6); blocks(2);                             /* (back to 3 steps through its own: 7 cleared, then 3) */
+    step_tap(2); blocks(2);
+    step(0, 0); blocks(2);
+    check(vint(dump(), "locks") == lk0 + 2, "3 steps set");
+    {
+        A_set("play", "1");
+        int on = 0, t0 = -1, t1 = -1;
+        for (int i = 0; i < 300; i++) {
+            A_render();
+            if (vint(view(), "gates") & 1) { if (t0 < 0) t0 = i; t1 = i; on++; }
+        }
+        A_set("play", "0"); blocks(4);
+        const double want = 3 * 44100.0 * 600 / (vint(view(), "bpm10") * 4.0) / 128;
+        printf("  the note's gate: %d blocks, 3 steps at %d tenths of BPM are %.1f\n", t1 - t0 + 1, vint(view(), "bpm10"), want);
+        check(t0 >= 0 && abs(t1 - t0 + 1 - (int)(want + 0.5)) <= 2, "it plays that long: the gate open 3 steps");
+    }
+    btn(119, 127); step(0, 1); blocks(1); step(0, 0); btn(119, 0); blocks(2);
+    check(!trig_at(0) && vint(dump(), "locks") == lk0, "Delete + the step: its length with it");
+    btn(49, 127); step(0, 1); blocks(1); step(0, 0); btn(49, 0); blocks(2);
+    check(!strcmp(vstr(view(), "pat", hv, sizeof hv), "A01"), "back to A01");
+
     /* Delete: a lock away with a step held, a trig away, a value home */
     step(e, 1); blocks(1);
     btn(119, 127); knob(0, 1); blocks(1); btn(119, 0);
