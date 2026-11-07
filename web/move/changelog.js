@@ -7,7 +7,7 @@ window.M2K_KINDS = window.M2K_KINDS || {
 };
 window.M2K_CHANGES = [
   {
-    date: "2026-11-07", title: "A held step says what it holds, and a note can last",
+    date: "2026-11-07", title: "MONO2K for the Move 0.4: a held step says what it holds, and a note can last",
     items: [
       ["screen", "Hold a step and the screen shows its condition, note and ratchet, each over what turns it: Shift + jog, the jog, Up and Down. They were being set unseen. A tap stays quiet, and a knob touched keeps the screen."],
       ["sequencer", "A note's length: hold a step a moment and tap a later empty step, and the note lasts to it, up to 8 steps, even on a sound that would have decayed sooner. The same step again gives the sound's own length back."],

@@ -7,9 +7,9 @@ window.M2K_KINDS = {
 };
 window.M2K_CHANGES = [
   {
-    date: "2026-11-07", title: "A note's length, the OP-XY's way",
+    date: "2026-11-07", title: "MONO2K 1.8: a note's length, the OP-XY's way",
     items: [
-      ["sequencer", "In GRID, hold a step a moment and press a later empty key: the note lasts to it, up to 8 steps, even on a sound that would have decayed sooner. The held step's line says LEN and the steps it lasts over show a dash. The same key again gives the sound's own length back."],
+      ["sequencer", "1.8: In GRID, hold a step a moment and press a later empty key: the note lasts to it, up to 8 steps, even on a sound that would have decayed sooner. The held step's line says LEN and the steps it lasts over show a dash. The same key again gives the sound's own length back."],
     ],
   },
   {
