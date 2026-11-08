@@ -142,7 +142,7 @@
   };
   const cstr = (x, p) => { const m = new Uint8Array(x.memory.buffer); let s = ""; while (m[p]) s += String.fromCharCode(m[p++]); return s; };
   async function firmware() {
-    const r = await fetch(at("m2k.wasm?v=115"));
+    const r = await fetch(at("m2k.wasm?v=116"));
     const x = new WebAssembly.Instance(new WebAssembly.Module(await r.arrayBuffer()), {}).exports;
     if (x._initialize) x._initialize();
     x.w_init(2000);
@@ -184,7 +184,7 @@
     const BLOCKS = [
       ["HOME", "HOME", P.HOME, [0]], ["AMP", "ENV", P.AMP, [0, 1]], ["FILTER", "SEL", P.FILT, [0, 1]],
       ...[0, 1, 2, 3].map((sub) => [cstr(x, x.w_page_label(P.FX, sub)), "FX", P.FX, [sub]]),
-      ...[0, 1, 2].map((l) => [`LFO ${l + 1}`, "LFO", P.LFO, [2 * l, 2 * l + 1]]),
+      ...[0, 1, 2].map((l) => [`LFO ${l + 1}`, "LFO", P.LFO, [l, l + 3]]),
       ["ARP", "ARP", P.ARP, [0]],
       ...Array.from({ length: x.w_subs(P.GLO) }, (_, sub) => [cstr(x, x.w_page_label(P.GLO, sub)), "GLO", P.GLO, [sub]]),   /* TIME BUS SET MIDI IN PLAY */
     ];

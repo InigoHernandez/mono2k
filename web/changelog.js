@@ -7,6 +7,19 @@ window.M2K_KINDS = {
 };
 window.M2K_CHANGES = [
   {
+    date: "2026-11-08", title: "MONO2K 1.9: the workflow, after a player's review",
+    items: [
+      ["workflow", "1.9: PRESETS is what the panel says: on the sound's pages it turns through the sounds, each heard on the track. Stop on one and it stays, the list leaves after 3 s or at any button, and GLO + OCT− undoes it; OCT− puts yours back at once. On HOME and GLO it still picks the pattern."],
+      ["workflow", "1.9: GLO + LFO, then turn any knob on any page, of any track: an LFO moves it, with some depth so you hear it at once."],
+      ["workflow", "1.9: A section's button opens the page you left there, so a trip to another section loses no place."],
+      ["workflow", "1.9: Spin a knob and each click counts more, up to six; turn it slowly and every click is one."],
+      ["workflow", "1.9: LFO's pages: LFO 1, 2 and 3 first, each with DEST WAVE SPD DPTH, so one page makes it move; their rest (TRCK TRIG MULT PHAS) after. DEST from OFF starts with some depth."],
+      ["sequencer", "1.9: GRID on HOME shows the track's notes in cells, a beat a row, with their locks, accents, ratchets and lengths; step entry shows them too. Hold a step half a second and its card says what each control turns."],
+      ["screen", "1.9: The LFO page shows all three, each wave cabled to what it moves, live. A knob an LFO moves shows a marker swinging under its picture, on every page."],
+      ["screen", "1.9: GLO > HELP: the manual on the FM-1, nine pages, KNOB 1 turns them."],
+    ],
+  },
+  {
     date: "2026-11-07", title: "MONO2K 1.8: a note's length, the OP-XY's way",
     items: [
       ["sequencer", "1.8: In GRID, hold a step a moment and press a later empty key: the note lasts to it, up to 8 steps, even on a sound that would have decayed sooner. The held step's line says LEN and the steps it lasts over show a dash. The same key again gives the sound's own length back."],

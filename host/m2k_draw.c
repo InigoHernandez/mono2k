@@ -436,6 +436,35 @@ int main(int argc, char **argv)
         m2k_frame(now);
         row(TN[i], instr() - a - base_cost);
     }
+    /* the workflow's, each at its worst: HOME in GRID with 16 trigs, their locks and marks; a held step's card; every page
+     * of GLO > HELP; the LFO page with all three at work, cables and rates; AMP with all 18 LFOs on its four knobs */
+    m2k_pattern_t *wp = PAT(cur_pat);
+    ui.trk = 0; ui.page = PG_HOME; ui.sub = 0; ui.grid = 1;
+    for (int s = 0; s < 16; s++) {
+        m2k_step_t *q = &wp->step[0][s];
+        q->flags = (uint8_t)(ST_TRIG | ST_ACC | ST_SLD); q->note = (uint8_t)(61 + s); q->rtrg = 4; q->cond = s & 1 ? C_NFILL : C_ALWAYS;
+        lock_set(0, s, P_ATK, 10);
+    }
+    audio(50);
+    row("HOME in GRID, 16 notes", frame_cost());
+    ui.held[0] = 3; ui.nheld = 1; ui.held_t = now - 2000;
+    row("a held step's card", frame_cost());
+    ui.nheld = 0; ui.grid = 0;
+    uint64_t hw = 0;
+    ui.page = PG_GLO; ui.sub = GS_HELP;
+    for (int h = 0; h < HELP_N; h++) { ui.help = (uint8_t)h; uint64_t c = frame_cost(); if (c > hw) hw = c; }
+    row("HELP worst", hw);
+    for (int t = 0; t < M2K_TRACKS; t++)
+        for (int l = 0; l < 3; l++) {
+            uint8_t *b = &wp->kit[t][P_LFO + 8 * l];
+            b[L_DEST] = (uint8_t)(P_ATK + 1 + (t * 3 + l) % 4); b[L_TRCK] = trck_enc(0); b[L_DPTH] = 110; b[L_WAVE] = 18; b[L_SPD] = 80;
+        }
+    for (int t = 0; t < M2K_TRACKS; t++) m_cpy(trk[t].eff, wp->kit[t], P_COUNT);
+    audio(50);
+    ui.page = PG_LFO; ui.sub = 0;
+    row("LFO, all three", frame_cost());
+    ui.page = PG_AMP; ui.sub = 0;
+    row("AMP, 18 LFOs on its knobs", frame_cost());
     printf("  heaviest: %s, %llu\n", worst_n, (unsigned long long)worst);
     return 0;
 }

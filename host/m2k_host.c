@@ -125,9 +125,8 @@ static const ev_t MANUAL[] = {
     {26200, 'e', E_K2, -8, 0}, {26250, 'e', E_K3, -37, 0}, {26300, 'e', E_K4, 43, 0}, {26350, 'e', E_K1, 48, 0},
     {27100, 's', 0, 0, "09b_amp_swell"},
     {27200, 'b', B_LFO, 1, 0}, {27220, 'b', B_LFO, 0, 0},
-    {27300, 'e', E_K2, 17, 0}, {27350, 'e', E_K3, 19, 0},
-    {27500, 'b', B_LFO, 1, 0}, {27520, 'b', B_LFO, 0, 0},
-    {27700, 'e', E_K4, 26, 0}, {27750, 'e', E_K2, 12, 0},
+    {27300, 'e', E_K1, 17, 0}, {27350, 'e', E_K2, 19, 0},
+    {27700, 'e', E_K4, 26, 0}, {27750, 'e', E_K3, 12, 0},
     {28500, 's', 0, 0, "14b_lfo_cycle"},
     /* PADS off (GLO + ARP), the ARP page, MODE on, ARP twice: the arp's HOLD (in the header and on the stage); a chord
      * played and let go, the arp playing it on (20b) */
@@ -190,6 +189,28 @@ static const ev_t HOME2_TOUR[] = {
     {10800, 'c', 97, 52, 0}, {11300, 'c', 102, 55, 0}, {11300, 'c', 102, 55 | 3 << 12, 0},
     {11600, 's', 0, 0, "37_cpu_full"},
     {11700, 'x', 0, 0, 0},
+};
+
+/* the workflow's screens (the manual's): GRID on HOME with T4's notes (38), a step held: its card (39), an LFO linked:
+ * GLO + LFO on ENV, the prompt (40), KNOB 3 turned, the knob moving (41), GLO > HELP (42), the LFO page's rest (43) */
+static const ev_t WORK_TOUR[] = {
+    {2600, 'b', B_PLAY, 1, 0}, {2620, 'b', B_PLAY, 0, 0},
+    {2700, 'e', E_SELECT, 1, 0}, {2720, 'e', E_SELECT, 1, 0}, {2740, 'e', E_SELECT, 1, 0},
+    {2800, 'b', B_SEQ, 1, 0}, {2820, 'b', B_SEQ, 0, 0},
+    {5600, 's', 0, 0, "38_steps_notes"},
+    {5700, 'k', 12, 1, 0}, {6400, 's', 0, 0, "39_step_card"}, {6450, 'k', 12, 0, 0},
+    {6500, 'b', B_SEQ, 1, 0}, {6520, 'b', B_SEQ, 0, 0},
+    {7000, 'b', B_ENV, 1, 0}, {7020, 'b', B_ENV, 0, 0},
+    {7500, 'b', B_GLO, 1, 0}, {7560, 'b', B_LFO, 1, 0}, {7580, 'b', B_LFO, 0, 0}, {7620, 'b', B_GLO, 0, 0},
+    {8000, 's', 0, 0, "40_lfo_link"},
+    {8100, 'e', E_K3, 1, 0}, {9700, 's', 0, 0, "41_lfo_moved"},
+    {9800, 'b', B_LFO, 1, 0}, {9820, 'b', B_LFO, 0, 0}, {10500, 's', 0, 0, "43_lfo_rows"},
+    {10600, 'b', B_GLO, 1, 0}, {10620, 'b', B_GLO, 0, 0},
+    {11100, 'b', B_GLO, 1, 0}, {11120, 'b', B_GLO, 0, 0}, {11500, 'b', B_GLO, 1, 0}, {11520, 'b', B_GLO, 0, 0},
+    {11900, 'b', B_GLO, 1, 0}, {11920, 'b', B_GLO, 0, 0}, {12300, 'b', B_GLO, 1, 0}, {12320, 'b', B_GLO, 0, 0},
+    {12700, 'b', B_GLO, 1, 0}, {12720, 'b', B_GLO, 0, 0}, {13100, 'b', B_GLO, 1, 0}, {13120, 'b', B_GLO, 0, 0},
+    {13500, 'e', E_K1, 4, 0}, {13900, 's', 0, 0, "42_glo_help"},
+    {14000, 'x', 0, 0, 0},
 };
 
 static void home2_scene(void)
@@ -376,6 +397,50 @@ static int text_sweep(void)
         }
         ui.btn[LAY[l]] = 0;
     }
+    /* GLO > HELP's every page */
+    for (int h = 0; h < HELP_N; h++) {
+        ui.page = PG_GLO; ui.sub = GS_HELP; ui.help = (uint8_t)h;
+        now += 3000; ui.trans_t = 0; ui.toast_t = 0; ui.card_t = 0; ui.focus_t = 0;
+        m2k_frame(now); ta_check((int)now);
+    }
+    /* a link waiting, on a page and on HOME */
+    for (int i = 0; i < 2; i++) {
+        ui.page = i ? PG_HOME : PG_AMP; ui.sub = 0; ui.link = 3; ui.link_trk = 0; ui.link_t = now | 1u;
+        now += 3000; ui.link_t = now | 1u; ui.trans_t = 0; ui.toast_t = 0;
+        m2k_frame(now); ta_check((int)now);
+    }
+    ui.link = 0;
+    /* the LFO page with every row at its longest: another track's parameter, the slowest and fastest rates, no depth */
+    ui.page = PG_LFO; ui.sub = 0; ui.trk = 0;
+    for (int sp = 0; sp < 128; sp += 9) {
+        for (int l = 0; l < 3; l++) {
+            uint8_t *b = &PAT(cur_pat)->kit[0][P_LFO + 8 * l];
+            b[L_DEST] = (uint8_t)(1 + (sp + l * 11) % P_COUNT); b[L_TRCK] = trck_enc((l + 1) % M2K_TRACKS6);
+            b[L_SPD] = (uint8_t)sp; b[L_MULT] = (uint8_t)(l * 40); b[L_DPTH] = l == 2 ? 64 : (uint8_t)(l ? 0 : 127);
+        }
+        now += 3000; ui.trans_t = 0; ui.toast_t = 0; ui.card_t = 0; ui.focus_t = 0;
+        m2k_frame(now); ta_check((int)now);
+    }
+    /* HOME's note cells at their fullest, and a held step's card with every long value */
+    m2k_init(2002);
+    ui.splash_end = 0; ui.splashed = 1;
+    ui.page = PG_HOME; ui.sub = 0; ui.grid = 1; ui.trk = 0;
+    for (int s = 0; s < 16; s++) {
+        m2k_step_t *q = &PAT(cur_pat)->step[0][s];
+        q->flags = (uint8_t)(ST_TRIG | (s & 1 ? ST_ACC : 0) | (s & 2 ? ST_SLD : 0)); q->note = (uint8_t)(13 + s * 7);
+        q->rtrg = (uint8_t)(1 + (s & 3)); q->cond = s & 4 ? C_NFILL : C_ALWAYS;
+        lock_set(0, s, P_ATK, 10);
+    }
+    now += 3000; ui.trans_t = 0; ui.toast_t = 0; m2k_frame(now); ta_check((int)now);
+    ui.held[0] = 5; ui.nheld = 2; ui.held[1] = 6; ui.held_t = now - 2000;
+    for (int c = 0; c < C_COUNT; c++)
+        for (int ty = 0; ty < 8; ty++) {
+            m2k_step_t *q = &PAT(cur_pat)->step[0][5];
+            q->cond = (uint8_t)c; q->flags = (uint8_t)(ST_TRIG | ST_ACC | ST_SLD | TTYPE[ty]);
+            now += 40; ui.trans_t = 0; ui.toast_t = 0; ui.held_t = now - 2000;
+            m2k_frame(now); ta_check((int)now);
+        }
+    ui.nheld = 0;
     /* a held step in GRID with every tag: a condition, a ratchet, a length, a trig type, accent and slide */
     m2k_init(2001);
     ui.page = PG_HOME; ui.grid = 1;
@@ -3302,6 +3367,151 @@ static int selftest(void)
             int pages = ui.page == PG_LFO && ui.sub == 2;
             CHECK(trk && mach && pages, "SELECT: the track on every page; ALGORITHM: the machine on every page; a section's button its pages");
         }
+        /* the workflow (the 2026-11 review): a section's button goes back to the page left there; PRESETS is the sounds on
+         * the sound's pages (OCT- gives the track's own back byte for byte, OCT+ keeps), the patterns on HOME and GLO, a held
+         * step's condition still; a knob spun counts more, slowly and with no time between turns one, a small range never;
+         * LFO's first page has what makes it move; a first DEST starts with depth; GLO + LFO arms a link: the next knob
+         * turned, on any page and track, is where the LFO goes, a tempo's knob turning as it always does, and 10 s let it
+         * go; LFO's taps, however quick, only turn its pages */
+        {
+            ux_init(77);
+            m2k_pattern_t *p = PAT(cur_pat);
+            int mem, pre, spd, main4, wake, link, other, late;
+            ui.page = PG_LFO; ui.sub = 0;
+            ux_tap(B_LFO); ux_ms(500);
+            ux_tap(B_LFO); ux_ms(500);
+            int at = ui.sub;
+            ux_tap(B_ENV); ux_ms(500);
+            ux_tap(B_LFO); ux_ms(500);
+            mem = at == 2 && ui.page == PG_LFO && ui.sub == at;
+            ux_tap(B_LFO); ux_ms(500);
+            mem &= ui.sub == 3;
+            static uint8_t own[P_COUNT];
+            ui.page = PG_AMP; ui.sub = 0;
+            const int pat0 = cur_pat, m0 = p->machine[0];
+            m_cpy(own, p->kit[0], P_COUNT);
+            m2k_encoder(E_PRESET, 1); m2k_encoder(E_PRESET, 1);
+            pre = cat.open && cur_pat == pat0;
+            ux_ms(100);
+            m2k_button(B_OCTD, 1); ux_ms(40); m2k_button(B_OCTD, 0); ux_ms(40);
+            pre &= !cat.open && p->machine[0] == m0 && !memcmp(p->kit[0], own, P_COUNT);
+            /* a preset knob: resting 3 s keeps the sound landed on, a page press keeps it too, and the undo gives the own back */
+            m2k_encoder(E_PRESET, 1); m2k_encoder(E_PRESET, 1);
+            ux_ms(3200);
+            pre &= !cat.open && memcmp(p->kit[0], own, P_COUNT);
+            m2k_button(B_GLO, 1); ux_ms(20); m2k_button(B_OCTD, 1); ux_ms(20); m2k_button(B_OCTD, 0); m2k_button(B_GLO, 0); ux_ms(40);
+            pre &= !memcmp(p->kit[0], own, P_COUNT);
+            ui.page = PG_AMP; ui.sub = 0;
+            m2k_encoder(E_PRESET, 1); m2k_encoder(E_PRESET, 1);
+            ux_ms(100);
+            ux_tap(B_SEL);
+            pre &= !cat.open && ui.page == PG_FILT && memcmp(p->kit[0], own, P_COUNT);
+            m2k_button(B_GLO, 1); ux_ms(20); m2k_button(B_OCTD, 1); ux_ms(20); m2k_button(B_OCTD, 0); m2k_button(B_GLO, 0); ux_ms(40);
+            pre &= !memcmp(p->kit[0], own, P_COUNT);
+            ui.page = PG_HOME; ui.sub = 0;
+            m2k_encoder(E_PRESET, 1);
+            pre &= !cat.open && cur_pat == pat0 + 1;
+            ui.page = PG_GLO; ui.sub = 0;
+            m2k_encoder(E_PRESET, -1);
+            pre &= !cat.open && cur_pat == pat0;
+            p = PAT(cur_pat);
+            ui.page = PG_AMP; ui.sub = 0; ui.trk = 0;
+            const int kc = knob_at(2);
+            int v0 = p->kit[0][kc] = 30;
+            m2k_encoder(E_K3, 1);                  /* (no time since the last turn: one) */
+            spd = p->kit[0][kc] == v0 + 1;
+            ux_now += 300; m2k_frame(ux_now);
+            m2k_encoder(E_K3, 1);
+            ux_now += 200; m2k_frame(ux_now);
+            m2k_encoder(E_K3, 1);
+            spd &= p->kit[0][kc] == v0 + 3;        /* (slowly: a click each) */
+            for (int i = 0; i < 4; i++) { ux_now += 20; m2k_frame(ux_now); m2k_encoder(E_K3, 1); }
+            spd &= p->kit[0][kc] >= v0 + 3 + 12;   /* (spun: four clicks, sixteen) */
+            ui.page = PG_LFO; ui.sub = 1;
+            static const char *const MAIN[4] = {"DEST", "WAVE", "SPD", "DPTH"};
+            main4 = 1;
+            for (int k = 0; k < 4; k++) main4 &= knob_at(k) == P_LFO + 8 + (k == 0 ? L_DEST : k == 1 ? L_WAVE : k == 2 ? L_SPD : L_DPTH) &&
+                                                  !strcmp(pinfo(0, knob_at(k))->s4, MAIN[k]);
+            p->kit[0][P_LFO + 8 + L_DEST] = 0; p->kit[0][P_LFO + 8 + L_DPTH] = 64;
+            ux_ms(200);
+            m2k_encoder(E_K1, 1);
+            wake = p->kit[0][P_LFO + 8 + L_DEST] == 1 && p->kit[0][P_LFO + 8 + L_DPTH] != 64;
+            /* the link: from AMP, the track's first free LFO, KNOB 3 of AMP on T1 */
+            for (int l = 0; l < 3; l++) { p->kit[0][P_LFO + 8 * l + L_DEST] = 0; p->kit[0][P_LFO + 8 * l + L_DPTH] = 64; }
+            p->kit[0][P_LFO + L_DEST] = 5;                  /* (LFO 1 in use: the second is the first free) */
+            ui.page = PG_AMP; ui.sub = 1; ui.trk = 0;
+            ux_ms(600);
+            m2k_button(B_GLO, 1); ux_ms(20); m2k_button(B_LFO, 1); ux_ms(20); m2k_button(B_LFO, 0); m2k_button(B_GLO, 0); ux_ms(20);
+            link = ui.link == 2 && ui.page == PG_AMP && ui.sub == 1;
+            ta_check((int)ux_now);
+            const int lc = knob_at(2), lv = p->kit[0][lc];
+            ux_ms(200);
+            m2k_encoder(E_K3, 1);
+            link &= !ui.link && p->kit[0][lc] == lv && p->kit[0][P_LFO + 8 + L_DEST] == lc + 1 &&
+                    trck_of(p->kit[0][P_LFO + 8 + L_TRCK]) == 0 && p->kit[0][P_LFO + 8 + L_DPTH] != 64;
+            int md = 0;
+            link &= knob_mod(lc, &md);
+            /* armed on T1, turned on T3: T1's LFO moves T3; a tempo's knob does not take it */
+            ui.page = PG_HOME; ui.sub = 0; ui.trk = 0;
+            ux_ms(600);
+            m2k_button(B_GLO, 1); ux_ms(20); m2k_button(B_LFO, 1); ux_ms(20); m2k_button(B_LFO, 0); m2k_button(B_GLO, 0); ux_ms(20);
+            other = ui.link == 3;
+            const int tm = p->glob[G_TMPO];
+            ux_ms(200);
+            m2k_encoder(E_K3, 1);
+            other &= ui.link == 3 && p->glob[G_TMPO] != tm && !p->kit[0][P_LFO + 16 + L_DEST];
+            ui.page = PG_AMP; ui.sub = 0; ui.trk = 2;
+            const int oc = knob_at(0);
+            ux_ms(200);
+            m2k_encoder(E_K1, 1);
+            other &= !ui.link && p->kit[0][P_LFO + 16 + L_DEST] == oc + 1 && trck_of(p->kit[0][P_LFO + 16 + L_TRCK]) == 2;
+            ui.trk = 0;
+            ux_ms(600);
+            m2k_button(B_GLO, 1); ux_ms(20); m2k_button(B_LFO, 1); ux_ms(20); m2k_button(B_LFO, 0); m2k_button(B_GLO, 0); ux_ms(20);
+            late = ui.link != 0;
+            ux_ms(10100);
+            late &= !ui.link;
+            ui.page = PG_LFO; ui.sub = 0;
+            m2k_button(B_LFO, 1); ux_ms(20); m2k_button(B_LFO, 0); ux_ms(20);
+            m2k_button(B_LFO, 1); ux_ms(20); m2k_button(B_LFO, 0); ux_ms(20);
+            late &= ui.sub == 2 && !ui.link;
+            CHECK(mem && pre && spd && main4 && wake && link && other && late,
+                  "the workflow: a section goes back to its page, PRESETS sounds or patterns by the page, a spun knob counts more, LFO's first page moves it, a link takes the next knob");
+            if (!(mem && pre && spd && main4 && wake && link && other && late))
+                printf("     mem %d pre %d spd %d main4 %d wake %d link %d other %d late %d\n", mem, pre, spd, main4, wake, link, other, late);
+        }
+        /* HOME in GRID shows the track's notes, not the lanes; a held step's card comes after a moment and gives way to a
+         * knob; step entry shows them too */
+        {
+            ux_init(78);
+            m2k_pattern_t *p = PAT(cur_pat);
+            ui.page = PG_HOME; ui.sub = 0; ui.trk = 0;
+            for (int s = 0; s < 16; s++) p->step[0][s].flags = 0;
+            p->step[0][4].flags = ST_TRIG; p->step[0][4].note = 61;
+            ux_tap(B_SEQ); ux_ms(2600);
+            static uint8_t on[M2K_FB_BYTES];
+            m_cpy(on, m2k_frame(ux_now += 20), sizeof on);
+            p->step[0][4].flags = 0;
+            const uint8_t *f = m2k_frame(ux_now += 20);
+            int diff = 0;
+            for (int i = (PIC_T + 28) * (M2K_W / 8); i < (PIC_T + 52) * (M2K_W / 8); i++) diff += f[i] != on[i];
+            p->step[0][4].flags = ST_TRIG;
+            int cells = ui.grid && diff > 24;      /* (its cell, the second row's first: solid with its note) */
+            ta_check((int)ux_now);
+            m2k_key(ux_white(4), 1);
+            ux_ms(200);
+            int early = !(ui.now - ui.held_t >= STEP_CARD_MS);
+            ux_ms(500);
+            ta_check((int)ux_now);
+            int card = ui.now - ui.held_t >= STEP_CARD_MS && ui.nheld == 1;
+            p->kit[0][P_LEVL] = 100;
+            m2k_encoder(E_K1, -1);
+            ux_ms(40);
+            card &= fresh_focus();
+            m2k_key(ux_white(4), 0);
+            ux_ms(100);
+            CHECK(cells && early && card, "GRID on HOME: the notes in cells; a held step's card after a moment, a knob over it");
+        }
         /* the catalogue: EDIT held alone 400 ms opens it and it stays (its release no SYN); SLOT puts each sound landed on
          * on the track, heard; OCT- puts the track's own back byte for byte (its machine, kit, keys' note); OCT+ keeps the
          * sound shown; a page button leaves it, the track's own back; SELECT scrolls it too, ALGO changes nothing in it;
@@ -5032,7 +5242,7 @@ static int selftest(void)
         m2k_encoder(E_SELECT, 1); sel &= ui.trk == 7;
         m2k_encoder(E_SELECT, 1); sel &= ui.trk == 0;
         m2k_encoder(E_SELECT, -1); sel &= ui.trk == 7;
-        ui.trk = 0; ui.page = PG_LFO; ui.sub = 0;
+        ui.trk = 0; ui.page = PG_LFO; ui.sub = 3;
         int tk = -1;
         for (int k = 0; k < 4; k++) if (knob_at(k) == P_LFO + L_TRCK) tk = k;
         char o[16];
@@ -6588,11 +6798,11 @@ static int selftest(void)
     {
         /* GLO's six pages (1.5: GLITCH and VERB one, BUS): TIME BUS SET MIDI IN PLAY; BUS's knobs and PERFORM's (FX
          * held) the bus's that stay, DCAY DAMP ADPC DRIV; no knob anywhere on TAPE, GLCH, SIZE or HISS */
-        static const char *const GN[6] = {"TIME", "BUS", "SET", "MIDI", "IN", "PLAY"}, *const BK[4] = {"DCAY", "DAMP", "ADPC", "DRIV"};
+        static const char *const GN[7] = {"TIME", "BUS", "SET", "MIDI", "IN", "PLAY", "HELP"}, *const BK[4] = {"DCAY", "DAMP", "ADPC", "DRIV"};
         m2k_init(80);
         char o[12];
-        int six = nsub(PG_GLO) == 6, bus4 = 1, perf4 = 1, none = 1;
-        for (int s = 0; s < 6; s++) { page_label(PG_GLO, s, o); six &= !strcmp(o, GN[s]); }
+        int six = nsub(PG_GLO) == 7, bus4 = 1, perf4 = 1, none = 1;
+        for (int s = 0; s < 7; s++) { page_label(PG_GLO, s, o); six &= !strcmp(o, GN[s]); }
         for (int k = 0; k < 4; k++) bus4 &= !strcmp(pinfo(0, knob_param(PG_GLO, GS_BUS, k))->s4, BK[k]);
         ui.page = PG_HOME;
         m2k_button(B_FX, 1);
@@ -6605,7 +6815,7 @@ static int selftest(void)
                     none &= c != GL(G_TAPE) && c != GL(G_GLCH) && c != GL(G_GSIZ) && c != GL(G_HISS);
                 }
         CHECK(six && bus4 && perf4 && none,
-              "GLO: six pages, TIME BUS SET MIDI IN PLAY; BUS's knobs and PERFORM's DCAY DAMP ADPC DRIV; none on TAPE GLCH SIZE HISS");
+              "GLO: seven pages, TIME BUS SET MIDI IN PLAY HELP; BUS's knobs and PERFORM's DCAY DAMP ADPC DRIV; none on TAPE GLCH SIZE HISS");
     }
     {
         /* PERFORM's banks: FX held, OCT+ shows bank B on the black keys and OCT- A (the OCT LEDs say which); a press
@@ -7143,6 +7353,8 @@ int main(int argc, char **argv)
     run_events(LENGTHS_TOUR, out);
     home2_scene();
     run_events(HOME2_TOUR, out);
+    m2k_init(2003);
+    run_events(WORK_TOUR, out);
     printf("tour done%s\n", ta_found ? ": TEXT TOUCHES OR IS CUT (above)" : ", every text clear");
     return ta_found != 0;
 }

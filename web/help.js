@@ -35,7 +35,7 @@ window.M2K_HELP = (() => {
       switch (i) {
         case 0: return `${k}: the track, now T${c.trk + 1}. GLO held: the tempo.`;
         case 1: return c.page === 1 ? `${k}: the machine, now ${c.mach}.` : `${k}: this page's pages, now ${c.label}.`;
-        case 2: return `${k}: the pattern, now ${c.pat}; queued while playing.`;
+        case 2: return c.page === 0 || c.page === 7 ? `${k}: the pattern, now ${c.pat}; queued while playing.` : `${k}: the sounds, each heard; it stays, OCT− puts yours back.`;
         case 7: return `${k}: the volume; a held step's trig type.`;
         default: {
           const kn = c.knobs && c.knobs[i - 3];
@@ -49,7 +49,7 @@ window.M2K_HELP = (() => {
         case 0: return `${k}: FX, four pages. Held: PERFORM on the black keys.`;
         case 1: return `${k}: FILT, the filters; again, their envelope.`;
         case 2: return `${k}: AMP, the envelope; again, DIST VOL PAN PORT.`;
-        case 3: return `${k}: three LFOs. Held: the knobs spring back.`;
+        case 3: return `${k}: three LFOs on one page. GLO + LFO, then any knob: a link. Held: the knobs spring back.`;
         case 4: return `${k}: SYN, the machine's knobs. Held: its sound's tools.`;
         case 5: return `${k}: tempo, bus, settings. Held: copy, paste, mutes.`;
         case 6: return `${k}: six lanes; again, the track's TLEN SPD PROB LANE. Held: pick patterns.`;
@@ -86,8 +86,8 @@ window.M2K_HELP = (() => {
       long: "Picks the track the keys play. With GLO held, the tempo; with a step held, its note; in the catalogue, the sound.", where: "; '" },
     { g: "Knobs", id: "e1", tag: "ALGORITHM", hi: ["e1"], short: "The track's machine, on any page.", screen: "b EDIT; w 300; e 1 1; w 500",
       long: "Changes the track's machine, on any page (on SYN its card shows). With a step held, accent and slide.", where: ", ." },
-    { g: "Knobs", id: "e2", tag: "PRESETS", hi: ["e2"], short: "The pattern: queued to the bar's end while playing.", screen: "e 2 1; w 400",
-      long: "Picks the pattern, at once when stopped, at the bar's end while playing. With a step held, its condition.", where: "[ ]" },
+    { g: "Knobs", id: "e2", tag: "PRESETS", hi: ["e2"], short: "The sounds on the sound's pages; on HOME the pattern.", screen: "e 2 1; w 400",
+      long: "On HOME and GLO, the pattern, at the bar's end while playing. On every other page, the sounds, each heard: it stays when you leave, OCT− puts yours back. With a step held, its condition.", where: "[ ]" },
     { g: "Knobs", id: "eK", tag: "KNOB 1–4", hi: ["e3", "e4", "e5", "e6"], short: "The four parameters of the page in view.", screen: "b ENV; w 200; e 3 4; w 300",
       long: "Turn the four values the screen names. Hold a step and turn one: a lock on that step.", where: "Tab picks, ↑ ↓ turn" },
     { g: "Knobs", id: "e7", tag: "MASTER", hi: ["e7"], short: "The volume; a held step's trig type.", screen: "e 7 -4; w 300",
@@ -100,14 +100,14 @@ window.M2K_HELP = (() => {
       long: "FILT: a high-pass and a low-pass as one band that follows the note. Again: its envelope.", where: "0 or F2" },
     { g: "Buttons", id: "b0", tag: "FX", hi: ["b0"], short: "FX's four pages; held, PERFORM.", screen: "b FX; w 400",
       long: "FX, DELAY, DSTR and MOD: EQ, rate, the track's echo, bits, fold, XOR, chorus. Held: PERFORM.", where: "P or F1" },
-    { g: "Buttons", id: "b3", tag: "LFO", hi: ["b3"], short: "Three LFOs, two pages each.", screen: "b LFO; w 400",
-      long: "Three LFOs a track, each moving any track's parameter. Held: what you turn comes back.", where: "L or F4" },
+    { g: "Buttons", id: "b3", tag: "LFO", hi: ["b3"], short: "Three LFOs on one page, then their rest.", screen: "b LFO; w 400",
+      long: "Three LFOs a track, each moving any track's parameter, wave to target in view. GLO + LFO, then turn any knob on any page: it moves that. Held: what you turn comes back.", where: "L or F4" },
     { g: "Buttons", id: "b8", tag: "ARP", hi: ["b8"], short: "The track's arpeggiator.", screen: "b ARP; w 400",
       long: "Hold keys and it plays them in turn. Tap twice: HOLD, the notes keep going, on that track while you play another. With REC, its notes are written.", where: "K or F9" },
-    { g: "Buttons", id: "b5", tag: "GLO", hi: ["b5"], short: "Tempo, the bus, settings; held, FUNC.", screen: "b GLO; w 400",
-      long: "TIME, BUS, SET, MIDI, IN, PLAY (the mutes, and the FM-1's CPU meter). Held: copy, paste, clear, undo; the white keys mute, fill, tap, solo.", where: "G or F6" },
-    { g: "Buttons", id: "b6", tag: "HOME", hi: ["b6"], short: "The pattern in six lanes; held, pick patterns.", screen: "b PLAY; w 1500",
-      long: "Six lanes, the playing step framed; level, pitch, tempo, swing. Again: HOME 2, the track's own length, speed, chance (PROB) and Grids lane. Held: the keys pick patterns and banks.", where: "1 or F7" },
+    { g: "Buttons", id: "b5", tag: "GLO", hi: ["b5"], short: "Tempo, the bus, settings, HELP; held, FUNC.", screen: "b GLO; w 400",
+      long: "TIME, BUS, SET, MIDI, IN, PLAY (the mutes, and the FM-1's CPU meter), HELP (the manual on the FM-1). Held: copy, paste, clear, undo; the white keys mute, fill, tap, solo.", where: "G or F6" },
+    { g: "Buttons", id: "b6", tag: "HOME", hi: ["b6"], short: "The pattern in six lanes; in GRID, the notes; held, pick patterns.", screen: "b PLAY; w 1500",
+      long: "Six lanes, the playing step framed; in GRID or step entry the track's notes in cells; level, pitch, tempo, swing. Again: HOME 2, the track's own length, speed, chance (PROB) and Grids lane. Held: the keys pick patterns and banks.", where: "1 or F7" },
     { g: "Buttons", id: "b9", tag: "SEQ", hi: ["b9"], short: "GRID: the keys are the steps; held, the step tools.", screen: "b SEQ; w 400",
       long: "GRID: the white keys are sixteen steps; tap one for a trig. Held: eight step tools on the white keys.", where: "A or F10" },
     { g: "Buttons", id: "b10", tag: "PLAY", hi: ["b10"], short: "Start and stop.", screen: "b PLAY; w 1000",
@@ -125,7 +125,7 @@ window.M2K_HELP = (() => {
     { g: "Keys", id: "lcd", tag: "Screen", hi: ["lcd"], short: "One grid of five bands on every page.", screen: "b PLAY; w 1200",
       long: "The page and track, the four knobs, the stage, the steps, the bars. Light or dark: GLO > SET.", where: "GLO > SET, SCRN" },
     { g: "Held", id: "hGLO", tag: "GLO held", hi: ["b5", "b11", "b10", "b9", "b12", "b13", "b7"], short: "FUNC: copy, paste, clear, undo; mutes and solos.", screen: "B GLO; w 900",
-      long: "REC copies, PLAY pastes, SEQ clears, OCT− OCT+ undo and redo. White 1–6 mute, 9–14 solo.", where: "Hold GLO" },
+      long: "REC copies, PLAY pastes, SEQ clears, OCT− OCT+ undo and redo, LFO links. White 1–6 mute, 9–14 solo.", where: "Hold GLO" },
     { g: "Held", id: "hHOME", tag: "HOME held", hi: ["b6", ...ALLW, "k1", "k3", "k5", "k8"], short: "Pick patterns and banks.", screen: "B HOME; w 900",
       long: "White keys open the bank's patterns, queued while playing. Black 1–4 pick the bank.", where: "Hold HOME" },
     { g: "Held", id: "hEDIT", tag: "EDIT held", hi: ["b4", "e3", "e0", "e4", "b13", "b12", "b9", "b7", "b11", "b10"], short: "The sound catalogue: KNOB 1 or SELECT plays each sound.", screen: "B EDIT; w 600; e 3 2; w 400",
@@ -146,8 +146,8 @@ window.M2K_HELP = (() => {
       long: "Sixteen steps a page, four pages. Black: the track, the page (held: the length), mute.", where: "SEQ" },
     { g: "Modes", id: "mPADS", tag: "PADS", hi: ["b5", "b6", "b8", ...ALLW], short: "White 1–6 and 9–14 hit tracks 1–6.", screen: "B GLO; w 100; b HOME; u GLO; w 400",
       long: "Each track at its root, so a drum stays in key. With REC, hits are written.", where: "GLO + HOME, or GLO + ARP" },
-    { g: "Modes", id: "mSTEP", tag: "Held step", hi: ["e0", "e1", "e2", "e3", "e4", "e5", "e6", "e7", "b12", "b13", ...ALLB], short: "Its note, condition, ratchet, trig type, locks.", screen: "b SEQ; w 2300; kd 0; w 700",
-      long: "Every knob edits it: note, accent, condition, ratchet, trig type, locks. Hold several to edit all. Held a moment, a later empty key: the note lasts to it, up to 8 steps.", where: "GRID, hold a white key" },
+    { g: "Modes", id: "mSTEP", tag: "Held step", hi: ["e0", "e1", "e2", "e3", "e4", "e5", "e6", "e7", "b12", "b13", ...ALLB], short: "Its card, what turns what; note, condition, ratchet, trig type, locks.", screen: "b SEQ; w 2300; kd 0; w 700",
+      long: "Held half a second, its card says what turns what. Every knob edits it: note, accent, condition, ratchet, trig type, locks. Hold several to edit all. Held a moment, a later empty key: the note lasts to it, up to 8 steps.", where: "GRID, hold a white key" },
     { g: "Recording", id: "rLIVE", tag: "REC live", hi: ["b10", "b11"], short: "PLAY, then REC: notes land on the nearest step.", screen: "b PLAY; w 300; b REC; w 600",
       long: "Notes land on the nearest step; knobs turned after a trig lock to it. REC held + SEQ: undo the take.", where: "PLAY, REC" },
     { g: "Recording", id: "rENTRY", tag: "Step entry", hi: ["b11", "b4", "e2"], short: "Stopped, REC: each note the next step.", screen: "b REC; w 400",

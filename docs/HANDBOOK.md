@@ -295,6 +295,9 @@ ghoulbox, DUELL and others; the full notes are in the session's research. The sc
 7. **OCT− held + a knob:** that knob back to its default; with a step held, its lock removed (Elektron's "trig + knob
    push" for knobs without a push).
 8. **The keys light for the layer held:** mutes and solos, used/open/queued patterns, effects on, tools.
+9. **A control does what its panel says (1.9, after a player's review):** PRESETS turns the sounds on a sound's pages,
+   each heard as it passes, kept when you stop (undoable), the pattern on HOME and GLO. A section's button opens the
+   page left there. A knob spun fast counts up to six a click. GLO + LFO, then any knob: the LFO moves it, audibly.
 
 **Lessons**
 - Write the rules first (one page), then map buttons. Every new combo was checked against the rules; that caught

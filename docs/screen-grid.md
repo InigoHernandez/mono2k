@@ -106,21 +106,26 @@ message's tail. Dark mode inverts the whole screen.
   rest a short line, a trig a block 6 wide and 8 tall (an accent 10, one on a condition 4), locks a frame round a
   checker, muted tracks dotted, the playing step a bar under it; the level live at the right. Turning a knob: the info
   line. HOME 2 (HOME again) the same lanes under the track in view's TLEN SPD PROB LANE; on either, a trig on a track
-  under 100 % (PROB) framed and filled from its foot to its chance.
+  under 100 % (PROB) framed and filled from its foot to its chance. In GRID or step entry (not on a Grids lane track)
+  the track in view's 16 steps as cells instead (`note_cells`): four rows of four under the knobs' columns, 28 apart, a
+  beat a row, a trig solid with its note (framed on a condition), locks a notch, an accent a bar at its foot, a slide a
+  dotted edge, ratchets dots, a length a line through the steps it lasts over.
 - **SYN**: the class and style, the model in F_L, punch, metal, plastic five cells each; the mark at the right, a cell
   a machine under it; at the foot which machine and `[ALGO] MACHINE`. SND: the library as a menu.
 - **AMP**: the envelope on the voice's curves; page 2 a picture under each knob (drive, level, pan, glide).
 - **FILT**: the response, its cutoffs' handles, the width on the floor while WDTH turns, the decades; page 2 the
   curve where the envelope takes it and the envelope.
 - **FX**: EQ and RATE each a row named at its left; DELAY's echoes; DSTR's sine; MOD's sweep and its mix.
-- **LFO** (Hortator's): the three side by side, each its number (solid for the one the knobs turn) and destination,
-  its wave in bars from its zero line, a cursor and a marker live, its rate at the foot.
+- **LFO**: the three in rows 36 px apart (`lfo_page`), each its number (solid for the one the knobs turn), its wave
+  72 wide at its depth with a cursor and a marker live, a cable to its destination's name and track; NO DEPTH or TURN
+  DEST where it moves nothing. Pages LFO1 LFO2 LFO3 (DEST WAVE SPD DPTH), then LFO1+ .. LFO3+ (TRCK TRIG MULT PHAS).
+  A knob an LFO moves, on any page: a marker 4 x 3 swinging on a dotted line under its picture (`knob_mod`).
 - **ARP**: the notes as a staircase, the sounding one solid; GRIDS Hortator's map (a dot a node, the four read solid,
   the place a marker) and the three lanes; LANES the three, each its followers.
 - **GLO**: TIME the tempo in F_L and the four beats under the knobs; BUS the reverb's tail; SET the project and the
   disc; MIDI the channels and clocks; IN the ports; PLAY the mutes, the bar and the FM-1's meter (CPU, CPU2, DROP on
   baseline 168, a 2-row bar under each share; DROP solid a second after a short; dashes where the platform says
-  nothing), a mute's wait on the info line.
+  nothing), a mute's wait on the info line; HELP the manual, nine pages (KNOB 1), a title and seven lines each.
 
 ## Lists
 
@@ -131,7 +136,8 @@ right edge (the rows shown solid on a dotted track).
 ## Panels
 
 Only where a layer covers the page: GLO held and latched, HOME held, SEQ held, PERFORM, the button cards, the
-catalogue, a question, the clear's ring (and LFO held, compact, the page moving on under it). Elektron's title bar:
+catalogue, a question, the clear's ring, a step held 500 ms in GRID (its card: the note, chance, accent, ratchet and
+the knobs that lock it; gone while a knob's value shows) (and LFO held, compact, the page moving on under it). Elektron's title bar:
 solid, its corners rounded, the title in paper from the left (its capitals rows 3-12 of the bar's 16), over a 1 px
 frame round the rest, the stage cleared round it; rows 16 apart from baseline 96 (`pairs`: a key an outlined tag, its
 action beside it, aligned); the keys' hints on the foot's baseline 196 (`hints`: `[KEY] ACTION`, as many as fit). A

@@ -136,7 +136,7 @@
       <tr><td>- =</td><td>OCT− and OCT+; in GRID, the page; a held step's ratchet.</td></tr>
       <tr><td>; '</td><td>SELECT: the track; a held step's note.</td></tr>
       <tr><td>, .</td><td>ALGORITHM: the track's machine, on any page; a held step's accent and slide.</td></tr>
-      <tr><td>[ ]</td><td>PRESETS: the pattern; a held step's condition.</td></tr>
+      <tr><td>[ ]</td><td>PRESETS: on HOME and GLO the pattern, elsewhere the sounds; a held step's condition.</td></tr>
       <tr><td>/</td><td>A held step's trig type (MASTER on the FM-1).</td></tr>
       <tr><td>Tab, ↑ ↓</td><td>Picks KNOB 1–4, and turns it; Shift turns it faster.</td></tr>
     </tbody>
@@ -150,6 +150,7 @@
   <p class="sub">Every button and combination on one page. On the FM-1, hold GLO, HOME, EDIT, SEQ, FX or LFO for a moment and the screen shows its own; hold any other button a second for its card.</p>
   <div class="figs">
     <figure class="fig"><canvas data-scr="27_glo_help"></canvas><figcaption>GLO held a moment: what it does with each button.</figcaption></figure>
+    <figure class="fig"><canvas data-scr="42_glo_help"></canvas><figcaption>GLO &gt; HELP: the manual on the FM-1, KNOB 1 its pages.</figcaption></figure>
     <figure class="fig"><canvas data-scr="29_home_held"></canvas><figcaption>HOME held: the bank's 16 slots as the white keys pick them, the one picked last named over them; the open one inverted, INIT ones dotted.</figcaption></figure>
     <figure class="fig"><canvas data-scr="29c_seq_held"></canvas><figcaption>SEQ held: the step tools on the white keys, the sequencer on the knobs.</figcaption></figure>
     <figure class="fig"><canvas data-scr="29f_perform"></canvas><figcaption>FX held: PERFORM, the bus's effects on the black keys while you hold them.</figcaption></figure>
@@ -185,6 +186,7 @@
     <thead><tr><th>With GLO</th><th>Does</th></tr></thead>
     <tbody>
       <tr><td>REC / PLAY</td><td>Copy / paste the pattern; in GRID, the track's steps.</td></tr>
+      <tr><td>LFO</td><td>A link: the next knob you turn, on any page, is what the LFO moves (<a href="#chain">LFOs</a>).</td></tr>
       <tr><td>SEQ</td><td>Clear the pattern's steps, its sounds kept; in GRID, the track's. Held a second: INIT (in GRID the track's sound too). Again: undone.</td></tr>
       <tr><td>OCT− / OCT+</td><td>UNDO / REDO the last edit.</td></tr>
       <tr><td>SAVE</td><td>Reload the saved pattern.</td></tr>
@@ -409,7 +411,7 @@
       <tr><td>ENV</td><td>AMP</td><td>The amp envelope, distortion, volume, pan, portamento.</td></tr>
       <tr><td>SEL</td><td>FILT</td><td>The filters: base and width, resonance, the filter's envelope.</td></tr>
       <tr><td>FX</td><td>FX</td><td>EQ and rate reduction, the delay, the destroy effects, the modulation effect. Held: PERFORM.</td></tr>
-      <tr><td>LFO</td><td>LFO</td><td>Three LFOs, two pages each. Held: the knobs come back when let go.</td></tr>
+      <tr><td>LFO</td><td>LFO</td><td>Three LFOs on one page: LFO 1, 2, 3, then their rest. Held: the knobs come back when let go.</td></tr>
       <tr><td>ARP</td><td>ARP</td><td>The track's arpeggiator.</td></tr>
       <tr><td>GLO</td><td>GLO</td><td>Tempo, the lofi bus, the reverb, settings. Held: the editing functions (copy, paste, clear, reload, mute).</td></tr>
       <tr><td>HOME</td><td>HOME</td><td>The pattern in six lanes; level, pitch, tempo and swing. Again: HOME 2, the track's TLEN, SPD, PROB and LANE. Held: pick patterns and banks.</td></tr>
@@ -426,11 +428,12 @@
     <tbody>
       <tr><td>SELECT</td><td>The track, 1–6.</td><td>The step's note.</td></tr>
       <tr><td>ALGORITHM</td><td>The track's machine, on any page.</td><td>Accent and slide.</td></tr>
-      <tr><td>PRESETS</td><td>The pattern (queued to the end of the bar while playing).</td><td>The step's condition.</td></tr>
+      <tr><td>PRESETS</td><td>On HOME and GLO, the pattern (queued to the end of the bar while playing). On every other page, the sounds (<a href="#projects">the sound library</a>).</td><td>The step's condition.</td></tr>
       <tr><td>KNOB 1–4</td><td>The four parameters on the page in view.</td><td>A lock on the step.</td></tr>
       <tr><td>MASTER</td><td>The volume.</td><td>The step's trig type.</td></tr>
     </tbody>
   </table>
+  <p>Spin a knob and each click counts more, up to six at a time; turn it slowly and every click is one, so the fine end stays.</p>
   <h2>The screen</h2>
   <div class="figs">
     <figure class="fig big"><canvas data-scr="01_home_stopped"></canvas><figcaption>HOME: the pattern and tempo on top, the knobs, six tracks' steps, the bars and the breadcrumb under.</figcaption></figure>
@@ -474,7 +477,7 @@
     <figure class="fig"><canvas data-scr="10_filt"></canvas><figcaption>FILT: the high-pass and low-pass as a band.</figcaption></figure>
     <figure class="fig"><canvas data-scr="12_fx_delay"></canvas><figcaption>FX, DELAY: its echoes as they fall.</figcaption></figure>
     <figure class="fig"><canvas data-scr="13_fx_destroy"></canvas><figcaption>FX, DSTR: bits, wavefold, XOR and the reverb's send.</figcaption></figure>
-    <figure class="fig"><canvas data-scr="14_lfo"></canvas><figcaption>LFO: all three stacked, live.</figcaption></figure>
+    <figure class="fig"><canvas data-scr="14_lfo"></canvas><figcaption>LFO: all three on one page, each wave cabled to what it moves, live.</figcaption></figure>
     <figure class="fig"><canvas data-scr="20_arp"></canvas><figcaption>ARP: mode, speed, range and gate.</figcaption></figure>
     <figure class="fig"><canvas data-scr="20c_grids"></canvas><figcaption>GRIDS: the map, X and Y's dot, the lanes.</figcaption></figure>
     <figure class="fig"><canvas data-scr="15_glo_time"></canvas><figcaption>GLO, TIME: tempo, swing, length, accent.</figcaption></figure>
@@ -494,7 +497,7 @@
   <p>Every machine starts as a sound for what it is for, not a bare oscillator: GND-SIN a round sine bass, SWAV-SAW a wide supersaw pad, SWAV-PUL a hollow reed lead, SWAV-ENS a minor-7 pad on one key, FM+STAT an e-piano, FM+PAR a gong-like bell, FM+DYN an FM bass, VOX-6 an "aah", DIGI-WAV a pluck that scans as it falls, SID-6581 a sync lead, DRM-KICK a kick, DRM-SNAR a snare, DRM-HATS a closed hat, DRM-CYMB a crash, GND-PERC a metal hit, GND-NOIS a wind you play, and the FX the track before made wide (FX-CHORUS), punched and held (FX-DYNAMIX) or turned to metal (FX-RING). Each is levelled to sit with the others. That INIT is what ALGORITHM gives a track at its INIT, what an INIT slot of the library, EDIT + SEQ and a held clear start a track with, and where OCT− and a knob take that knob back. A new pattern is INIT too: a sine bass, a kick, a snare, a hat, the FM keys and the ENS pad.</p>
   <h2>Notes and octaves</h2>
   <p>Each track plays at home. A machine chosen or INITed puts the track's new trigs, its pad and its keys on the note its INIT was made at: DRM-KICK at C2, GND-SIN, FM+DYN and the FX at C3, the rest at C4. A pattern opened puts each track on its root, the note its trigs sit on most, or its machine's home when it has none. The keyboard's octave is each track's own, set from its home note, which sits near the bottom of the keys (a C on their first C): a kick at C2 plays as a kick, not as a high zap. OCT− and OCT+ change the track in view's, and their lights show it.</p>
-  <p>Each section's button turns through its own pages: press LFO again for LFO 1B to 3B, FX for DELAY, DSTR and MOD, GLO for TIME to PLAY.</p>
+  <p>Each section's button turns through its own pages: press LFO again for LFO 2, LFO 3 and their rest (LFO 1+ to 3+), FX for DELAY, DSTR and MOD, GLO for TIME to HELP. Coming back from another section, it opens the page you left there.</p>
   <h2>Level, pitch and mute</h2>
   <p>On HOME, KNOB 1 and 2 are the track's level and pitch. In GRID the MUTE key mutes the track in view; GLO held with one of the six lower keys mutes that track from anywhere.</p>
   <h2>FX machines</h2>
@@ -517,6 +520,8 @@
   <div class="figs">
     <figure class="fig"><canvas data-scr="02_home_playing"></canvas><figcaption>HOME while playing: the step under way framed in every lane.</figcaption></figure>
     <figure class="fig"><canvas data-scr="17a_grid_step_card"></canvas><figcaption>A held step in GRID: its note, condition, ratchet and accent.</figcaption></figure>
+    <figure class="fig"><canvas data-scr="38_steps_notes"></canvas><figcaption>GRID on HOME: the track's notes, a beat a row.</figcaption></figure>
+    <figure class="fig"><canvas data-scr="39_step_card"></canvas><figcaption>Held half a second: its card, what turns what.</figcaption></figure>
   </div>
   <h2>GRID</h2>
   <p>SEQ turns the keys into steps. The sixteen lower keys are the steps of the page in view; OCT− and OCT+ turn the page (four pages, 64 steps). A key on an empty step puts a trig there with the last note you played; a quick tap on a trig takes it away, with its locks.</p>
@@ -567,7 +572,7 @@
     <figure class="fig"><canvas data-scr="33_home_lengths"></canvas><figcaption>Six lengths: 16, 12, 7, 5, 10, 3. Past each one's end, dots; each playhead its own.</figcaption></figure>
   </div>
   <h2>Choosing patterns</h2>
-  <p>PRESETS picks the pattern: at once when stopped, at the end of the bar while playing, so patterns chain as you play.</p>
+  <p>On HOME and GLO, PRESETS picks the pattern: at once when stopped, at the end of the bar while playing, so patterns chain as you play. HOME held picks them from the keys on any page.</p>
   <p>An accent plays the step harder (GLO &gt; TIME's ACNT says how much); a slide glides into the next note without trigging again.</p>
 </article>
 
@@ -712,11 +717,12 @@
   <p>EQF and EQG are one band of EQ; SRR reduces the sample rate; the delay (DTIM, DSND, DFB, DBAS, DWID) is the track's own, in 8-bit mu-law. DSTR: BITS crushes, FOLD folds the wave over itself, XOR mangles the samples, VERB sends the track to the bus's reverb. Both sends, DSND and VERB, are straight in level: half way is 6 dB under the most, so a little is already heard. MOD is a chorus, a flanger or a phaser across the stereo.</p>
   <h2>LFOs</h2>
   <div class="figs">
-    <figure class="fig"><canvas data-scr="14b_lfo_cycle"></canvas><figcaption>LFO 1B: SPD as a cycle's time; DPTH against full.</figcaption></figure>
+    <figure class="fig"><canvas data-scr="14b_lfo_cycle"></canvas><figcaption>LFO 1: its target, wave, SPD as a cycle's time, DPTH.</figcaption></figure>
   </div>
-  <p>Three per track, two pages each: TRCK and DEST say which track and parameter it moves (any track's), WAVE its shape, TRIG what a trig does to it (FREE runs on, TRIG starts it over, HOLD samples it until the next trig, ONE runs one cycle, HALF half a cycle), MULT and SPD its rate in time with the tempo, PHAS where it starts, DPTH how far, either way.</p>
+  <p>The quick way: hold GLO and press LFO, then turn any knob, on any page, of any track. That knob is now what the LFO moves, with some depth so you hear it at once (the track's first free LFO, or the one in view on the LFO page). The LED blinks and the stage asks until you turn one; 10 s, or LFO, lets it go. A knob an LFO moves shows a marker swinging over a dotted rule under its picture, on every page.</p>
+  <p>Three per track, all on one page: LFO, LFO again and LFO again give each one's DEST, WAVE, SPD and DPTH; a fourth press its rest, TRCK, TRIG, MULT and PHAS. DEST turned from OFF starts with some depth. TRCK and DEST say which track and parameter it moves (any track's), WAVE its shape, TRIG what a trig does to it (FREE runs on, TRIG starts it over, HOLD samples it until the next trig, ONE runs one cycle, HALF half a cycle), MULT and SPD its rate in time with the tempo, PHAS where it starts, DPTH how far, either way.</p>
   <p>SPD shows the time one cycle takes, in bars and notes at any tempo, slow at the bottom and fast at the top: 0 stands still, 1 is 30 bars, 12 is 16 bars, 60 a bar, 84 a quarter note and 120 a 1/32 note. Every twelve steps it doubles; seven steps slower than a note is that note dotted, seven faster its triplet. MULT multiplies it (x1 to x128), and past a 1/64 note it shows hertz at the pattern's tempo. The LFOs run on MONO2K's own clock, 1.5 % slower than the bars they are named after, as they always have: a FREE LFO drifts slowly against the pattern, and TRIG starts it with each note.</p>
-  <p>DPTH is squared around its middle, so the first steps away from 64 are fine (66 swings an eighth of a step, 72 two steps, 80 eight) and the ends sweep the whole range; the screen shows it as a share of full. The picture stacks all three LFOs: destination, rate, wave, a live cursor; the one you edit drawn heavy. Whatever an LFO moves glides between the knob's steps, with no zipper. A little DPTH on PTCH is a vibrato (66 is about 12 cents).</p>
+  <p>DPTH is squared around its middle, so the first steps away from 64 are fine (66 swings an eighth of a step, 72 two steps, 80 eight) and the ends sweep the whole range; the screen shows it as a share of full. The picture has all three LFOs, a row each: its wave as deep as DPTH swings it, a live cursor, a cable from what it sends now to where it goes, its rate; the one you edit drawn heavy. Whatever an LFO moves glides between the knob's steps, with no zipper. A little DPTH on PTCH is a vibrato (66 is about 12 cents).</p>
   <h2>Arpeggiator</h2>
   <p>On ARP: MODE (OFF, UP, DOWN, U/D, RND, ORDR, the order you played them), SPD (1/32 to 1/4), RNG (one to four octaves) and GATE. Hold keys and it plays them in turn.</p>
   <p>HOLD: tap ARP twice (or press a sustain pedal, CC 64) and the notes keep playing after you let go; a chord played after your hands leave the keys replaces them. ARP twice again stops it. Its LED pulses while it holds, and HOLD shows in the header and on the ARP page.</p>
@@ -768,8 +774,9 @@
   <h2>The sound library</h2>
   <div class="figs">
     <figure class="fig"><canvas data-scr="25_syn_snd"></canvas><figcaption>SYN &gt; SND: the library's slots, each with its machine; SLOT picks one.</figcaption></figure>
-    <figure class="fig"><canvas data-scr="29b_catalogue"></canvas><figcaption>EDIT held: the catalogue, each sound played on the track as KNOB 1 or SELECT lands on it.</figcaption></figure>
+    <figure class="fig"><canvas data-scr="29b_catalogue"></canvas><figcaption>PRESETS, or EDIT held: the catalogue, each sound played on the track as it is landed on.</figcaption></figure>
   </div>
+  <p>The quick way to a sound: on any page but HOME and GLO, turn PRESETS. Each sound is on the track as you land on it. Stop there and it stays: the list leaves after 3 s, or at any button, and GLO + OCT− undoes it. OCT− puts your own sound back at once. EDIT held a moment opens the same list and asks: OCT+ keeps, anything else puts yours back.</p>
   <p>128 sounds, S001 to S128, kept apart from the patterns: a sound saved there can go onto any track of any pattern. A sound is a track's machine and every setting (the machine's knobs, the amp, the filter, the FX, the LFOs), a category (KICK, SNARE, HATS, PERC, BASS, LEAD, PAD or FX) and the note it was made at: the track's root when it was saved, the note its trigs sit on most. Loaded, it is ready to sound as it did: the track's keys, pad and new trigs go to that note and its octave (a kick saved at C2 plays at C2). Its LFOs move the track it is loaded on. The library starts with 96 sounds of its own, twelve in each category (S001–S012 the kicks, then the snares, hats, percussion, basses, leads, pads and FX), each a different character at its note, then 32 INIT slots; it is saved with the rest. A library saved by an older MONO2K keeps every sound you saved or changed; only the factory's old sounds become the new ones (where yours stands, its new sound goes to S097 on). (Sounds kept before their notes were: a kick at C2, a bass at C3, the rest at C4.)</p>
   <p>Press EDIT until the footer says SND (the page after SYN, and after BANK on DIGI-WAV), or GLO + EDIT from anywhere.</p>
   <table>
@@ -868,7 +875,7 @@
 <script src="site.js?v=4"></script>
 <script src="switch.js?v=1"></script>
 <script src="panel.js?v=2"></script>
-<script src="changelog.js?v=54"></script>
-<script src="manual.js?v=60"></script>
+<script src="changelog.js?v=55"></script>
+<script src="manual.js?v=61"></script>
 </body>
 </html>
