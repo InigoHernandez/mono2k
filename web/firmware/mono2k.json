@@ -1,8 +1,8 @@
 {
   "file": "mono2k.fwsc",
-  "sha256": "87c680b7bcba756c7aedaa2a34793174544b71751cea7349aae5fb81390bc34c",
+  "sha256": "4fb65f626d079539f6f94efc35b108d3b80826a8c9f80348fc8df605dcb4eb43",
   "product": "FM-1_980",
-  "version": "1.9",
-  "date": "2026-11-08",
+  "version": "1.9.1",
+  "date": "2026-11-09",
   "note": "Six mono machines, a 64-step sequencer and the new bank A (CIRCUIT, TIDE, SUSPEND, LANTERN). Back up what your FM-1 holds first, with the firmware it runs now; if it does not start, hold OCT− while switching it on (If it stops, below)."
 }

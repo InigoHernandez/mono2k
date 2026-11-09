@@ -134,7 +134,7 @@
       <tr><td>P 0 8 L 5 G 1 \ K A</td><td>The same buttons as letters: FX, SEL, ENV, LFO, EDIT, GLO, HOME, SAVE, ARP, SEQ.</td></tr>
       <tr><td>Space, Enter</td><td>PLAY, REC (held: FILL).</td></tr>
       <tr><td>- =</td><td>OCT− and OCT+; in GRID, the page; a held step's ratchet.</td></tr>
-      <tr><td>; '</td><td>SELECT: the track; a held step's note.</td></tr>
+      <tr><td>; '</td><td>SELECT: the track (on LFO's pages, the LFO); a held step's note.</td></tr>
       <tr><td>, .</td><td>ALGORITHM: the track's machine, on any page; a held step's accent and slide.</td></tr>
       <tr><td>[ ]</td><td>PRESETS: on HOME and GLO the pattern, elsewhere the sounds; a held step's condition.</td></tr>
       <tr><td>/</td><td>A held step's trig type (MASTER on the FM-1).</td></tr>
@@ -411,7 +411,7 @@
       <tr><td>ENV</td><td>AMP</td><td>The amp envelope, distortion, volume, pan, portamento.</td></tr>
       <tr><td>SEL</td><td>FILT</td><td>The filters: base and width, resonance, the filter's envelope.</td></tr>
       <tr><td>FX</td><td>FX</td><td>EQ and rate reduction, the delay, the destroy effects, the modulation effect. Held: PERFORM.</td></tr>
-      <tr><td>LFO</td><td>LFO</td><td>Three LFOs on one page: LFO 1, 2, 3, then their rest. Held: the knobs come back when let go.</td></tr>
+      <tr><td>LFO</td><td>LFO</td><td>Three LFOs on one page: LFO 1, 2, 3, then their rest; SELECT picks one. Held: the knobs come back when let go.</td></tr>
       <tr><td>ARP</td><td>ARP</td><td>The track's arpeggiator.</td></tr>
       <tr><td>GLO</td><td>GLO</td><td>Tempo, the lofi bus, the reverb, settings. Held: the editing functions (copy, paste, clear, reload, mute).</td></tr>
       <tr><td>HOME</td><td>HOME</td><td>The pattern in six lanes; level, pitch, tempo and swing. Again: HOME 2, the track's TLEN, SPD, PROB and LANE. Held: pick patterns and banks.</td></tr>
@@ -426,7 +426,7 @@
   <table>
     <thead><tr><th>Knob</th><th>Turned</th><th>A step held in GRID</th></tr></thead>
     <tbody>
-      <tr><td>SELECT</td><td>The track, 1–6.</td><td>The step's note.</td></tr>
+      <tr><td>SELECT</td><td>The track, 1–6 (on LFO's pages, LFO 1–3).</td><td>The step's note.</td></tr>
       <tr><td>ALGORITHM</td><td>The track's machine, on any page.</td><td>Accent and slide.</td></tr>
       <tr><td>PRESETS</td><td>On HOME and GLO, the pattern (queued to the end of the bar while playing). On every other page, the sounds (<a href="#projects">the sound library</a>).</td><td>The step's condition.</td></tr>
       <tr><td>KNOB 1–4</td><td>The four parameters on the page in view.</td><td>A lock on the step.</td></tr>
@@ -491,13 +491,13 @@
   <h1>Tracks and machines</h1>
   <p class="sub">Six tracks, each one mono machine with its own sound, chain and steps.</p>
   <h2>Choosing a track and its machine</h2>
-  <p>SELECT picks the track; in GRID, the upper keys T1–T6 do. ALGORITHM changes the track's machine, on any page; on EDIT (SYN) its card comes up. A track still at its machine's INIT takes the new machine's whole INIT; a sound you have shaped keeps its chain, its LFOs and its steps, and only the eight knobs start from the new machine's INIT.</p>
+  <p>SELECT picks the track (on LFO's pages, the LFO: below); in GRID, the upper keys T1–T6 do. ALGORITHM changes the track's machine, on any page; on EDIT (SYN) its card comes up. A track still at its machine's INIT takes the new machine's whole INIT; a sound you have shaped keeps its chain, its LFOs and its steps, and only the eight knobs start from the new machine's INIT.</p>
   <p>The machines come in this order: the ten that play notes first (GND-SIN, SWAV-SAW, SWAV-PUL, SWAV-ENS, FM+STAT, FM+PAR, FM+DYN, VOX-6, DIGI-WAV, SID-6581), then the drums (DRM-KICK, DRM-SNAR, DRM-HATS, DRM-CYMB), GND-PERC and GND-NOIS, and the three FX last. One step back from GND-SIN is FX-RING.</p>
   <h2>INIT: each machine's own sound</h2>
   <p>Every machine starts as a sound for what it is for, not a bare oscillator: GND-SIN a round sine bass, SWAV-SAW a wide supersaw pad, SWAV-PUL a hollow reed lead, SWAV-ENS a minor-7 pad on one key, FM+STAT an e-piano, FM+PAR a gong-like bell, FM+DYN an FM bass, VOX-6 an "aah", DIGI-WAV a pluck that scans as it falls, SID-6581 a sync lead, DRM-KICK a kick, DRM-SNAR a snare, DRM-HATS a closed hat, DRM-CYMB a crash, GND-PERC a metal hit, GND-NOIS a wind you play, and the FX the track before made wide (FX-CHORUS), punched and held (FX-DYNAMIX) or turned to metal (FX-RING). Each is levelled to sit with the others. That INIT is what ALGORITHM gives a track at its INIT, what an INIT slot of the library, EDIT + SEQ and a held clear start a track with, and where OCT− and a knob take that knob back. A new pattern is INIT too: a sine bass, a kick, a snare, a hat, the FM keys and the ENS pad.</p>
   <h2>Notes and octaves</h2>
   <p>Each track plays at home. A machine chosen or INITed puts the track's new trigs, its pad and its keys on the note its INIT was made at: DRM-KICK at C2, GND-SIN, FM+DYN and the FX at C3, the rest at C4. A pattern opened puts each track on its root, the note its trigs sit on most, or its machine's home when it has none. The keyboard's octave is each track's own, set from its home note, which sits near the bottom of the keys (a C on their first C): a kick at C2 plays as a kick, not as a high zap. OCT− and OCT+ change the track in view's, and their lights show it.</p>
-  <p>Each section's button turns through its own pages: press LFO again for LFO 2, LFO 3 and their rest (LFO 1+ to 3+), FX for DELAY, DSTR and MOD, GLO for TIME to HELP. Coming back from another section, it opens the page you left there.</p>
+  <p>Each section's button turns through its own pages: press LFO again for LFO 2, LFO 3 and their rest (LFO 1+ to 3+), FX for DELAY, DSTR and MOD, GLO for TIME to HELP. Coming back from another section, it opens the page you left there. On LFO's pages SELECT picks LFO 1, 2 or 3 instead of the track, on the half in view (LFO 1–3, or 1+ to 3+): change the track on another page, or with T1–T6 in GRID.</p>
   <h2>Level, pitch and mute</h2>
   <p>On HOME, KNOB 1 and 2 are the track's level and pitch. In GRID the MUTE key mutes the track in view; GLO held with one of the six lower keys mutes that track from anywhere.</p>
   <h2>FX machines</h2>
@@ -875,7 +875,7 @@
 <script src="site.js?v=4"></script>
 <script src="switch.js?v=1"></script>
 <script src="panel.js?v=2"></script>
-<script src="changelog.js?v=55"></script>
-<script src="manual.js?v=61"></script>
+<script src="changelog.js?v=56"></script>
+<script src="manual.js?v=62"></script>
 </body>
 </html>

@@ -2520,6 +2520,12 @@ void m2k_encoder(int e, int d)
             break;
         }
         if (cat.open) { edit(0, d); break; }          /* the catalogue: SELECT scrolls it as KNOB 1 does, heard */
+        if (ui.page == PG_LFO) {                       /* LFO's pages: LFO 1 2 3, the half in view kept (the owner's) */
+            ui.sub = (uint8_t)(ui.sub - ui.sub % 3 + (ui.sub % 3 + (d > 0 ? 1 : 2)) % 3);
+            if (ui.link) { ui.link = (uint8_t)(ui.sub % 3 + 1); ui.link_trk = ui.trk; ui.link_t = ui.now | 1u; }   /* (armed: the one in view) */
+            ui.focus_t = 0;
+            break;
+        }
         track_to((ui.trk + M2K_TRACKS + (d > 0 ? 1 : -1)) % M2K_TRACKS);   /* the track (Demake's synth) */
         break;
     case E_ALGO:
@@ -3992,8 +3998,8 @@ static const char *const HELP[HELP_N][7] = {
      "A LATER KEY: ITS LENGTH", "BLACK 6-11: QUICK CHANCES"},
     {"SOUND", "EDIT: THE MACHINE'S KNOBS", "ENV: THE AMP", "SEL: THE FILTER", "FX: DELAY, DSTR, MOD",
      "OCT- + KNOB: ITS DEFAULT", "EDIT + SAVE: KEEP A SOUND"},
-    {"LFO", "GLO + LFO, TURN ANY KNOB:", "IT MOVES THAT, ANY PAGE", "LFO: ALL THREE AT ONCE", "A RULE UNDER A KNOB: MOVED",
-     "LFO HELD: KNOBS COME BACK", 0},
+    {"LFO", "GLO + LFO, TURN ANY KNOB:", "IT MOVES THAT, ANY PAGE", "LFO: ALL THREE AT ONCE", "SELECT PICKS LFO 1 2 3",
+     "A RULE UNDER A KNOB: MOVED", "LFO HELD: KNOBS COME BACK"},
     {"PATTERNS", "ON HOME, PRESETS PICKS", "HOME HELD: THE KEYS PICK", "BLACK 1-4: THE BANK", "PLAYING: AT THE BAR'S END",
      "GLO + REC COPY, PLAY PASTE", "GLO + SEQ CLEAR"},
     {"RECORD", "PLAY, REC: NOTES LAND", "REC, STOPPED: NOTE BY NOTE", "EDIT RESTS, PRESETS MOVES", "REC HELD: FILL",

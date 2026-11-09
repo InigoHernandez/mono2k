@@ -7,6 +7,12 @@ window.M2K_KINDS = {
 };
 window.M2K_CHANGES = [
   {
+    date: "2026-11-09", title: "MONO2K 1.9.1: SELECT picks the LFO",
+    items: [
+      ["workflow", "1.9.1: On LFO's pages SELECT picks LFO 1, 2 or 3, on the half in view, instead of the track; an LFO link armed there follows it. On every other page SELECT is the track, as before."],
+    ],
+  },
+  {
     date: "2026-11-08", title: "MONO2K 1.9: the workflow, after a player's review",
     items: [
       ["workflow", "1.9: PRESETS is what the panel says: on the sound's pages it turns through the sounds, each heard on the track. Stop on one and it stays, the list leaves after 3 s or at any button, and GLO + OCT− undoes it; OCT− puts yours back at once. On HOME and GLO it still picks the pattern."],

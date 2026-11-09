@@ -49,7 +49,7 @@ window.M2K_HELP = (() => {
         case 0: return `${k}: FX, four pages. Held: PERFORM on the black keys.`;
         case 1: return `${k}: FILT, the filters; again, their envelope.`;
         case 2: return `${k}: AMP, the envelope; again, DIST VOL PAN PORT.`;
-        case 3: return `${k}: three LFOs on one page. GLO + LFO, then any knob: a link. Held: the knobs spring back.`;
+        case 3: return `${k}: three LFOs on one page, SELECT picks one. GLO + LFO, then any knob: a link. Held: the knobs spring back.`;
         case 4: return `${k}: SYN, the machine's knobs. Held: its sound's tools.`;
         case 5: return `${k}: tempo, bus, settings. Held: copy, paste, mutes.`;
         case 6: return `${k}: six lanes; again, the track's TLEN SPD PROB LANE. Held: pick patterns.`;
@@ -82,8 +82,8 @@ window.M2K_HELP = (() => {
    * white key held, "k i" / "K i" a white / black key tapped) */
   const ALLW = WHITE.map((k) => "k" + k), ALLB = BLACK.map((k) => "k" + k);
   const G = [
-    { g: "Knobs", id: "e0", tag: "SELECT", hi: ["e0"], short: "The track, T1 to T6.", screen: "e 0 1; w 400",
-      long: "Picks the track the keys play. With GLO held, the tempo; with a step held, its note; in the catalogue, the sound.", where: "; '" },
+    { g: "Knobs", id: "e0", tag: "SELECT", hi: ["e0"], short: "The track, T1 to T6; on LFO's pages, the LFO.", screen: "e 0 1; w 400",
+      long: "Picks the track the keys play; on LFO's pages, LFO 1, 2 or 3. With GLO held, the tempo; with a step held, its note; in the catalogue, the sound.", where: "; '" },
     { g: "Knobs", id: "e1", tag: "ALGORITHM", hi: ["e1"], short: "The track's machine, on any page.", screen: "b EDIT; w 300; e 1 1; w 500",
       long: "Changes the track's machine, on any page (on SYN its card shows). With a step held, accent and slide.", where: ", ." },
     { g: "Knobs", id: "e2", tag: "PRESETS", hi: ["e2"], short: "The sounds on the sound's pages; on HOME the pattern.", screen: "e 2 1; w 400",
@@ -100,7 +100,7 @@ window.M2K_HELP = (() => {
       long: "FILT: a high-pass and a low-pass as one band that follows the note. Again: its envelope.", where: "0 or F2" },
     { g: "Buttons", id: "b0", tag: "FX", hi: ["b0"], short: "FX's four pages; held, PERFORM.", screen: "b FX; w 400",
       long: "FX, DELAY, DSTR and MOD: EQ, rate, the track's echo, bits, fold, XOR, chorus. Held: PERFORM.", where: "P or F1" },
-    { g: "Buttons", id: "b3", tag: "LFO", hi: ["b3"], short: "Three LFOs on one page, then their rest.", screen: "b LFO; w 400",
+    { g: "Buttons", id: "b3", tag: "LFO", hi: ["b3"], short: "Three LFOs on one page, then their rest; SELECT picks one.", screen: "b LFO; w 400",
       long: "Three LFOs a track, each moving any track's parameter, wave to target in view. GLO + LFO, then turn any knob on any page: it moves that. Held: what you turn comes back.", where: "L or F4" },
     { g: "Buttons", id: "b8", tag: "ARP", hi: ["b8"], short: "The track's arpeggiator.", screen: "b ARP; w 400",
       long: "Hold keys and it plays them in turn. Tap twice: HOLD, the notes keep going, on that track while you play another. With REC, its notes are written.", where: "K or F9" },

@@ -3341,9 +3341,9 @@ static int selftest(void)
             CHECK(entry && waits && still && started && rec0 && now && off && midi && ext,
                   "REC + PLAY stopped: Ready, the first note starts it on step 1, recorded; PLAY again now; REC off; MIDI; SYIN plays");
         }
-        /* SELECT: the track, round, on every page, the page as it was; ALGORITHM: the track's machine on every page (the
-         * owner's: "ALGO always changes the synth engine"), the page and the track as they were; a section's button turns
-         * its pages */
+        /* SELECT: the track, round, on every page but LFO's (there the LFO: the workflow's test), the page as it was;
+         * ALGORITHM: the track's machine on every page (the owner's: "ALGO always changes the synth engine"), the page and
+         * the track as they were; a section's button turns its pages */
         {
             m2k_init(41);
             static const uint8_t PGS[5] = {PG_HOME, PG_AMP, PG_LFO, PG_GLO, PG_SYN};
@@ -3351,10 +3351,12 @@ static int selftest(void)
             for (int i = 0; i < 5; i++) {
                 ui.page = PGS[i]; ui.sub = 1 % nsub(PGS[i]); ui.trk = 5;
                 const int sub = ui.sub;
-                m2k_encoder(E_SELECT, 1);
-                trk &= ui.trk == (5 + 1) % M2K_TRACKS && ui.page == PGS[i] && ui.sub == sub;
-                m2k_encoder(E_SELECT, -1);
-                trk &= ui.trk == 5;
+                if (PGS[i] != PG_LFO) {
+                    m2k_encoder(E_SELECT, 1);
+                    trk &= ui.trk == (5 + 1) % M2K_TRACKS && ui.page == PGS[i] && ui.sub == sub;
+                    m2k_encoder(E_SELECT, -1);
+                    trk &= ui.trk == 5;
+                }
                 int m0 = PAT(cur_pat)->machine[5];
                 m2k_encoder(E_ALGO, 1);
                 mach &= PAT(cur_pat)->machine[5] == M_ORDER[(m_place(m0) + 1) % M_COUNT] && ui.page == PGS[i] &&
@@ -3365,7 +3367,7 @@ static int selftest(void)
             ui.page = PG_LFO; ui.sub = 0;
             for (int i = 0; i < 2; i++) { m2k_button(B_LFO, 1); m2k_button(B_LFO, 0); }
             int pages = ui.page == PG_LFO && ui.sub == 2;
-            CHECK(trk && mach && pages, "SELECT: the track on every page; ALGORITHM: the machine on every page; a section's button its pages");
+            CHECK(trk && mach && pages, "SELECT: the track on every page but LFO's; ALGORITHM: the machine on every page; a section's button its pages");
         }
         /* the workflow (the 2026-11 review): a section's button goes back to the page left there; PRESETS is the sounds on
          * the sound's pages (OCT- gives the track's own back byte for byte, OCT+ keeps), the patterns on HOME and GLO, a held
@@ -3376,7 +3378,7 @@ static int selftest(void)
         {
             ux_init(77);
             m2k_pattern_t *p = PAT(cur_pat);
-            int mem, pre, spd, main4, wake, link, other, late;
+            int mem, pre, spd, main4, wake, link, other, late, sel;
             ui.page = PG_LFO; ui.sub = 0;
             ux_tap(B_LFO); ux_ms(500);
             ux_tap(B_LFO); ux_ms(500);
@@ -3475,10 +3477,32 @@ static int selftest(void)
             m2k_button(B_LFO, 1); ux_ms(20); m2k_button(B_LFO, 0); ux_ms(20);
             m2k_button(B_LFO, 1); ux_ms(20); m2k_button(B_LFO, 0); ux_ms(20);
             late &= ui.sub == 2 && !ui.link;
-            CHECK(mem && pre && spd && main4 && wake && link && other && late,
-                  "the workflow: a section goes back to its page, PRESETS sounds or patterns by the page, a spun knob counts more, LFO's first page moves it, a link takes the next knob");
-            if (!(mem && pre && spd && main4 && wake && link && other && late))
-                printf("     mem %d pre %d spd %d main4 %d wake %d link %d other %d late %d\n", mem, pre, spd, main4, wake, link, other, late);
+            /* SELECT on LFO's pages: LFO 1 2 3 round, the half in view kept, the track kept; an armed link follows it;
+             * on any other page the track (the owner's, 2026-11-08) */
+            ui.page = PG_LFO; ui.sub = 2; ui.trk = 1;
+            m2k_encoder(E_SELECT, 1);
+            sel = ui.sub == 0 && ui.trk == 1;
+            m2k_encoder(E_SELECT, -1);
+            sel &= ui.sub == 2 && ui.trk == 1;
+            ui.sub = 4;
+            m2k_encoder(E_SELECT, 1);
+            sel &= ui.sub == 5 && ui.trk == 1 && knob_at(0) == P_LFO + 16 + L_TRCK;
+            ui.sub = 0;
+            ux_ms(600);
+            m2k_button(B_GLO, 1); ux_ms(20); m2k_button(B_LFO, 1); ux_ms(20); m2k_button(B_LFO, 0); m2k_button(B_GLO, 0); ux_ms(20);
+            sel &= ui.link == 1;
+            m2k_encoder(E_SELECT, 1);
+            sel &= ui.link == 2 && ui.sub == 1 && ui.link_trk == 1;
+            m2k_button(B_GLO, 1); ux_ms(20); m2k_button(B_LFO, 1); ux_ms(20); m2k_button(B_LFO, 0); m2k_button(B_GLO, 0); ux_ms(20);
+            sel &= !ui.link;
+            ui.page = PG_AMP; ui.sub = 0;
+            m2k_encoder(E_SELECT, 1);
+            sel &= ui.trk == 2;
+            ui.trk = 0;
+            CHECK(mem && pre && spd && main4 && wake && link && other && late && sel,
+                  "the workflow: a section goes back to its page, PRESETS sounds or patterns by the page, a spun knob counts more, LFO's first page moves it, a link takes the next knob, SELECT the LFO on its pages");
+            if (!(mem && pre && spd && main4 && wake && link && other && late && sel))
+                printf("     mem %d pre %d spd %d main4 %d wake %d link %d other %d late %d sel %d\n", mem, pre, spd, main4, wake, link, other, late, sel);
         }
         /* HOME in GRID shows the track's notes, not the lanes; a held step's card comes after a moment and gives way to a
          * knob; step entry shows them too */
