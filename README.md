@@ -374,3 +374,5 @@ The 64-wave bank (`assets/waves/mono2k64/`) is the project owner's own waveforms
 Bank A's parts are MONO2K's own: their sounds were drawn at random and picked by ear, their harmony and craft from
 research written up in `docs/composing.md`; the Model:Cycles demos and the IDM references there were measured or read
 about, never quoted.
+
+You can also try MONO2K in the browser, no flashing needed, in the free community [FM-1 Emulator](https://fm1-emulator.atst.tools/).
