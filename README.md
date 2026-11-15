@@ -25,6 +25,10 @@ WebAssembly, with sound).
 - **USB.** It shows up as a MIDI device named "MONO2K FM-1" and answers the identity FM-1_980. While it updates, the
   update loader shows up as "Felucca Update", the loader being Felucca's.
 - **Rescue.** Hold OCT− while switching on: the FM-1 starts the updater only and waits for a package over USB.
+- **Every FM-1, the newer chip 0xB36014 too** (1.9.2). It saves and updates on the first units' Puya flash (`0x856014`)
+  and on the UC25HQ80 (`0xB36014`) of units sold since autumn 2026. A newer unit on MONO2K 1.9.1 or older can't write
+  its flash, so it takes 1.9.2 once through the chip's download mode (the Firmware Hub's rescue page). Any other chip
+  is refused: MONO2K shows `FLASH ??` and its id at power-on, and keeps its saves in RAM.
 
 ## Run it
 

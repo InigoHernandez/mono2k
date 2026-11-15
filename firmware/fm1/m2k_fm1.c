@@ -137,7 +137,7 @@ static void take_panel(void)
 #define M2K_FM1_DIAG 0
 #endif
 static uint32_t diag_short_ms, diag_last_short, frame_ticks;
-static char diag_txt[40];
+static char diag_txt[48];                       /* (CPU W F, the flash's S R: 44 at most) */
 
 /* ---- the meter, always (the core shows it on GLO > PLAY, m2k_cpu; a short more says CPU FULL): every half second the
  * first core's share of real time rendering the sound (its waits for the second included: what must stay under
@@ -183,6 +183,10 @@ static void diag_tick(int fresh)                 /* (the meter's numbers, as the
         diag_num(o, meter_c2 < 0 ? 0u : (uint32_t)meter_c2); while (*o) o++;
         *o++ = ' '; *o++ = ' '; *o++ = 'F'; *o++ = ' ';
         diag_num(o, meter_f); while (*o) o++;
+        *o++ = ' '; *o++ = ' '; *o++ = 'S'; *o++ = ' ';   /* the flash: operations late (past the Puya's maxima), */
+        diag_num(o, fl_stat.late_erase + fl_stat.late_prog); while (*o) o++;   /* and resets (fm1_flash.h) */
+        *o++ = ' '; *o++ = 'R'; *o++ = ' ';
+        diag_num(o, fl_stat.resets);
     }
 #else
     (void)fresh;
@@ -197,12 +201,12 @@ static const uint16_t *diag_glyph(char c)
                                       {7,1,1,1,1},{7,5,7,5,7},{7,5,7,1,7}};
     static const uint16_t A[][5] = {{7,4,4,4,7} /* C */, {7,5,7,4,4} /* P */, {5,5,5,5,7} /* U */, {5,7,7,5,5} /* M */,
                                     {6,5,5,5,6} /* D */, {6,5,6,5,6} /* B */, {7,4,7,1,7} /* S */, {7,4,6,4,4} /* F */,
-                                    {5,5,7,7,5} /* W */};
+                                    {5,5,7,7,5} /* W */, {6,5,6,5,5} /* R */};
     static const uint16_t SP[5] = {0, 0, 0, 0, 0};
     if (c >= '0' && c <= '9') return D[c - '0'];
     switch (c) { case 'C': return A[0]; case 'P': return A[1]; case 'U': return A[2]; case 'M': return A[3];
                  case 'D': return A[4]; case 'B': return A[5]; case 'S': return A[6]; case 'F': return A[7];
-                 case 'W': return A[8]; }
+                 case 'W': return A[8]; case 'R': return A[9]; }
     return SP;
 }
 

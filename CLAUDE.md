@@ -150,7 +150,12 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   (a stream into the flash, 0xC0000..0xE0000, when the sequencer stands; the update loader stages at 0xE0000) and the Patch Editor's link to it (SysEx
   `F0 7D 'M2K' cmd pack7(body) F7` through the platform's `APP_SYSEX` hook; `host/m2k_link_test.c` runs both on a NOR
   flash in memory, and `check.sh` with the browser's store for the FM-1, `m2k_host --web-store`, and the FM-1's read
-  in the browser, `--fm1-store`). The core is its own unit there (`core.o`): reach it
+  in the browser, `--fm1-store`). The flash chip (1.9.2): every FM-1, the Puya `0x856014` and the newer units'
+  UC25HQ80 `0xB36014`, accepted in one place (`FL_JEDEC_OK`, `hal/fm1_flash.h`) by the app, the rescue and the update
+  loader. An unknown id writes nothing and is shown ("FLASH ?? id"). A busy chip gets 2 s an erase and 50 ms a page,
+  then a reset (66h 99h) and one more try, and never XIP while busy. `host/fm1_flash_test.c [OLD NEW]` runs the
+  driver on a simulated chip (both ids, slow, overrunning, stuck), the store through it, and with two packages an
+  update (the app's staging, then the loader) from OLD to NEW on each. The core is its own unit there (`core.o`): reach it
   through `m2k.h` alone. RAM: 96 KiB `.bss` + 336 KiB pool; the FM-1 keeps one project of 64 patterns, two of them
   unpacked (`M2K_PAT_SLOTS` 2: `PAT(i)` is pattern i everywhere, a cache over the working image on the FM-1; reach
   patterns only through it, and never hold two `PAT()` pointers to patterns other than the open one), the rest

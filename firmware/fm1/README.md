@@ -72,6 +72,15 @@ the sizes: the image within the app slot (581 KB), `.data + .bss` within 96 KiB,
 - `src/platform.c`: `BANK_AT` / `BANK_LEN` and `CV_MAX` can be set by the app; an app's SysEx hook (`APP_SYSEX`)
   sees each frame before the update entry does.
 - `src/sense.c`: its tables from `gen/sense_tables.h` (generated here) in place of CS-1's.
+- The flash chip (1.9.2): `hal/fm1_flash.h` `FL_JEDEC_OK` takes the Puya (`0x856014`) and the UC25HQ80 (`0xB36014`)
+  in one place for `src/platform.c`, `src/recovery.c` and `loader/loader.c`. Any other id writes nothing and is shown
+  ("FLASH ?? B36014": at power-on, and in the USB rescue). A chip may stay busy 2 s an erase and 50 ms a page (it was
+  0.5 s and 10 ms), and past that it is reset (66h 99h) and the operation tried once more. XIP never comes back while it
+  is busy, and late operations and resets are counted (`fl_stat`, on the `--diag` overlay as S and R). The
+  boot's staging cleanup runs only on a known chip. `src/ota.c` feeds the watchdog between the staging's erases and
+  reads from the host after each (the web installer gives up after 8 s without a request). `loader/loader.c` feeds the
+  watchdog before each erase and page. The FL_SIM seam lets `host/fm1_flash_test.c` run the driver on a simulated
+  chip.
 
 ## Whose is what
 

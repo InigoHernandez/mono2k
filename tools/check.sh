@@ -7,7 +7,9 @@
 #  2. the device rules: the core built for a 32-bit soft-float target (armv7m) calls no float helper and no 64-bit
 #     division (__aeabi_ldivmod / __aeabi_uldivmod, __divdi3 ...); its section sizes are printed
 #  3. sanitizers: the self-test, the FM-1's store and link (host/m2k_link_test.c, with the browser's store for it and
-#     its store read back in the browser), every screen (and the text audit: on the tour's frames and a sweep of every
+#     its store read back in the browser), the FM-1's flash driver on a simulated chip (host/fm1_flash_test.c: both
+#     flash parts, slow and overrunning ones, the store through it, and an update from 1.9.1's package to the
+#     installer's), every screen (and the text audit: on the tour's frames and a sweep of every
 #     page, machine and knob value, no two texts touch and none is cut), every bank A track, every reference spec and
 #     the power test's loop under ASan + UBSan; any report fails the run
 #  3b. eight tracks: the host of eight's self-test, screens and text sweep under the sanitizers; its renders of bank A,
@@ -26,7 +28,7 @@ I="-Ifirmware/src -Ifirmware/gen"
 echo "== warnings"
 for cc in clang $(ls /opt/homebrew/bin/gcc-[0-9]* /usr/local/bin/gcc-[0-9]* 2>/dev/null) ${GCC:-}; do
     case "$($cc --version 2>/dev/null | head -1)" in *clang*) [ "$cc" = clang ] || continue ;; esac
-    for src in host/m2k_host.c host/m2k_ref.c host/m2k_link_test.c; do
+    for src in host/m2k_host.c host/m2k_ref.c host/m2k_link_test.c host/fm1_flash_test.c; do
         if ! out=$($cc -O2 $W $I -o "$B/$(basename "$src" .c)" "$src" -lm 2>&1); then
             echo "  $cc $src: DOES NOT BUILD"; printf "%s\n" "$out" | grep "error:" | head -5; FAIL=1; continue
         fi
@@ -61,14 +63,17 @@ fi
 
 echo "== sanitizers"
 SAN="-O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer"
-rm -f "$B/m2k_host_san" "$B/m2k_ref_san" "$B/m2k_link_san"      # (a build that fails runs nothing old)
+rm -f "$B/m2k_host_san" "$B/m2k_ref_san" "$B/m2k_link_san" "$B/fm1_flash_san"   # (a build that fails runs nothing old)
 clang $SAN -w $I -o "$B/m2k_host_san" host/m2k_host.c -lm && clang $SAN -w $I -o "$B/m2k_ref_san" host/m2k_ref.c -lm &&
-    clang $SAN -w $I -o "$B/m2k_link_san" host/m2k_link_test.c || FAIL=1
+    clang $SAN -w $I -o "$B/m2k_link_san" host/m2k_link_test.c && clang $SAN -w $I -o "$B/fm1_flash_san" host/fm1_flash_test.c ||
+    FAIL=1
+git show v1.9.1:web/firmware/mono2k.fwsc > "$B/old.fwsc" 2>/dev/null || rm -f "$B/old.fwsc"
 mkdir -p "$B/screens" "$B/pitch" "$B/ref" "$B/link"
 {
     "$B/m2k_host_san" --selftest
     "$B/m2k_host_san" --web-store "$B/link/web16.bin" && "$B/m2k_link_san" "$B/link/web16.bin" "$B/link/fm1.bin" &&
         "$B/m2k_host_san" --fm1-store "$B/link/fm1.bin" || echo "LINK FAILED"
+    if [ -f "$B/old.fwsc" ]; then "$B/fm1_flash_san" "$B/old.fwsc" web/firmware/mono2k.fwsc; else "$B/fm1_flash_san"; fi
 
     "$B/m2k_host_san" "$B/screens"
     "$B/m2k_host_san" --text-sweep
@@ -78,8 +83,8 @@ mkdir -p "$B/screens" "$B/pitch" "$B/ref" "$B/link"
 } > "$B/san.log" 2>&1
 h1=$("$B/m2k_host_san" --bank-hash 2>/dev/null); h2=$(grep "bank hash" "$B/san.log" | head -1)
 [ -n "$h1" ] && [ "$h1" = "$h2" ] || echo "LINK FAILED: bank A through the cache ($h2) is not the browser's ($h1)" >> "$B/san.log"
-rep=$(grep -E "runtime error|ERROR: AddressSanitizer|SELFTEST FAILED|LINK FAILED|^FAIL|^TEXT " "$B/san.log" | sort | uniq -c)
-if [ -n "$rep" ]; then echo "$rep"; FAIL=1; else echo "  self-test, the FM-1 link, screens and their text, bank A, $(ls tools/ref/*.spec | wc -l | tr -d ' ') specs, the power loop: clean"; fi
+rep=$(grep -E "runtime error|ERROR: AddressSanitizer|SELFTEST FAILED|LINK FAILED|FLASH TEST FAILED|^FAIL|^TEXT " "$B/san.log" | sort | uniq -c)
+if [ -n "$rep" ]; then echo "$rep"; FAIL=1; else echo "  self-test, the FM-1 link, the flash on both chips, screens and their text, bank A, $(ls tools/ref/*.spec | wc -l | tr -d ' ') specs, the power loop: clean"; fi
 
 echo "== eight tracks (M2K_TRACKS=8, the Move's build)"
 # its self-test (format 21 both ways: the build of six reads its bytes, FMT21; both pack a pattern of six alike), every

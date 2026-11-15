@@ -137,6 +137,7 @@ static volatile uint32_t fm1_ms;                /* milliseconds since power-on (
                              FL_IN(off, n, BANK_AT, BANK_AT + BANK_LEN))
 #include "fm1_flash.h"
 static uint8_t flash_ok;
+static uint32_t flash_id;                       /* the chip's JEDEC id, read at boot: FL_JEDEC_OK's two, or shown */
 static int st_read(uint32_t off, void *dst, uint32_t n)
 {
     uint8_t *d = dst;
@@ -151,6 +152,15 @@ static int st_read(uint32_t off, void *dst, uint32_t n)
         n -= k;
     }
     return 0;
+}
+
+/* "FLASH ?? B36014": a chip FL_JEDEC_OK does not know, its id for the player to report (nothing is written to it) */
+static const char *flash_unknown_text(void)
+{
+    static char b[16] = "FLASH ?? ";
+    uint32_t i;
+    for (i = 0; i < 6u; i++) b[9 + i] = "0123456789ABCDEF"[(flash_id >> (20u - 4u * i)) & 15u];
+    return b;
 }
 
 static uint8_t recovery_active;
@@ -440,10 +450,21 @@ void fm1_cstart(void)
     fm1_boot.p3_rst = (uint8_t)p3;
     if (boot_mode == BOOT_RECOVERY || recovery_key())
         recovery_main();                        /* OCT- at power-on: the USB rescue */
-    flash_ok = FL_FAR(fl_jedec_ram)() == 0x856014u;
-    ota_boot_cleanup();
+    flash_id = FL_FAR(fl_jedec_ram)();
+    flash_ok = FL_JEDEC_OK(flash_id);
+    if (flash_ok)
+        ota_boot_cleanup();                     /* (it erases: never on a chip it does not know) */
     lcd_init();
     lcd_fill(0, 0, 240, 240, C_BLACK);
+    if (!flash_ok) {                            /* saves stay in RAM: say so a moment, with the id */
+        uint32_t t0 = fm1_ticks();
+        draw_text_box(0, 92, 240, &FONT_S, flash_unknown_text(), C_WHITE, 1);
+        draw_text_box(0, 124, 240, &FONT_S, "SAVES STAY IN RAM", C_WHITE, 1);
+        lcd_sync();
+        while ((uint32_t)(fm1_ticks() - t0) < 4000u * 1000u * FM1_TICKS_PER_US)
+            fm1_wdt_feed();
+        lcd_fill(0, 0, 240, 240, C_BLACK);
+    }
     fm1_input_init();
     fm1_adc_init();
 #if DINGHY_DUAL_CORE

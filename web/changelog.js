@@ -7,6 +7,16 @@ window.M2K_KINDS = {
 };
 window.M2K_CHANGES = [
   {
+    date: "2026-11-15", title: "MONO2K 1.9.2: every FM-1, the newer chip 0xB36014 too",
+    items: [
+      ["fixes", "1.9.2: FM-1s sold since autumn 2026 carry another flash chip (a UC25HQ80, id 0xB36014). MONO2K now saves on it and takes updates there, as on the first units: your work stays after you switch off."],
+      ["fixes", "1.9.2: A newer FM-1 on an older MONO2K cannot write its flash, so the update cannot start from it: install 1.9.2 once through the chip's download mode (the Firmware Hub's rescue page). From then on it updates as usual."],
+      ["fixes", "1.9.2: Saving and updating wait for a slow flash instead of giving up, and a chip that takes far too long is reset and tried again."],
+      ["fixes", "1.9.2: On a flash chip MONO2K does not know, it shows FLASH ?? and the chip's id for a few seconds at power-on: your saves stay until you switch off, and nothing is written. Send us the id."],
+      ["patterns", "1.9.2: Your patterns and sounds load as they were, from 1.9.1 and from older versions."],
+    ],
+  },
+  {
     date: "2026-11-09", title: "MONO2K 1.9.1: SELECT picks the LFO",
     items: [
       ["workflow", "1.9.1: On LFO's pages SELECT picks LFO 1, 2 or 3, on the half in view, instead of the track; an LFO link armed there follows it. On every other page SELECT is the track, as before."],

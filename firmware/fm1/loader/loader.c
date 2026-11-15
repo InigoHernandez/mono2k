@@ -57,21 +57,23 @@ static void ota_commit(const uint8_t *parm) { (void)parm; }
 
 /* ---- ldr_core.c hooks: interrupts are off for the whole loader ---- */
 static int ldr_fread(uint32_t off, void *p, uint32_t n) { return fl_read_ram(off, p, n); }
-static int ldr_erase(uint32_t off)
+static int ldr_erase(uint32_t off)              /* (fed first: a slow chip's erase, reset and retry take ~4 s) */
 {
     uint32_t took;
+    fm1_wdt_feed();
     return fl_erase4k_ram(off, &took);
 }
 static int ldr_prog(uint32_t off, const void *p, uint32_t n)
 {
     uint32_t took;
+    fm1_wdt_feed();
     return fl_prog_ram(off, p, n, &took);
 }
 static void ldr_record_clear(void)
 {
     fm1_updata_parm_clear();                        /* CRC 0: the SPL ignores it on a warm reset */
 }
-static int ldr_flash_known(void) { return fl_jedec_ram() == 0x856014u; }   /* as the app (project.c) */
+static int ldr_flash_known(void) { return FL_JEDEC_OK(fl_jedec_ram()); }   /* as the app (platform.c) */
 static void ldr_progress(uint32_t done, uint32_t total) { (void)done; (void)total; ldr_poll(); }
 #include "ldr_core.c"
 

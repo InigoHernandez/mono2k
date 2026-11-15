@@ -11,6 +11,24 @@
  */
 #pragma once
 #include <stdint.h>
+
+/* The flash chips the app's storage and the update loader accept (the JEDEC id, 9Fh): one place for the app
+ * (platform.c, recovery.c) and the loader (loader.c). The Puya P25Q80 (0x856014) of the first FM-1s, and the UC25HQ80
+ * (0xB36014) of units sold since autumn 2026: both 1 MiB, the same plain SPI NOR commands (9F 05 35 06 20 02 0B 66 99);
+ * the UC25HQ80 can take longer to erase and program (FL_ERASE_MAX_US, FL_PROG_MAX_US). Any other id: nothing is
+ * written (the app keeps its saves in RAM, the loader refuses to install) and the id is shown (MONO2K 1.9.2) */
+#define FL_JEDEC_OK(id) ((id) == 0x856014u || (id) == 0xB36014u)
+
+/* How long the chip may stay busy (WIP) before it is reset (66h 99h) and the operation tried once more, and past what
+ * it counts as late (the Puya's datasheet maxima, 400 ms and 3 ms; fl_stat): kept so a call's interrupts-off time
+ * stays well under the watchdog's ~8 s (an erase, its reset and one more: ~4 s; the callers feed it before each) */
+#define FL_ERASE_MAX_US 2000000u
+#define FL_PROG_MAX_US 50000u
+#define FL_ERASE_LATE_US 400000u
+#define FL_PROG_LATE_US 3000u
+static struct { uint32_t late_erase, late_prog, resets, slowest_erase_us; } fl_stat;   /* (RAM: the RAM code counts) */
+
+#ifndef FL_SIM                                  /* (host/fm1_flash_test.c gives these a simulated chip) */
 #include "fm1_xip.h"
 
 #define RAMFN  __attribute__((section(".ram_text"), noinline, used))
@@ -35,6 +53,7 @@ static inline void *fl_far(void *p) { void *volatile q = p; return q; }
 #define T4_CNT          REG32(0x10804u)            /* TIMER4, 24 MHz free-running */
 
 #define FL_XIP(off)     FM1_XIP(off)              /* fm1_xip.h */
+#endif /* FL_SIM */
 #define FL_DATA_LO      0x00097000u                /* Felucca main store */
 #define FL_DATA_HI      0x000E0000u
 #define FL_GLOB_LO      0x000FC000u                /* Felucca superblock / globals */
@@ -55,6 +74,7 @@ static inline void *fl_far(void *p) { void *volatile q = p; return q; }
 
 typedef struct { uint32_t sfc_con, spi_con; } fl_saved_t;
 
+#ifndef FL_SIM
 RAMINL void fl_csync(void) { __asm__ volatile("csync" ::: "memory"); }
 RAMINL void fl_cache_idle(void) { while (!(CACHE_CON & 0x4000u)) ; }
 RAMINL void fl_delay(uint32_t n) { volatile uint32_t i = n; while (i--) ; }
@@ -89,10 +109,12 @@ RAMINL uint8_t fl_rx(void)
     SPI0_CON &= ~8u;
     return v;
 }
+#endif /* FL_SIM */
 RAMINL void fl_addr(uint32_t a) { fl_tx((uint8_t)(a >> 16)); fl_tx((uint8_t)(a >> 8)); fl_tx((uint8_t)a); }
 RAMINL uint8_t fl_rdsr(uint8_t cmd) { uint8_t v; fl_cs(0); fl_tx(cmd); v = fl_rx(); fl_cs(1); return v; }
 RAMINL void fl_wren(void) { fl_cs(0); fl_tx(0x06); fl_cs(1); }
 
+#ifndef FL_SIM
 RAMINL int fl_enter(fl_saved_t *s)
 {
     uint32_t mode;
@@ -131,14 +153,25 @@ RAMINL void fl_inval(uint32_t off, uint32_t len)
         fl_cache_idle();
     }
 }
+#endif /* FL_SIM */
+
+/* until the chip is ready (WIP clear), up to max_us; past it the chip is reset (66h, then 99h: what it was doing is
+ * dropped) and waited for again with no limit, so XIP never comes back while the chip may be busy (one that never comes
+ * ready is the watchdog's). 0 ready (took_us the time), -4 it overran and was reset */
 RAMINL int fl_wait_ready(uint32_t max_us, uint32_t *took_us)
 {
     uint32_t t0 = T4_CNT, dt;
     for (;;) {
         dt = (T4_CNT - t0) / 24u;
         if (!(fl_rdsr(0x05) & 1u)) { *took_us = dt; return 0; }
-        if (dt > max_us) { *took_us = dt; return -4; }
+        if (dt > max_us) break;
     }
+    *took_us = dt;
+    fl_stat.resets++;
+    fl_cs(0); fl_tx(0x66); fl_cs(1);
+    fl_cs(0); fl_tx(0x99); fl_cs(1);
+    while (fl_rdsr(0x05) & 1u) ;
+    return -4;
 }
 
 /* ---- entry points: IRQs OFF, args/buffers in RAM ---- */
@@ -165,16 +198,18 @@ static RAMFN uint32_t fl_status_ram(void)                /* SR1 | SR2 << 8 */
 
 static RAMFN int fl_erase4k_ram(uint32_t off, uint32_t *took_us)
 {
-    fl_saved_t s; int rc;
+    fl_saved_t s; int rc = -4, tries;
     if (!FL_RANGE_OK(off, 0x1000u) || (off & 0xFFFu))
         return -1;
     if (fl_enter(&s)) return -2;
-    fl_wren();
-    if (!(fl_rdsr(0x05) & 2u)) rc = -3;           /* WEL did not set */
-    else {
+    for (tries = 0; tries < 2 && rc == -4; tries++) {   /* (once more after a reset: the erase was dropped) */
+        fl_wren();
+        if (!(fl_rdsr(0x05) & 2u)) { rc = -3; break; }  /* WEL did not set */
         fl_cs(0); fl_tx(0x20); fl_addr(off); fl_cs(1);
         fl_inval(off, 4096u);
-        rc = fl_wait_ready(500000u, took_us);     /* generic NOR max 400 ms */
+        rc = fl_wait_ready(FL_ERASE_MAX_US, took_us);
+        if (!rc && *took_us > FL_ERASE_LATE_US) fl_stat.late_erase++;
+        if (!rc && *took_us > fl_stat.slowest_erase_us) fl_stat.slowest_erase_us = *took_us;
     }
     fl_exit(&s);
     return rc;
@@ -182,18 +217,20 @@ static RAMFN int fl_erase4k_ram(uint32_t off, uint32_t *took_us)
 
 static RAMFN int fl_prog_ram(uint32_t off, const uint8_t *src, uint32_t n, uint32_t *took_us)
 {
-    fl_saved_t s; int rc; uint32_t i;
+    fl_saved_t s; int rc = -4, tries; uint32_t i;
     if (!FL_RANGE_OK(off, n) ||
         n == 0 || n > 256u || ((off & 0xFFu) + n) > 256u) return -1;    /* one page, no wrap */
     if (fl_enter(&s)) return -2;
-    fl_wren();
-    if (!(fl_rdsr(0x05) & 2u)) rc = -3;
-    else {
+    for (tries = 0; tries < 2 && rc == -4; tries++) {   /* (once more after a reset: a page programmed twice with
+                                                         * the same bytes is the same page) */
+        fl_wren();
+        if (!(fl_rdsr(0x05) & 2u)) { rc = -3; break; }
         fl_cs(0); fl_tx(0x02); fl_addr(off);
         for (i = 0; i < n; i++) fl_tx(src[i]);
         fl_cs(1);
         fl_inval(off, n);
-        rc = fl_wait_ready(10000u, took_us);      /* generic NOR max 3 ms */
+        rc = fl_wait_ready(FL_PROG_MAX_US, took_us);
+        if (!rc && *took_us > FL_PROG_LATE_US) fl_stat.late_prog++;
     }
     fl_exit(&s);
     return rc;
@@ -212,6 +249,7 @@ static RAMFN int fl_read_ram(uint32_t off, uint8_t *dst, uint32_t n)   /* 0x0B f
 
 /* ---- XIP side (normal .text) ---- */
 
+#ifndef FL_SIM
 /* Once at boot, before any XIP read of the data region: map the data area
  * as an unencrypted XIP window (as the SDK's IOCTL_SET_VM_INFO does). */
 static void fl_plain_window_init(void)
@@ -227,6 +265,7 @@ static void fl_plain_window_init(void)
 
 static inline uint32_t irq_save(void) { __asm__ volatile("cli" ::: "memory"); return 0; }
 static inline void irq_restore(uint32_t f) { (void)f; __asm__ volatile("csync\n\tsti" ::: "memory"); }
+#endif /* FL_SIM */
 
 static int fl_erase4k(uint32_t off, uint32_t *took_us)
 {
@@ -254,6 +293,7 @@ static int fl_write(uint32_t off, const uint8_t *src_ram, uint32_t n)
 }
 
 /* Read back through XIP (needs fl_plain_window_init) and compare. */
+#ifndef FL_SIM
 static int fl_verify_xip(uint32_t off, const uint8_t *ref, uint32_t n)
 {
     const volatile uint8_t *p = (const volatile uint8_t *)FL_XIP(off);
@@ -261,3 +301,4 @@ static int fl_verify_xip(uint32_t off, const uint8_t *ref, uint32_t n)
     for (i = 0; i < n; i++) if (p[i] != ref[i]) return -(int)(i + 1);
     return 0;
 }
+#endif /* FL_SIM */
