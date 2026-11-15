@@ -7,6 +7,15 @@ window.M2K_KINDS = {
 };
 window.M2K_CHANGES = [
   {
+    date: "2026-11-16", title: "MONO2K 1.9.3: the update on the FM-1's screen",
+    items: [
+      ["screen", "1.9.3: While MONO2K is installed, the FM-1's screen shows it: the firmware's 143 blocks fill one by one, a blinking block where it writes, the percentage under them, and MONO2K's M at the end before it starts."],
+      ["screen", "1.9.3: An FM-1 waiting for an installer, also after a power cut in the middle of an update, says UPDATE MODE, OPEN THE INSTALLER; an update cut short says STOPPED, PRESS INSTALL AGAIN. Press Install and it finishes."],
+      ["screen", "1.9.3: The first seconds of an update from MONO2K show the same screen, its five steps under the grid."],
+      ["web", "The Installer takes the page while it writes: the FM-1's flash drawn as its sectors, filling as the update reaches them, one percentage for the whole update, its four steps, Try again if it stops, and MONO2K's isotype at the end. The computer stays awake meanwhile. installer.html?demo plays it without an FM-1."],
+    ],
+  },
+  {
     date: "2026-11-15", title: "MONO2K 1.9.2: every FM-1, the newer chip 0xB36014 too",
     items: [
       ["fixes", "1.9.2: FM-1s sold since autumn 2026 carry another flash chip (a UC25HQ80, id 0xB36014). MONO2K now saves on it and takes updates there, as on the first units: your work stays after you switch off."],

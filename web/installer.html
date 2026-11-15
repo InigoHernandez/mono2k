@@ -12,7 +12,7 @@
 <meta name="description" content="Install MONO2K on the M-VAVE FM-1 from the browser over USB, see what your FM-1 runs, and go back to the official firmware.">
 <script>try { const t = localStorage.getItem("mono2k.theme"); if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t); } catch (e) {}</script>
 <link rel="icon" href="brand/mono2k-iso.svg" type="image/svg+xml">
-<link rel="stylesheet" href="style.css?v=59">
+<link rel="stylesheet" href="style.css?v=60">
 </head>
 <body>
 <!-- the controls' glitch (style.css): rows slipped sideways, in hard bands -->
@@ -104,9 +104,31 @@
 <script type="module">
 import { Updater } from "./fm1/fm1ota.js?v=1";
 import { productOf, logicalImage, validateStockPackage, sha256hex } from "./fm1/fm1pkg.js?v=1";
+import { Live } from "./installing.js?v=1";
 
 const $ = (id) => document.getElementById(id);
 const MONO2K = /^FM-1_980$/;                           /* MONO2K's identity, every release (FM-1_981, _983 are others') */
+/* ?demo plays the install screen with nothing sent (?demo=fail stops it on the way): the page as it looks while an
+ * FM-1 is written, without one */
+const DEMO = new URLSearchParams(location.search).get("demo");
+class Rehearsal {
+  async resume() { return false; }
+  async install(image, product, step) {
+    const total = Math.ceil(image.length / 512), w = (ms) => new Promise((r) => setTimeout(r, ms));
+    step("start", "FM-1_980"); await w(900);
+    for (let n = 1; n <= 48; n++) { step("verify", n); await w(50); }
+    step("loader"); await w(4500);
+    for (let n = 1; n < total; n += 2) {
+      step("write", n);
+      if (DEMO === "fail" && n > total * 0.6) throw Object.assign(new Error("lost"), { code: "lost" });
+      await w(20);
+    }
+    step("write", total);
+    step("reboot"); await w(3500);
+    step("done", product);
+    return product;
+  }
+}
 
 /* what an identity says the FM-1 runs ("FM-1_015", "ota-FM-1_981", ...): the numbers the open firmwares claim */
 function describe(id) {
@@ -179,7 +201,7 @@ function takePackage(raw, label) {
   if (!/^FM-1_\d+$/.test(product)) throw new Error("not an FM-1 package");
   if (!new TextDecoder("latin1").decode(raw).includes("FELUCCA-LOADER-1"))
     throw new Error("this package has no update loader this page can drive (M-VAVE's own? use Back to V15 for that)");
-  pkg = { product, image: logicalImage(raw), label };
+  pkg = { product, image: logicalImage(raw), label, mine: MONO2K.test(product) };
   $("install-sub").textContent = `${label} · ${product}`;
   $("pkg-note").textContent = `Ready: ${label}, identity ${product}. Press Install, then leave the cable in until it says done.`;
   $("install").disabled = busy;
@@ -196,6 +218,7 @@ function takePackage(raw, label) {
     if (meta.sha256 && await sha256hex(raw) !== meta.sha256) throw new Error(`${meta.file} does not match its fingerprint`);
     if (productOf(raw) !== meta.product) throw new Error(`${meta.file} is not ${meta.product}`);
     takePackage(raw, `MONO2K ${meta.version}`);
+    if (DEMO !== null) $("install-sub").textContent = `Demo · nothing is sent to the FM-1`;
     $("st-pkg").textContent = `${meta.version}, ${meta.date}`;
     $("pkg-note").textContent = `MONO2K ${meta.version} (${meta.date}), ${(raw.length / 1024).toFixed(0)} KB. ${meta.note || ""}`;
   } catch (e) {
@@ -228,7 +251,14 @@ async function write(p, verb) {
   lock(true);
   $("bar").hidden = false; $("bar").value = 0;
   const total = Math.ceil(p.image.length / 512);
+  const live = new Live({
+    title: p.mine ? `Installing ${/^MONO2K /.test(p.label) ? p.label : "MONO2K"}` : verb, total, mine: !!p.mine,
+    done: p.mine ? `${/^MONO2K /.test(p.label) ? p.label : "MONO2K"} runs on your FM-1.` : p === stock ? "The FM-1 runs M-VAVE's V15 again." : "",
+    retry: () => { if (!busy) write(p, verb); },
+  });
+  live.open();
   const step = (k, a) => {
+    live.step(k, a);
     if (k === "start") say(`Found ${a}. ${verb}: do not unplug.`);
     else if (k === "verify") say(`Checking the package (${a})…`);
     else if (k === "loader") say("The FM-1 restarts into its update mode…");
@@ -237,11 +267,13 @@ async function write(p, verb) {
     else if (k === "done") { say(`Done: the FM-1 runs ${a}.`, "ok"); show({ model: "FM-1", text: a, version: parseInt(a.split("_")[1], 10) }); }
   };
   try {
-    const up = new Updater(await access(), (m) => console.log(m));
+    const up = DEMO !== null ? new Rehearsal() : new Updater(await access(), (m) => console.log(m));
     if (await up.resume(p.image, step, p.product)) { say(`That finished an update cut short: the FM-1 runs ${p.product}.`, "ok"); return; }
     await up.install(p.image, p.product, step);
   } catch (e) {
-    say((WORDS[e.code] || e.message) + (e.detail ? ` (${e.detail})` : ""), "err");
+    const msg = (WORDS[e.code] || e.message) + (e.detail ? ` (${e.detail})` : "");
+    say(msg, "err");
+    live.fail(msg);
     console.error(e);
   } finally { lock(false); }
 }

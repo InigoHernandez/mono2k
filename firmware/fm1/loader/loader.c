@@ -5,6 +5,8 @@
  * It is a USB-MIDI device "Felucca Update" (1209:0002) that answers the
  * M-UPGRADE update protocol as "ota-FM-1_900" (hosts look for "ota-"), and
  * writes the app area only (ldr_core.c). The UBOOT soft key works here too.
+ * MONO2K: the panel shows the write (src/upd_screen.c): the app area's sectors filling, waiting for an installer
+ * when there is none, and why it stopped. A panel that does not answer is left alone.
  * Single compilation unit. */
 #include <stdint.h>
 #define FELUCCA_LOADER 1
@@ -21,6 +23,12 @@
 #include "fm1_flash.h"
 #include "../src/libc.c"
 #include "../src/usb.c"
+#include "fm1_lcd_hw.h"
+#include "../src/lcd.c"
+#ifndef APP_VER
+#define APP_VER "UPDATE"
+#endif
+#include "../src/upd_screen.c"
 
 static uint32_t ldr_ms(void)   /* monotonic ms; survives the TIMER4 wrap (178.9 s) */
 {
@@ -33,7 +41,7 @@ static uint32_t ldr_ms(void)   /* monotonic ms; survives the TIMER4 wrap (178.9 
     return ms;
 }
 
-static void ldr_poll(void)                          /* USB at ~2 kHz, watchdog */
+static void ldr_poll(void)                          /* USB at ~2 kHz, watchdog, the screen's blink */
 {
     static uint32_t last;
     uint32_t now = fm1_ticks();
@@ -41,7 +49,32 @@ static void ldr_poll(void)                          /* USB at ~2 kHz, watchdog *
     if (now - last >= 500u * FM1_TICKS_PER_US) {
         last = now;
         usb_poll();
+        us_tick(ldr_ms());
     }
+}
+
+/* the panel, before USB (its set-up holds the CPU ~0.4 s): one command first, and if that times out nothing more
+ * (a full-screen fill on a silent SPI would wait out the watchdog) */
+static void ldr_screen(void)
+{
+    fm1_lcd_hw_init();
+    lcd_cmd(0x00);                                  /* NOP */
+    fm1_wdt_feed();
+    if (fm1_lcd_timeouts)
+        return;
+    lcd_init();
+    fm1_wdt_feed();
+    us.ok = fm1_lcd_timeouts == 0;
+    us_begin(APP_VER);
+    us_wait();
+}
+
+static void ldr_hex6(char *t, uint32_t v)
+{
+    uint32_t i;
+    for (i = 0; i < 6u; i++)
+        t[i] = "0123456789ABCDEF"[v >> (20u - 4u * i) & 15u];
+    t[6] = 0;
 }
 
 /* ---- ota.c hooks (the SysEx frame hooks are in usb.c) ---- */
@@ -74,7 +107,11 @@ static void ldr_record_clear(void)
     fm1_updata_parm_clear();                        /* CRC 0: the SPL ignores it on a warm reset */
 }
 static int ldr_flash_known(void) { return FL_JEDEC_OK(fl_jedec_ram()); }   /* as the app (platform.c) */
-static void ldr_progress(uint32_t done, uint32_t total) { (void)done; (void)total; ldr_poll(); }
+static void ldr_progress(uint32_t done, uint32_t total)
+{
+    us_write(done / 0x1000u, total / 0x1000u);
+    ldr_poll();
+}
 #include "ldr_core.c"
 
 extern uint32_t _bss_start[], _bss_end[];
@@ -83,6 +120,7 @@ void ldr_main(void)
 {
     fm1_wdt_arm(0x0D);                              /* ~8 s, fed by ldr_poll */
     fm1_time_init();
+    ldr_screen();
     usb_start();
     for (;;) {
         ldr_poll();
@@ -96,7 +134,23 @@ void ldr_main(void)
         if (usb.ota_req) {
             int rc;
             usb.ota_req = 0;
+            us_check();
             rc = ldr_session();
+            if (rc == 0) {                          /* MONO2K's isotype in the grid, a moment */
+                uint32_t t0 = ldr_ms();
+                us_done();
+                while (ldr_ms() - t0 < 900u)
+                    ldr_poll();
+            }
+            else if (rc == LDR_EFLASH) {            /* a moment to read it, then the old firmware */
+                char id[7];
+                uint32_t t0 = ldr_ms();
+                ldr_hex6(id, fl_jedec_ram());
+                us_stop("FLASH ??", "OLD FIRMWARE AGAIN", id);
+                while (ldr_ms() - t0 < 3000u)
+                    ldr_poll();
+            } else                                  /* the record stays: the installer can finish it */
+                us_stop("STOPPED", "PRESS INSTALL AGAIN", "STOPPED");
             if (rc == 0 || rc == LDR_EFLASH) {      /* done, or another flash chip: the old firmware again */
                 fm1_delay_ms(200);                  /* the "success" reply leaves */
                 usb_detach();

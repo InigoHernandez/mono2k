@@ -223,6 +223,8 @@ static const uint8_t *frame;
 static uint16_t be16(uint16_t c) { return (uint16_t)((c >> 8) | (c << 8)); }
 
 static uint32_t frame_ms;
+static uint8_t screen_all;                      /* the panel was drawn over (an update that stopped): all of it again */
+static void app_screen_lost(void) { screen_all = 1; }
 
 static void screen_frame(void)
 {
@@ -237,11 +239,13 @@ static void screen_frame(void)
         for (i = 0; i < 30u; i++)
             for (y = 0; y < ROWS; y++)
                 if (a[y * 30u + i] != b[y * 30u + i]) { if (lo == 30u) lo = i; hi = i; break; }
+        if (screen_all) { lo = 0; hi = 29u; }
         todo[s] = lo < 30u;
         sx0[s] = (uint8_t)lo;
         sx1[s] = (uint8_t)hi;
         pending += todo[s];
     }
+    screen_all = 0;
 }
 
 /* a nibble of the frame as its four pixels (ink and paper: pure black and white, the panel's most contrast), so a

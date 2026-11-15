@@ -695,6 +695,52 @@ details.gl-dealt[open] > :not(summary) { animation: gl-deal 240ms steps(1, end);
 .inst input[type="file"]::file-selector-button { margin-right: var(--s1); padding: 4px var(--s2); font: var(--label); text-transform: uppercase; letter-spacing: 0.1em; color: var(--paper); background: var(--ink); border: 1px solid var(--ink); border-radius: 0; cursor: pointer; }
 .inst .params summary { padding: var(--s1) 0; cursor: pointer; font: var(--label); text-transform: uppercase; letter-spacing: 0.1em; }
 
+/* the installer's screen while an update runs (installing.js): the page steps aside, the flash's sectors on the
+ * left, the whole update in one number on the right; it deals in as an accordion does, the number glitches each ten */
+.lv-open { overflow: hidden; }
+.lv [hidden] { display: none; }
+.lv { position: fixed; inset: 0; z-index: 50; display: grid; grid-template-rows: auto 1fr; overflow: auto; background: var(--paper); color: var(--ink); outline: 0; }
+.lv.in { animation: gl-deal 240ms steps(1, end); }
+.lv__top { display: flex; justify-content: space-between; gap: var(--s2); padding: var(--s2) var(--gut); border-bottom: 1px solid var(--ink); }
+.lv__clock { font-variant-numeric: tabular-nums; }
+.lv__body { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); align-content: center; align-items: center; column-gap: var(--s8); row-gap: var(--s3); padding: var(--s4) var(--gut) var(--s6); }
+.lv__map { display: grid; grid-template-columns: fit-content(100%); justify-content: center; min-width: 0; margin: 0; }
+.lv__grid { display: flex; gap: var(--s1); }
+.lv__addr { list-style: none; margin: 0; padding: 0; display: grid; grid-template-rows: repeat(16, 1fr); align-items: center; font: 10px / 1 var(--mono); }
+.lv__addr li { opacity: 0.35; }
+.lv__addr li:nth-child(4n + 1) { opacity: 1; }
+.lv__cv { display: block; image-rendering: pixelated; }
+.lv__legend { display: flex; flex-wrap: wrap; gap: var(--s1) var(--s3); margin-top: var(--s2); font: var(--label); text-transform: uppercase; letter-spacing: 0.1em; }
+.lv__legend span { display: inline-flex; align-items: center; gap: var(--s1); }
+.lv__legend canvas { width: 14px; height: 14px; image-rendering: pixelated; }
+.lv__pct { display: flex; align-items: flex-start; margin: 0; font: 700 clamp(88px, 10.5vw, 184px) / 0.86 var(--head); letter-spacing: -0.03em; }
+.lv__pct b { font-weight: inherit; font-variant-numeric: tabular-nums; }
+.lv__pct span { margin: 0.1em 0 0 0.06em; font-size: 0.28em; }
+.lv__stage { margin: var(--s2) 0 0; font: var(--title); text-transform: uppercase; letter-spacing: 0.04em; }
+.lv .gl { animation: gl-text 160ms steps(1, end); }
+.lv__rail { list-style: none; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--s1); max-width: 30em; margin: var(--s3) 0 0; padding: 0; }
+.lv__rail li { font: var(--label); text-transform: uppercase; letter-spacing: 0.1em; opacity: 0.4; }
+.lv__rail li.on, .lv__rail li.done { opacity: 1; }
+.lv__rail li span { display: block; font: 400 11px / 16px var(--head); }
+.lv__rail i { display: block; height: 8px; margin-bottom: 6px; border: 1px solid var(--ink); background: linear-gradient(to right, var(--ink) var(--p, 0%), transparent 0); }
+.lv__rail li.on i { background: linear-gradient(to right, var(--ink) var(--p, 0%), transparent 0), var(--d-sparse); image-rendering: pixelated; }
+.lv__rail li.bad i { border-style: dashed; background: var(--d-check); }
+.lv__say { max-width: 28em; margin: var(--s3) 0 0; font: var(--body); }
+.lv__stats { min-height: 18px; margin: var(--s1) 0 0; font: 12px / 18px var(--mono); font-variant-numeric: tabular-nums; opacity: 0.7; }
+.lv__acts { display: flex; flex-wrap: wrap; gap: var(--s2); margin: var(--s3) 0 0; }
+.lv__acts .bigbtn { margin-top: 0; }
+.lv__acts .lv__again:not([hidden]) + .lv__close { color: var(--ink); background: var(--paper); border: 1px solid var(--ink); }
+.lv.is-done .lv__legend { opacity: 0.35; }
+.lv.is-fail .lv__say { padding: var(--s1) var(--s2); font: 700 13px / 20px var(--mono); border: 1px dashed var(--ink); border-left-width: 6px; }
+@media (max-width: 860px) {
+  .lv__body { grid-template-columns: minmax(0, 1fr); align-content: start; align-items: start; padding-top: var(--s3); }
+  .lv__side { order: -1; }
+  .lv__pct { font-size: clamp(72px, 22vw, 128px); }
+  .lv__rail { margin-top: var(--s2); }
+  .lv__say { margin-top: var(--s2); }
+}
+@media (prefers-reduced-motion: reduce) { .lv.in, .lv .gl { animation: none; } }
+
 /* the patch editor: the bar, the tracks (the emulator's), the machine, then a card a page, a slider a knob */
 .ed { position: relative; z-index: 1; padding: var(--s6) var(--gut) var(--s12); }
 .ed__start { display: grid; justify-items: start; gap: var(--s2); }

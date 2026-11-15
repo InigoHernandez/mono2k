@@ -165,6 +165,7 @@ static const char *flash_unknown_text(void)
 
 static uint8_t recovery_active;
 #define OTA_IDENTITY (recovery_active ? "FM-1_000" : FELUCCA_ID)
+#include "upd_screen.c"                         /* MONO2K: the update's screen, the loader's too */
 #include "ota.c"
 static void recovery_poll(void);
 static uint32_t ota_now_ms(void) { return fm1_ms; }
@@ -188,16 +189,30 @@ static int ota_prog(uint32_t off, const void *p, uint32_t n)
     return fl_write(off, p, n);
 }
 static int ota_fread(uint32_t off, void *p, uint32_t n) { return st_read(off, p, n); }
+/* MONO2K: the update's screen (upd_screen.c), as the update loader goes on with it: the grid of the sectors it will
+ * write, the step under it; a stop in a box (the app area was not touched) */
+static void app_screen_lost(void);              /* the glue: the panel was drawn over, all of it again */
 static void ota_show(uint32_t step, int32_t code)
 {
     static const char *const STEP[] = {"", "PACKAGE", "CHECK HEAD", "LOADER", "CONFIRM", "RESTART"};
+    char n[4] = {0, '/', '5', 0}, e[16] = "FAILED ";
     if (recovery_active) return;
-    lcd_fill(0, 0, 240, 240, C_BLACK);
-    draw_text_box(0, 92, 240, &FONT_S, "UPDATE", C_WHITE, 1);
-    if (step < 9u)
-        draw_text_box(0, 124, 240, &FONT_S, STEP[step < 6u ? step : 0], C_WHITE, 1);
-    else
-        draw_text_box(0, 124, 240, &FONT_S, code == 1 ? "DRY RUN OK" : "FAILED", C_WHITE, 1);
+    us.ok = 1;
+    if (step == 1u)
+        us_begin("UPDATE");
+    if (step < 6u) {
+        n[0] = (char)('0' + step);
+        us_bottom(n, STEP[step]);
+    } else if (code == 1)
+        us_stop("DRY RUN OK", "NOTHING CHANGED", "DONE");
+    else {
+        uint32_t k = 7, v = (uint32_t)(code < 0 ? -code : code);
+        if (code < 0) e[k++] = '-';
+        if (v >= 10u) e[k++] = (char)('0' + v / 10u % 10u);
+        e[k++] = (char)('0' + v % 10u);
+        e[k] = 0;
+        us_stop(e, "NOTHING CHANGED", "FAILED");
+    }
 }
 static void ota_commit(const uint8_t *parm)
 {
@@ -379,8 +394,10 @@ static void platform_poll(void)
     ota_service();
     if (usb.ota_req) {
         usb.ota_req = 0;
-        if (flash_ok)
+        if (flash_ok) {
             ota_session();                      /* returns only if nothing was committed */
+            app_screen_lost();
+        }
     }
     if (usb.uboot_req) {
         fm1_audio_stop();

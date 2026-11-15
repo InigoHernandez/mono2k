@@ -81,6 +81,13 @@ the sizes: the image within the app slot (581 KB), `.data + .bss` within 96 KiB,
   reads from the host after each (the web installer gives up after 8 s without a request). `loader/loader.c` feeds the
   watchdog before each erase and page. The FL_SIM seam lets `host/fm1_flash_test.c` run the driver on a simulated
   chip.
+- The update's screen (1.9.3): `src/upd_screen.c`, in MONO2K's type, drawn through `src/lcd.c` alone. The app's
+  `ota_show` (`src/platform.c`) draws the grid of the app area's 143 sectors and the staging's step; the glue then
+  sends its whole frame again (`app_screen_lost`). The update loader (`loader/loader.c`) now sets up the panel itself,
+  after one command that must not time out (else it draws nothing), and shows the sectors as `ldr_core.c` reports
+  them (`ldr_progress`), a cursor blinking from `ldr_poll`, a box while it waits for an installer or after a stop, the
+  chip's id on `LDR_EFLASH` for 3 s, and MONO2K's isotype for 0.9 s once it is written. `build.py` gives the loader the
+  version (`APP_VER`). `host/upd_screen_draw.c` draws every state on a computer.
 
 ## Whose is what
 

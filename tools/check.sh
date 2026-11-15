@@ -9,7 +9,7 @@
 #  3. sanitizers: the self-test, the FM-1's store and link (host/m2k_link_test.c, with the browser's store for it and
 #     its store read back in the browser), the FM-1's flash driver on a simulated chip (host/fm1_flash_test.c: both
 #     flash parts, slow and overrunning ones, the store through it, and an update from 1.9.1's package to the
-#     installer's), every screen (and the text audit: on the tour's frames and a sweep of every
+#     installer's), the FM-1's update screen (host/upd_screen_draw.c: the app's and the update loader's), every screen (and the text audit: on the tour's frames and a sweep of every
 #     page, machine and knob value, no two texts touch and none is cut), every bank A track, every reference spec and
 #     the power test's loop under ASan + UBSan; any report fails the run
 #  3b. eight tracks: the host of eight's self-test, screens and text sweep under the sanitizers; its renders of bank A,
@@ -28,7 +28,7 @@ I="-Ifirmware/src -Ifirmware/gen"
 echo "== warnings"
 for cc in clang $(ls /opt/homebrew/bin/gcc-[0-9]* /usr/local/bin/gcc-[0-9]* 2>/dev/null) ${GCC:-}; do
     case "$($cc --version 2>/dev/null | head -1)" in *clang*) [ "$cc" = clang ] || continue ;; esac
-    for src in host/m2k_host.c host/m2k_ref.c host/m2k_link_test.c host/fm1_flash_test.c; do
+    for src in host/m2k_host.c host/m2k_ref.c host/m2k_link_test.c host/fm1_flash_test.c host/upd_screen_draw.c; do
         if ! out=$($cc -O2 $W $I -o "$B/$(basename "$src" .c)" "$src" -lm 2>&1); then
             echo "  $cc $src: DOES NOT BUILD"; printf "%s\n" "$out" | grep "error:" | head -5; FAIL=1; continue
         fi
@@ -63,17 +63,19 @@ fi
 
 echo "== sanitizers"
 SAN="-O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer"
-rm -f "$B/m2k_host_san" "$B/m2k_ref_san" "$B/m2k_link_san" "$B/fm1_flash_san"   # (a build that fails runs nothing old)
+rm -f "$B/m2k_host_san" "$B/m2k_ref_san" "$B/m2k_link_san" "$B/fm1_flash_san" "$B/upd_screen_san"   # (a build that fails runs nothing old)
 clang $SAN -w $I -o "$B/m2k_host_san" host/m2k_host.c -lm && clang $SAN -w $I -o "$B/m2k_ref_san" host/m2k_ref.c -lm &&
-    clang $SAN -w $I -o "$B/m2k_link_san" host/m2k_link_test.c && clang $SAN -w $I -o "$B/fm1_flash_san" host/fm1_flash_test.c ||
+    clang $SAN -w $I -o "$B/m2k_link_san" host/m2k_link_test.c && clang $SAN -w $I -o "$B/fm1_flash_san" host/fm1_flash_test.c &&
+    clang $SAN -w $I -o "$B/upd_screen_san" host/upd_screen_draw.c ||
     FAIL=1
 git show v1.9.1:web/firmware/mono2k.fwsc > "$B/old.fwsc" 2>/dev/null || rm -f "$B/old.fwsc"
-mkdir -p "$B/screens" "$B/pitch" "$B/ref" "$B/link"
+mkdir -p "$B/screens" "$B/pitch" "$B/ref" "$B/link" "$B/upd"
 {
     "$B/m2k_host_san" --selftest
     "$B/m2k_host_san" --web-store "$B/link/web16.bin" && "$B/m2k_link_san" "$B/link/web16.bin" "$B/link/fm1.bin" &&
         "$B/m2k_host_san" --fm1-store "$B/link/fm1.bin" || echo "LINK FAILED"
     if [ -f "$B/old.fwsc" ]; then "$B/fm1_flash_san" "$B/old.fwsc" web/firmware/mono2k.fwsc; else "$B/fm1_flash_san"; fi
+    "$B/upd_screen_san" "$B/upd" && echo "update screen drawn: $B/upd" || echo "UPDATE SCREEN FAILED"
 
     "$B/m2k_host_san" "$B/screens"
     "$B/m2k_host_san" --text-sweep

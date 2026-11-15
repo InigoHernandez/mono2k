@@ -29,6 +29,9 @@ WebAssembly, with sound).
   and on the UC25HQ80 (`0xB36014`) of units sold since autumn 2026. A newer unit on MONO2K 1.9.1 or older can't write
   its flash, so it takes 1.9.2 once through the chip's download mode (the Firmware Hub's rescue page). Any other chip
   is refused: MONO2K shows `FLASH ??` and its id at power-on, and keeps its saves in RAM.
+- **The update on the FM-1's screen** (1.9.3). While it is installed, the FM-1 shows its firmware's 143 sectors of
+  4 KB filling one by one, the percentage, and MONO2K's M at the end. Waiting for an installer (also after a power cut
+  in the middle of an update) it says "UPDATE MODE / OPEN THE INSTALLER"; cut short, "STOPPED / PRESS INSTALL AGAIN".
 
 ## Run it
 
