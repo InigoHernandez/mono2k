@@ -124,7 +124,9 @@ typedef struct {
 
 typedef union {
     struct { uint16_t trig[8], hollow[8]; uint8_t len[8], lead[8]; int8_t pos[8]; } home;
-    struct { char cls[12], style[12], model[10]; } syn;
+    struct { char cls[12], style[12], model[10];
+             uint8_t mk, fr, lift, saw, lv[3]; } syn;   /* its mark (0xFF none), the frame, the hop's lift in px;
+                                                         * SWAV-SAW playing: its teeth's levels instead */
     struct { uint8_t a, h, d, s, r, st; int32_t lv; } amp;
     struct { int16_t hp, lp, hp1, lp1; uint8_t hq, lq, fa, fd, fs, fr, fst; uint16_t fe; } filt;
     struct { uint8_t f, g, dt, snd, fb, wid; } efx;

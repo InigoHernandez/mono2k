@@ -7,7 +7,7 @@ window.M2K_KINDS = window.M2K_KINDS || {
 };
 window.M2K_CHANGES = [
   {
-    date: "2026-11-16", title: "MONO2K for the Move 0.6: POLY, chords on one track",
+    date: "2026-11-17", title: "MONO2K for the Move 0.6: POLY, and the machines' marks",
     items: [
       ["sequencer", "POLY plays chords on one track. On TRK, turn MODE to POLY: the track becomes a lead and the tracks after it its voices, as many as VOIC (knob 4) says, up to eight. T1 on four plays T1 to T4; the rest play on as always."],
       ["sound", "Every voice plays the lead's machine and its whole sound: every knob, its locks, its LFOs and its effects. The voices' own sounds wait unheard and come back when POLY is off."],
@@ -15,6 +15,7 @@ window.M2K_CHANGES = [
       ["sequencer", "Rec while playing, or Capture: a chord's lowest note goes on the lead's step and the others on its voices' steps. The lead's step decides the chord: its condition, chance, trig type, accent and locks."],
       ["screen", "TRK on POLY shows the voices and their notes; HOME brackets the voices to their lead, and a voice's track button shows the lead."],
       ["patterns", "Your patterns and sounds load and play exactly as before."],
+      ["screen", "SYN shows the machine's mark, the FM-1's 3D picture of it, beside its name: it sways in time with the music and hops on the track's hits, higher for a louder one. SWAV-SAW's three teeth rise and fall with its level while it plays."],
     ],
   },
   {
