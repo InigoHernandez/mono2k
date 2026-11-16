@@ -20,7 +20,7 @@ enum {
     K_LSPD, K_LDPT,                                                        /* the LFOs' speed and depth */
     K_DCAY, K_DAMP,                                                        /* the reverb's */
     K_PCT, K_GRES, K_LANE,                                                 /* GRIDS' */
-    K_MUTQ, K_MOTN,                                                        /* GLO > PLAY's, the screen's motion */
+    K_MUTQ, K_MOTN, K_REST,                                                /* GLO > PLAY's, the screen's motion */
     K_TLEN,                                                                /* a track's own length (SEQ held) */
     K_PROB,                                                                /* its chance (HOME 2: 16 steps, 100 % first) */
     K_SUS, K_FSUS, K_FREL,                                                 /* the ADSR's: the levels, the filter's release */
@@ -73,7 +73,7 @@ static const pi_t PI_GLOB[G_COUNT] = {
     PI_TRK("VOIC", "POLY VOICES", K_PVOI),
 };
 
-static const pi_t PI_SET[18] = {
+static const pi_t PI_SET[19] = {
     {"SCRN", "SCREEN", K_SCRN},
     {"PROJ", "PROJECT", K_PROJ},
     {"LOAD", "LOAD PROJECT", K_LOAD},
@@ -92,6 +92,7 @@ static const pi_t PI_SET[18] = {
     {"MUTE", "MUTES", K_MUTQ},         /* GLO > PLAY */
     {"MOTN", "MOTION", K_MOTN},        /* GLO > SET on the FM-1, PLAY with projects */
     {"PAGE", "HELP PAGE", K_NUM},      /* GLO > HELP */
+    {"REST", "REST FIRST", K_REST},    /* GLO > PLAY: the FM-1's CPU guard, the track that rests when one must */
 };
 
 typedef struct {
@@ -205,7 +206,7 @@ static const pi_t *pinfo(int t, int id)
 {
     if (id == 0xFF) return &PI_NONE;
     if (id >= 0xC0) { int s = id & 0x3F; return &PI_SET[s == 16 ? 1 : s == 17 ? 2 : s >= 18 && s <= 23 ? 7 + s - 18 : s >= S_MCH && s <= S_NOTO ? 3 + s - S_MCH
-                                            : s == S_NTIN ? 13 : s == S_THRU ? 14 : s == S_MUTQ ? 15 : s == S_MOTN ? 16 : s == 24 ? 17 : 0]; }
+                                            : s == S_NTIN ? 13 : s == S_THRU ? 14 : s == S_MUTQ ? 15 : s == S_MOTN ? 16 : s == 24 ? 17 : s == S_REST ? 18 : 0]; }
     if (id >= 0x80) return &PI_GLOB[id & 0x7F];
     if (id < 8) return &MI[PAT(cur_pat)->machine[t]].syn[id];
     if (id < P_LFO) return &PI_COMMON[id - 8];
@@ -230,6 +231,7 @@ static int kind_choices(int k)
     case K_FR24: return 24;
     case K_SIDW: return 5;
     case K_ONOFF: case K_MSRC: case K_THRU: case K_GRES: case K_MUTQ: case K_MOTN: return 2;
+    case K_REST: return M2K_TRACKS6 + 2;   /* AUTO, T1..T6, NONE */
     case K_SIDM: case K_ALGO: case K_ASPD: case K_ARNG: case K_SYIN: case K_NTIN: case K_LANE: return 4;
     case K_SCRN: return 2;
     case K_MCH: return 16;
@@ -529,6 +531,11 @@ static void fmt(const pi_t *pi, int t, int v, char *out, const char **unit)
                    s_cpy(out, N[c]); *unit = U[c]; break; }
     case K_MUTQ: s_cpy(out, c ? "NOW" : "BAR"); *unit = c ? "AT ONCE" : "NEXT BAR"; break;
     case K_MOTN: s_cpy(out, c ? "GLTCH" : "CALM"); *unit = c ? "GLITCHES" : "CLEAN CUTS"; break;
+    case K_REST:                       /* (the FM-1's CPU guard; elsewhere none runs) */
+        if (!c) { s_cpy(out, "AUTO"); *unit = "THE QUIETEST"; }
+        else if (c > M2K_TRACKS6) { s_cpy(out, "NONE"); *unit = "NO TRACK RESTS"; }
+        else { out[0] = 'T'; out[1] = (char)('0' + c); out[2] = 0; *unit = "RESTS FIRST"; }
+        break;
     case K_SSEL: { int i = snd_sel_get(); out[0] = 'S'; s_num3(out + 1, i + 1);
                    *unit = snd[i].name[0] ? snd[i].name : "INIT"; break; }
     case K_SLOAD: s_cpy(out, "TURN"); *unit = "TO LOAD"; break;
@@ -581,7 +588,7 @@ static int knob_param(int page, int sub, int k)
     case PG_ARP:                    /* (on POLY: KNOB 2 its voices, RNG none) */
         if (sub == 0 && pv.nv[view_trk()] > 1 && (k == 1 || k == 2)) return k == 1 ? GL(G_POLY1 + view_trk()) : NONE;
         return sub == 0 ? P_AMOD + k : sub == 1 ? GL(G_GRX + k) : k < 3 ? GL(G_GRBD + k) : GL(G_LANE1 + view_trk());
-    case PG_GLO: return sub == GS_HELP ? (k == 0 ? SETTING(24) : NONE) : sub == GS_PLAY ? (k == 0 ? SETTING(S_MUTQ) : k == 1 && M2K_PROJECTS > 1 ? SETTING(S_MOTN) : NONE)
+    case PG_GLO: return sub == GS_HELP ? (k == 0 ? SETTING(24) : NONE) : sub == GS_PLAY ? (k == 0 ? SETTING(S_MUTQ) : k == 1 ? SETTING(S_REST) : k == 2 && M2K_PROJECTS > 1 ? SETTING(S_MOTN) : NONE)
                         : sub == GS_IN ? (k == 0 ? SETTING(S_NTIN) : k == 1 ? SETTING(S_THRU) : NONE)
                         : sub == GS_TIME ? GL(G_TMPO + k) : sub == GS_BUS ? BUS_K[k] : sub == GS_MIDI ? SETTING(S_MCH + k)
                         : k == 0 ? SETTING(S_SCREEN) : M2K_PROJECTS < 2 ? (k == 1 ? SETTING(22) : k == 2 ? SETTING(23) : SETTING(S_MOTN))
@@ -729,8 +736,9 @@ static void keys_home(void)
 static int track_root(const m2k_pattern_t *p, int t) { int r = pat_root(p, t); return r < 0 ? ui.note[t] : r; }
 
 /* the platform's meter (m2k_cpu, the FM-1's every half second): GLO > PLAY shows it; a short more than the last, or
- * a track the guard faded (m2k_shed), asks for CPU FULL (m2k_frame: at most every 5 s) */
-static struct { int16_t c1, c2; uint32_t shorts, short_t, full_t; uint8_t on, full, shed; int8_t faded; } cpu;
+ * a step of the guard (m2k_guard), asks for CPU FULL (m2k_frame: at most every 5 s, a rest after a tail's cut at once);
+ * the track whose tail was cut last and when, for GLO > PLAY's cells */
+static struct { int16_t c1, c2; uint32_t shorts, short_t, full_t, cut_t; uint8_t on, full, shed, what, said; int8_t faded, cut; } cpu;
 void m2k_cpu(int core1_pct, int core2_pct, int shorts)
 {
     cpu.c1 = (int16_t)CLAMP(core1_pct, 0, 999);
@@ -740,64 +748,203 @@ void m2k_cpu(int core1_pct, int core2_pct, int shorts)
     cpu.on = 1;
 }
 
-/* the platform's CPU guard (m2k.h; the FM-1's), a call a render. In danger, the track sounding quietest for what it
- * costs fades out over a block and rests, its trigs silent (the track in view the last to go); with no danger and room
- * for the last to rest (the load over the last ~0.2 s and what it cost under 90 %: the loop's own work, the screen's,
- * needs the rest), it plays again from its next trig; the track in view never rests. Then nothing for 8 renders after
- * a fade (the load's fall seen first), 32 after a return. CPU FULL says which, and the dearest track */
-static struct { uint8_t wait, n; int8_t rest[M2K_TRACKS]; int32_t slow; } grd;   /* resting, in the order they went;
-                                                                                   * the load followed, Q8 */
+/* the platform's CPU guard (m2k.h; the FM-1's), a call a render. 1.11 (the owner's, after playing 1.10: "a bit intense
+ * cutting the track ... give more room and also give the option to which one and/or be smarter"; 1.7's rested a track
+ * on any short over 70 %, the screen's or a flash write's too, and its 8 renders' wait was shorter than its own load's
+ * average took to show the saving, so a second track went for the first's sake). The load judged is the render's less
+ * what the last steps will still take off its average (credit: the average follows ~8 renders). Danger:
+ * - over: the render alone over its real time, the ring empty within GRD_SEC / 8 at that rate;
+ * - tight: over 95 % with a third left (the render and the loop's own work, the screen's, over it): the screen gives way
+ *   first, its frames GRD_GAP ms apart (m2k_guard_gap), the sound only if it stays tight GRD_SEC / 10 after;
+ *   either lets a tail go; a track rests only when the load followed (~64 renders) is over its real time too;
+ * - a short (the interrupt found the ring empty): the render's when over 90 %; over 80 % when it is the second within a
+ *   second with the ring half full between them (the screen gave way at the first), or the ring has not refilled a
+ *   third of a second after the first (nor after a step): a tail or a track may go; else the screen's or a flash
+ *   write's: the screen gives way, the sound as it is.
+ * In danger one step, then GRD_SETTLE renders (its fade, the split's turn), the least heard first: a tail (a note
+ * ended that only rings: its release, its decay past its gate, its delay's echoes alone) faded out, the quietest for
+ * what it saves, its next note as ever; a voice of a poly chord (guard_voice_steal: POLY's); then a track rests, as
+ * REST says (GLO > PLAY, S_REST): AUTO the quietest for what it costs (its level held ~0.4 s and followed ~1.5 s, so a
+ * hit a beat counts as loud and a rare one little), never the track in view; T1..T6 that one first, then AUTO; NONE
+ * none (the sound may run short: DROP counts it). A rested track plays again from its next trig once for a second
+ * nothing was in danger and the load with it back stayed under 85 % (the ring half full), the last to go first (one
+ * back only to rest again within 4 s, as bars heavy and light take turns: the next waits twice as long, up to 8 s); the
+ * track in view never kept resting (but the one REST names) */
+#define GRD_SEC 345                    /* renders a second (128 frames) */
+#define GRD_SETTLE 4                   /* renders after a step before the next */
+#define GRD_GAP 200                    /* ms between the screen's frames while it gives way */
+#define GRD_FALL 138                   /* AUTO's level held: falling over ~0.4 s (renders) */
+enum { GR_TAIL = 1, GR_VOICE, GR_REST };
+static struct {
+    uint32_t tick, shorts, ev_t, ep_t, wide_t, wide_from, calm_t, back_t;   /* renders: now; the interrupt's count; the
+                                                                            * last short, the first of these shorts; the
+                                                                            * screen given way until, since; the last in
+                                                                            * danger; the last back */
+    int32_t credit, slow;              /* Q8 %: the last steps' saving its average has yet to show; the load followed */
+    int32_t hold[M2K_TRACKS], lv[M2K_TRACKS];   /* each track's level, held (GRD_FALL), then followed ~1.5 s: AUTO's */
+    uint16_t settle, calm;             /* renders: before the next step; with nothing in danger before one comes back */
+    uint8_t n, ep;                     /* resting; shorts since the ring was last half full */
+    int8_t rest[M2K_TRACKS];           /* resting, in the order they went */
+} grd;
 
 static char *s_trk(char *d, int t) { d[0] = 'T'; d[1] = (char)('1' + t); d[2] = 0; return d + 2; }
 
-/* a track's cost as a share of real time, % (the FM-1's measure; elsewhere the estimate against the yardstick, 1570
- * Mac instructions a sample) */
-static int cost_pct(int32_t c)
+/* REST's choice: 0 AUTO, 1..6 that track first, 7 NONE */
+#define REST_NONE (M2K_TRACKS6 + 1)
+static int rest_choice(void) { return (store_.set[S_REST] * (M2K_TRACKS6 + 2)) >> 7; }
+
+/* a track's cost as a share of real time, Q8 % (the FM-1's measure; elsewhere the estimate against the yardstick,
+ * 1570 Mac instructions a sample) */
+static int32_t cost_q8(int32_t c)
 {
     if (m2k_clock && m2k_clock_per_ms) {
         uint32_t tpb = m2k_clock_per_ms * 160u / 441u;      /* ticks a block of real time (16 samples) */
-        return (int)((uint32_t)(c >> 4) * 100u / (tpb ? tpb : 1u));
+        return (int32_t)((uint32_t)(c >> 4) * 25600u / (tpb ? tpb : 1u));   /* (2^16 ticks a block at most: a word) */
     }
-    return (int)(c * 100 / 1570);
+    return c * 25600 / 1570;
 }
 
-static void grd_back(int t)
+/* the share of real time that comes off the render with track t faded (or back), Q8 %: half where the second core
+ * shares the tracks */
+static int32_t cores_q8(int32_t c) { return m2k_par_begin ? c / 2 : c; }
+
+/* what fading track t takes off the render: its voice and chain's share of what it costs (its delay rings on), or
+ * (DLY) its delay's, the line's echoes alone */
+static int32_t grd_saving(int t, int dly)
 {
-    trk[t].held = 0;
-    int j = 0;
-    for (int i = 0; i < grd.n; i++) if (grd.rest[i] != t) grd.rest[j++] = grd.rest[i];
-    grd.n = (uint8_t)j;
+    const trk_t *k = &trk[t];
+    const int32_t em = k->sounding ? k->ccost : C_IDLE, ed = k->dsleep ? 0 : k->dmode ? C_DLY2 : C_DLY;
+    const int32_t c = cost_q8(trk_cost(t));                         /* (2^16 at most, by 2^11: a word) */
+    return cores_q8(c * (dly ? ed : em) / (em + ed));
 }
 
-int m2k_guard(int load_pct, int danger)
+/* the tail to cut, the quietest for what it saves (its level now), the track in view only when no other has one;
+ * *dly: its delay's echoes alone */
+static int grd_tail(int *dly)
 {
-    grd.slow += ((CLAMP(load_pct, 0, 999) << 8) - grd.slow) / 64;   /* (~64 renders) */
-    if (trk[ui.trk].held) grd_back(ui.trk);
-    if (grd.wait) { grd.wait--; return -1; }
-    if (!danger) {
-        if (grd.n) {
-            const int t = grd.rest[grd.n - 1];
-            if ((grd.slow >> 8) + cost_pct(trk[t].park_cost) < 90) { grd_back(t); grd.wait = 32; }
-        }
-        return -1;
-    }
-    grd.wait = 8;
     int best = -1;
     uint32_t bs = 0;
     for (int pass = 0; pass < 2 && best < 0; pass++)
         for (int t = 0; t < M2K_TRACKS; t++) {
             const trk_t *k = &trk[t];
-            if (!k->sounding || k->held || (t == ui.trk) != pass) continue;
-            uint32_t v = ((uint32_t)CLAMP(k->lvl, 0, 65535) << 12) / ((uint32_t)trk_cost(t) + 1u);   /* (2^28 at most) */
-            if (best < 0 || v < bs) { best = t; bs = v; }
+            if ((t == ui.trk) != pass || k->held || k->park || k->dcut) continue;
+            int d;
+            uint32_t lv;
+            if (k->sounding && (k->astage == 4 || (k->astage == 3 && !k->gate))) {
+                d = 0;
+                lv = ((uint32_t)CLAMP(k->peak, 0, T_CLIP) * tq_u16(T_VOL, P8(k, P_LEVL))) >> 15;
+            } else if (!k->sounding && !k->astage && !k->dsleep && bus.dub_t != t + 1) {
+                d = 1;
+                lv = (uint32_t)CLAMP(mon.dly[t], 0, 131071) >> 1;
+            } else continue;
+            const int32_t sv = grd_saving(t, d);
+            if (sv <= 0) continue;
+            uint32_t v = (lv << 12) / (uint32_t)sv;                        /* (2^29 at most) */
+            if (best < 0 || v < bs) { best = t; bs = v; *dly = d; }
         }
-    if (best >= 0) {
-        trk_park(best, trk_cost(best));
-        grd.rest[grd.n++] = (int8_t)best;
-        cpu.faded = (int8_t)best;
-        cpu.shed = 1;
+    return best;
+}
+
+/* POLY's hook (a lead track borrowing the tracks after it as voices): the oldest voice of a poly chord faded, its
+ * track returned, before a whole track rests. No chords here yet: none */
+static int guard_voice_steal(void) { return -1; }
+
+/* the track to rest: REST's first (unless it rests), else the quietest for what it costs, never the track in view */
+static int grd_rest(int rs)
+{
+    if (rs >= 1 && rs <= M2K_TRACKS6 && rs <= M2K_TRACKS && !trk[rs - 1].held) return rs - 1;
+    int best = -1;
+    uint32_t bs = 0;
+    for (int t = 0; t < M2K_TRACKS; t++) {
+        const trk_t *k = &trk[t];
+        if (t == ui.trk || !k->sounding || k->held) continue;
+        const int32_t sv = grd_saving(t, 0);
+        uint32_t v = ((uint32_t)CLAMP(grd.lv[t] >> 8, 0, 65535) << 12) / (uint32_t)(sv > 0 ? sv + 1 : 1);   /* (2^28) */
+        if (best < 0 || v < bs) { best = t; bs = v; }
     }
     return best;
+}
+
+static void grd_back(int t)
+{
+    trk[t].held = 0;
+    grd.back_t = grd.tick;
+    grd.credit -= cores_q8(cost_q8(trk[t].park_cost));                /* (its cost to come) */
+    int j = 0;
+    for (int i = 0; i < grd.n; i++) if (grd.rest[i] != t) grd.rest[j++] = grd.rest[i];
+    grd.n = (uint8_t)j;
+}
+
+static void grd_wide(uint32_t now)
+{
+    if ((int32_t)(grd.wide_t - now) <= 0) grd.wide_from = now;
+    grd.wide_t = now + 2 * GRD_SEC;
+}
+
+int m2k_guard_gap(void) { return (int32_t)(grd.wide_t - grd.tick) > 0 ? GRD_GAP : 0; }
+
+int m2k_guard(int load_pct, int ahead, int ring, int shorts)
+{
+    const uint32_t now = ++grd.tick;
+    const int rs = rest_choice();
+    grd.credit -= grd.credit / 8;                                     /* (the average catching up) */
+    const int eff = CLAMP(load_pct, 0, 999) - grd.credit / 256;
+    grd.slow += ((eff << 8) - grd.slow) / 64;                         /* (~64 renders) */
+    for (int t = 0; t < M2K_TRACKS; t++) {
+        const int32_t h = CLAMP(trk[t].lvl, 0, 65535) << 8;
+        grd.hold[t] = h > grd.hold[t] ? h : grd.hold[t] - grd.hold[t] / GRD_FALL;
+        grd.lv[t] += (grd.hold[t] - grd.lv[t]) / 512;                  /* (~1.5 s) */
+    }
+    if (trk[ui.trk].held && rs != ui.trk + 1) grd_back(ui.trk);
+    int sound = 0;                     /* 1: a tail may go; 2: a track may rest too */
+    if (ahead * 2 >= ring) grd.ep = 0;                                 /* the ring half full again: shorts over */
+    if ((uint32_t)shorts != grd.shorts) {                              /* a short: the render's, or the screen's */
+        if (!grd.ep) {                                                 /* (the first since the ring was half full) */
+            if (eff > 90 || (eff > 80 && grd.ev_t && now - grd.ev_t < GRD_SEC)) sound = 2;
+            grd.ep = 1;
+            grd.ep_t = now;
+        } else if (eff > 90 || (eff > 80 && now - grd.ep_t >= GRD_SEC / 3)) sound = 2;   /* (the ring not refilling) */
+        grd.ev_t = now;
+        grd_wide(now);
+    }
+    grd.shorts = (uint32_t)shorts;
+    /* over: the ring empty within GRD_SEC / 8 at this load; tight: the loop's own work on top */
+    const int over = eff > 100 && ahead * 100 < (eff - 100) * (GRD_SEC / 8), tight = ahead * 3 <= ring && eff > 95;
+    if (tight || over) grd_wide(now);
+    if (over) sound = 2;
+    else if (tight && now - grd.wide_from >= GRD_SEC / 10 && !sound) sound = grd.slow >= (100 << 8) ? 2 : 1;
+    if (sound || tight) grd.calm_t = now;
+    if (grd.settle) { grd.settle--; return -1; }
+    if (!sound) {                                                      /* room: the last to rest, back */
+        if (grd.n) {
+            const int t = grd.rest[grd.n - 1];
+            if (grd.slow + cores_q8(cost_q8(trk[t].park_cost)) >= (85 << 8)) grd.calm_t = now;   /* (no room for it yet) */
+            if (rs == REST_NONE || (now - grd.calm_t >= (grd.calm ? grd.calm : GRD_SEC) && ahead * 2 >= ring)) {
+                grd_back(t);
+                grd.settle = GRD_SETTLE;
+            }
+        } else if (now - grd.calm_t >= 10 * GRD_SEC) grd.calm = 0;    /* (calm a while: a second again) */
+        return -1;
+    }
+    int dly = 0, what = GR_TAIL, t = grd_tail(&dly);
+    if (t < 0 && (t = guard_voice_steal()) >= 0) what = GR_VOICE;
+    if (t < 0 && sound > 1 && rs != REST_NONE && (t = grd_rest(rs)) >= 0) what = GR_REST;
+    if (t < 0) return -1;
+    grd.credit += grd_saving(t, dly);
+    if (dly) trk[t].dcut = PARK_N + 1;
+    else trk_park(t, trk_cost(t), what == GR_REST);
+    if (what == GR_REST) {
+        grd.rest[grd.n++] = (int8_t)t;
+        if (grd.back_t && now - grd.back_t < 4 * GRD_SEC) grd.calm = (uint16_t)CLAMP(2 * (grd.calm ? grd.calm : GRD_SEC), 0, 8 * GRD_SEC);
+    }
+    else { cpu.cut = (int8_t)t; cpu.cut_t = ui.now | 1u; }
+    grd.settle = GRD_SETTLE;
+    grd.ev_t = 0;                                                      /* (a short next: the ring refilling) */
+    grd.ep_t = now;
+    cpu.faded = (int8_t)t;
+    cpu.what = (uint8_t)what;
+    cpu.shed = 1;
+    return t;
 }
 
 static void ui_init(void)
@@ -3019,7 +3166,7 @@ static int icon_of(const pi_t *pi)
     case K_FOCT: case K_FWID: return IC_FILT;
     case K_LWAV: case K_DWV4: case K_DWV5: case K_SIDW: return IC_WAVE;
     case K_ALGO: case K_VOIC: case K_VOF1: case K_VOF2: case K_CONS: case K_TRK: case K_DEST: case K_LTRG: case K_AMOD:
-    case K_SCRN: case K_ONOFF: case K_SYIN: case K_NTIN: case K_THRU: case K_MUTQ: case K_MOTN: case K_SCAT: case K_MODT:
+    case K_SCRN: case K_ONOFF: case K_SYIN: case K_NTIN: case K_THRU: case K_MUTQ: case K_MOTN: case K_REST: case K_SCAT: case K_MODT:
     case K_WBNK: case K_SIDM: case K_MSRC: case K_GRES: case K_LANE: case K_PROJ: case K_SSEL: case K_LOAD: case K_SLOAD:
     case K_SSAVE: case K_WIPE: case K_DEMO:
         return IC_BOX;
@@ -4250,6 +4397,7 @@ static void play_picture(int busy)
          * alone where nothing measures: the browser, the host); REST while the CPU guard keeps it silent */
         int lc = !heard, lx = x + 28, ly = y + 16, ld = track_load(i);
         if (trk[i].held) { tx_b(&F_S, lx, ly, "REST", lc); continue; }
+        if (cpu.cut == i && cpu.cut_t && ui.now - cpu.cut_t < 1500) { tx_b(&F_S, lx, ly, "CUT", lc); continue; }   /* (a tail) */
         if (pv.lead[i] != i) { char ld[4]; s_trk(ld, pv.lead[i]); tx_b(&F_S, lx, ly, ld, lc); continue; }   /* (POLY: its lead's) */
         for (int j = 0; j < 40; j += 2) px(lx + j, ly + 1, lc);
         if (ld > 0) rect(lx, ly, (ld > 50 ? 50 : ld) * 40 / 50, 2, lc);
@@ -5026,18 +5174,22 @@ const uint8_t *m2k_frame(uint32_t ms)
     ui.now = ms;
     if (pv.lead[ui.trk] != ui.trk) track_to(pv.lead[ui.trk]);   /* (a pattern made the track in view a POLY voice) */
     if (sq.full) { sq.full = 0; toast("PATTERNS FULL", "THE NEXT DID NOT OPEN"); }
-    if (cpu.full || cpu.shed) {         /* the sound ran short, or a track faded so it would not: never a mystery, never
-                                         * a nag; the dearest track named, the one to lighten */
+    if (cpu.full || cpu.shed) {         /* the sound ran short, or the guard took a step so it would not: what it did,
+                                         * never a mystery, never a nag (a rest after a tail's cut said at once); a rest
+                                         * names the dearest track, the one to lighten */
         if (cpu.full) cpu.short_t = ms | 1u;
-        if (!cpu.full_t || ms - cpu.full_t >= 5000) {
+        const int rest = cpu.shed && cpu.what == GR_REST;
+        if (!cpu.full_t || ms - cpu.full_t >= 5000 || (rest && cpu.said != GR_REST)) {
             char o[24], *e = o;
             const int d = trk_dearest();
-            if (cpu.shed) {
-                e = s_cpy(s_cpy(s_trk(e, cpu.faded), " FADED, "), d == cpu.faded ? "THE" : "");
+            if (rest) {
+                e = s_cpy(s_cpy(s_trk(e, cpu.faded), " RESTS, "), d == cpu.faded ? "THE" : "");
                 if (d != cpu.faded) e = s_trk(e, d);
-            } else e = s_trk(s_cpy(e, "DROPPED, "), d);
-            s_cpy(e, " HEAVIEST");
+                s_cpy(e, " HEAVIEST");
+            } else if (cpu.shed) s_cpy(s_trk(e, cpu.faded), cpu.what == GR_VOICE ? " VOICE CUT" : " TAIL CUT");
+            else s_cpy(s_trk(s_cpy(e, "DROPPED, "), d), " HEAVIEST");
             cpu.full_t = ms | 1u;
+            cpu.said = cpu.shed ? cpu.what : 0;
             toast("CPU FULL", o);
         }
         cpu.full = cpu.shed = 0;

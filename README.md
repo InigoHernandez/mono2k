@@ -41,6 +41,9 @@ WebAssembly, with sound).
   the Move's pads play chords (a free voice first, past VOIC the oldest); recorded, a chord's lowest note goes on the
   lead's step and the rest on its voices', and the lead's step decides how the chord plays. A pattern with POLY packs
   as format 24 (25 eight wide); every other one as before, byte for byte.
+- **A calmer CPU guard** (1.11). When the FM-1 is full it gives way a step at a time, the least heard first: the
+  screen's frames further apart, a ringing tail faded, then a track rests; a drop it did not cause (a flash write)
+  moves only the screen. GLO > PLAY's REST picks the track: AUTO, T1–T6 or NONE (FM-1 only).
 
 ## Run it
 

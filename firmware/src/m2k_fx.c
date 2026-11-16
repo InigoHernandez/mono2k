@@ -119,6 +119,17 @@ static void delay_run(int ti, const dl_par_t *p, int sent, uint32_t sps, int dub
         t->dhr[0] = t->dhr[1] = t->dlr[0] = t->dlr[1] = 0;
         t->dquiet = DL_LEN;
     }
+    if (t->dcut == 1 && !dio) {        /* the CPU guard's cut faded out (m2k_guard): the line wiped, asleep */
+        m_set(t->dl, 0x7F, DL_LEN);
+        t->dacc[0] = t->dacc[1] = t->dn = 0;
+        t->dhp[0] = t->dhp[1] = t->dlp[0] = t->dlp[1] = t->dprev[0] = t->dprev[1] = 0;
+        t->dhr[0] = t->dhr[1] = t->dlr[0] = t->dlr[1] = 0;
+        t->dquiet = DL_LEN;
+        t->dcut = 0;
+        t->dsleep = 1;
+        mon.dly[ti] = 0;
+        return;
+    }
     uint32_t n = dual ? DL_LEN / 2 : DL_LEN, mask = n - 1;
     /* nothing sent, every entry of the line written silent since, the filters settled: nothing to hear, nothing to
      * work out (most tracks, most of the time; the FM-1's time) */
@@ -136,6 +147,7 @@ static void delay_run(int ti, const dl_par_t *p, int sent, uint32_t sps, int dub
             mon.dly[ti] = 0;
             if (dio && !dub_on()) dub_end();
             t->dsleep = 1;
+            t->dcut = 0;
             return;
         }
     }
@@ -157,7 +169,14 @@ static void delay_run(int ti, const dl_par_t *p, int sent, uint32_t sps, int dub
     int dbas = dio ? DUB_BAS : p->dbas;
     int32_t ahp = T_DLY_HP[dbas], alp = T_DLY_LP[CLAMP(dbas + (dio ? DUB_WID : p->dwid), 0, 127)];
     int pan = dio ? DUB_PAN : p->pan;
-    int32_t gl = T_PAN[pan], gr = T_PAN[127 - pan], lev = T_VOL[dio ? DUB_LEV : p->levl];
+    int32_t gl = T_PAN[pan], gr = T_PAN[127 - pan], lev = T_VOL[dio ? DUB_LEV : p->levl], dlev = 0;
+    if (t->dcut > 1 && !dio) {         /* the guard's cut (a tail): the echoes straight down over PARK_N blocks, a line
+                                        * across each (2^15 by 8 at most) */
+        const int32_t l0 = lev * (t->dcut - 1) / PARK_N, l1 = lev * (t->dcut - 2) / PARK_N;
+        lev = l0;
+        dlev = (l1 - l0) / (M2K_SUB / 2);
+        t->dcut--;
+    }
     uint8_t *b = t->dl;
     int32_t pk = 0;
     for (int i = 0; i < M2K_SUB; i += 2) {
@@ -205,6 +224,7 @@ static void delay_run(int ti, const dl_par_t *p, int sent, uint32_t sps, int dub
         }
         l = (l * lev) >> 15;
         r = (r * lev) >> 15;
+        lev += dlev;
         L[i] += (t->dprev[0] + l) >> 1;
         R[i] += (t->dprev[1] + r) >> 1;
         L[i + 1] += l;

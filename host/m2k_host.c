@@ -43,7 +43,7 @@ typedef struct { int ms; char kind; int a, b; const char *shot; } ev_t;
 
 /* the tour: kind b button (a, b = down), e encoder (a, delta), k key (a, down), m MIDI in (a from, b status), s
  * screenshot, c the platform's meter (m2k_cpu: a the first core's %, b the second's in its low 12 bits, the shorts
- * over them) */
+ * over them), g the FM-1's CPU guard called b times at a % with the ring empty (m2k_guard, as a render's) */
 static const ev_t TOUR[] = {
     {1200, 's', 0, 0, "00_boot"},             /* (the splash's waterfall) */
     {2520, 's', 0, 0, "01_home_stopped"},     /* (the splash 2.1 s, its wipe into HOME 0.4 s) */
@@ -176,7 +176,7 @@ static const ev_t LENGTHS_TOUR[] = {
 
 /* HOME's second page on B01, the lengths' scene with chances (T2 50 %, T4 25 %, T6 75 %; T5 at 2x): HOME 1 (34),
  * HOME again: HOME 2 on T2 (35), PROB turned (35b); GLO > PLAY with the FM-1's meter (36), then the sound short: CPU
- * FULL (37) */
+ * FULL (37); then the guard over it: a track rests, CPU FULL says which (37b) */
 static const ev_t HOME2_TOUR[] = {
     {2600, 'b', B_PLAY, 1, 0}, {2620, 'b', B_PLAY, 0, 0},
     {4300, 's', 0, 0, "34_home1_prob"},
@@ -189,7 +189,8 @@ static const ev_t HOME2_TOUR[] = {
     {9800, 'c', 58, 41, 0}, {10300, 'c', 61, 44, 0}, {10500, 's', 0, 0, "36_glo_meter"},
     {10800, 'c', 97, 52, 0}, {11300, 'c', 102, 55, 0}, {11300, 'c', 102, 55 | 3 << 12, 0},
     {11600, 's', 0, 0, "37_cpu_full"},
-    {11700, 'x', 0, 0, 0},
+    {16500, 'c', 99, 70 | 3 << 12, 0}, {16600, 'g', 130, 6, 0}, {16900, 's', 0, 0, "37b_cpu_rest"},
+    {17000, 'x', 0, 0, 0},
 };
 
 /* the workflow's screens (the manual's): GRID on HOME with T4's notes (38), a step held: its card (39), an LFO linked:
@@ -584,6 +585,7 @@ static void run_events(const ev_t *E, const char *out)
             if (e->kind == 'k') m2k_key(e->a, e->b);
             if (e->kind == 'm') m2k_midi_from(e->a, e->b, 0, 0);
             if (e->kind == 'c') m2k_cpu(e->a, e->b & 0xFFF, e->b >> 12);
+            if (e->kind == 'g') for (int i = 0; i < e->b; i++) m2k_guard(e->a, 0, 6, 0);
             if (e->kind == 's') {
                 snprintf(path, sizeof path, "%s/%s.pbm", out, e->shot);
                 pbm_write(path, m2k_frame((uint32_t)now));
@@ -6676,83 +6678,155 @@ static int selftest(void)
               "ACCENT: an accent on a sounding note ramps in across a block (no step), as loud; none, nothing moves");
     }
     {
-        /* 1.7, the FM-1's CPU guard (m2k_guard, its glue's call a render; never elsewhere, so the renders above are the
-         * same): in danger the track sounding quietest for what it costs fades out and rests, its trigs silent, the
-         * track in view the last to go and never kept resting, nothing faded for 8 calls after; with room for the last
-         * to rest (the load and its cost under 85 %) it plays again from its next trig. The fade a straight ramp over
-         * PARK_N blocks (no step: a held sine's own sample step at most 1.5 x; a cut at its crest ~27 x). CPU FULL names
-         * the track faded and the dearest, once in 5 s */
+        /* 1.11, the FM-1's CPU guard (m2k_guard, its glue's call a render; never elsewhere, so the renders above are the
+         * same; host/m2k_guard_bench.c runs it against load traces): a step at a time, the least heard first. Over (the
+         * render over its real time, the ring soon empty): a tail first (a note let go, ringing), faded, not resting, its
+         * next note as ever, even one that comes during its fade; then (no tail) a track rests, the quietest for what it
+         * costs, never the track in view, as REST says (T2 first; NONE none); GRD_SETTLE renders between. A short at 75 %
+         * is the screen's: nothing cut, the screen gives way. Back once a second's calm left room, the last first; the
+         * track in view at once. The fades straight ramps (no step: a held sine's own sample step at most 1.5 x), the
+         * delay's echoes too (a delay-only tail: then asleep). CPU FULL says what it did */
         m2k_pattern_t *q = eng_pat(43);
-        for (int t = 0; t < 2; t++) {
+        for (int t = 0; t < 3; t++) {
             kit_default(q, t, M_GSIN);
             q->kit[t][P_HOLD] = 127;
             q->kit[t][P_DEC] = 127;
-            q->kit[t][P_LEVL] = t ? 40 : 110;                    /* T2 the quieter */
+            q->kit[t][P_REL] = 110;                              /* (a long release: a tail to cut) */
+            q->kit[t][P_LEVL] = t == 1 ? 40 : 110;               /* T2 the quietest */
             m_cpy(trk[t].eff, q->kit[t], P_COUNT);
         }
-        ui.trk = 2;
+        ui.trk = 2;                                               /* T3 in view */
         voice_on(0, 60, 100, 0);
         voice_on(1, 64, 100, 0);
+        voice_on(2, 67, 100, 0);
         eng_run(0.3);
-        int pick = m2k_guard(100, 1) == 1 && trk[1].held && trk[1].park == PARK_N + 1;
-        for (int i = 0; i < 8; i++) pick &= m2k_guard(100, 1) == -1;   /* (the load's fall seen first) */
-        pick &= m2k_guard(100, 1) == 0;                           /* T1 next */
-        for (int i = 0; i < 8; i++) m2k_guard(100, 0);
-        pick &= m2k_guard(100, 1) == -1;                          /* none sounding left */
+        voice_off(0);                                             /* T1 let go: its release a tail */
+        eng_run(0.05);
+        int sh = 0, ladder = m2k_guard(130, 0, 6, sh) == 0 && trk[0].park == PARK_N + 1 && !trk[0].held;
+        for (int i = 0; i < GRD_SETTLE; i++) ladder &= m2k_guard(130, 0, 6, sh) == -1;   /* (it takes effect first) */
+        eng_run(0.05);
+        ladder &= !trk[0].sounding;
         m2k_frame(10000);
-        int said = !strcmp(ui.toast, "CPU FULL") && !strcmp(ui.toast2, "T1 FADED, THE HEAVIEST");
+        int said = !strcmp(ui.toast, "CPU FULL") && !strcmp(ui.toast2, "T1 TAIL CUT");
+        voice_on(0, 60, 100, 0);                                  /* its next note: as ever */
+        eng_run(0.05);
+        ladder &= trk[0].sounding && trk[0].peak > 0 && !trk[0].held;
+        for (int i = 0; i < 40; i++) m2k_guard(90, 6, 6, sh);   /* (the credit spent) */
+        ladder &= m2k_guard(130, 0, 6, sh) == 1 && trk[1].held;  /* no tail: T2 rests (the quietest; T3 in view) */
         uint32_t tt = ui.toast_t;
+        m2k_frame(10500);
+        said &= ui.toast_t != tt && !strncmp(ui.toast2, "T2 RESTS, ", 10);   /* (a rest after a tail's cut: at once) */
+        for (int i = 0; i < 40; i++) m2k_guard(90, 6, 6, sh);
+        ladder &= m2k_guard(130, 0, 6, sh) == 0 && trk[0].held;  /* then T1 (T3 never: in view) */
+        for (int i = 0; i < 40; i++) m2k_guard(90, 6, 6, sh);
+        ladder &= m2k_guard(130, 0, 6, sh) == -1 && !trk[2].held;
         eng_run(0.1);
         voice_on(1, 64, 100, 0);                                  /* a trig while it rests: silent */
         eng_run(0.05);
-        int rest = !trk[0].sounding && !trk[1].sounding && trk[0].peak == 0 && trk[1].peak == 0;
+        int rest = !trk[0].sounding && !trk[1].sounding && trk[1].peak == 0 && trk[2].sounding;
         int back = 1;
-        grd.slow = 80 << 8;                                       /* (the load followed as if it had been 80 % a while) */
-        for (int i = 0; i < 400; i++) back &= m2k_guard(80, 0) == -1 && trk[0].held;   /* no room at 80 % */
-        for (int i = 0; i < 400 && trk[0].held; i++) m2k_guard(10, 0);
-        back &= !trk[0].held && trk[1].held;                      /* the last to go, back first, as the load fell */
-        for (int i = 0; i < 32; i++) m2k_guard(10, 0);
-        back &= trk[1].held;                                      /* (32 renders after a return) */
-        m2k_guard(10, 0);
+        for (int i = 0; i < 2 * GRD_SEC; i++) back &= m2k_guard(90, 6, 6, sh) == -1 && trk[0].held && trk[1].held;   /* no room */
+        int k = 0;
+        for (; k < 3 * GRD_SEC && trk[0].held; k++) m2k_guard(20, 6, 6, sh);
+        back &= !trk[0].held && trk[1].held && k >= GRD_SEC;     /* the last to go, back first, after a second's room */
+        for (k = 0; k < 3 * GRD_SEC && trk[1].held; k++) m2k_guard(20, 6, 6, sh);
         back &= !trk[1].held;
-        voice_on(0, 60, 100, 0);
-        eng_run(0.05);
-        back &= trk[0].sounding && trk[0].peak > 0;
-        ui.trk = 1;                                               /* in view, alone: it goes, and is back at once */
         voice_on(1, 64, 100, 0);
-        trk[0].sounding = 0; trk[0].astage = 0;
-        for (int i = 0; i < 40; i++) m2k_guard(10, 0);
+        eng_run(0.05);
+        back &= trk[1].sounding && trk[1].peak > 0;
+        /* the screen's short: at 75 % nothing cut, the screen gives way */
+        for (int i = 0; i < 3 * GRD_SEC; i++) m2k_guard(20, 6, 6, sh);
+        int screen = m2k_guard_gap() == 0 && m2k_guard(75, 0, 6, ++sh) == -1 && m2k_guard_gap() == GRD_GAP;
+        for (int i = 0; i < 40; i++) screen &= m2k_guard(75, 6, 6, sh) == -1;
+        screen &= !trk[0].held && !trk[1].held && !trk[0].park && !trk[1].park;
+        /* REST: T2 first though T1 is quieter now; NONE: no rest; the track in view back at once, but REST's own */
+        q->kit[0][P_LEVL] = 20; trk[0].eff[P_LEVL] = 20;
         eng_run(0.3);
-        pick &= m2k_guard(100, 1) == 1;
-        m2k_guard(100, 0);
-        pick &= !trk[1].held;
-        m2k_frame(12000);
-        said &= ui.toast_t == tt;                                 /* (2 s on: not said again) */
-        /* the fade itself: T1 alone, held, faded in the middle of the run */
-        q = eng_pat(44);
-        kit_default(q, 0, M_GSIN);
-        q->kit[0][P_HOLD] = 127;
-        q->kit[0][P_DEC] = 127;
-        m_cpy(trk[0].eff, q->kit[0], P_COUNT);
+        for (int i = 0; i < 3 * GRD_SEC; i++) m2k_guard(20, 6, 6, sh);
+        m2k_setting(S_REST, enc(2, M2K_TRACKS6 + 2));
+        int opt = m2k_guard(130, 0, 6, sh) == 1 && trk[1].held;
+        ui.trk = 1;
+        for (int i = 0; i < 40; i++) m2k_guard(90, 6, 6, sh);
+        opt &= trk[1].held;                                       /* (in view, but REST names it) */
+        m2k_setting(S_REST, enc(0, M2K_TRACKS6 + 2));
+        m2k_guard(130, 6, 6, sh);
+        opt &= !trk[1].held;                                      /* AUTO: the track in view back at once */
         ui.trk = 2;
-        voice_on(0, 60, 100, 0);
-        const int nb = M2K_SR / 2 / M2K_SUB, at = nb / 2;
-        int16_t *a = malloc((size_t)nb * M2K_SUB * 4);
-        int down = 1, gone = 1;
-        int32_t a_prev = 0;
-        for (int k = 0; k < nb; k++) {
-            if (k == at) { down &= m2k_guard(100, 1) == 0; a_prev = trk[0].amp1; }
-            m2k_render(a + 2 * k * M2K_SUB, M2K_SUB);
-            if (k >= at && k < at + PARK_N) { down &= trk[0].amp1 <= a_prev; a_prev = trk[0].amp1; }
-            if (k == at + PARK_N - 1) down &= trk[0].amp1 == 0;
-            if (k > at + PARK_N) gone &= !trk[0].sounding && trk[0].peak == 0;
+        voice_on(1, 64, 100, 0);
+        eng_run(0.05);
+        for (int i = 0; i < 3 * GRD_SEC; i++) m2k_guard(20, 6, 6, sh);
+        m2k_setting(S_REST, enc(M2K_TRACKS6 + 1, M2K_TRACKS6 + 2));
+        for (int i = 0; i < 40; i++) opt &= m2k_guard(130, 0, 6, sh) == -1;
+        opt &= !trk[0].held && !trk[1].held && !trk[2].held;
+        m2k_setting(S_REST, 0);
+        /* the fades themselves: T1 alone, held, rested in the middle of the run; then its release cut (a tail); then its
+         * delay's echoes alone, cut; then its release cut and a note in the fade's middle (it plays) */
+        double fade[3], own[3];
+        int down = 1, gone = 1, slept = 0, noted = 0;
+        for (int f = 0; f < 4; f++) {
+            q = eng_pat(44);
+            kit_default(q, 0, M_GSIN);
+            q->kit[0][P_HOLD] = 127;
+            q->kit[0][P_DEC] = 127;
+            q->kit[0][P_REL] = 110;
+            if (f == 2) { q->kit[0][P_DSND] = 0; q->kit[0][P_DFB] = 56; q->kit[0][P_DTIM] = 8; q->kit[0][P_REL] = 0; }
+            if (f == 3) q->kit[0][P_ATK] = 20;                   /* (a rise: its amp still under the fade's cap) */
+            m_cpy(trk[0].eff, q->kit[0], P_COUNT);
+            ui.trk = 2;
+            voice_on(0, 60, 100, 0);
+            const int nb = M2K_SR / 2 / M2K_SUB, at = nb / 2;
+            int16_t *a = malloc((size_t)nb * M2K_SUB * 4);
+            int32_t a_prev = 0;
+            for (int b = 0; b < nb; b++) {
+                if (f && b == at - (f == 2 ? 300 : 200)) voice_off(0);
+                if (b == at) { down &= m2k_guard(130, 0, 6, 0) == 0 && (f != 2 || trk[0].dcut == PARK_N + 1); a_prev = trk[0].amp1; }
+                if (f == 3 && b == at + PARK_N / 2) voice_on(0, 64, 100, 0);
+                m2k_render(a + 2 * b * M2K_SUB, M2K_SUB);
+                if (f == 3 && b == at + 4 * PARK_N) noted = trk[0].sounding && !trk[0].park && trk[0].amp1 > 0 && trk[0].astage;
+                if (f == 3) continue;
+                if (f < 2 && b >= at && b < at + PARK_N) { down &= trk[0].amp1 <= a_prev; a_prev = trk[0].amp1; }
+                if (f < 2 && b == at + PARK_N - 1) down &= trk[0].amp1 == 0;
+                if (f < 2 && b > at + PARK_N) gone &= !trk[0].sounding && trk[0].peak == 0;
+                if (f == 2 && b == at + PARK_N + 1) slept = trk[0].dsleep && !trk[0].dcut;
+            }
+            if (f < 3) {
+                own[f] = step_max(a, (at - 100) * M2K_SUB, (at - 20) * M2K_SUB);
+                fade[f] = step_max(a, at * M2K_SUB, (at + PARK_N + 2) * M2K_SUB);
+            }
+            if (f == 2) for (int i = (at + PARK_N + 1) * M2K_SUB; i < nb * M2K_SUB; i++) gone &= a[2 * i] == 0 && a[2 * i + 1] == 0;
+            free(a);
         }
-        double own = step_max(a, (at - 200) * M2K_SUB, at * M2K_SUB), fade = step_max(a, at * M2K_SUB, (at + PARK_N + 2) * M2K_SUB);
-        free(a);
-        printf("     the guard's fade: its sample step %.2f x the held sine's own\n", fade / own);
-        CHECK(pick && said && rest && back && down && gone && fade < 1.5 * own,
-              "GUARD: the CPU guard rests the track sounding quietest for what it costs (the track in view the last, "
-              "never kept), with no step, its trigs silent until there is room; CPU FULL names it and the dearest");
+        printf("     the guard's fades: their sample step %.2f, %.2f, %.2f x the sound's own (a rest, a tail, echoes)\n",
+               fade[0] / own[0], fade[1] / own[1], fade[2] / own[2]);
+        /* AUTO's level: T1 a steady pad, quiet; T2 a loud hit every beat; T3 a louder one every 4 s. Just after T3's hit
+         * (its moment the loudest, T2 between two of its own the quietest) AUTO rests T3 first, then T1, T2 last */
+        q = eng_pat(45);
+        static const uint8_t LV[3] = {60, 110, 120};
+        for (int t = 0; t < 3; t++) {
+            kit_default(q, t, M_GSIN);
+            q->kit[t][P_HOLD] = t ? 0 : 127;
+            q->kit[t][P_DEC] = t ? 40 : 127;
+            q->kit[t][P_LEVL] = LV[t];
+            m_cpy(trk[t].eff, q->kit[t], P_COUNT);
+        }
+        ui.trk = 3;
+        voice_on(0, 60, 100, 0);
+        int order[3] = {-1, -1, -1}, no = 0, moment = 0;
+        static int16_t ab[2 * 128];
+        for (int r = 0; r < 345 * 7 + 20 && no < 3; r++) {
+            if (r % 172 == 0) voice_on(1, 48, 100, 0);
+            if (r % 1380 == 670) voice_on(2, 72, 100, 0);
+            m2k_render(ab, 128);
+            if (r == 2058) moment = trk[2].lvl > trk[0].lvl && trk[0].lvl > trk[1].lvl;   /* (the trap) */
+            int g = m2k_guard(r >= 2058 ? 130 : 50, r >= 2058 ? 0 : 6, 6, 0);
+            if (g >= 0 && trk[g].held) order[no++] = g;
+        }
+        int autopick = moment && order[0] == 2 && order[1] == 0 && order[2] == 1;
+        CHECK(ladder && said && rest && back && screen && opt && down && gone && slept && noted && autopick && fade[0] < 1.5 * own[0] &&
+              fade[1] < 1.5 * own[1] && fade[2] < 1.5 * own[2],
+              "GUARD: the CPU guard a step at a time, a tail before a track (the quietest for what it costs, a hit a beat "
+              "loud and a rare one not, never the track in view, REST's first, none on NONE), a stall's short only the "
+              "screen's; back after a second's room; no step in its fades; CPU FULL says what it did");
     }
     {
         /* 1.6.2: VO-6 faded in from near silence at every trig, as the Monomachine's (~150 ms to its level at C3): a

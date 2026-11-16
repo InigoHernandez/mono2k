@@ -105,7 +105,7 @@ window.M2K_HELP = (() => {
     { g: "Buttons", id: "b8", tag: "ARP", hi: ["b8"], short: "The track's arpeggiator.", screen: "b ARP; w 400",
       long: "Hold keys and it plays them in turn. Tap twice: HOLD, the notes keep going, on that track while you play another. With REC, its notes are written. MODE on POLY: chords, the tracks after it its voices (KNOB 2, VOIC).", where: "K or F9" },
     { g: "Buttons", id: "b5", tag: "GLO", hi: ["b5"], short: "Tempo, the bus, settings, HELP; held, FUNC.", screen: "b GLO; w 400",
-      long: "TIME, BUS, SET, MIDI, IN, PLAY (the mutes, and the FM-1's CPU meter), HELP (the manual on the FM-1). Held: copy, paste, clear, undo; the white keys mute, fill, tap, solo.", where: "G or F6" },
+      long: "TIME, BUS, SET, MIDI, IN, PLAY (the mutes; REST, the track that rests when the FM-1's CPU is full; its CPU meter), HELP (the manual on the FM-1). Held: copy, paste, clear, undo; the white keys mute, fill, tap, solo.", where: "G or F6" },
     { g: "Buttons", id: "b6", tag: "HOME", hi: ["b6"], short: "The pattern in six lanes; in GRID, the notes; held, pick patterns.", screen: "b PLAY; w 1500",
       long: "Six lanes, the playing step framed; in GRID or step entry the track's notes in cells; level, pitch, tempo, swing. Again: HOME 2, the track's own length, speed, chance (PROB) and Grids lane. Held: the keys pick patterns and banks.", where: "1 or F7" },
     { g: "Buttons", id: "b9", tag: "SEQ", hi: ["b9"], short: "GRID: the keys are the steps; held, the step tools.", screen: "b SEQ; w 400",

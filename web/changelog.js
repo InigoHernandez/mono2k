@@ -7,7 +7,7 @@ window.M2K_KINDS = {
 };
 window.M2K_CHANGES = [
   {
-    date: "2026-11-16", title: "MONO2K 1.11: POLY, chords on one track",
+    date: "2026-11-17", title: "MONO2K 1.11: POLY, and a calmer CPU guard",
     items: [
       ["sequencer", "1.11: POLY plays chords on one track. On ARP, turn MODE to POLY: the track becomes a lead and the tracks after it its voices, as many as KNOB 2 (VOIC) says. T4 on three plays T4, T5 and T6; T1 to T3 play on as always."],
       ["sound", "1.11: Every voice plays the lead's machine and its whole sound: every knob, its locks, its LFOs and its effects. The voices' own sounds wait unheard and come back when POLY is off."],
@@ -16,6 +16,10 @@ window.M2K_CHANGES = [
       ["sequencer", "1.11: Recorded, live or in step entry (keys held together are one step), a chord's lowest note goes on the lead's step and the others on its voices' steps. The lead's step decides the chord: its condition, chance, trig type, accent and locks."],
       ["screen", "1.11: ARP on POLY shows the voices and their notes; HOME and GLO > PLAY name the lead in its voices' cells, and SELECT passes them. GLO > HELP has a page for chords."],
       ["patterns", "1.11: Your patterns, sounds and projects load and play exactly as before. A pattern with POLY on saves in a new format that 1.10 cannot open."],
+      ["sound", "1.11: When the FM-1's CPU is full it gives way a step at a time, the least heard first: the screen's frames further apart, then a ringing tail (a note's release, its echoes) faded out, its next note as ever, and only then a whole track rests. Each step waits for the last to take effect, so one tight moment no longer silences two or three tracks."],
+      ["sound", "1.11: More room: a short drop that the sound did not cause (a flash write, a page turned) only moves the screen, and nothing is cut for it. A track that rests comes back as soon as there has been room for a second."],
+      ["workflow", "1.11: GLO > PLAY, KNOB 2, REST: which track rests when one must. AUTO, the quietest for what it costs, never the track you are on; T1–T6, that track first; NONE, no track rests (the sound may then drop: DROP counts it). FM-1 only."],
+      ["screen", "1.11: CPU FULL says what it did: T2 TAIL CUT, or T2 RESTS, T4 HEAVIEST. On GLO > PLAY a cut tail shows CUT for a moment, a resting track REST. In the browser, GLO > PLAY's MOTN moved to KNOB 3."],
     ],
   },
   {

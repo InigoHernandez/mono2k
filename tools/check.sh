@@ -18,6 +18,9 @@
 #     fm_v9 and sid_v10 but the equivalent one
 #  5. the wave banks (tools/wave_check.py); the bus's controls, every value as recorded and every old value as it
 #     sounded once converted (tools/bus_curves.py)
+#  6. the FM-1's CPU guard (1.11): the guard bench (host/m2k_guard_bench.c: the FM-1's ring, interrupt and main loop
+#     against load traces, 1.7's rule beside it), with no warning and under ASan + UBSan; and its mutants
+#     (tools/guard_mutants.py: each caught by the bench or the self-test's GUARD, made in copies, nothing in place)
 set -u
 B=build/check
 mkdir -p "$B"
@@ -114,6 +117,21 @@ echo "== the wave banks"
 
 echo "== the bus's controls"
 .venv/bin/python tools/bus_curves.py > "$B/bus.log" 2>&1 && tail -1 "$B/bus.log" | sed 's/^/  /' || { cat "$B/bus.log"; FAIL=1; }
+
+echo "== the CPU guard"
+rm -f "$B/m2k_guard_bench" "$B/m2k_guard_bench_san"
+if out=$(clang -O2 $W $I -Ifirmware/fm1 -o "$B/m2k_guard_bench" host/m2k_guard_bench.c 2>&1); then
+    n=$(printf "%s" "$out" | grep -c "warning:")
+    [ "$n" -eq 0 ] || { printf "%s\n" "$out"; FAIL=1; }
+    "$B/m2k_guard_bench" > "$B/guard.log" 2>&1 && tail -1 "$B/guard.log" | sed 's/^/  /' || { grep -E "FAIL" "$B/guard.log"; FAIL=1; }
+else
+    echo "  host/m2k_guard_bench.c: DOES NOT BUILD"; printf "%s\n" "$out" | grep "error:" | head -5; FAIL=1
+fi
+clang $SAN -w $I -Ifirmware/fm1 -o "$B/m2k_guard_bench_san" host/m2k_guard_bench.c &&
+    "$B/m2k_guard_bench_san" > "$B/guard_san.log" 2>&1 || FAIL=1
+rep=$(grep -E "runtime error|ERROR: AddressSanitizer|FAIL" "$B/guard_san.log" | sort | uniq -c)
+if [ -n "$rep" ]; then echo "$rep"; FAIL=1; else echo "  the bench under ASan + UBSan: clean"; fi
+.venv/bin/python tools/guard_mutants.py > "$B/guard_mut.log" 2>&1 && tail -1 "$B/guard_mut.log" | sed 's/^/  /' || { grep -E "SURVIVED|MISSING|BUILD" "$B/guard_mut.log"; FAIL=1; }
 
 [ "$FAIL" -eq 0 ] && echo "check: passed" || echo "check: FAILED"
 exit "$FAIL"
