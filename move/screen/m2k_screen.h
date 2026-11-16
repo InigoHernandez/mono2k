@@ -18,12 +18,13 @@
 #define MS_H 64
 #define MS_BYTES (MS_W * MS_H / 8)
 
-/* the pages. Every one has its own pad (MS_PAD_PAGE); the first MS_PAGES are pages of eight knobs */
+/* the pages. Every one has its own pad (MS_PAD_PAGE) but AMP+ and FILT+, AMP's and FILT's again; the first MS_PAGES are
+ * pages of eight knobs */
 enum {
     MS_HOME,                    /* the pattern: eight lanes; LEVL PTCH BPM SWNG TLEN SPD PROB LANE (no pictures) */
     MS_SYN,                     /* the machine's A..H */
-    MS_AMP,                     /* ATCK HOLD DEC REL DIST VOL PAN PORT */
-    MS_FILT,                    /* BASE WDTH HPQ LPQ ATK DEC B-OF W-OF */
+    MS_AMP,                     /* ATCK DEC SUS REL DIST VOL PAN PORT (the FM-1's AMP 1 and 2); its pad again: AMP+ */
+    MS_FILT,                    /* BASE WDTH HPQ LPQ ATCK DEC SUS REL (FILT 1 and 2); its pad again: FILT+ */
     MS_EFX,                     /* EQF EQG SRR DTIM DSND DFB DBAS DWID */
     MS_DSTR,                    /* BITS FOLD XOR VERB, then the modulation effect: TYPE RATE DPTH MIX */
     MS_LFO1, MS_LFO2, MS_LFO3,  /* TRCK DEST WAVE TRIG MULT SPD PHAS DPTH */
@@ -33,6 +34,8 @@ enum {
     MS_MIX,                     /* the eight tracks' LEVL, a knob a track (a proposal) */
     MS_GLO,                     /* the bus and the instrument: DCAY DAMP ADPC DRIV, MUTES AT BAR */
     MS_PERF,                    /* PERFORM: the bus's four; the keyboard plays the effects */
+    MS_AMP2,                    /* AMP+: HOLD (the FM-1's AMP 3), the AMP pad pressed again; no pad of its own */
+    MS_FILT2,                   /* FILT+: B-OF W-OF (FILT 3), the FILT pad pressed again */
     MS_PAGES,                   /* (the pages of knobs: this many) */
     MS_CAT = MS_PAGES,          /* SOUNDS: the library, a list that previews as it scrolls */
     MS_PATS,                    /* the patterns, a list the jog scrolls (no pad: the jog's) */
@@ -48,7 +51,12 @@ static const uint8_t MS_PAD_PAGE[16] = {
     MS_SYN, MS_AMP, MS_FILT, MS_EFX, MS_DSTR, MS_LFO1, MS_LFO2, MS_LFO3,   /* pads 24..31: the top row */
 };
 enum { MS_FAM_SOUND, MS_FAM_SEQ, MS_FAM_FN, MS_FAM_NONE };   /* the sound, the sequence and mix, the two functions */
-static inline int ms_pad_of(int page) { for (int i = 0; i < 16; i++) if (MS_PAD_PAGE[i] == page) return i; return -1; }
+static inline int ms_pad_of(int page)
+{
+    if (page == MS_AMP2) page = MS_AMP; else if (page == MS_FILT2) page = MS_FILT;   /* (their pad's second page) */
+    for (int i = 0; i < 16; i++) if (MS_PAD_PAGE[i] == page) return i;
+    return -1;
+}
 static inline int ms_family(int page)
 {
     const int p = ms_pad_of(page);
@@ -116,8 +124,8 @@ typedef struct {
 typedef union {
     struct { uint16_t trig[8], hollow[8]; uint8_t len[8]; int8_t pos[8]; } home;
     struct { char cls[12], style[12], model[10]; } syn;
-    struct { uint8_t a, h, d, r, st; int32_t lv; } amp;
-    struct { int16_t hp, lp, hp1, lp1; uint8_t hq, lq; } filt;
+    struct { uint8_t a, h, d, s, r, st; int32_t lv; } amp;
+    struct { int16_t hp, lp, hp1, lp1; uint8_t hq, lq, fa, fd, fs, fr, fst; uint16_t fe; } filt;
     struct { uint8_t f, g, dt, snd, fb, wid; } efx;
     struct { uint8_t bits, fold, xr, type, dep, mix; uint32_t inc; } dstr;
     struct { uint8_t mode, n, rng, hold; int16_t on; } arp;

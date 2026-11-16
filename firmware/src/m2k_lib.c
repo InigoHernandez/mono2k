@@ -378,7 +378,14 @@ static void lib_factory(void)
     for (int i = 0; i < LIB_N; i++) lib_put(i, i);
 }
 
-static uint32_t snd_fnv(const m2k_sound_t *s) { return fnv((const uint8_t *)s, sizeof *s); }
+/* a sound's FNV-1a as the store keeps it: its record (name, machine, a kit of 71), then the ADSR's three only where it
+ * uses them, so a sound without them hashes as it always has (LIB_OLD, LIB_HASH) */
+static uint32_t snd_fnv(const m2k_sound_t *s)
+{
+    uint32_t h = fnv((const uint8_t *)s, SND_REC);
+    if (kit_adsr(s->kit)) for (int k = P_COUNT_V21; k < P_COUNT; k++) h = (h ^ s->kit[k]) * 16777619u;
+    return h;
+}
 
 /* the factory's sounds before the library, as an older store holds them once read (each slot's name, machine and kit
  * after the store's conversions), by their FNV-1a: every commit's from the library's first (64 slots of bank A's

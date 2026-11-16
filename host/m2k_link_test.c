@@ -194,8 +194,11 @@ static uint32_t bank_hash(void)                   /* every pattern packed, and t
 {
     uint32_t h = 2166136261u;
     for (int i = 0; i < M2K_PATTERNS; i++) { int n = pat_pack(PAT(i), blob); for (int k = 0; k < n; k++) h = (h ^ blob[k]) * 16777619u; }
-    const uint8_t *sb = (const uint8_t *)snd;
-    for (unsigned k = 0; k < sizeof snd; k++) h = (h ^ sb[k]) * 16777619u;
+    for (int i = 0; i < M2K_SOUNDS; i++) {                 /* (the sounds as the store keeps them: SND_REC, then 'A') */
+        const uint8_t *sb = (const uint8_t *)&snd[i];
+        for (unsigned k = 0; k < SND_REC; k++) h = (h ^ sb[k]) * 16777619u;
+    }
+    if (snd_adsr(snd)) for (int i = 0; i < M2K_SOUNDS; i++) for (int k = P_COUNT_V21; k < P_COUNT; k++) h = (h ^ snd[i].kit[k]) * 16777619u;
     return h;
 }
 

@@ -47,8 +47,8 @@ window.M2K_HELP = (() => {
       const k = `${BNAME[i]} (${BK[i]})`;
       switch (i) {
         case 0: return `${k}: FX, four pages. Held: PERFORM on the black keys.`;
-        case 1: return `${k}: FILT, the filters; again, their envelope.`;
-        case 2: return `${k}: AMP, the envelope; again, DIST VOL PAN PORT.`;
+        case 1: return `${k}: FILT, the filters; again, their ADSR; again, how far it takes them.`;
+        case 2: return `${k}: AMP, its ADSR; again, DIST VOL PAN PORT; again, HOLD.`;
         case 3: return `${k}: three LFOs on one page, SELECT picks one. GLO + LFO, then any knob: a link. Held: the knobs spring back.`;
         case 4: return `${k}: SYN, the machine's knobs. Held: its sound's tools.`;
         case 5: return `${k}: tempo, bus, settings. Held: copy, paste, mutes.`;
@@ -94,10 +94,10 @@ window.M2K_HELP = (() => {
       long: "The volume. With a step held, its trig type: ALL, AMP, FILTER, LFO, a pair or NONE.", where: "/" },
     { g: "Buttons", id: "b4", tag: "EDIT", hi: ["b4"], short: "SYN: the machine's knobs A–H, then the sound library.", screen: "b EDIT; w 400",
       long: "SYN: the machine's card, A–D, then E–H, then SND. Held: + SEQ INIT, + SAVE keep, + REC / PLAY copy, paste.", where: "5 or F5" },
-    { g: "Buttons", id: "b2", tag: "ENV", hi: ["b2"], short: "AMP: the envelope, distortion, volume, pan.", screen: "b ENV; w 400",
-      long: "AMP: ATCK, HOLD, DEC, REL, each shown as the time you hear. Again: DIST, VOL, PAN, PORT.", where: "8 or F3" },
-    { g: "Buttons", id: "b1", tag: "SEL", hi: ["b1"], short: "FILT: the filters as a band.", screen: "b SEL; w 400",
-      long: "FILT: a high-pass and a low-pass as one band that follows the note. Again: its envelope.", where: "0 or F2" },
+    { g: "Buttons", id: "b2", tag: "ENV", hi: ["b2"], short: "AMP: an ADSR; the chain; HOLD.", screen: "b ENV; w 400",
+      long: "AMP: ATCK, DEC, SUS, REL, a regular ADSR, each time shown as you hear it (SUS 0: the one-shot, as ever). Again: DIST, VOL, PAN, PORT. Again: HOLD.", where: "8 or F3" },
+    { g: "Buttons", id: "b1", tag: "SEL", hi: ["b1"], short: "FILT: the filters as a band, and their ADSR.", screen: "b SEL; w 400",
+      long: "FILT: a high-pass and a low-pass as one band that follows the note. Again: its ADSR (ATCK, DEC, SUS, REL; SUS 0 its old AD). Again: how far it takes the band, B-OF and W-OF.", where: "0 or F2" },
     { g: "Buttons", id: "b0", tag: "FX", hi: ["b0"], short: "FX's four pages; held, PERFORM.", screen: "b FX; w 400",
       long: "FX, DELAY, DSTR and MOD: EQ, rate, the track's echo, bits, fold, XOR, chorus. Held: PERFORM.", where: "P or F1" },
     { g: "Buttons", id: "b3", tag: "LFO", hi: ["b3"], short: "Three LFOs on one page, then their rest; SELECT picks one.", screen: "b LFO; w 400",

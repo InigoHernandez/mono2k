@@ -14,13 +14,14 @@
 #endif
 #define IMG_DATA M2K_IMG_DATA
 /* the most a pattern of NT tracks packs to: its head (2 + 8 + NT + its globals + 1: six tracks fill the 60 since format
- * 20, the 54 since 19, the 48 since 18), every kit, its trig mask, every step a trig, every lock. BLOB_MAX is this
- * build's (six: 3608, the Patch Editor's, editor.js's), BLOB_ANY format 21's, eight wide (4288: what a store may hold) */
+ * 20, the 54 since 19, the 48 since 18), every kit (74 wide since format 22), its trig mask, every step a trig, every
+ * lock. BLOB_MAX is this build's (six: 3626, the Patch Editor's, editor.js's; 3608 before 22), BLOB_ANY format 23's,
+ * eight wide (4312: what a store may hold) */
 #define BLOB_OF(nt) (2 + 8 + (nt) + G_COUNT_OF(20, nt) + 1 + (nt) * P_COUNT + (nt) * M2K_STEPS / 8 + \
                      (nt) * M2K_STEPS * 4 + 2 + M2K_LOCKS * 4)
 #define BLOB_MAX BLOB_OF(M2K_TRACKS)
 #define BLOB_ANY BLOB_OF(M2K_TRACKS21)
-_Static_assert(BLOB_OF(M2K_TRACKS6) == 3608, "a pattern of six packs to 3608 at most (editor.js's BLOB_MAX)");
+_Static_assert(BLOB_OF(M2K_TRACKS6) == 3626, "a pattern of six packs to 3626 at most (editor.js's BLOB_MAX)");
 
 typedef struct {
     char name[8];
@@ -36,8 +37,11 @@ static int cur_proj;
 
 /* -------------------------------------------------------------------------------------- one pattern, packed */
 
-/* a format's tracks: 21 eight (a pattern that uses a track past the sixth, in a build of eight), every one before six */
-static inline int fmt_nt(int ver) { return ver >= 21 ? M2K_TRACKS21 : M2K_TRACKS6; }
+/* a format's tracks: 21 and 23 eight (a pattern that uses a track past the sixth, in a build of eight), 22 and every
+ * one before 21 six */
+static inline int fmt_nt(int ver) { return ver == 21 || ver >= 23 ? M2K_TRACKS21 : M2K_TRACKS6; }
+/* a format's kit: from 22 the ADSR's three after the bank (74), from 8 the bank (71), from 3 the MOD effect (70) */
+static inline int fmt_kit(int ver) { return ver >= 22 ? P_COUNT : ver >= 8 ? P_COUNT_V21 : ver >= 3 ? P_WBNK : P_MODT; }
 
 /* the globals from s to d between a pattern and a format's layout, GL of them, its per-track blocks (the speeds;
  * Grids' map, then the lanes; the lengths; the chances) NT wide where the pattern's are M2K_TRACKS: OUT, s the
@@ -57,13 +61,14 @@ static void glob_io(const uint8_t *s, uint8_t *d, int gl, int nt, int out)
     }
 }
 
-/* a pattern in the layout of a version (21 in a build of eight; 20, 19 and 18, today's; the self-test writes the older
- * ones, 3..17; 3..7 kits 70 wide). Format 21 is 20 eight tracks wide: the machines, the per-track globals, the mutes'
- * bits, the kits, the trig mask, the trigs and the locks of eight; an LFO's TRCK past 127 aims past the sixth */
+/* a pattern in the layout of a version (21 and 23 in a build of eight; 22, 20, 19 and 18, today's; the self-test writes
+ * the older ones, 3..17; 3..7 kits 70 wide). Format 21 is 20 eight tracks wide: the machines, the per-track globals,
+ * the mutes' bits, the kits, the trig mask, the trigs and the locks of eight; an LFO's TRCK past 127 aims past the
+ * sixth. Format 22 is 20 with kits 74 wide (the ADSR's SUS FSUS FREL after the bank), 23 is 22 eight wide (21's) */
 static int pat_pack_v(const m2k_pattern_t *p, uint8_t *o, int ver)
 {
-    const int nt = fmt_nt(ver);        /* (no more than the build has: 21 only in a build of eight) */
-    int n = 0, stride = ver >= 8 ? P_COUNT : P_WBNK;
+    const int nt = fmt_nt(ver);        /* (no more than the build has: 21 and 23 only in a build of eight) */
+    int n = 0, stride = fmt_kit(ver);
     o[n++] = 'P';
     o[n++] = (uint8_t)ver;             /* 2: amp envelope on the Monomachine's times; 3: MOD; 4: SWAV-SAW's new page;
                                         * 5: the track chain on the Monomachine's; 6: GND-SIN's TUNE in 3.125 c;
@@ -75,7 +80,8 @@ static int pat_pack_v(const m2k_pattern_t *p, uint8_t *o, int ver)
                                         * reverb, its and the delay's sends, the glitch); 18: Grids (its map, its
                                         * lanes, after the speeds) and four more chances, after the conditions; 19:
                                         * the tracks' own lengths, after the lanes; 20: the tracks' chances (PROB),
-                                        * after the lengths; 21: eight tracks */
+                                        * after the lengths; 21: eight tracks; 22: the amp's and the filter's ADSR
+                                        * (SUS FSUS FREL, kits 74 wide); 23: 22 eight tracks wide */
     m_cpy(o + n, p->name, 8); n += 8;
     m_cpy(o + n, p->machine, (uint32_t)nt); n += nt;
     const int gl = G_COUNT_OF(ver, nt);
@@ -107,6 +113,39 @@ static int pat_pack_v(const m2k_pattern_t *p, uint8_t *o, int ver)
 }
 
 static inline int is_trck(int prm) { return prm >= P_LFO && prm < P_LFO + 24 && (prm - P_LFO) % 8 == L_TRCK; }
+static inline int is_dest(int prm) { return prm >= P_LFO && prm < P_LFO + 24 && (prm - P_LFO) % 8 == L_DEST; }
+/* an LFO's DEST on the ADSR's three (72..74: OFF before format 22, past a kit of 71) */
+static inline int dest_adsr(int v) { return v > P_COUNT_V21 && v <= P_COUNT; }
+
+/* a kit that uses the ADSR's three (format 22): SUS FSUS FREL off their defaults (0 0 32: every older kit's), or an LFO
+ * aimed at one */
+static int kit_adsr(const uint8_t *k)
+{
+    if (k[P_SUS] || k[P_FSUS] || k[P_FREL] != FREL_DEF) return 1;
+    for (int l = 0; l < 3; l++) if (dest_adsr(k[P_LFO + 8 * l + L_DEST])) return 1;
+    return 0;
+}
+
+/* a kit of a format before 22 (or a sound of a store without them): the ADSR's three at what played as it did (SUS 0
+ * the one-shot amp, FSUS 0 the filter's AD, FREL 32), an LFO aimed past its 71 parameters (OFF there) still OFF */
+static void kit_v21(uint8_t *k)
+{
+    k[P_SUS] = 0;
+    k[P_FSUS] = 0;
+    k[P_FREL] = FREL_DEF;
+    for (int l = 0; l < 3; l++) if (dest_adsr(k[P_LFO + 8 * l + L_DEST])) k[P_LFO + 8 * l + L_DEST] = 0;
+}
+
+/* a pattern that uses the ADSR's three: a kit's (kit_adsr), a lock on one, or a lock aiming an LFO at one */
+static int pat_adsr(const m2k_pattern_t *p)
+{
+    for (int t = 0; t < M2K_TRACKS; t++) if (kit_adsr(p->kit[t])) return 1;
+    for (int i = 0; i < M2K_LOCKS; i++) {
+        const m2k_lock_t *l = &p->lock[i];
+        if (l->trk < M2K_TRACKS && (l->param >= P_COUNT_V21 || (is_dest(l->param) && dest_adsr(l->val)))) return 1;
+    }
+    return 0;
+}
 
 #if M2K_TRACKS > M2K_TRACKS6
 /* a pattern that uses a track past the sixth: anything of it other than as a pattern of six leaves it (track_blank: its
@@ -135,15 +174,17 @@ static int pat_wide(const m2k_pattern_t *p)
 
 /* a pattern none of whose tracks has a length of its own packs as format 18, byte for byte as before (bank A's, a
  * blank's: the stores' demos and blanks still match, and 1.4 reads it); one with a length, as 19; one with a track's
- * chance under 100 %, as 20 (1.5 reads 19); one that uses a track past the sixth (a build of eight), as 21 */
+ * chance under 100 %, as 20 (1.5 reads 19); one that uses the ADSR's three (pat_adsr), as 22 (1.9 reads 20 and 21);
+ * one that uses a track past the sixth (a build of eight), as 21, or as 23 with the ADSR's */
 static int pat_pack(const m2k_pattern_t *p, uint8_t *o)
 {
     int own = 0, prb = 0;
     for (int t = 0; t < M2K_TRACKS; t++) { own |= p->glob[G_TLEN1 + t]; prb |= p->glob[G_TPRB1 + t]; }
+    const int adsr = pat_adsr(p);
 #if M2K_TRACKS > M2K_TRACKS6
-    if (pat_wide(p)) return pat_pack_v(p, o, 21);
+    if (pat_wide(p)) return pat_pack_v(p, o, adsr ? 23 : 21);
 #endif
-    return pat_pack_v(p, o, prb ? 20 : own ? 19 : 18);
+    return pat_pack_v(p, o, adsr ? 22 : prb ? 20 : own ? 19 : 18);
 }
 
 static uint8_t tune_v5(int v)
@@ -207,12 +248,12 @@ static void trck_past(m2k_pattern_t *p)
 static int pat_unpack(m2k_pattern_t *p, const uint8_t *o, int len)
 {
     int n = 0;
-    if (len < 2 || o[0] != 'P' || o[1] < 1 || o[1] > 21) return 0;
-    int ver = o[1], stride = ver >= 8 ? P_COUNT : ver >= 3 ? P_WBNK : P_MODT;   /* before 3 a kit ended before the MOD
-                                                                               * effect, before 8 before the bank */
+    if (len < 2 || o[0] != 'P' || o[1] < 1 || o[1] > 23) return 0;
+    int ver = o[1], stride = fmt_kit(ver);    /* before 3 a kit ended before the MOD effect, before 8 before the bank,
+                                               * before 22 before the ADSR's three */
     /* before 15 no speeds, 18 no Grids, 19 no lengths of the tracks' own (0: each the pattern's, as they played), 20
-     * no chances (0: every trig); before 21 six tracks (those past them blank, track_blank), 21 eight (those past this
-     * build's passed over) */
+     * no chances (0: every trig), 22 no ADSR (kit_v21: SUS 0, FSUS 0, FREL 32, as they played); before 21 (and 22) six
+     * tracks (those past them blank, track_blank), 21 and 23 eight (those past this build's passed over) */
     const int nt = fmt_nt(ver), gl = G_COUNT_OF(ver, nt);
     const int nc = ver >= 18 ? C_COUNT : C_COUNT_V17;                       /* (a condition past them was ALWAYS) */
     const int head = 2 + 8 + nt + gl + 1 + nt * stride + nt * M2K_STEPS / 8 + 2;
@@ -230,6 +271,7 @@ static int pat_unpack(m2k_pattern_t *p, const uint8_t *o, int len)
         if (t >= M2K_TRACKS) continue;
         m_cpy(p->kit[t], o + n, stride);
         if (stride <= P_MODT) { p->kit[t][P_MODT] = 0; p->kit[t][P_MODR] = 40; p->kit[t][P_MODD] = 64; p->kit[t][P_MODM] = 0; }
+        if (stride < P_COUNT) kit_v21(p->kit[t]);
     }
     const uint8_t *mask = o + n;
     n += nt * M2K_STEPS / 8;
@@ -250,10 +292,13 @@ static int pat_unpack(m2k_pattern_t *p, const uint8_t *o, int len)
     int nl = o[n] | (o[n + 1] << 8);
     n += 2;
     for (int i = 0; i < M2K_LOCKS; i++) p->lock[i].trk = 0xFF;
+    const int np = ver >= 22 ? P_COUNT : P_COUNT_V21;                     /* (a lock past its kit was dropped) */
     for (int i = 0; i < nl && i < M2K_LOCKS; i++) {
         if (n + 4 > len) return 0;
-        p->lock[i] = (m2k_lock_t){o[n], o[n + 1], o[n + 2], o[n + 3]};
-        if (p->lock[i].trk >= M2K_TRACKS || p->lock[i].step >= M2K_STEPS || p->lock[i].param >= P_COUNT) p->lock[i].trk = 0xFF;
+        m2k_lock_t *l = &p->lock[i];
+        *l = (m2k_lock_t){o[n], o[n + 1], o[n + 2], o[n + 3]};
+        if (l->trk >= M2K_TRACKS || l->step >= M2K_STEPS || l->param >= np) l->trk = 0xFF;
+        else if (ver < 22 && is_dest(l->param) && dest_adsr(l->val)) l->val = 0;   /* (OFF there: kit_v21's) */
         n += 4;
     }
     if (nt > M2K_TRACKS) trck_past(p);
@@ -465,8 +510,13 @@ static int img_pack_all(m2k_img_t *dst, const char *name)
 
 /* the sound library: 128 slots (S001..S128, M2K_SOUNDS in m2k.h), each a track's machine and its parameters, a
  * category and the note it was made at, kept with the store. An empty slot (no name) is INIT: loading it starts the
- * track's machine afresh. The factory fills the first 96 with its own, twelve a category (m2k_lib.c), the rest INIT */
+ * track's machine afresh. The factory fills the first 96 with its own, twelve a category (m2k_lib.c), the rest INIT.
+ * The store keeps a sound as it always has (SND_REC: its name, machine and a kit of 71), and the ADSR's three of every
+ * slot in a section of their own ('A') only when a sound uses them: a library without them stores byte for byte as
+ * before, and an older build reads it, those three left out */
 typedef struct { char name[8]; uint8_t machine, kit[P_COUNT]; } m2k_sound_t;
+#define SND_REC (9 + P_COUNT_V21)                  /* a sound's record in the store's 'S' (80) */
+_Static_assert(__builtin_offsetof(m2k_sound_t, kit) == 9, "a sound's record is its first SND_REC bytes");
 static m2k_sound_t snd[M2K_SOUNDS] POOL;
 enum { CAT_ALL, CAT_KICK, CAT_SNARE, CAT_HATS, CAT_PERC, CAT_BASS, CAT_LEAD, CAT_PAD, CAT_FX, CAT_COUNT };
 static const char *const CAT_N[CAT_COUNT] = {"ALL", "KICK", "SNARE", "HATS", "PERC", "BASS", "LEAD", "PAD", "FX"};
@@ -656,7 +706,8 @@ static void projects_factory(void)
 /* everything the instrument keeps, as one blob for the platform to save: the settings, the working patterns,
  * the four projects. "M2K2", version, open project; then images as (name, used, len[], data). */
 
-#define STORE_MAX (16 + S_COUNT + (M2K_PROJECTS + 1) * (12 + 2 * M2K_PATTERNS + IMG_DATA) + 6 + 82 * M2K_SOUNDS)
+#define STORE_MAX (16 + S_COUNT + (M2K_PROJECTS + 1) * (12 + 2 * M2K_PATTERNS + IMG_DATA) + 6 + (SND_REC + 2) * M2K_SOUNDS + \
+                   2 + 3 * M2K_SOUNDS)
 #ifndef M2K_FW
 static uint8_t store_buf[STORE_MAX] POOL;
 #endif
@@ -756,19 +807,31 @@ static int img_check(uint32_t len, int n, int kept)
     return 1;
 }
 
-/* the sound library after the images, whole when it is there: 'S', its count, the slots; 'C', its count, the
- * categories; 'R', its count, the notes they were made at (an older store ends before 'R', 'C' or all three) */
+/* the sound library after the images, whole when it is there: 'S', its count, the slots (SND_REC each); 'C', its count,
+ * the categories; 'R', its count, the notes they were made at; 'A', its count, the ADSR's three of each (SUS FSUS FREL:
+ * only when a sound uses them). An older store ends before 'A', 'R', 'C' or all of them */
 static int snd_check(uint32_t len)
 {
     uint8_t sh[2];
     if (st_at >= len) return 1;
-    if (!st_get(sh, 2, len) || sh[0] != 'S' || st_at + sh[1] * (uint32_t)sizeof(m2k_sound_t) > len) return 0;
-    st_at += sh[1] * (uint32_t)sizeof(m2k_sound_t);
+    if (!st_get(sh, 2, len) || sh[0] != 'S' || st_at + sh[1] * (uint32_t)SND_REC > len) return 0;
+    st_at += sh[1] * (uint32_t)SND_REC;
     if (st_at >= len) return 1;
     if (!st_get(sh, 2, len) || sh[0] != 'C' || st_at + sh[1] > len) return 0;
     st_at += sh[1];
     if (st_at >= len) return 1;
-    return st_get(sh, 2, len) && sh[0] == 'R' && st_at + sh[1] <= len;
+    if (!st_get(sh, 2, len) || sh[0] != 'R' || st_at + sh[1] > len) return 0;
+    st_at += sh[1];
+    if (st_at >= len) return 1;
+    return st_get(sh, 2, len) && sh[0] == 'A' && st_at + 3u * sh[1] <= len;
+}
+
+/* does a sound of a library (snd, or a copy of it: the Move's saver's) use the ADSR's three (an empty slot's kit is
+ * never played) */
+static int snd_adsr(const m2k_sound_t *s)
+{
+    for (int i = 0; i < M2K_SOUNDS; i++) if (s[i].name[0] && kit_adsr(s[i].kit)) return 1;
+    return 0;
 }
 
 #ifndef M2K_FW
@@ -903,13 +966,18 @@ static int store_pack_nk(int n, int k)
     for (int i = 0; i < k; i++) ser_img(&proj[i == 0 && cur_proj >= k ? cur_proj : i < M2K_PROJECTS ? i : 0], n);
     uint8_t sh[2] = {'S', M2K_SOUNDS};
     st_put(sh, 2);
-    st_put(snd, sizeof snd);
+    for (int i = 0; i < M2K_SOUNDS; i++) st_put(&snd[i], SND_REC);
     sh[0] = 'C';                                        /* their categories */
     st_put(sh, 2);
     st_put(snd_cat, sizeof snd_cat);
     sh[0] = 'R';                                        /* the notes they were made at */
     st_put(sh, 2);
     st_put(snd_root, sizeof snd_root);
+    if (snd_adsr(snd)) {                                   /* the ADSR's three, when a sound uses them */
+        sh[0] = 'A';
+        st_put(sh, 2);
+        for (int i = 0; i < M2K_SOUNDS; i++) st_put(&snd[i].kit[P_COUNT_V21], 3);
+    }
     return st_bad ? 0 : (int)st_at;
 }
 
@@ -955,10 +1023,11 @@ int m2k_store_unpack(int len)
     if (ver >= 3 && st_get(sh, 2, n) && sh[0] == 'S') {   /* the sound library: the slots this build keeps */
         m_set(snd, 0, sizeof snd);
         m_set(snd_cat, 0, sizeof snd_cat);
-        int nr = 0;                                     /* the notes read */
+        int nr = 0, na = 0;                             /* the notes read; the ADSR's read */
         for (int i = 0; i < sh[1]; i++) {
             m2k_sound_t tmp;
-            if (!st_get(&tmp, sizeof tmp, n)) break;
+            m_set(&tmp, 0, sizeof tmp);
+            if (!st_get(&tmp, SND_REC, n)) break;
             if (i >= M2K_SOUNDS) continue;
             snd[i] = tmp;
             snd[i].name[7] = 0;
@@ -969,13 +1038,23 @@ int m2k_store_unpack(int len)
         }
         if (st_get(sh, 2, n) && sh[0] == 'C') {         /* the categories (a store before them: guessed) */
             for (int i = 0; i < sh[1]; i++) { uint8_t c; if (!st_get(&c, 1, n)) break; if (i < M2K_SOUNDS) snd_cat[i] = c < CAT_COUNT ? c : 0; }
-            if (st_get(sh, 2, n) && sh[0] == 'R')       /* their notes (a store before them: by category) */
+            if (st_get(sh, 2, n) && sh[0] == 'R') {     /* their notes (a store before them: by category) */
                 for (int i = 0; i < sh[1]; i++) {
                     uint8_t r;
                     if (!st_get(&r, 1, n)) break;
                     if (i < M2K_SOUNDS) { snd_root[i] = r & 127; nr = i + 1; }
                 }
+                if (st_get(sh, 2, n) && sh[0] == 'A')   /* their ADSR's (a store without: kit_v21's, as they played) */
+                    for (int i = 0; i < sh[1]; i++) {
+                        uint8_t a[3];
+                        if (!st_get(a, 3, n)) break;
+                        if (i >= M2K_SOUNDS) continue;
+                        for (int k = 0; k < 3; k++) snd[i].kit[P_COUNT_V21 + k] = a[k] > 127 ? 127 : a[k];
+                        na = i + 1;
+                    }
+            }
         }
+        for (int i = na; i < M2K_SOUNDS; i++) if (snd[i].name[0]) kit_v21(snd[i].kit);   /* (an empty slot's never plays) */
         for (int i = 0; i < M2K_SOUNDS; i++) {
             if (snd[i].name[0] && !snd_cat[i]) snd_cat[i] = (uint8_t)sound_guess(snd[i].machine, snd[i].kit, 127, 0);
             if (i >= nr) snd_root[i] = (uint8_t)root_guess(snd_cat[i]);

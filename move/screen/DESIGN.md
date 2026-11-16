@@ -102,8 +102,8 @@ Calm: pages cut, no transitions, no glitches. What moves is the sound: HOME's pl
 | Pad | Page | Knobs | Stage |
 |---|---|---|---|
 | top 1 | SYN | the machine's A–H | its class and style; its model at x3 |
-| top 2 | AMP | ATK HLD DEC REL DST VOL PAN POR | the envelope, one live curve |
-| top 3 | FILT | BAS WID HPQ LPQ ATK DEC BOF WOF | the response, one live curve; the envelope's reach dotted |
+| top 2 | AMP | ATK DEC SUS REL DST VOL PAN POR | the envelope as an ADSR, one live curve; its pad again AMP+: HLD |
+| top 3 | FILT | BAS WID HPQ LPQ ATK DEC SUS REL | the response, one live curve; the envelope's reach dotted; its envelope while one of its four is touched; its pad again FILT+: BOF WOF, the curve at the reach |
 | top 4 | EFX | EQF EQG SRR DTM DSN DFB DBS DWD | the EQ's band; the echoes (ping-pong each side in turn, dotted with no send) |
 | top 5 | DSTR | BIT FLD XOR VRB TYP SPD DPT MIX | a sine through the crush; the modulation's sweep |
 | top 6–8 | LFO1–3 | TRK DES WAV TRG MUL SPD PHS DPT | where it goes and its cycle, small; the wave as deep as it swings, live |

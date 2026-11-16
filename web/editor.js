@@ -48,8 +48,8 @@
     return [
       ["SYN", "EDIT", knobs(PG.SYN, [0, 1])],
       ["TRACK", "HOME", [LEVL, PTCH]],
-      ["AMP", "ENV", knobs(PG.AMP, [0, 1])],
-      ["FILTER", "SEL", knobs(PG.FILT, [0, 1])],
+      ["AMP", "ENV", knobs(PG.AMP, [0, 1, 2])],
+      ["FILTER", "SEL", knobs(PG.FILT, [0, 1, 2])],
       ...[0, 1, 2, 3].map((sub) => [cstr(x, x.w_page_label(PG.FX, sub)), "FX", knobs(PG.FX, [sub])]),
       ...[0, 1, 2].map((l) => [`LFO ${l + 1}`, "LFO", knobs(PG.LFO, [2 * l, 2 * l + 1])]),
       ["ARP", "ARP", knobs(PG.ARP, [0])],
@@ -58,7 +58,7 @@
   /* a control's short and long name, as the screen has them for this track's machine */
   const names = (code) => {
     const x = pre;
-    for (const [page, subs] of [[PG.SYN, [0, 1]], [PG.HOME, [0]], [PG.AMP, [0, 1]], [PG.FILT, [0, 1]], [PG.FX, [0, 1, 2, 3]], [PG.LFO, [0, 1, 2, 3, 4, 5]], [PG.ARP, [0]]])
+    for (const [page, subs] of [[PG.SYN, [0, 1]], [PG.HOME, [0]], [PG.AMP, [0, 1, 2]], [PG.FILT, [0, 1, 2]], [PG.FX, [0, 1, 2, 3]], [PG.LFO, [0, 1, 2, 3, 4, 5]], [PG.ARP, [0]]])
       for (const sub of subs) for (let k = 0; k < 4; k++)
         if (x.w_kcode(page, sub, k) === code) return [cstr(x, x.w_knob(page, sub, machines[trk], k)), cstr(x, x.w_kname(page, sub, machines[trk], k))];
     return ["", ""];
@@ -385,7 +385,7 @@
   }
   /* the most one pattern packs to (m2k_proj.c's BLOB_MAX): the FM-1 keeps that much free in its image, for the
    * pattern playing to grow into (its patterns open only so), so a store must leave it */
-  const BLOB_MAX = 3608;
+  const BLOB_MAX = 3626;
   function packed(m) {
     if (m.why === "send") {
       const big = Math.max(0, ...imageSizes(m.bytes));
@@ -433,7 +433,7 @@
 
   // -------------------------------------------------------------------------------------------- the core
   async function boot() {
-    const r = await fetch("m2k.wasm?v=119");
+    const r = await fetch("m2k.wasm?v=120");
     wasmBytes = await r.arrayBuffer();
     pre = new WebAssembly.Instance(new WebAssembly.Module(wasmBytes), {}).exports;
     if (pre._initialize) pre._initialize();

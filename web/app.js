@@ -7,7 +7,7 @@
   "use strict";
   const $ = (id) => document.getElementById(id);
   /* the firmware, fetched and compiled once for every copy the page runs */
-  const wasmP = fetch("m2k.wasm?v=119").then((r) => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); });
+  const wasmP = fetch("m2k.wasm?v=120").then((r) => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); });
   window.M2K_CORE = { bytes: wasmP, module: wasmP.then((b) => WebAssembly.compile(b)) };
   const NS = "http://www.w3.org/2000/svg";
   const css = () => getComputedStyle(document.documentElement);
@@ -509,7 +509,7 @@
     const knobs = (page, subs, m) => subs.flatMap((sub) => [0, 1, 2, 3].map((k) => ({ s4: cstr(x, x.w_knob(page, sub, m, k)), name: cstr(x, x.w_kname(page, sub, m, k)), code: x.w_kcode(page, sub, k) })))
       .filter((r) => r.name);
     const blocks = [
-      ["SYN", P.SYN, [0, 1]], ["AMP", P.AMP, [0, 1]], ["FILTER", P.FILT, [0, 1]],
+      ["SYN", P.SYN, [0, 1]], ["AMP", P.AMP, [0, 1, 2]], ["FILTER", P.FILT, [0, 1, 2]],
       ...[0, 1, 2, 3].map((sub) => [cstr(x, x.w_page_label(P.FX, sub)), P.FX, [sub]]),
       ...[0, 1, 2].map((l) => [`LFO ${l + 1}`, P.LFO, [2 * l, 2 * l + 1]]),
       ["ARP", P.ARP, [0]], ["HOME", P.HOME, [0]],

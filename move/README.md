@@ -71,8 +71,10 @@ Gone since step 2: the jog turning pages and its page list (every page has a pad
 | Page | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
 |---|---|---|---|---|---|---|---|---|
 | SYN | A | B | C | D | E | F | G | H |
-| AMP | ATCK | HOLD | DEC | REL | DIST | VOL | PAN | PORT |
-| FILT | BASE | WDTH | HPQ | LPQ | ATK | DEC | B-OF | W-OF |
+| AMP | ATCK | DEC | SUS | REL | DIST | VOL | PAN | PORT |
+| AMP+⁵ | HOLD | – | – | – | – | – | – | – |
+| FILT | BASE | WDTH | HPQ | LPQ | ATCK | DEC | SUS | REL |
+| FILT+⁵ | B-OF | W-OF | – | – | – | – | – | – |
 | EFX | EQF | EQG | SRR | DTIM | DSND | DFB | DBAS | DWID |
 | DSTR | BITS | FOLD | XOR | VERB | TYPE | RATE | DPTH | MIX |
 | LFO1–3 | TRCK | DEST | WAVE | TRIG | MULT | SPD | PHAS | DPTH |
@@ -84,7 +86,7 @@ Gone since step 2: the jog turning pages and its page list (every page has a pad
 | GLO | DCAY | DAMP | ADPC | DRIV | MUTE⁴ | – | – | – |
 | PERFORM | DCAY | DAMP | ADPC | DRIV | – | – | – | – |
 
-¹ DIGI-WAV's wave bank only. ² The tempo, as Shift + knob 1: Move's and MONO2K's under SYNC (turning it asks Move for it), the pattern's own (whole BPM) under INT. ³ A proposal for the owner: one knob a track, the eight levels (no locks: MIX edits the kits). ⁴ MUTES: a mute made while playing comes at the next bar, or at once (a setting, kept with the store).
+¹ DIGI-WAV's wave bank only. ² The tempo, as Shift + knob 1: Move's and MONO2K's under SYNC (turning it asks Move for it), the pattern's own (whole BPM) under INT. ³ A proposal for the owner: one knob a track, the eight levels (no locks: MIX edits the kits). ⁴ MUTES: a mute made while playing comes at the next bar, or at once (a setting, kept with the store). ⁵ AMP's and FILT's pad pressed again (and again back): the FM-1's AMP 3 and FILT 3. AMP and FILT are the FM-1's AMP 1 and 2, FILT 1 and 2, two of its pages to the Move's eight knobs: the amp's and the filter's ADSRs (SUS 0: the one-shot amp, the filter's AD, as every older pattern).
 
 SYN to LFO3, TRK's are the track's (m2k.h's Monomachine pages); TRK holds the arp (the FM-1's ARP). PAT is the pattern's time and the track's own (the FM-1's HOME 2 and SEQ: there is no SEQ pad), HOME the FM-1's HOME 1 and 2 on one page, GRID the pattern's Grids and the track's lane, GLO the bus (the FM-1's GLO > BUS) and the one setting that matters on the Move (GLO > PLAY's MUTE). The FM-1's MIDI settings have no use here (the Move's glue routes no MIDI out or in), so they have no page.
 
