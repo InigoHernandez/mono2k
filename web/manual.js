@@ -172,7 +172,7 @@
   };
   const cstr = (x, p) => { const m = new Uint8Array(x.memory.buffer); let s = ""; while (m[p]) s += String.fromCharCode(m[p++]); return s; };
   async function firmware() {
-    const r = await fetch(at("m2k.wasm?v=119"));
+    const r = await fetch(at("m2k.wasm?v=120"));
     const x = new WebAssembly.Instance(new WebAssembly.Module(await r.arrayBuffer()), {}).exports;
     if (x._initialize) x._initialize();
     x.w_init(2000);
@@ -212,7 +212,7 @@
     const knobs = (page, subs) => subs.flatMap((sub) => [0, 1, 2, 3].map((k) => ({ s4: cstr(x, x.w_knob(page, sub, 0, k)), name: cstr(x, x.w_kname(page, sub, 0, k)) }))).filter((r) => r.name);
     const rows = (page, subs) => knobs(page, subs).map((r) => `<tr><td>${esc(r.s4)}</td><td>${esc(r.name.toLowerCase().replace(/^./, (c) => c.toUpperCase()))}</td></tr>`).join("");
     const BLOCKS = [
-      ["HOME", "HOME", P.HOME, [0]], ["AMP", "ENV", P.AMP, [0, 1]], ["FILTER", "SEL", P.FILT, [0, 1]],
+      ["HOME", "HOME", P.HOME, [0]], ["AMP", "ENV", P.AMP, [0, 1, 2]], ["FILTER", "SEL", P.FILT, [0, 1, 2]],
       ...[0, 1, 2, 3].map((sub) => [cstr(x, x.w_page_label(P.FX, sub)), "FX", P.FX, [sub]]),
       ...[0, 1, 2].map((l) => [`LFO ${l + 1}`, "LFO", P.LFO, [l, l + 3]]),
       ["ARP", "ARP", P.ARP, [0]],

@@ -270,11 +270,30 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   33 25 20 10 5 0 %, 0 every trig): `prob_pass` after the step's condition (and a lane's hit), a draw of 256 from the
   track's own generator (`sq.prng`, the sequencer's, first core: the same order everywhere, the conditions', LFOs'
   and arp's draws untouched; none at 100 % or 0 %); a pattern with every track at 100 % packs as 19 or 18, byte for
-  byte; the blob's head is 60 (BLOB_MAX 3608, editor.js's too). 21 eight tracks (`M2K_TRACKS` 8, the Move's build):
+  byte; the blob's head is 60 (BLOB_MAX 3608 until 22, 3626 since, editor.js's too). 21 eight tracks (`M2K_TRACKS` 8, the Move's build):
   20's layout eight wide, only for a pattern that uses T7 or T8 (`pat_wide`: anything not `track_blank`'s, or an LFO's
   TRCK 128/129 aimed there); else it packs as 18-20, byte for byte. A build of six reads 21 as its first six (an LFO
   aimed past them off, `trck_past`), a build of eight reads 18-20 with T7 T8 blank (SID, GND-PERC INIT, no trigs);
-  the self-test holds both ways on `FMT21`, the eight build's bytes. Older ones are
+  the self-test holds both ways on `FMT21`, the eight build's bytes. 22 the amp's and the filter's ADSRs (the owner's,
+  2026-11-16, after a player's "why not using regular ADSR?"): `P_SUS` `P_FSUS` `P_FREL` after the bank (71..73,
+  `P_COUNT` 74; `P_COUNT_V21` the kit before), 20's layout with kits 74 wide, only for a pattern that uses them
+  (`pat_adsr`: a kit's SUS FSUS FREL off 0 0 32, a lock on one, an LFO's DEST or a DEST lock on one), else it packs as
+  18-21, byte for byte; 23 is 22 eight tracks wide (21's layout, kits 74), in a build of eight. An older format loads with
+  them at 0 0 32 (`kit_v21`), their locks dropped and an LFO's DEST 72..74 (OFF there, past its 71) still OFF, as an
+  older build reads it; the self-test holds 22 and 23 both ways (FMT21 widened). The store keeps a sound's record as
+  before (`SND_REC` 80) and the three of every slot in a section of their own after 'R', `'A'` count, 3 a slot, only
+  when a named sound uses them: a library without them stores byte for byte as before (LIB_HASH, LIB_OLD, no LIB_REV,
+  FACTORY_REV or store version), an older build reads it without them; a store without 'A' reads its sounds at 0 0 32.
+  The engine: `env_block` as it was where SUS and FSUS are 0 (and no LFO on them), bit for bit (`m2k_draw --hash`), one
+  check before it (its cost at `--cpu`'s noise, +0..9 Mac instructions a sample: inlined, a fuller env_block cost +20);
+  the rest out of line, `env_adsr`: SUS past 0 the decay
+  falls on DEC's law toward (SUS / 127)^2 of full (`T_SUS`, Q30; shown in dB, `T_SUS_DB10`), held while the note lasts,
+  the note's end (a key let go, the step's gate run out) the release from wherever it is, in any stage (HOLD 127 and
+  DEC 127 as ever: full while the note lasts); FSUS past 0 the filter's decay stops at FSUS / 127 of full, held, the
+  note's end a straight release on FDEC's law timed by FREL (127 stays; 32 by default), for a FILTER trig in a note
+  (`fnote`; one with the gate shut plays its AD). The pages (the owner's): AMP 1 ATCK DEC SUS REL, 2 DIST VOL PAN PORT,
+  3 HOLD; FILT 1 BASE WDTH HPQ LPQ, 2 ATCK DEC SUS REL, 3 B-OF W-OF (`AMP_K`, `FILT_K`; the Move's AMP and FILT two
+  of them a page, AMP+ and FILT+ its pad again); no CC for the three; LFO targets 72..74. Older ones are
   converted on load. The
   Monomachine's tempo is set on its panel (TEMPO, the LEVEL knob a BPM a detent; `chain_hold46.panel`): the loop and
   spec modes leave it at 120.
@@ -296,7 +315,8 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   levels and the rest as they were, the drums and hits sample for sample.
   A note's length (the OP-XY's gesture, the owner's 2026-11-07; `span_tap`, `span_of`, m2k_ui.c, the FM-1's GRID and the
   Move's steps alike): a step held past a tap (`TAP_MS`), a later empty step pressed: two of the step's locks, GATE
-  (16 a step, 8 steps at most) and HOLD 127, the amp open that long whatever the kit's HOLD and DEC. No format change.
+  (16 a step, 8 steps at most) and HOLD 127, the amp open that long whatever the kit's HOLD and DEC; on a sound with a
+  sustain (SUS past 0, format 22) GATE alone, the ADSR holding its sustain that long. No format change.
   A step's flags bits 3..5 are its trig types (`ST_NOAMP`, `ST_NOFLT`, `ST_NOLFO`; clear is ALL, as every older pattern
   has them: no format change). FM+'s 24 ratio steps decode as the Monomachine's sound does, `fr24` (v * 24 + 8) >> 7,
   not as its screen labels them (`chain_fmstep43`, FM+STAT's 2FRQ `chain_fmstep44`). The owner's sheet (FM MACHINE

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
-# Mutation tests of the pattern format's conversions (fm_v9, sid_v10, gsin_v11, hold_v12, vox_v13, feel_v15, fx_v16, grids_v17, the tracks' lengths of format 19, format 21 read by a build of six): each mutant is one small change to a conversion;
+# Mutation tests of the pattern format's conversions (fm_v9, sid_v10, gsin_v11, hold_v12, vox_v13, feel_v15, fx_v16, grids_v17, the tracks' lengths of format 19, format 21 read by a build of six, the ADSRs' three of format 22 and the store's 'A'): each mutant is one small change to a conversion;
 # the self-test must fail on every one. A survivor is a conversion the self-test does not hold.
 #   .venv/bin/python tools/ref/mutate_formats.py [TREE]     (default: this checkout; it restores each file it touches)
 import subprocess, sys, os
@@ -122,26 +122,42 @@ M = [
     "    const int nt = fmt_nt(ver), gl = G_COUNT_OF(ver == 18 ? 19 : ver, nt);"),
  ("TLEN 18 written with 19's globals", P, "    const int gl = G_COUNT_OF(ver, nt);",
     "    const int gl = G_COUNT_OF(ver == 18 ? 19 : ver, nt);"),
- ("TLEN lengths packed as 18", P, "    return pat_pack_v(p, o, prb ? 20 : own ? 19 : 18);", "    return pat_pack_v(p, o, prb ? 20 : 18 + 0 * own);"),
- ("TLEN no lengths packed as 19", P, "    return pat_pack_v(p, o, prb ? 20 : own ? 19 : 18);", "    return pat_pack_v(p, o, prb ? 20 : 19 + 0 * own);"),
- ("TLEN 19 refused", P, "o[1] < 1 || o[1] > 21) return 0;", "o[1] < 1 || o[1] > 18) return 0;"),
+ ("TLEN lengths packed as 18", P, "    return pat_pack_v(p, o, adsr ? 22 : prb ? 20 : own ? 19 : 18);", "    return pat_pack_v(p, o, adsr ? 22 : prb ? 20 : 18 + 0 * own);"),
+ ("TLEN no lengths packed as 19", P, "    return pat_pack_v(p, o, adsr ? 22 : prb ? 20 : own ? 19 : 18);", "    return pat_pack_v(p, o, adsr ? 22 : prb ? 20 : 19 + 0 * own);"),
+ ("TLEN 19 refused", P, "o[1] < 1 || o[1] > 23) return 0;", "o[1] < 1 || o[1] > 18) return 0;"),
  ("PROB 19's globals read as 20's", P, "    const int nt = fmt_nt(ver), gl = G_COUNT_OF(ver, nt);",
     "    const int nt = fmt_nt(ver), gl = G_COUNT_OF(ver == 19 ? 20 : ver, nt);"),
  ("PROB 19 written with 20's globals", P, "    const int gl = G_COUNT_OF(ver, nt);",
     "    const int gl = G_COUNT_OF(ver == 19 ? 20 : ver, nt);"),
- ("PROB chances packed as 19", P, "    return pat_pack_v(p, o, prb ? 20 : own ? 19 : 18);", "    return pat_pack_v(p, o, prb ? 19 : own ? 19 : 18);"),
- ("PROB none packed as 20", P, "    return pat_pack_v(p, o, prb ? 20 : own ? 19 : 18);", "    return pat_pack_v(p, o, 20 + 0 * (prb + own));"),
- ("PROB 20 refused", P, "o[1] < 1 || o[1] > 21) return 0;", "o[1] < 1 || o[1] > 19) return 0;"),
+ ("PROB chances packed as 19", P, "    return pat_pack_v(p, o, adsr ? 22 : prb ? 20 : own ? 19 : 18);", "    return pat_pack_v(p, o, adsr ? 22 : prb ? 19 : own ? 19 : 18);"),
+ ("PROB none packed as 20", P, "    return pat_pack_v(p, o, adsr ? 22 : prb ? 20 : own ? 19 : 18);", "    return pat_pack_v(p, o, adsr ? 22 : 20 + 0 * (prb + own));"),
+ ("PROB 20 refused", P, "o[1] < 1 || o[1] > 23) return 0;", "o[1] < 1 || o[1] > 19) return 0;"),
  ("PROB a step past 15 kept", P, "    for (int t = 0; t < M2K_TRACKS; t++) if (p->glob[G_TPRB1 + t] > 15) p->glob[G_TPRB1 + t] = 15;\n", "\n"),
  ("TLEN a length past 64 kept", P, "    for (int t = 0; t < M2K_TRACKS; t++) if (p->glob[G_TLEN1 + t] > 64) p->glob[G_TLEN1 + t] = 64;\n", "\n"),
- ("EIGHT 21 refused", P, "o[1] < 1 || o[1] > 21) return 0;", "o[1] < 1 || o[1] > 20) return 0;"),
- ("EIGHT 21 read six wide", P, "{ return ver >= 21 ? M2K_TRACKS21 : M2K_TRACKS6; }", "{ return M2K_TRACKS6 + 0 * ver; }"),
+ ("EIGHT 21 refused", P, "o[1] < 1 || o[1] > 23) return 0;", "o[1] < 1 || o[1] > 20) return 0;"),
+ ("EIGHT 21 read six wide", P, "{ return ver == 21 || ver >= 23 ? M2K_TRACKS21 : M2K_TRACKS6; }", "{ return ver >= 23 ? M2K_TRACKS21 : M2K_TRACKS6; }"),
  ("EIGHT T8's mute kept by six", P, "    if (nt > M2K_TRACKS) p->mute &= (uint8_t)M2K_TMASK;\n", "\n"),
  ("EIGHT an LFO aimed past the six left aimed", P, "    if (nt > M2K_TRACKS) trck_past(p);\n", "\n"),
  ("EIGHT a TRCK lock past the six left", P, "        l->param = (uint8_t)dp;\n        l->val = 0;\n", "        (void)dp;\n"),
  ("EIGHT the LFO past the six on, its DEST kept", P, "            p->kit[t][b + L_TRCK] = trck_enc(t);\n            p->kit[t][b + L_DEST] = 0;\n", "            p->kit[t][b + L_TRCK] = trck_enc(t);\n"),
  ("COND a condition past 17's kept", P, "    const int nc = ver >= 18 ? C_COUNT : C_COUNT_V17;", "    const int nc = C_COUNT;"),
  ("COND 18's new chances refused", P, "    const int nc = ver >= 18 ? C_COUNT : C_COUNT_V17;", "    const int nc = C_COUNT_V17;"),
+ ("ADSR 22 refused", P, "o[1] < 1 || o[1] > 23) return 0;", "o[1] < 1 || o[1] > 21) return 0;"),
+ ("ADSR used, packed as 20", P, "    return pat_pack_v(p, o, adsr ? 22 : prb ? 20 : own ? 19 : 18);", "    return pat_pack_v(p, o, 0 * adsr ? 22 : prb ? 20 : own ? 19 : 18);"),
+ ("ADSR none, packed as 22", P, "    return pat_pack_v(p, o, adsr ? 22 : prb ? 20 : own ? 19 : 18);", "    return pat_pack_v(p, o, 1 + 0 * adsr ? 22 : prb ? 20 : own ? 19 : 18);"),
+ ("ADSR 22's kits read 71 wide", P, "{ return ver >= 22 ? P_COUNT : ver >= 8 ?", "{ return ver >= 24 ? P_COUNT : ver >= 8 ?"),
+ ("ADSR 23 read six wide", P, "{ return ver == 21 || ver >= 23 ? M2K_TRACKS21 : M2K_TRACKS6; }", "{ return ver == 21 ? M2K_TRACKS21 : M2K_TRACKS6; }"),
+ ("ADSR FREL not FDEC's on an older kit", P, "    k[P_FREL] = FREL_DEF;\n", "    k[P_FREL] = 0;\n"),
+ ("ADSR an older kit's LFO aimed past 71 left on", P, "    for (int l = 0; l < 3; l++) if (dest_adsr(k[P_LFO + 8 * l + L_DEST])) k[P_LFO + 8 * l + L_DEST] = 0;\n}", "    (void)0;\n}"),
+ ("ADSR an older DEST lock past 71 left on", P, "        else if (ver < 22 && is_dest(l->param) && dest_adsr(l->val)) l->val = 0;", "        else (void)0;"),
+ ("ADSR an older lock on them kept", P, "    const int np = ver >= 22 ? P_COUNT : P_COUNT_V21;", "    const int np = P_COUNT + 0 * ver;"),
+ ("ADSR a FREL off 32 unseen", P, "    if (k[P_SUS] || k[P_FSUS] || k[P_FREL] != FREL_DEF) return 1;", "    if (k[P_SUS] || k[P_FSUS]) return 1;"),
+ ("ADSR a lock on them unseen", P, "        if (l->trk < M2K_TRACKS && (l->param >= P_COUNT_V21 || (is_dest(l->param) && dest_adsr(l->val)))) return 1;",
+                                   "        if (l->trk < M2K_TRACKS && (is_dest(l->param) && dest_adsr(l->val))) return 1;"),
+ ("ADSR the store's 'A' never written", P, "    if (snd_adsr(snd)) {", "    if (0 * snd_adsr(snd)) {"),
+ ("ADSR the store's 'A' always written", P, "    if (snd_adsr(snd)) {", "    if (1 + 0 * snd_adsr(snd)) {"),
+ ("ADSR 'A' read and dropped", P, "                        for (int k = 0; k < 3; k++) snd[i].kit[P_COUNT_V21 + k] = a[k] > 127 ? 127 : a[k];", "                        (void)a;"),
+ ("ADSR an older store's sounds not at 0 0 32", P, "if (snd[i].name[0]) kit_v21(snd[i].kit);", "(void)0;"),
 ]
 def run():
     r = subprocess.run("cc -O2 -w -Ifirmware/src -Ifirmware/gen -o build/host/m2k_mut host/m2k_host.c -lm && build/host/m2k_mut --selftest",

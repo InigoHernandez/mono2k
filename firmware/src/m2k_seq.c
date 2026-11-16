@@ -1030,6 +1030,7 @@ static void kit_default(m2k_pattern_t *p, int t, int m)
     m_cpy(k, D, P_COUNT);
     k[P_MODR] = 40;                    /* the modulation: a slow chorus, off until its MIX is up */
     k[P_MODD] = 64;
+    k[P_FREL] = FREL_DEF;              /* the ADSR's (format 22): SUS and FSUS 0, every older sound's one-shot; FREL as FDEC */
     for (int l = 0; l < 3; l++) {
         uint8_t *b = &k[P_LFO + 8 * l];
         b[L_TRCK] = trck_enc(t);

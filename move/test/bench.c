@@ -312,7 +312,7 @@ static int trig_at(int k) { int st[16]; vlist(view(), "st", st, 16); return st[k
 static int step_flags(int k) { int st[16]; vlist(view(), "st", st, 16); return st[k]; }
 static int kv(int k) { int v[8]; vlist(view(), "k", v, 8); return v[k]; }
 static int kf(int k) { int v[8]; vlist(view(), "kf", v, 8); return v[k]; }
-static int dump_kit(int p) { int v[80]; char b[2000]; vstr(dump(), "kit", b, sizeof b); const char *q = b; for (int i = 0; i < 71; i++) { v[i] = atoi(q); q = strchr(q, ','); if (!q) break; q++; } return v[p]; }
+static int dump_kit(int p) { int v[80] = {0}; char b[2000]; vstr(dump(), "kit", b, sizeof b); const char *q = b; for (int i = 0; i < 74; i++) { v[i] = atoi(q); q = strchr(q, ','); if (!q) break; q++; } return v[p]; }   /* (P_COUNT 74: format 22's) */
 static int dump_step(int s, int *note)
 {
     char b[2000];
@@ -574,6 +574,27 @@ static int do_ctl(void)
     }
     check(every, "the 14 page pads: each its page, one press, on the screen too");
     check(lights, "the page pads lit: the page in view bright (sound orange, the rest azure), the others dim, the functions magenta");
+    /* AMP and FILT (the FM-1's AMP 1 2 and FILT 1 2: ATCK DEC SUS REL ..., BASE WDTH HPQ LPQ ATCK DEC SUS REL): their pad
+     * again their second page, AMP+ (HOLD, the kit's 9) and FILT+ (B-OF W-OF, 22 23), their pad lit; again, back */
+    {
+        page(MS_AMP); page(MS_AMP);
+        v = view();
+        int pads2[32];
+        vlist(v, "pads", pads2, 32);
+        int second = vint(v, "pg") == MS_AMP2 && vint(v, "spg") == MS_AMP2 && pads2[16 + ms_pad_of(MS_AMP)] == 3;
+        const int h0 = kv(0);
+        knob(0, 2); blocks(1);
+        second &= kv(0) == h0 + 2 && dump_kit(9) == h0 + 2 && (kf(1) & MV_K_FREE);
+        knob(0, -2); blocks(1);
+        page(MS_AMP);
+        second &= vint(view(), "pg") == MS_AMP && kv(1) == dump_kit(10) && kv(2) == dump_kit(71) && kv(3) == dump_kit(11);
+        page(MS_FILT); page(MS_FILT);
+        second &= vint(view(), "pg") == MS_FILT2 && kv(0) == dump_kit(22) && kv(1) == dump_kit(23) && (kf(2) & MV_K_FREE);
+        page(MS_FILT);
+        second &= vint(view(), "pg") == MS_FILT && kv(6) == dump_kit(72) && kv(7) == dump_kit(73) && kv(7) == 32;
+        page(MS_HOME);
+        check(second, "AMP's and FILT's pad again: AMP+ (HOLD) and FILT+ (B-OF W-OF), their pad lit; again, back; SUS, FSUS, FREL");
+    }
 
     /* the knobs: a range (AMP's VOL), a choice (DRM-KICK's WAVE, SYN A) */
     page(MS_AMP);
@@ -1514,6 +1535,7 @@ static int do_save(const char *d)
     in("B 42 127;B 42 0"); blocks(1);
     jog(1); knob(0, -9); knob(5, 4); blocks(1); jog(-1);
     tap(88);
+    page(MS_AMP); knob(2, 40); blocks(1); page(MS_HOME);   /* (a sustain: A03 packs as format 22, the ADSRs') */
     char d1[8][4096];
     for (int t = 0; t < 8; t++) { char b[16]; snprintf(b, sizeof b, "%d", t); A_set("track", b); blocks(1); A_get("dump", d1[t], sizeof d1[t]); }
     A_set("track", "1"); blocks(1);

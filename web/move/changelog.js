@@ -7,6 +7,14 @@ window.M2K_KINDS = window.M2K_KINDS || {
 };
 window.M2K_CHANGES = [
   {
+    date: "2026-11-16", title: "MONO2K for the Move: regular ADSR envelopes",
+    items: [
+      ["sound", "The amp is a regular ADSR: AMP's knobs 1-4 are ATCK DEC SUS REL. SUS holds a level while the note lasts and REL takes it down after; at 0 the envelope is as it was, so your patterns play exactly as before."],
+      ["sound", "The filter's envelope is an ADSR too: FILT's knobs 5-8 are ATCK DEC SUS REL."],
+      ["workflow", "AMP's pad again: HOLD. FILT's pad again: B-OF and W-OF, how far the envelope moves the band."],
+    ],
+  },
+  {
     date: "2026-11-16", title: "The manual, in the order you make music",
     items: [
       ["web", "The Move's manual in the order you make music: play the demos, build a beat, shape a sound, add effects, add movement, make it vary, then patterns into a song, play it live, in time with Move. Each page starts with a few steps to do; every control and page is under Reference."],

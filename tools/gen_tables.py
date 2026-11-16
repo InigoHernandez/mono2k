@@ -74,6 +74,11 @@ out.append(arr("T_ADEC_COEF", "uint32_t", [round((2 ** 31 - 1) * 10 ** (-3 / blo
 out.append(arr("T_AATK_MS10", "uint32_t", [round(-(-(1 << 30) // ATK0) * BLK * 10000)] +
                [round(blocks(n_atk(v)) * BLK * 10000) for v in range(1, 128)], 8))
 out.append(arr("T_ADEC_MS10", "uint32_t", [round(blocks(n_dec(v)) * BLK * 10000) for v in range(128)], 8))
+# the amp's sustain (format 22, SUS): the level its decay falls to and holds while the note lasts, (v / 127)^2 of full
+# (Q30, as the envelope): VOL's and LEVL's law, so the knob spends itself evenly on what is heard (-12 dB at 64, -24 at
+# 32, -48 at 8); 0 is no sustain, the one-shot amp of every pattern before. Its dB for the screen, in tenths
+out.append(arr("T_SUS", "uint32_t", [round((1 << 30) * (v / 127.0) ** 2) for v in range(128)], 8))
+out.append(arr("T_SUS_DB10", "int16_t", [-999] + [round(400 * math.log10(v / 127.0)) for v in range(1, 128)], 16))
 # a format-15 pattern's ATK DEC REL to format 16 (amp_v15). DEC and REL: the value whose time to -60 dB is nearest (on a
 # log scale; DEC's INF stays INF). ATK: the one whose rise sounds nearest the old straight one, its loudness (level^0.6)
 # against time closest (least area between them): about 0.73 of the old time; 0 stays 0 (the same straight 1 ms)

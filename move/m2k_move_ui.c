@@ -129,6 +129,9 @@ static void page_pad(int j)
         mc.page = MS_PERF;
         return;
     }
+    /* AMP and FILT have a second page (the FM-1's AMP 3 and FILT 3: HOLD; B-OF W-OF), their pad pressed again, and back */
+    const int plus = pg == MS_AMP ? MS_AMP2 : pg == MS_FILT ? MS_FILT2 : -1;
+    if (plus >= 0 && mc.page == pg) { mc.page = (uint8_t)plus; return; }
     mc.page = (uint8_t)pg;
 }
 
@@ -891,7 +894,11 @@ enum { W_OFF = 0, W_DIM = 16, W_MID = 64, W_ON = 124 };
 
 static void str_n(char *d, const char *s, int n) { s_cpyn(d, s ? s : "", n); }
 
-static int page_lit(int pg) { return pg == mc.page || (pg == MS_PERF && mc.perf) || (pg == MS_CAT && cat.open); }
+static int page_lit(int pg)
+{
+    return pg == mc.page || (pg == MS_PERF && mc.perf) || (pg == MS_CAT && cat.open) || (pg == MS_AMP && mc.page == MS_AMP2) ||
+           (pg == MS_FILT && mc.page == MS_FILT2);
+}
 
 static void mv_leds(mv_view_t *v)
 {

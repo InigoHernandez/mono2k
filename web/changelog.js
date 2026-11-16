@@ -7,6 +7,16 @@ window.M2K_KINDS = {
 };
 window.M2K_CHANGES = [
   {
+    date: "2026-11-16", title: "MONO2K 1.10: regular ADSR envelopes",
+    items: [
+      ["sound", "1.10: The amp is a regular ADSR: AMP 1 is ATCK DEC SUS REL. SUS holds a level while the note lasts, a key held or the step's length, and REL takes it down when the note ends. SUS at 0 is the envelope as it was, so every pattern and sound you have plays exactly as before."],
+      ["sound", "1.10: The filter's envelope is an ADSR too, on FILT 2: ATCK DEC SUS REL. B-OF and W-OF, how far it moves the band, are on FILT 3."],
+      ["workflow", "1.10: AMP 2 is DIST VOL PAN PORT as before; HOLD, the time at full level before the decay, is on AMP 3. The pictures draw the ADSR, SUS as a level in dB."],
+      ["sequencer", "1.10: A long note (a step held, a later one pressed) on a sound with a sustain holds that sustain to its end, then releases."],
+      ["patterns", "1.10: Your patterns and sounds load as they were."],
+    ],
+  },
+  {
     date: "2026-11-16", title: "MONO2K 1.9.3: the update on the FM-1's screen",
     items: [
       ["screen", "1.9.3: While MONO2K is installed, the FM-1's screen shows it: the firmware's 143 blocks fill one by one, a blinking block where it writes, the percentage under them, and MONO2K's M at the end before it starts."],

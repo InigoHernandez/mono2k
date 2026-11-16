@@ -267,7 +267,8 @@ static int ms_machine_icon(int m)
 /* ------------------------------------------------------------------------------------------------ the pages */
 
 static const char *const MS_PAGE_N[MS_COUNT] = {"HOME", "SYN", "AMP", "FILT", "EFX", "DSTR", "LFO1", "LFO2", "LFO3",
-                                                "TRK", "PAT", "GRID", "MIX", "GLO", "PERFORM", "SOUNDS", "PATTERNS"};
+                                                "TRK", "PAT", "GRID", "MIX", "GLO", "PERFORM", "AMP+", "FILT+", "SOUNDS",
+                                                "PATTERNS"};
 
 const char *m2k_screen_page_name(int page) { return page >= 0 && page < MS_COUNT ? MS_PAGE_N[page] : "?"; }
 
@@ -279,8 +280,10 @@ int m2k_screen_param(int page, int t, int k)
                     static const uint8_t m[4] = {P_LEVL, P_PTCH, GL(G_TMPO), GL(G_SWNG)};
                     return k < 4 ? m[k] : GL(g[k - 4] + t); }
     case MS_SYN: return P_SYN + k;
-    case MS_AMP: return P_ATK + k;
-    case MS_FILT: return P_BASE + k;
+    case MS_AMP: return AMP_K[k >> 2][k & 3];          /* (the FM-1's pages two to a Move page: m2k_ui.c AMP_K, FILT_K) */
+    case MS_AMP2: return k < 4 ? AMP_K[2][k] : NONE;
+    case MS_FILT: return FILT_K[k >> 2][k & 3];
+    case MS_FILT2: return k < 4 ? FILT_K[2][k] : NONE;
     case MS_EFX: return P_EQF + k;
     case MS_DSTR: return k < 4 ? P_BITS + k : P_MODT + k - 4;
     case MS_LFO1: case MS_LFO2: case MS_LFO3: return P_LFO + 8 * (page - MS_LFO1) + k;
@@ -390,7 +393,7 @@ static int ms_writes(const pi_t *pi, int t)
 /* the column a knob's picture takes (m2k_ui.c's icon_of, at 16 px): what it is, drawn; a value written where its
  * kind's every value fits the box, else drawn (a choice of up to 6 its places, more a dial) */
 enum { MP_DIAL, MP_BIDIAL, MP_SLIDER, MP_ENV, MP_FILT, MP_WAVE, MP_DWAV, MP_PAN, MP_CHOICE, MP_SEGS, MP_TOGGLE,
-       MP_TEXT, MP_NUM };
+       MP_TEXT, MP_NUM, MP_LVL };
 static int ms_pic_of(const pi_t *pi, int t)
 {
     const int k = pi->kind, n = kind_choices(k);
@@ -404,6 +407,7 @@ static int ms_pic_of(const pi_t *pi, int t)
     case IC_FILT: return MP_FILT;
     case IC_WAVE: return MP_WAVE;
     case IC_PAN: return MP_PAN;
+    case IC_LVL: return MP_LVL;
     default:
         if (n == 2) return MP_TOGGLE;
         if (ms_writes(pi, t)) return n && n <= 8 ? MP_CHOICE : icon_of(pi) == IC_BOX ? MP_TEXT : MP_NUM;
@@ -433,6 +437,7 @@ void m2k_screen_init(void)
     for (int i = 0; i < 4; i++) ms_pic_of(&PI_MOD[i], 0);
     for (int i = 0; i < G_COUNT; i++) ms_pic_of(&PI_GLOB[i], 0);
     ms_pic_of(&PI_WBNK, 0);
+    for (int i = 0; i < 3; i++) ms_pic_of(&PI_ADSR[i], 0);
     ms_pic_of(pinfo(0, SETTING(S_MUTQ)), 0);
 }
 
@@ -445,7 +450,8 @@ static void g_pic(ms_knob_t *kn, const pi_t *pi, int t, int val, char *o)
     kn->n = (uint8_t)kind_choices(pi->kind);
     kn->c = (uint8_t)choice_of(pi->kind, val);
     switch (pic) {
-    case MP_ENV: kn->sub = (uint8_t)(pi->kind == K_AHLD ? 2 : pi->s4[0] == 'A' && pi->s4[1] == 'T' ? 1 : 0); break;
+    case MP_ENV: kn->sub = (uint8_t)(pi->kind == K_AHLD ? 2 : pi->kind == K_AREL || pi->kind == K_FREL ? 3
+                                     : pi->s4[0] == 'A' && pi->s4[1] == 'T' ? 1 : 0); break;
     case MP_FILT: kn->sub = (uint8_t)(pi->kind == K_FOCT ? 0 : pi->kind == K_FWID ? 1 : pi->s4[0] == 'H' ? 2 : 3); break;
     case MP_WAVE: case MP_DWAV: {                      /* a cycle (its name's end to end, or DIGI-WAV's own from the bank
                                                         * it plays), its lowest and highest on the box's foot and top */
@@ -625,13 +631,14 @@ static void g_stage(ms_view_t *v, const m2k_scr_t *s)
         s_cpyn(st->syn.model, ms_model(p->machine[t]), sizeof st->syn.model);
         break;
     }
-    case MS_AMP:
+    case MS_AMP: case MS_AMP2:
         st->amp.a = (uint8_t)ms_value(s, t, P_ATK); st->amp.h = (uint8_t)ms_value(s, t, P_HOLD);
-        st->amp.d = (uint8_t)ms_value(s, t, P_DEC); st->amp.r = (uint8_t)ms_value(s, t, P_REL);
+        st->amp.d = (uint8_t)ms_value(s, t, P_DEC); st->amp.s = (uint8_t)ms_value(s, t, P_SUS);
+        st->amp.r = (uint8_t)ms_value(s, t, P_REL);
         st->amp.st = mon.astage[t];
         st->amp.lv = mon.aenv[t];
         break;
-    case MS_FILT: {                                   /* the cutoffs where the knobs have them, or the voice's now */
+    case MS_FILT: case MS_FILT2: {                    /* the cutoffs where the knobs have them, or the voice's now */
         const int base = ms_value(s, t, P_BASE), wdth = ms_value(s, t, P_WDTH);
         const int db = ms_value(s, t, P_BOF) - 64, dw = ms_value(s, t, P_WOF) - 64;
         const int ob = 7 * db * (db < 0 ? -db : db), ow = 7 * dw * (dw < 0 ? -dw : dw);
@@ -647,6 +654,10 @@ static void g_stage(ms_view_t *v, const m2k_scr_t *s)
             if (hp1 != hp0) st->filt.hp1 = (int16_t)hp1;
             if (lp1 != lp0) st->filt.lp1 = (int16_t)lp1;
         }
+        st->filt.fa = (uint8_t)ms_value(s, t, P_FATK); st->filt.fd = (uint8_t)ms_value(s, t, P_FDEC);   /* its envelope */
+        st->filt.fs = (uint8_t)ms_value(s, t, P_FSUS); st->filt.fr = (uint8_t)ms_value(s, t, P_FREL);
+        st->filt.fst = trk[t].sounding ? trk[t].fstage : 0;
+        st->filt.fe = (uint16_t)(trk[t].fenv >> 22);
         break;
     }
     case MS_EFX:
@@ -863,11 +874,23 @@ static void ms_pic(const ms_knob_t *kn, int X, int Y)
         if (f) ms_rect(X + 5, Y + e - 1 - f, 3, f, 1);
         break;
     }
-    case MP_ENV: {                           /* the segment, its run the value: a rise then held, a hold, a fall then out */
+    case MP_ENV: {                           /* the segment, its run the value: a rise then held, a hold, a fall then out,
+                                              * a release from a level held */
         const int L = (q * e + 128) >> 8;
         if (sub == 2) { ms_vline(X, Y, MS_KS, 1); ms_hline(X, Y, L + 1, 1); ms_vline(X + L, Y, MS_KS, 1); }
         else if (sub == 1) { ms_line(X, Y + e, X + L, Y, 1); ms_hline(X + L, Y, MS_KS - L, 1); }
+        else if (sub == 3) {                 /* (held a moment, then the fall: the top row and the foot, as every line) */
+            const int r = (q * (e - 3) + 128) >> 8;
+            ms_hline(X, Y, 3, 1); ms_line(X + 2, Y, X + 2 + r, Y + e, 1); ms_hline(X + 2 + r, Y + e, MS_KS - 2 - r, 1);
+        }
         else { ms_line(X, Y, X + L, Y + e, 1); ms_hline(X + L, Y + e, MS_KS - L, 1); }
+        break;
+    }
+    case MP_LVL: {                           /* a sustain: a fall from the top to the level, held there, let go to the foot */
+        const int ly = Y + e - ((q * e + 128) >> 8);
+        ms_line(X, Y, X + 3, ly, 1);
+        ms_hline(X + 3, ly, MS_KS - 6, 1);
+        ms_line(X + e - 3, ly, X + e, Y + e, 1);
         break;
     }
     case MP_FILT: {                          /* the band: the passband on the box's top row from lo to hi, each edge a
@@ -1012,50 +1035,80 @@ static void ms_pen(ms_pen_t *pn, int x, int y)
     pn->x = x; pn->y = y; pn->on = 1;
 }
 
-/* AMP: the envelope, attack hold decay release on the voice's own curves (env_level), the lengths on the FM-1's log
- * scale; its area a tint, the segment touched in hairlines; a handle where each ends; the voice live a dotted cursor
- * and a marker on its level */
+/* AMP and AMP+: the envelope as an ADSR, attack, HOLD's flat top where it has one, decay to the sustain, the sustain,
+ * release (SUS 0: the one-shot's decay, on to where a key let go would release it), on the voice's own curves
+ * (env_level), the lengths on the FM-1's log scale (env_widths); its area a tint, the segment touched in hairlines
+ * (AMP's ATCK DEC SUS REL, AMP+'s HOLD); a handle where each ends; the voice live a dotted cursor and a marker on its
+ * level (env_marker_x) */
 static void d_amp(const ms_view_t *v)
 {
+    static const int8_t SEG[4] = {ENV_A, ENV_D, ENV_S, ENV_R};
     const int X = 1, W = 126, top = MS_ST_T + 1, yb = MS_ST_B - 1, tk = v->touch.k;
-    const int a = v->st.amp.a, h = v->st.amp.h, d = v->st.amp.d, r = v->st.amp.r;
-    const int dec_inf = d == 127, fk = tk >= 0 && tk < 4 ? tk : -1, pk = yb - top;
-    int wa = 6 + a * 24 / 127, wh = h == 127 ? 18 : 2 + h * 18 / 127, wd = dec_inf ? 18 : 12 + d * 30 / 127, wr = 8 + r * 24 / 127;
-    const int tot = wa + wh + wd + wr, PW = W - 4;
-    wa = wa * PW / tot; wh = wh * PW / tot; wd = wd * PW / tot; wr = PW - wa - wh - wd;
-    int xs[5], ys[5];
-    xs[0] = X + 1; xs[1] = xs[0] + wa; xs[2] = xs[1] + wh; xs[3] = xs[2] + wd; xs[4] = xs[3] + wr;
-    for (int b = 0; b < 5; b++) ys[b] = yb;
+    const int a = v->st.amp.a, h = v->st.amp.h, d = v->st.amp.d, sus = v->st.amp.s, r = v->st.amp.r;
+    const int fk = v->page == MS_AMP2 ? (tk == 0 ? ENV_H : -1) : tk >= 0 && tk < 4 ? SEG[tk] : -1;
+    const int s = env_sus(sus, h, d), dec_inf = d == 127, pk = yb - top, PW = W - 4;
+    int w[ENV_N], tot = 0, xs[ENV_N + 1], ys[ENV_N + 1];
+    env_widths(a, h, d, sus, r, w);
+    for (int i = 0; i < ENV_N; i++) tot += w[i];
+    xs[0] = X + 1;
+    for (int i = 0; i < ENV_N - 1; i++) xs[i + 1] = xs[i] + w[i] * PW / tot;
+    xs[ENV_N] = xs[0] + PW;
+    for (int b = 0; b <= ENV_N; b++) ys[b] = yb;
     ms_pen_t pn = {0, 0, 0};
-    for (int x = xs[0]; x <= xs[4]; x++) {
-        int seg = x < xs[1] ? 0 : x < xs[2] ? 1 : x < xs[3] ? 2 : 3, len = xs[seg + 1] - xs[seg];
+    for (int x = xs[0]; x <= xs[ENV_N]; x++) {
+        int seg = env_seg_at(xs, x), len = xs[seg + 1] - xs[seg];
         int q = (x - xs[seg]) * 256 / (len ? len : 1);
-        int y = yb - pk * env_level(seg, q, dec_inf, !a) / 256;
-        if (x == xs[4]) y = yb;
+        int y = yb - pk * env_level(seg, q, dec_inf, !a, s) / 256;
+        if (x == xs[ENV_N]) y = yb;
         ms_fill(x, X, y + 1, yb, fk < 0 ? 1 : seg == fk ? 2 : 1);
         ms_pen(&pn, x, y);
-        for (int b = 1; b < 5; b++) if (x == xs[b]) ys[b] = y;
+        for (int b = 1; b <= ENV_N; b++) if (x == xs[b]) ys[b] = y;
     }
     ms_dots_h(X - 1, yb + 1, W + 2);
-    for (int b = 1; b < 4; b++) ms_handle(xs[b], ys[b], b - 1 == fk);
+    for (int b = 1; b < ENV_N; b++) if (xs[b] > xs[b - 1]) ms_handle(xs[b], ys[b], b - 1 == fk);
     const int st = v->st.amp.st, lv = v->st.amp.lv;
     if (st) {
-        const int ww[4] = {xs[1] - xs[0], xs[2] - xs[1], xs[3] - xs[2], xs[4] - xs[3]};
-        int dn = lv ? (ilog2_q8(32768) - ilog2_q8((uint32_t)lv)) : 8 * 256;
-        int ra = !a ? lv : (int)(atk_from((uint32_t)lv << 15) >> 15);
-        int x = st == 1 ? xs[0] + ww[0] * ra / 32768 : st == 2 ? xs[1] + ww[1] / 2
-              : st == 3 ? xs[2] + ww[2] * CLAMP(dn, 0, 512) / 512 : xs[3] + ww[3] * CLAMP(dn - (dec_inf ? 0 : 512), 0, 2048) / 2048;
+        const int x = env_marker_x(xs, st, lv, a, d, s);
         ms_dots_v(x, top, yb - top);
         ms_marker(x, yb - (pk * lv >> 15));
     }
 }
 
+/* FILT's envelope while one of its four is touched (ATCK DEC SUS REL): the FM-1's FILT 2 (fenv_shape), its area a tint,
+ * the segment touched in hairlines; the voice's place a dotted cursor and a marker */
+static void d_fenv(const ms_view_t *v)
+{
+    const int X = 1, W = 126, top = MS_ST_T + 1, yb = MS_ST_B - 1, eh = yb - top, fk = v->touch.k - 4;
+    const int fs = v->st.filt.fs, fr = v->st.filt.fr;
+    int w[4], xs[5] = {0};
+    const int sl = fenv_shape(v->st.filt.fa, v->st.filt.fd, fs, fr, W - 2, w), hs = eh * sl / 256;
+    for (int i = 0; i < 4; i++) xs[i + 1] = xs[i] + w[i];
+    ms_pen_t pn = {0, 0, 0};
+    for (int x = 0; x <= xs[4]; x++) {
+        const int y = yb - fenv_h(xs, w, x, eh, hs, fr == 127);
+        ms_fill(X + x, X, y + 1, yb, fenv_seg(xs, x) == fk ? 2 : 1);
+        ms_pen(&pn, X + x, y);
+    }
+    ms_dots_h(X - 1, yb + 1, W + 2);
+    const int fe = v->st.filt.fe;
+    if (v->st.filt.fst == 1 || (v->st.filt.fst && fe)) {
+        const int x = X + fenv_marker_x(xs, w, v->st.filt.fst, fe, fs, sl);
+        ms_dots_v(x, top, yb - top);
+        ms_marker(x, yb - (eh * fe >> 8));
+    }
+}
+
 /* FILT: the chain's response (m2k_ui.c's filt_db), one curve: the knobs' band, or while the track sounds where its
- * envelope and LFOs have it now; how far the envelope takes each cutoff dotted; the cutoffs' handles */
+ * envelope and LFOs have it now; how far the envelope takes each cutoff dotted; the cutoffs' handles. Its envelope's
+ * four touched: the envelope (d_fenv). FILT+ (B-OF W-OF) touched: the curve where the envelope takes it, its handle */
 static void d_filt(const ms_view_t *v)
 {
-    const int X = 1, W = 126, top = MS_ST_T + 1, yb = MS_ST_B - 1, fk = v->touch.k;
-    const int hp = v->st.filt.hp, lp = v->st.filt.lp, hq = v->st.filt.hq, lq = v->st.filt.lq;
+    if (v->page == MS_FILT && v->touch.k >= 4) { d_fenv(v); return; }
+    const int X = 1, W = 126, top = MS_ST_T + 1, yb = MS_ST_B - 1, plus = v->page == MS_FILT2;
+    const int tk = v->touch.k, reach = plus && (tk == 0 || tk == 1);
+    const int fk = plus ? (tk == 0 ? 0 : tk == 1 ? 3 : -1) : tk;       /* (FILT+'s B-OF the low handle, W-OF the high) */
+    const int hp = reach && v->st.filt.hp1 >= 0 ? v->st.filt.hp1 : v->st.filt.hp, hq = v->st.filt.hq, lq = v->st.filt.lq;
+    const int lp = reach && v->st.filt.lp1 >= 0 ? v->st.filt.lp1 : v->st.filt.lp;
     ms_pen_t pn = {0, 0, 0};
     for (int i = 0; i < W; i++) {
         int q = i * FQ_MAX / (W - 1), y = filt_row(filt_db(q, hp, lp, hq, lq), top, yb);
@@ -1474,8 +1527,8 @@ void m2k_screen_draw(const ms_view_t *v, uint8_t *fb)
         d_header(v, MS_PAGE_N[pg], pg != MS_MIX && pg != MS_GLO && pg != MS_PERF, 0);
         switch (pg) {
         case MS_SYN: d_syn(v); break;
-        case MS_AMP: d_amp(v); break;
-        case MS_FILT: d_filt(v); break;
+        case MS_AMP: case MS_AMP2: d_amp(v); break;
+        case MS_FILT: case MS_FILT2: d_filt(v); break;
         case MS_EFX: d_efx(v); break;
         case MS_DSTR: d_dstr(v); break;
         case MS_TRK: d_trk(v); break;

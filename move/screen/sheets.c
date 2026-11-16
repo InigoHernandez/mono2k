@@ -47,7 +47,14 @@ static void knob(int k, int d) { char s[32]; snprintf(s, sizeof s, "K %d %d", k,
 static void tempo(int k, int d10, int coarse) { char s[40]; snprintf(s, sizeof s, "P %d %d %d", k, d10, coarse); in(s); }
 static void touch(int k, int on) { char s[32]; snprintf(s, sizeof s, "T %d %d", k, on); in(s); }
 static void jog(int d) { char s[32]; snprintf(s, sizeof s, "J %d", d); in(s); }
-static void page_go(int page) { tap_pad(MS_PAD0 + ms_pad_of(page)); }
+/* a page by its pad (PERFORM's and SOUNDS' pads toggle them); AMP and FILT from their second pages and back, AMP+ and
+ * FILT+ their pad pressed once more */
+static void page_go(int page)
+{
+    if ((page == MS_AMP || page == MS_FILT) && mc.page == page) return;
+    if (page == MS_AMP2 || page == MS_FILT2) { if (mc.page == page) return; page_go(page == MS_AMP2 ? MS_AMP : MS_FILT); }
+    tap_pad(MS_PAD0 + ms_pad_of(page));
+}
 static void track(int t) { char s[8]; snprintf(s, sizeof s, "%d", t); v2_set_param(&mv, "track", s); blocks(1); }
 static void play(int on) { v2_set_param(&mv, "play", on ? "1" : "0"); blocks(1); }
 
@@ -256,8 +263,8 @@ static void header_audit(void)
     run_ms(200);
     select_pattern(5);                 /* (queued: A06 after A04) */
     char w[120];
-    static const uint8_t PG[] = {MS_HOME, MS_SYN, MS_AMP, MS_FILT, MS_EFX, MS_DSTR, MS_LFO1, MS_LFO2, MS_LFO3, MS_TRK,
-                                 MS_PAT, MS_GRID, MS_MIX, MS_GLO, MS_PERF, MS_CAT, MS_PATS};
+    static const uint8_t PG[] = {MS_HOME, MS_SYN, MS_AMP, MS_AMP2, MS_FILT, MS_FILT2, MS_EFX, MS_DSTR, MS_LFO1, MS_LFO2,
+                                 MS_LFO3, MS_TRK, MS_PAT, MS_GRID, MS_MIX, MS_GLO, MS_PERF, MS_CAT, MS_PATS};
     for (unsigned i = 0; i < sizeof PG; i++) {
         if (PG[i] == MS_PATS) { jog(1); blocks(4); }
         else page_go(PG[i]);
@@ -637,6 +644,24 @@ int main(int argc, char **argv)
     touch(0, 1); blocks(VW_EVERY);
     shot("15_touch_base", "FILT  BASE TOUCHED");
     touch(0, 0);
+    /* the ADSRs (format 22): T1 (A02's SWAV-ENS) given a sustain and its filter one, playing: AMP (SUS touched), AMP+
+     * (HOLD touched), FILT's envelope (FSUS touched), FILT+ (B-OF touched) */
+    {
+        uint8_t *k = PAT(cur_pat)->kit[0];
+        k[P_SUS] = 90; k[P_DEC] = 60; k[P_GATE] = 64; k[P_FSUS] = 60; k[P_FDEC] = 50; k[P_FREL] = 60; k[P_BOF] = 100;
+        m_cpy(trk[0].eff, k, P_COUNT);
+        run_ms(600);
+        static const struct { int page, k; const char *name, *label; } AD[] = {
+            {MS_AMP, 2, "15_adsr_amp", "AMP  ATCK DEC SUS REL: SUS TOUCHED"}, {MS_AMP2, 0, "15_adsr_amp2", "AMP+  HOLD TOUCHED"},
+            {MS_FILT, 6, "15_adsr_filt", "FILT  ITS ENVELOPE: FSUS TOUCHED"}, {MS_FILT2, 0, "15_adsr_filt2", "FILT+  B-OF TOUCHED"}};
+        for (unsigned i = 0; i < sizeof AD / sizeof AD[0]; i++) {
+            page_go(AD[i].page);
+            touch(AD[i].k, 1); blocks(VW_EVERY);
+            shot(AD[i].name, AD[i].label);
+            touch(AD[i].k, 0);
+        }
+        page_go(MS_AMP);
+    }
     blocks(500);
 
     /* TRK: the arp, three keys held, HOLD (Loop) */
@@ -660,8 +685,8 @@ int main(int argc, char **argv)
     if (ls < 0) { ls = 4; lock_set(0, 4, P_BASE, 90); lock_set(0, 4, P_LPQ, 100); lockmap_build(); }
     int lp = -1;
     for (int i = 0; i < M2K_LOCKS; i++) if (PAT(cur_pat)->lock[i].trk == 0 && PAT(cur_pat)->lock[i].step == ls) { lp = PAT(cur_pat)->lock[i].param; break; }
-    const int lpage = lp < 8 ? MS_SYN : lp < 16 ? MS_AMP : lp < 24 ? MS_FILT : lp < 32 ? MS_EFX : lp < 36 ? MS_DSTR
-                    : lp < 42 ? MS_TRK : lp < 66 ? MS_LFO1 + (lp - 42) / 8 : MS_DSTR;
+    int lpage = MS_DSTR;                               /* (the page of knobs that has it) */
+    for (int pg = MS_PAGES - 1; pg >= 0; pg--) for (int k = 0; k < 8; k++) if (m2k_screen_param(pg, 0, k) == lp) lpage = pg;
     page_go(lpage);
     step(ls, 1); blocks(VW_EVERY);
     shot("16_plock", "A STEP HELD: ITS LOCKS MARKED");
@@ -805,16 +830,17 @@ int main(int argc, char **argv)
     knob_rows();
 
     /* the motions, at the screen's pace (two panel frames, 34.8 ms: 12 blocks a sfb) */
-    /* a knob touched: A02 T1's DEC on AMP, touched, turned down and back, let go (shown a moment more) */
+    /* a knob touched: A02 T1's DEC on AMP (its knob 2: ATCK DEC SUS REL), touched, turned down and back, let go (shown a
+     * moment more) */
     open_at(1);
     page_go(MS_AMP);
     play(1);
     run_ms(500);
     for (int i = 0; i < 90; i++) {
-        if (i == 8) touch(2, 1);
-        if (i >= 12 && i < 40) knob(2, -1);
-        if (i >= 44 && i < 72) knob(2, 1);
-        if (i == 76) touch(2, 0);
+        if (i == 8) touch(1, 1);
+        if (i >= 12 && i < 40) knob(1, -1);
+        if (i >= 44 && i < 72) knob(1, 1);
+        if (i == 76) touch(1, 0);
         blocks(12);
         frame_of("knob", i);
     }

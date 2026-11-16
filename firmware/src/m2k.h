@@ -59,8 +59,12 @@ enum {
     P_LFO = 42,                   /* 3 x 8: TRCK DEST WAVE TRIG MULT SPD PHAS DPTH */
     P_MODT = 66, P_MODR, P_MODD, P_MODM,   /* the modulation effect: CHOR FLNG PHAS, rate, depth, mix */
     P_WBNK = 70,                  /* the wave machines' bank: MONO2K's 32, the owner's 64 (format 8) */
-    P_COUNT = 71
+    P_SUS = 71, P_FSUS, P_FREL,   /* the amp's and the filter's sustain, the filter's release (format 22): 0, 0 and 32
+                                   * play as every older pattern did (SUS 0 the one-shot amp, FSUS 0 the filter's AD) */
+    P_COUNT = 74
 };
+#define P_COUNT_V21 P_SUS         /* a kit's width in formats 8..21 (before the ADSR's three) */
+#define FREL_DEF 32               /* FREL's default (FDEC's): what an older pattern, a sound or a blank kit holds */
 enum { L_TRCK, L_DEST, L_WAVE, L_TRIG, L_MULT, L_SPD, L_PHAS, L_DPTH };
 
 /* global (pattern) parameters */

@@ -158,11 +158,18 @@ static int sv_write_store(const char *path)
     int ok = fwrite(h, 10, 1, f) == 1 && fwrite(sv.set, S_COUNT, 1, f) == 1 && sv_img_out(f, &sv_img);
     for (int i = 0; i < M2K_PROJECTS && ok; i++) ok = sv_img_out(f, &sv.proj[i]);
     uint8_t sh[2] = {'S', M2K_SOUNDS};
-    ok = ok && fwrite(sh, 2, 1, f) == 1 && fwrite(sv.snd, sizeof sv.snd, 1, f) == 1;
+    ok = ok && fwrite(sh, 2, 1, f) == 1;
+    for (int i = 0; i < M2K_SOUNDS && ok; i++) ok = fwrite(&sv.snd[i], SND_REC, 1, f) == 1;   /* (a record each, the kit's
+                                                                                          * first 71: the core's) */
     sh[0] = 'C';
     ok = ok && fwrite(sh, 2, 1, f) == 1 && fwrite(sv.cat, sizeof sv.cat, 1, f) == 1;
     sh[0] = 'R';
     ok = ok && fwrite(sh, 2, 1, f) == 1 && fwrite(sv.root, sizeof sv.root, 1, f) == 1;
+    if (snd_adsr(sv.snd)) {            /* the ADSRs' three of each, when a sound uses them (format 22: the store's 'A') */
+        sh[0] = 'A';
+        ok = ok && fwrite(sh, 2, 1, f) == 1;
+        for (int i = 0; i < M2K_SOUNDS && ok; i++) ok = fwrite(&sv.snd[i].kit[P_COUNT_V21], 3, 1, f) == 1;
+    }
     ok = ok && fflush(f) == 0 && fsync(fileno(f)) == 0;
     ok = fclose(f) == 0 && ok;
     if (ok) ok = rename(tmp, path) == 0;

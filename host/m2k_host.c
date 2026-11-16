@@ -118,11 +118,11 @@ static const ev_t MANUAL[] = {
     {24600, 'b', B_GLO, 1, 0}, {24620, 'b', B_GLO, 0, 0}, {24800, 'e', E_K2, 1, 0},
     {25000, 'b', B_GLO, 1, 0}, {25020, 'b', B_GLO, 0, 0}, {25200, 'e', E_K2, 1, 0},
     {25750, 'm', M2K_TRS, 0xF8, 0}, {25800, 's', 0, 0, "32_glo_in"},
-    /* T1's AMP on a swell (ATK 48, 0.17 s, its square rising; HOLD a half beat, DEC 1.4 s, REL 1.8 s: from GND-SIN's
-     * INIT, HOLD 24 DEC 113 REL 37), ATK in focus (09b); its LFO 1 on BASE, a sine, SPD 60 (a bar, from 48) and DPTH 90
-     * (+17 %), SPD in focus (14b) */
+    /* T1's AMP 1 on a swell, an ADSR (ATK 48, 0.17 s, its square rising; HOLD 24, 3/4 beat; DEC 1.4 s; SUS 90, -6.9 dB;
+     * REL 1.8 s: from GND-SIN's INIT, DEC 113 SUS 0 REL 37), ATK in focus (09b); its LFO 1 on BASE, a sine, SPD 60 (a
+     * bar, from 48) and DPTH 90 (+17 %), SPD in focus (14b) */
     {26000, 'b', B_ENV, 1, 0}, {26020, 'b', B_ENV, 0, 0},
-    {26200, 'e', E_K2, -8, 0}, {26250, 'e', E_K3, -37, 0}, {26300, 'e', E_K4, 43, 0}, {26350, 'e', E_K1, 48, 0},
+    {26200, 'e', E_K2, -37, 0}, {26250, 'e', E_K3, 90, 0}, {26300, 'e', E_K4, 43, 0}, {26350, 'e', E_K1, 48, 0},
     {27100, 's', 0, 0, "09b_amp_swell"},
     {27200, 'b', B_LFO, 1, 0}, {27220, 'b', B_LFO, 0, 0},
     {27300, 'e', E_K1, 17, 0}, {27350, 'e', E_K2, 19, 0},
@@ -192,7 +192,7 @@ static const ev_t HOME2_TOUR[] = {
 };
 
 /* the workflow's screens (the manual's): GRID on HOME with T4's notes (38), a step held: its card (39), an LFO linked:
- * GLO + LFO on ENV, the prompt (40), KNOB 3 turned, the knob moving (41), GLO > HELP (42), the LFO page's rest (43) */
+ * GLO + LFO on ENV, the prompt (40), KNOB 2 (DEC) turned, the knob moving (41), GLO > HELP (42), the LFO page's rest (43) */
 static const ev_t WORK_TOUR[] = {
     {2600, 'b', B_PLAY, 1, 0}, {2620, 'b', B_PLAY, 0, 0},
     {2700, 'e', E_SELECT, 1, 0}, {2720, 'e', E_SELECT, 1, 0}, {2740, 'e', E_SELECT, 1, 0},
@@ -203,7 +203,7 @@ static const ev_t WORK_TOUR[] = {
     {7000, 'b', B_ENV, 1, 0}, {7020, 'b', B_ENV, 0, 0},
     {7500, 'b', B_GLO, 1, 0}, {7560, 'b', B_LFO, 1, 0}, {7580, 'b', B_LFO, 0, 0}, {7620, 'b', B_GLO, 0, 0},
     {8000, 's', 0, 0, "40_lfo_link"},
-    {8100, 'e', E_K3, 1, 0}, {9700, 's', 0, 0, "41_lfo_moved"},
+    {8100, 'e', E_K2, 1, 0}, {9700, 's', 0, 0, "41_lfo_moved"},
     {9800, 'b', B_LFO, 1, 0}, {9820, 'b', B_LFO, 0, 0}, {10500, 's', 0, 0, "43_lfo_rows"},
     {10600, 'b', B_GLO, 1, 0}, {10620, 'b', B_GLO, 0, 0},
     {11100, 'b', B_GLO, 1, 0}, {11120, 'b', B_GLO, 0, 0}, {11500, 'b', B_GLO, 1, 0}, {11520, 'b', B_GLO, 0, 0},
@@ -212,6 +212,38 @@ static const ev_t WORK_TOUR[] = {
     {13500, 'e', E_K1, 4, 0}, {13900, 's', 0, 0, "42_glo_help"},
     {14000, 'x', 0, 0, 0},
 };
+
+/* the ADSRs (format 22) on B01, playing: T1 a SWAV-SAW pad held 4 steps (GATE 64) on an ADSR and a filter's ADSR (adsr_scene):
+ * AMP 1 (44), AMP 2 (45), AMP 3 with HOLD turned (46), FILT 2 with FSUS turned (47), FILT 3 with B-OF turned (48) */
+static const ev_t ADSR_TOUR[] = {
+    {2600, 'b', B_PLAY, 1, 0}, {2620, 'b', B_PLAY, 0, 0},
+    {2700, 'b', B_ENV, 1, 0}, {2720, 'b', B_ENV, 0, 0},
+    {3330, 's', 0, 0, "44_amp_adsr"},
+    {3400, 'b', B_ENV, 1, 0}, {3420, 'b', B_ENV, 0, 0}, {3900, 's', 0, 0, "45_amp_chain"},
+    {4000, 'b', B_ENV, 1, 0}, {4020, 'b', B_ENV, 0, 0}, {4300, 'e', E_K1, 8, 0}, {4600, 's', 0, 0, "46_amp_hold"},
+    {4700, 'b', B_SEL, 1, 0}, {4720, 'b', B_SEL, 0, 0}, {5000, 'b', B_SEL, 1, 0}, {5020, 'b', B_SEL, 0, 0},
+    {5300, 'e', E_K3, 4, 0}, {5450, 's', 0, 0, "47_filt_adsr"},
+    {5700, 'b', B_SEL, 1, 0}, {5720, 'b', B_SEL, 0, 0}, {6000, 'e', E_K1, 4, 0}, {6300, 's', 0, 0, "48_filt_reach"},
+    {6400, 'x', 0, 0, 0},
+};
+
+static void adsr_scene(void)
+{
+    m2k_init(2004);
+    m2k_pattern_t *q = &pat[16];
+    kit_init(q, 0, M_SAW);
+    static const uint8_t KV[][2] = {{P_ATK, 30}, {P_HOLD, 0}, {P_DEC, 60}, {P_SUS, 90}, {P_REL, 70}, {P_GATE, 64},
+                                    {P_BASE, 4}, {P_WDTH, 30}, {P_LPQ, 40}, {P_FATK, 20}, {P_FDEC, 50}, {P_FSUS, 60},
+                                    {P_FREL, 60}, {P_BOF, 100}, {P_WOF, 90}};
+    for (unsigned i = 0; i < sizeof KV / sizeof KV[0]; i++) q->kit[0][KV[i][0]] = KV[i][1];
+    static const uint8_t NT[4] = {48, 55, 51, 46};
+    for (int i = 0; i < 4; i++) q->step[0][4 * i] = (m2k_step_t){.note = NT[i], .flags = ST_TRIG};
+    for (int t = 1; t < M2K_TRACKS; t++) q->mute |= (uint8_t)(1u << t);
+    cur_pat = 16;
+    sq.queued = 16;
+    lockmap_build();
+    for (int t = 0; t < M2K_TRACKS; t++) m_cpy(trk[t].eff, pat[16].kit[t], P_COUNT);
+}
 
 static void home2_scene(void)
 {
@@ -1326,6 +1358,12 @@ static const char FMT21[] =
 #define X6_LEN 672
 #define X6_FNV 0x8a8b3458u
 static int x8_hex(const char *h, uint8_t *b) { int n = 0; for (; h[0] && h[1]; h += 2) { unsigned v; sscanf(h, "%2x", &v); b[n++] = (uint8_t)v; } return n; }
+/* a lock of pattern q's (lock_find's, on any pattern): its index, -1 none */
+static int lock_in(const m2k_pattern_t *q, int t, int s, int prm)
+{
+    for (int i = 0; i < M2K_LOCKS; i++) if (q->lock[i].trk == t && q->lock[i].step == s && q->lock[i].param == prm) return i;
+    return -1;
+}
 
 /* the sound engine's tests: pattern 40 bare (bare()), the drive off; eng_go takes its kits up and plays it, eng_run
  * renders (the last block's output in eng_out) */
@@ -1366,6 +1404,27 @@ static void amp_probe(int atk, int hold, int dec, int rel, int gate, int retrig,
         lv[i] = c > a ? (c > b ? c : b) : a > b ? a : b;
         b = a; a = c;
         amp_ae[i] = trk[0].amp1;
+    }
+}
+/* the ADSRs (format 22) on T1's clean sine, its kit changed by kv (param, value .. KV_END): the amp (amp_ae, Q15) and
+ * the filter's envelope (adsr_fe, Q15) each block's end, n blocks; the note's end the step's gate run out after gate
+ * blocks (-1: none), or a key let go at block off (-1: none); a FILTER trig (no AMP, no LFO) at block ftrig (-1: none) */
+static int32_t adsr_fe[M2K_SR * 12 / M2K_SUB];
+static void adsr_probe(const uint8_t *kv, int gate, int off, int ftrig, int n)
+{
+    m2k_pattern_t *q = eng_pat(41);
+    uint8_t *k = q->kit[0];
+    k[P_VOL] = 100; k[P_LEVL] = 127;
+    for (; kv[0] != KV_END; kv += 2) k[kv[0]] = kv[1];
+    m_cpy(trk[0].eff, k, P_COUNT);
+    voice_on(0, 96, 100, 0);
+    trk[0].gate_left = gate;
+    for (int i = 0; i < n; i++) {
+        if (i == off) voice_off(0);
+        if (i == ftrig) voice_trig(0, 96, 100, 0, ST_NOAMP | ST_NOLFO);
+        m2k_render(eng_out, M2K_SUB);
+        amp_ae[i] = trk[0].amp1;
+        adsr_fe[i] = (int32_t)(trk[0].fenv >> 15);
     }
 }
 /* the first block at or past i0 where lv is at least (up 1) or under (up 0) the fraction f of ref: -1 if none */
@@ -1608,6 +1667,7 @@ static int selftest(void)
             int same = pat_unpack(&w2, wb, wn);
             static m2k_pattern_t we;                                     /* (16 turns the amp's and the LFOs' alone) */
             m_cpy(&we, &w, sizeof we);
+            for (int t = 0; t < M2K_TRACKS6; t++) kit_v21(we.kit[t]);   /* (22: an LFO aimed past 71, OFF, stays OFF) */
             feel_v15(&we);
             for (int t = 0; t < M2K_TRACKS6; t++) same = same && !memcmp(w2.kit[t], we.kit[t], P_WBNK) && w2.kit[t][P_WBNK] == 0;
             CHECK(same, "format: version 7 -> 8 keeps every kit value, the bank MONO2K's 32");
@@ -2965,9 +3025,11 @@ static int selftest(void)
             for (int j = i + 1; j < LIB_N; j++) uniq &= strcmp(LIB[i].name, LIB[j].name) != 0;
         for (unsigned k = 1; k < sizeof LIB_OLD / sizeof LIB_OLD[0]; k++) sorted &= LIB_OLD[k - 1] < LIB_OLD[k];
         uint32_t h = 2166136261u;
-        for (int i = 0; i < LIB_N; i++) {
+        for (int i = 0; i < LIB_N; i++) {                   /* (as the store keeps each: its record, the ADSR's three
+                                                             * only where it uses them, snd_fnv's) */
             const uint8_t *b = (const uint8_t *)&snd[i];
-            for (unsigned k = 0; k < sizeof snd[i]; k++) h = (h ^ b[k]) * 16777619u;
+            for (unsigned k = 0; k < SND_REC; k++) h = (h ^ b[k]) * 16777619u;
+            if (kit_adsr(snd[i].kit)) for (int k = P_COUNT_V21; k < P_COUNT; k++) h = (h ^ snd[i].kit[k]) * 16777619u;
             h = (h ^ snd_cat[i]) * 16777619u;
             h = (h ^ snd_root[i]) * 16777619u;
         }
@@ -3193,6 +3255,7 @@ static int selftest(void)
         loaded &= trk[4].note == 36;
         m2k_key(7, 0);
         snd_root[101] = 77; s_cpy(snd[101].name, "HIGH"); snd[101].machine = M_SAW; snd_cat[101] = CAT_LEAD;
+        kit_v21(snd[101].kit);                                    /* (a track's kit: the ADSR's three at their defaults) */
         int n = m2k_store_pack();
         m2k_init(53);
         int kept = m2k_store_unpack(n) == 1 && snd_root[100] == 36 && snd_root[101] == 77;
@@ -3786,11 +3849,11 @@ static int selftest(void)
         ui.page = PG_AMP; ui.sub = 0; ui.trk = 1;
         int dec0 = pat[0].kit[1][P_DEC];
         m2k_button(B_LFO, 1);
-        edit(2, 10);                                  /* KNOB 3: DEC */
+        edit(1, 10);                                  /* KNOB 2: DEC (AMP 1: ATCK DEC SUS REL) */
         int moved = pat[0].kit[1][P_DEC] != dec0;
         m2k_button(B_LFO, 0);
         int back = pat[0].kit[1][P_DEC] == dec0 && ui.page == PG_AMP;
-        m2k_button(B_LFO, 1); edit(2, 10); m2k_button(B_OCTU, 1); m2k_button(B_OCTU, 0); m2k_button(B_LFO, 0);
+        m2k_button(B_LFO, 1); edit(1, 10); m2k_button(B_OCTU, 1); m2k_button(B_OCTU, 0); m2k_button(B_LFO, 0);
         int kept = pat[0].kit[1][P_DEC] != dec0;
         CHECK(fxpage && rep_on && rep_off && killed && moved && back && kept,
               "PERFORM: FX tapped its page, held a repeat while a black key is held, KILL silent; LFO held: the knobs snap back, OCT+ keeps");
@@ -4061,9 +4124,9 @@ static int selftest(void)
         m2k_key(bk[6], 1); m2k_key(bk[6], 0);         /* black 7: 50% */
         int cd = q->step[0][0].cond == C_P50 && ui.trk == 0;
         ui.page = PG_AMP; ui.sub = 0;
-        edit(2, 5);                                   /* a lock on DEC */
+        edit(1, 5);                                   /* a lock on DEC (AMP 1 KNOB 2) */
         int locked = lock_find(0, 0, P_DEC) >= 0;
-        m2k_button(B_OCTD, 1); edit(2, 1); m2k_button(B_OCTD, 0);
+        m2k_button(B_OCTD, 1); edit(1, 1); m2k_button(B_OCTD, 0);
         int unlocked = lock_find(0, 0, P_DEC) < 0 && q->step[0][0].rtrg <= 1;
         m2k_key(0, 0);
         ui.grid = 0;
@@ -4074,7 +4137,7 @@ static int selftest(void)
         kit_default(&fd, 0, q->machine[0]);
         q->kit[0][P_DEC] = (uint8_t)(fr.kit[0][P_DEC] ^ 40);
         int o0 = ui.oct[ui.trk];
-        m2k_button(B_OCTD, 1); edit(2, 1); m2k_button(B_OCTD, 0);
+        m2k_button(B_OCTD, 1); edit(1, 1); m2k_button(B_OCTD, 0);
         int home = q->kit[0][P_DEC] == fr.kit[0][P_DEC] && fr.kit[0][P_DEC] != fd.kit[0][P_DEC] && ui.oct[ui.trk] == o0;
         m2k_button(B_OCTD, 1); m2k_button(B_OCTD, 0);
         int oct = ui.oct[ui.trk] == o0 - 1;
@@ -4218,6 +4281,27 @@ static int selftest(void)
         const int let = !trk[t].gate && trk[t].astage != 2 && trk[t].astage != 1;
         ux_tap(B_PLAY);
         CHECK(open && let, "LENGTH: played on a sound that decays: the amp open past 2.5 steps, let go by 3.5");
+        /* on a sound with a sustain (SUS past 0: an ADSR, format 22) GATE alone: the span's HOLD 127 goes, the envelope
+         * holds its sustain that long, then its release; the same step again: the GATE gone */
+        q->kit[t][P_SUS] = 80; q->kit[t][P_HOLD] = 0; q->kit[t][P_DEC] = 30; q->kit[t][P_REL] = 64;
+        m_cpy(trk[t].eff, q->kit[t], P_COUNT);
+        ui.spage = 0;                                       /* (GRID followed the playhead) */
+        m2k_key(k0, 1); ux_ms(400);
+        m2k_key(k4, 1); ux_ms(40); m2k_key(k4, 0); ux_ms(40);
+        const int g5 = span_of(t, 0) == 5 && ux_locks(t, 0, 15) == 1 && lock_find(t, 0, P_HOLD) < 0 && !LT(4) &&
+                       q->lock[lock_find(t, 0, P_GATE)].val == 80;
+        m2k_key(k0, 0); ux_ms(400);
+        ux_tap(B_PLAY);
+        ux_audio(spt * 4);
+        const uint32_t s80 = T_SUS[80];
+        const int sus = trk[t].gate && trk[t].astage == 3 && trk[t].aenv >= s80 - s80 / 50 && trk[t].aenv <= s80 + s80 / 50;
+        ux_audio(spt * 3 / 2);
+        const int rel = !trk[t].gate && trk[t].astage == 4 && trk[t].aenv < s80 - s80 / 10;
+        ux_tap(B_PLAY);
+        ui.spage = 0; m2k_key(k0, 1); ux_ms(400); m2k_key(k4, 1); ux_ms(40); m2k_key(k4, 0); ux_ms(40); m2k_key(k0, 0); ux_ms(400);
+        const int off = !span_of(t, 0) && !ux_locks(t, 0, 15);
+        printf("     LENGTH on an ADSR: GATE alone %d, its sustain held %d, released %d, again gone %d\n", g5, sus, rel, off);
+        CHECK(g5 && sus && rel && off, "LENGTH: on an ADSR (SUS past 0) GATE alone: its sustain held 5 steps, then released; again, gone");
 #undef LT
     }
     /* a trig taken away takes its condition and ratchet with it: tapped again, the new trig is plain (100 %, no
@@ -5003,7 +5087,7 @@ static int selftest(void)
     }
     /* format 19: a pattern with no track of its own length packs as 18, byte for byte (bank A's bytes kept); one with, as
      * 19, six bytes more, read back the same; a version-18 pattern loads with every track on the pattern's length (0); a
-     * length past 64 reads 64; a version past today's (22) is refused; a store keeps the lengths. Every length set to the pattern's own
+     * length past 64 reads 64; a version past today's (24) is refused; a store keeps the lengths. Every length set to the pattern's own
      * plays as none set (A01, two seconds) */
     {
         static m2k_pattern_t w, w2;
@@ -5021,7 +5105,7 @@ static int selftest(void)
         m_cpy(bx, b19, (size_t)n19);
         bx[2 + 8 + M2K_TRACKS6 + G_COUNT_OF(18, M2K_TRACKS6) + 1] = 200;   /* (T2's length, as 19 packs it) */
         int clamp = pat_unpack(&w2, bx, n19) && w2.glob[G_TLEN1 + 1] == 64;
-        bx[1] = 22;
+        bx[1] = 24;
         int refused = !pat_unpack(&w2, bx, n19);
         pat[5].glob[G_TLEN1 + 2] = 7;
         int sn = m2k_store_pack();
@@ -5042,7 +5126,7 @@ static int selftest(void)
     }
     /* format 20, the tracks' chances (PROB): a pattern with every track at 100 % packs as before (19 with a length of
      * its own, bank A's as 18), byte for byte; one with a chance as 20, six bytes more, read back the same; a version-19
-     * pattern loads with every track at 100 % (0); a step past 15 reads 15 (0 %); version 22 is refused; a store keeps
+     * pattern loads with every track at 100 % (0); a step past 15 reads 15 (0 %); version 24 is refused; a store keeps
      * the chances; HOME's second page is the track's TLEN SPD PROB LANE */
     {
         static m2k_pattern_t w, w2;
@@ -5062,7 +5146,7 @@ static int selftest(void)
         m_cpy(bx, b20, (size_t)n20);
         bx[2 + 8 + M2K_TRACKS6 + G_COUNT_OF(19, M2K_TRACKS6) + 2] = 200;   /* (T3's chance, as 20 packs it) */
         int clamp = pat_unpack(&w2, bx, n20) && w2.glob[G_TPRB1 + 2] == 15;
-        bx[1] = 22;
+        bx[1] = 24;
         int refused = !pat_unpack(&w2, bx, n20);
         pat[5].glob[G_TPRB1 + 3] = 8;
         int sn = m2k_store_pack();
@@ -5082,7 +5166,7 @@ static int selftest(void)
         for (int i = 0; i < 20; i++) edit(2, -1);
         home2 &= pat[cur_pat].glob[G_TPRB1 + 2] == 0;
         ui.sub = 0;
-        printf("     packed 18 %d, 19 %d, 20 %d, 19 read %d, clamp %d, 22 refused %d, store %d, HOME 2 %d\n", ok18, ok19, ok20,
+        printf("     packed 18 %d, 19 %d, 20 %d, 19 read %d, clamp %d, 24 refused %d, store %d, HOME 2 %d\n", ok18, ok19, ok20,
                old, clamp, refused, kept, home2);
         CHECK(ok18 && ok19 && ok20 && old && clamp && refused && kept && home2,
               "format: 20 the tracks' chances (all 100 %: packed as before, byte for byte), 19 loads at 100 %; HOME 2: TLEN SPD PROB LANE");
@@ -5191,6 +5275,90 @@ static int selftest(void)
         CHECK(six && blank && wide && read6 && fok > 30 && franged,
               "format: 21 eight tracks (one that uses T7 or T8; a pattern of six packs as before in either build, T7 T8 blank), "
               "read by a build of six as its first six, an LFO aimed past them off");
+    }
+    /* format 22, the ADSRs' three (SUS FSUS FREL after the bank, kits 74 wide): a pattern whose every kit has them at 0
+     * 0 32, no lock on them and no LFO aimed at them, packs as before, byte for byte (bank A's 18, x8_pattern's 20);
+     * one that uses them (a kit's SUS, FSUS or FREL, a lock on one, an LFO's DEST, a DEST lock) as 22, 18 bytes more,
+     * read back the same; written in an older layout (20) it loads as an older build read it: the three at 0 0 32,
+     * their locks gone, an LFO aimed at them OFF (an older build's DEST past its 71). 23 is 22 eight tracks wide (21's):
+     * FMT21 with the three in its eight kits, read by a build of six as its first six (packed as 22), by a build of
+     * eight as it was (packed back to the same bytes). A store keeps them; the sounds' in the store's 'A' only when a
+     * sound uses them (a library without: the store as before, 'R' its last), an older store's sounds at 0 0 32 */
+    {
+        static m2k_pattern_t w, w2, e;
+        static uint8_t b[BLOB_ANY + 32], b2[BLOB_ANY + 32], fx[BLOB_ANY], f23[BLOB_ANY + 32];
+        m2k_init(46);
+        int before = 1;
+        for (int i = 0; i < 16; i++) before &= pat_pack(&pat[i], b) > 0 && b[1] <= 20 && !pat_adsr(&pat[i]);
+        x8_pattern(&w, 0);
+        before &= pat_pack(&w, b) == X6_LEN && b[1] == 20;
+        int uses = 1;
+        for (int c = 0; c < 6; c++) {
+            m_cpy(&e, &w, sizeof e);
+            switch (c) {
+            case 0: e.kit[2][P_SUS] = 1; break;
+            case 1: e.kit[0][P_FSUS] = 60; break;
+            case 2: e.kit[5][P_FREL] = 31; break;
+            case 3: lk(&e, 1, 3, P_SUS, 90); break;
+            case 4: e.kit[3][P_LFO + 8 + L_DEST] = P_FREL + 1; break;
+            case 5: lk(&e, 4, 2, P_LFO + L_DEST, P_SUS + 1); break;
+            }
+            int n = pat_pack(&e, b);
+            uses &= b[1] == 22 && n == X6_LEN + 18 + (c == 3 || c == 5 ? 4 : 0) && pat_unpack(&w2, b, n) &&
+                    !memcmp(&w2, &e, sizeof e) && pat_pack(&w2, b2) == n && !memcmp(b, b2, (size_t)n);
+        }
+        m_cpy(&e, &w, sizeof e);                                  /* 22's written as 20: an older build's reading */
+        e.kit[0][P_SUS] = 80; e.kit[1][P_FSUS] = 50; e.kit[1][P_FREL] = 70;
+        e.kit[2][P_LFO + L_DEST] = P_SUS + 1; e.kit[2][P_LFO + L_DPTH] = 100;
+        lk(&e, 3, 0, P_FREL, 10); lk(&e, 3, 1, P_LFO + 8 + L_DEST, P_FSUS + 1);
+        int n20 = pat_pack_v(&e, b, 20), old = b[1] == 20 && pat_unpack(&w2, b, n20);
+        for (int t = 0; t < M2K_TRACKS6; t++) {
+            old &= !w2.kit[t][P_SUS] && !w2.kit[t][P_FSUS] && w2.kit[t][P_FREL] == FREL_DEF;
+            for (int q = 0; q < P_COUNT_V21; q++) old &= w2.kit[t][q] == (t == 2 && q == P_LFO + L_DEST ? 0 : e.kit[t][q]);
+        }
+        old &= lock_in(&w2, 3, 0, P_FREL) < 0 && lock_in(&w2, 3, 1, P_LFO + 8 + L_DEST) >= 0 &&
+               !w2.lock[lock_in(&w2, 3, 1, P_LFO + 8 + L_DEST)].val && pat_pack(&w2, b2) > 0 && b2[1] == 20;
+        /* 23: FMT21 widened, the three after each of its eight kits */
+        static const uint8_t AD[M2K_TRACKS21][3] = {{70, 0, 32}, {0, 40, 50}, {0, 0, 32}, {0, 0, 32}, {0, 0, 32}, {0, 0, 32},
+                                                    {100, 20, 90}, {0, 0, 32}};
+        const int fn = x8_hex(FMT21, fx), hd = 2 + 8 + M2K_TRACKS21 + G_COUNT_OF(21, M2K_TRACKS21) + 1;
+        int o = hd;
+        m_cpy(f23, fx, (uint32_t)hd);
+        f23[1] = 23;
+        for (int t = 0; t < M2K_TRACKS21; t++) {
+            m_cpy(f23 + o, fx + hd + t * P_COUNT_V21, P_COUNT_V21); o += P_COUNT_V21;
+            m_cpy(f23 + o, AD[t], 3); o += 3;
+        }
+        m_cpy(f23 + o, fx + hd + M2K_TRACKS21 * P_COUNT_V21, (uint32_t)(fn - hd - M2K_TRACKS21 * P_COUNT_V21));
+        const int n23 = fn + 3 * M2K_TRACKS21;
+#if M2K_TRACKS > M2K_TRACKS6
+        x8_pattern(&e, 1);
+        for (int t = 0; t < M2K_TRACKS; t++) m_cpy(&e.kit[t][P_SUS], AD[t], 3);
+        int w23 = pat_unpack(&w2, f23, n23) && !memcmp(&w2, &e, sizeof e) && pat_pack(&w2, b) == n23 && !memcmp(b, f23, (size_t)n23);
+#else
+        x8_pattern(&e, 2);
+        for (int t = 0; t < M2K_TRACKS; t++) m_cpy(&e.kit[t][P_SUS], AD[t], 3);
+        int en = pat_pack(&e, b2);
+        int w23 = b2[1] == 22 && pat_unpack(&w2, f23, n23) && pat_pack(&w2, b) == en && !memcmp(b, b2, (size_t)en);
+#endif
+        /* a store: a pattern's and a sound's kept; a library without them as before */
+        m2k_init(47);
+        int sn = m2k_store_pack(), last = sn > 130 && store_buf[sn - 130] == 'R';
+        pat[6].kit[2][P_SUS] = 60; pat[6].kit[2][P_FREL] = 100;
+        snd[3].kit[P_FSUS] = 70; snd[3].kit[P_LFO + L_DEST] = P_SUS + 1;
+        sn = m2k_store_pack();
+        int tagged = sn > 2 + 3 * M2K_SOUNDS && store_buf[sn - 2 - 3 * M2K_SOUNDS] == 'A';
+        m2k_init(48);
+        int kept = m2k_store_unpack(sn) == 1 && pat[6].kit[2][P_SUS] == 60 && pat[6].kit[2][P_FREL] == 100 &&
+                   snd[3].kit[P_FSUS] == 70 && snd[3].kit[P_LFO + L_DEST] == P_SUS + 1 && snd[3].kit[P_FREL] == FREL_DEF;
+        m2k_init(49);
+        int cut = tagged && m2k_store_unpack(sn - 2 - 3 * M2K_SOUNDS) == 1 && !snd[3].kit[P_FSUS] && !snd[3].kit[P_LFO + L_DEST] &&
+                  snd[3].kit[P_FREL] == FREL_DEF && pat[6].kit[2][P_SUS] == 60;
+        printf("     format 22: as before %d, uses %d, as 20 %d, 23 %d; store: as before %d, 'A' %d, kept %d, without 'A' %d\n",
+               before, uses, old, w23, last, tagged, kept, cut);
+        CHECK(before && uses && old && w23 && last && tagged && kept && cut,
+              "format: 22 the ADSRs' three (none used: packed as before, byte for byte), older formats at 0 0 32; 23 eight wide; "
+              "the store's sounds in 'A' only when used");
     }
 #if M2K_TRACKS > M2K_TRACKS6
     /* eight tracks played: T7's and T8's trigs at their chances, T7 at 3/2x, T8 on 12 steps of its own, their p-locks
@@ -5986,6 +6154,59 @@ static int selftest(void)
             cont &= amp_ae[j + 1] >= amp_ae[j] && (j < 162 + XF_N || lv[j + 1] >= lv[j] * 99 / 100);
         CHECK(cont && lv[159] < lv[59] / 2 && lv[n - 1] > lv[59] * 98 / 100,
               "AMP: a trig on a releasing note rises from where it is to full, no step down (ATK 12)");
+    }
+    /* the ADSRs (format 22, the owner's): SUS 0 and FSUS 0 the one-shot amp and the filter's AD as ever, the gate unheard
+     * (the same with the note ended early as never); SUS past 0 the decay falls on DEC's law to (SUS / 127)^2 of full and
+     * holds it while the note lasts, the note's end (the step's gate run out, a key let go: the same) releasing it on
+     * REL's law (-60 dB under it in REL's time), from the attack or the hold too; HOLD 127 and DEC 127 held full till
+     * then; FSUS past 0 the filter's decay stops at FSUS / 127 of full, held, the note's end a straight release to zero
+     * in FREL's share of FDEC's time; a FILTER trig with no note open its AD */
+    {
+        enum { N = 1600 };
+        static int32_t a0[N], f0[N];
+        const double blk = 1000.0 * M2K_SUB / M2K_SR;
+        const uint8_t *ONE = KV(P_ATK, 0, P_HOLD, 0, P_DEC, 50, P_REL, 20, P_FATK, 10, P_FDEC, 30, P_FREL, 5);
+        adsr_probe(ONE, -1, -1, -1, N);
+        m_cpy(a0, amp_ae, sizeof a0); m_cpy(f0, adsr_fe, sizeof f0);
+        adsr_probe(ONE, 100, -1, -1, N);
+        int one = !memcmp(a0, amp_ae, sizeof a0) && !memcmp(f0, adsr_fe, sizeof f0) && a0[N - 1] < a0[50] / 100 && !f0[N - 1];
+        /* the ADSRs' own path (env_adsr) plays the other envelope as env_block does: the amp's one-shot beside a filter's
+         * sustain, the filter's AD beside an amp's */
+        adsr_probe(KV(P_ATK, 0, P_HOLD, 0, P_DEC, 50, P_REL, 20, P_FATK, 10, P_FDEC, 30, P_FREL, 5, P_FSUS, 60), 100, -1, -1, N);
+        one &= !memcmp(a0, amp_ae, sizeof a0) && memcmp(f0, adsr_fe, sizeof f0);
+        adsr_probe(KV(P_ATK, 0, P_HOLD, 0, P_DEC, 50, P_REL, 20, P_FATK, 10, P_FDEC, 30, P_FREL, 5, P_SUS, 60), 100, -1, -1, N);
+        one &= !memcmp(f0, adsr_fe, sizeof f0) && memcmp(a0, amp_ae, sizeof a0);
+        const uint8_t *AD = KV(P_ATK, 0, P_HOLD, 0, P_DEC, 32, P_SUS, 64, P_REL, 32, P_FATK, 0, P_FDEC, 32, P_FSUS, 60, P_FREL, 32);
+        const int g = 800, s15 = (int)(T_SUS[64] >> 15), fs = (int)(fsus_of(60 * 256) >> 15);
+        const int rb = (int)(T_ADEC_MS10[32] / 10.0 / blk + 0.5);
+        adsr_probe(AD, g, -1, -1, N);
+        int dec = 1;
+        for (int j = 2; j < g - 1; j++) dec &= amp_ae[j + 1] <= amp_ae[j] && amp_ae[j] >= s15;
+        double r60 = 20 * log10((amp_ae[g + rb] + 0.5) / s15);
+        int held = abs(amp_ae[g - 2] - s15) <= s15 / 200 && adsr_fe[g - 2] == fs && fabs(r60 + 60) < 1.5;
+        const int fb = (int)((fsus_of(60 * 256) + T_FDEC_DEC[32] - 1) / T_FDEC_DEC[32]);
+        int frel = adsr_fe[g + fb / 2] > 0 && adsr_fe[g + fb / 2] < fs && !adsr_fe[g + fb + 1];
+        m_cpy(a0, amp_ae, sizeof a0); m_cpy(f0, adsr_fe, sizeof f0);
+        adsr_probe(AD, -1, g - 1, -1, N);                         /* a key let go there: the same */
+        int key = !memcmp(a0, amp_ae, sizeof a0) && !memcmp(f0, adsr_fe, sizeof f0);
+        adsr_probe(KV(P_ATK, 64, P_SUS, 100, P_REL, 32), 200, -1, -1, N);   /* let go in a 0.4 s attack */
+        int fatk = amp_ae[198] < 16384 && amp_ae[199] == amp_ae[198];
+        for (int j = 199; j < N - 1; j++) fatk &= amp_ae[j + 1] <= amp_ae[j];
+        adsr_probe(KV(P_HOLD, 64, P_SUS, 100, P_REL, 32), 300, -1, -1, N);   /* in a 2-beat hold */
+        int fhold = amp_ae[298] == 32768 && amp_ae[310] < 32768;
+        adsr_probe(KV(P_HOLD, 127, P_SUS, 50, P_REL, 32), 600, -1, -1, N);   /* HOLD 127: full the note through */
+        int hinf = amp_ae[598] == 32768 && amp_ae[620] < 32768;
+        adsr_probe(KV(P_DEC, 127, P_SUS, 50, P_REL, 32), 600, -1, -1, N);    /* DEC 127: no decay */
+        hinf &= amp_ae[598] == 32768 && amp_ae[620] < 32768;
+        adsr_probe(KV(P_FDEC, 127, P_FSUS, 50, P_FREL, 127), 400, -1, -1, N);   /* FDEC 127 full, FREL 127 stays */
+        int finf = adsr_fe[398] == 32768 && adsr_fe[N - 1] == 32768;
+        adsr_probe(AD, 100, -1, 700, N);                          /* a FILTER trig at 700, the note over: its AD */
+        int fad = adsr_fe[702] > 0 && !adsr_fe[N - 1];
+        printf("     ADSR: SUS 0 one-shot %d; decay to SUS %d, held %d (released %.1f dB in REL's time), filter released %d; "
+               "a key the same %d; from the attack %d, the hold %d; INF %d %d; a FILTER trig with no note %d\n",
+               one, dec, held, r60, frel, key, fatk, fhold, hinf, finf, fad);
+        CHECK(one && dec && held && frel && key && fatk && fhold && hinf && finf && fad,
+              "ADSR: SUS 0 / FSUS 0 as ever; a sustain held for the note, released at the gate's end or a key let go, from any stage");
     }
     {
         /* 1.6.2 (the owner's "fix it"): a trig over a sounding note restarted GND-SIN's, the FM+'s, DIGI-WAV's, SWAV-PULS's
@@ -7308,8 +7529,11 @@ int main(int argc, char **argv)
         m2k_init(3);
         uint32_t h = 2166136261u;
         for (int i = 0; i < M2K_PATTERNS; i++) { int n = pat_pack(PAT(i), blob); for (int k = 0; k < n; k++) h = (h ^ blob[k]) * 16777619u; }
-        const uint8_t *sb = (const uint8_t *)snd;
-        for (unsigned k = 0; k < sizeof snd; k++) h = (h ^ sb[k]) * 16777619u;
+        for (int i = 0; i < M2K_SOUNDS; i++) {             /* (the sounds as the store keeps them: SND_REC, then 'A') */
+            const uint8_t *sb = (const uint8_t *)&snd[i];
+            for (unsigned k = 0; k < SND_REC; k++) h = (h ^ sb[k]) * 16777619u;
+        }
+        if (snd_adsr(snd)) for (int i = 0; i < M2K_SOUNDS; i++) for (int k = P_COUNT_V21; k < P_COUNT; k++) h = (h ^ snd[i].kit[k]) * 16777619u;
         printf("     bank hash %08x\n", h);
         return 0;
     }
@@ -7379,6 +7603,8 @@ int main(int argc, char **argv)
     run_events(HOME2_TOUR, out);
     m2k_init(2003);
     run_events(WORK_TOUR, out);
+    adsr_scene();
+    run_events(ADSR_TOUR, out);
     printf("tour done%s\n", ta_found ? ": TEXT TOUCHES OR IS CUT (above)" : ", every text clear");
     return ta_found != 0;
 }

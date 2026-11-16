@@ -106,7 +106,9 @@ static uint32_t fg_at(const uint32_t *T, int32_t pos)
 typedef struct {
     uint8_t note, gate, vel, sounding, slide, let_go;   /* let_go: a key or a MIDI note-off, not the sequencer */
     int32_t pitch, ptarget;            /* 1/64 semitones */
-    uint8_t astage, fstage;
+    uint8_t astage, fstage;            /* the amp's 1 attack 2 hold 3 decay (and sustain) 4 release; the filter's 1 attack
+                                        * 2 decay (and sustain) 3 release */
+    uint8_t fnote;                     /* the filter's trig came in a note (the gate open): its sustain holds for it */
     uint32_t aenv, fenv;               /* Q30 */
     uint32_t aph;                      /* the attack's way through, Q30, straight in time: aenv its square */
     int32_t hold;                      /* control blocks left in hold */
@@ -1323,8 +1325,103 @@ static uint32_t atk_from(uint32_t lv)
 
 #define PARK_N 8                       /* the CPU guard's fade, blocks: 2.9 ms, one FM-1 render */
 
+/* the filter's sustain level, FSUS's share of full (Q30): v / 127 at P8's Q8 (127 x 256 x 33026 under 2^30) */
+static inline uint32_t fsus_of(int32_t fs8) { return (uint32_t)fs8 * 33026u; }
+
+/* the CPU guard's fade (m2k_guard): the amp straight down to nothing over PARK_N blocks, then the note ends as a
+ * release would; the amp's end the track's (both envelopes' paths) */
+static inline void env_park(trk_t *t)
+{
+    if (t->park) {
+        if (t->park == 1) { t->aenv = 0; t->astage = 0; }
+        else {
+            uint32_t cap = (t->park_lv / PARK_N) * (uint32_t)(t->park - 2);   /* (2^30 at most) */
+            if (t->aenv > cap) t->aenv = cap;
+        }
+        t->park--;
+    }
+    if (t->astage == 0) t->sounding = 0;
+}
+
+/* the envelopes of a sound with a sustain (format 22: SUS or FSUS past 0, or an LFO on one), out of line: env_block's
+ * own stays as it was for every sound before, what they cost included. The amp: SUS past 0 an ADSR, the decay falling
+ * on DEC's own law toward SUS's level ((v / 127)^2 of full, T_SUS) and holding it while the note lasts, the note's end
+ * (a key let go, the step's gate run out) the release from wherever it is, in any stage (HOLD 127 and DEC 127 keep
+ * their meaning: full while the note lasts); SUS 0 here as env_block's one-shot. The filter: FSUS past 0, for a trig in
+ * a note (the gate open: fnote), the decay stops at FSUS's share of full and holds it while the note lasts, the note's
+ * end a straight release to zero on FDEC's law, timed by FREL (127: stays); FSUS 0 as env_block's AD. A stage left for
+ * the release holds its level that block (as the hold's end always has) */
+static __attribute__((noinline)) void env_adsr(trk_t *t)
+{
+    const int32_t s8 = P8(t, P_SUS), end = t->let_go || !t->gate;
+    switch (t->astage) {
+    case 1:
+        if (s8 && end) { t->astage = 4; break; }
+        t->aph += T_AATK_INC[t->eff[P_ATK]];
+        t->aenv = t->eff[P_ATK] ? mulu_hi(t->aph, t->aph, 30) : t->aph;
+        if (t->aph >= (1u << 30)) {
+            t->aenv = t->aph = 1u << 30;
+            t->astage = 2;
+            int h = t->eff[P_HOLD];
+            t->hold = h == 127 ? -1 : (int32_t)((((uint32_t)h * HOLD_K) / hold_bpm + 128) >> 8);
+        }
+        break;
+    case 2:
+        if (t->hold < 0) { if (!t->gate) t->astage = 4; }
+        else if (t->let_go || (s8 && end)) t->astage = 4;
+        else if (t->hold-- <= 0) t->astage = 3;
+        break;
+    case 3: {
+        if (t->let_go || (s8 && end)) { t->astage = 4; break; }
+        int32_t d8 = P8(t, P_DEC);
+        if (s8) {                      /* toward the sustain, s + (env - s) x DEC's coefficient, either way (an LFO or a
+                                        * lock may move s); there, held */
+            if (d8 < 127 * 256) {
+                uint32_t s = tq_u32(T_SUS, s8), c = tq_u32(T_ADEC_COEF, d8);
+                t->aenv = t->aenv >= s ? s + mulu_hi(t->aenv - s, c, 31) : s - mulu_hi(s - t->aenv, c, 31);
+            }
+            break;
+        }
+        if (d8 < 127 * 256) t->aenv = mulu_hi(t->aenv, tq_u32(T_ADEC_COEF, d8), 31);
+        else if (!t->gate) t->astage = 4;
+        if (t->aenv < (1u << 15)) { t->aenv = 0; t->astage = 0; }
+        break;
+    }
+    case 4:
+        t->aenv = mulu_hi(t->aenv, tq_u32(T_ADEC_COEF, P8(t, P_REL)), 31);
+        if (t->aenv < (1u << 15)) { t->aenv = 0; t->astage = 0; }
+        break;
+    default:
+        t->aenv = 0;
+        break;
+    }
+    env_park(t);
+    const int32_t fs8 = t->fnote ? P8(t, P_FSUS) : 0;
+    if (t->fstage == 1) {
+        if (fs8 && end) t->fstage = 3;
+        else {
+            t->fenv += T_FATK_INC[t->eff[P_FATK]];
+            if (t->fenv >= (1u << 30)) { t->fenv = 1u << 30; t->fstage = 2; }
+        }
+    } else if (t->fstage == 2) {
+        uint32_t d = tq_u32(T_FDEC_DEC, P8(t, P_FDEC));
+        if (!fs8) t->fenv = t->fenv > d ? t->fenv - d : 0;
+        else if (end) t->fstage = 3;
+        else {                         /* to the sustain and no further (or up to it, should an LFO lift it) */
+            uint32_t s = fsus_of(fs8);
+            t->fenv = t->fenv > s ? (t->fenv - s > d ? t->fenv - d : s) : (s - t->fenv > d ? t->fenv + d : s);
+        }
+    } else if (t->fstage == 3) {
+        uint32_t d = tq_u32(T_FDEC_DEC, P8(t, P_FREL));
+        t->fenv = t->fenv > d ? t->fenv - d : 0;
+    }
+}
+
 static void env_block(trk_t *t)
 {
+    /* a sound with a sustain, the amp's or the filter's (or an LFO on one): its own path (format 22, env_adsr). The
+     * check's cost on the rest measured at the noise of m2k_draw --cpu (+0..9 Mac instructions a sample) */
+    if (__builtin_expect((t->eff[P_SUS] | t->eff[P_FSUS] | t->mod[P_SUS] | t->mod[P_FSUS]) != 0, 0)) { env_adsr(t); return; }
     /* amp (format 16, gen_tables.py): the attack a square of its time to full (an even swell to the ear), hold (127:
      * while the gate is open), decay (127: none) and release on note-off straight in dB to -60 at their times */
     switch (t->astage) {
@@ -1360,22 +1457,16 @@ static void env_block(trk_t *t)
         t->aenv = 0;
         break;
     }
-    if (t->park) {                     /* the CPU guard (m2k_guard): the amp straight down to nothing over PARK_N blocks,
-                                        * then the note ends as a release would */
-        if (t->park == 1) { t->aenv = 0; t->astage = 0; }
-        else {
-            uint32_t cap = (t->park_lv / PARK_N) * (uint32_t)(t->park - 2);   /* (2^30 at most) */
-            if (t->aenv > cap) t->aenv = cap;
-        }
-        t->park--;
-    }
-    if (t->astage == 0) t->sounding = 0;
+    env_park(t);
     /* filter: a straight attack, a straight decay to zero (127: stays), timed as the Monomachine's (measured) */
     if (t->fstage == 1) {
         t->fenv += T_FATK_INC[t->eff[P_FATK]];
         if (t->fenv >= (1u << 30)) { t->fenv = 1u << 30; t->fstage = 2; }
     } else if (t->fstage == 2) {
         uint32_t d = tq_u32(T_FDEC_DEC, P8(t, P_FDEC));
+        t->fenv = t->fenv > d ? t->fenv - d : 0;
+    } else if (t->fstage == 3) {       /* (an ADSR's release on, its FSUS since gone to 0: env_adsr's) */
+        uint32_t d = tq_u32(T_FDEC_DEC, P8(t, P_FREL));
         t->fenv = t->fenv > d ? t->fenv - d : 0;
     }
 }
@@ -1561,6 +1652,7 @@ static void voice_trig(int ti, int note, int vel, int slide, unsigned skip)
     if (!(skip & ST_NOFLT)) {
         t->fstage = 1;
         t->fenv = 0;
+        t->fnote = t->gate;            /* (a FILTER trig with no note open: its sustain has none to hold for, an AD) */
     }
     if (!(skip & ST_NOLFO)) lfo_trig(t);
     mon.trig[ti]++;

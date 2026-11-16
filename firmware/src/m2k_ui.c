@@ -22,7 +22,8 @@ enum {
     K_PCT, K_GRES, K_LANE,                                                 /* GRIDS' */
     K_MUTQ, K_MOTN,                                                        /* GLO > PLAY's, the screen's motion */
     K_TLEN,                                                                /* a track's own length (SEQ held) */
-    K_PROB                                                                 /* its chance (HOME 2: 16 steps, 100 % first) */
+    K_PROB,                                                                /* its chance (HOME 2: 16 steps, 100 % first) */
+    K_SUS, K_FSUS, K_FREL                                                  /* the ADSR's: the levels, the filter's release */
 };
 typedef struct { const char *s4, *name; uint8_t kind; } pi_t;
 
@@ -43,6 +44,8 @@ static const pi_t PI_COMMON[P_LFO - 8] = {
     {"MULT", "LFO MULTIPLIER", K_MULT}, {"SPD", "LFO CYCLE", K_LSPD}, {"PHAS", "START PHASE", K_NUM}, {"DPTH", "LFO DEPTH", K_LDPT}
 static const pi_t PI_LFO[24] = {PI_LFO1, PI_LFO1, PI_LFO1};
 static const pi_t PI_WBNK = {"BANK", "WAVE BANK", K_WBNK};
+/* the ADSR's three (format 22), after the bank: AMP 1's SUS, FILT 2's SUS and REL */
+static const pi_t PI_ADSR[3] = {{"SUS", "SUSTAIN", K_SUS}, {"SUS", "FILTER SUSTAIN", K_FSUS}, {"REL", "FILTER RELEASE", K_FREL}};
 static const pi_t PI_MOD[4] = {
     {"TYPE", "MOD TYPE", K_MODT}, {"RATE", "MOD RATE", K_MHZ}, {"DPTH", "MOD DEPTH", K_NUM}, {"MIX", "MOD MIX", K_NUM},
 };
@@ -204,6 +207,7 @@ static const pi_t *pinfo(int t, int id)
     if (id < 8) return &MI[PAT(cur_pat)->machine[t]].syn[id];
     if (id < P_LFO) return &PI_COMMON[id - 8];
     if (id == P_WBNK) return &PI_WBNK;
+    if (id >= P_SUS && id < P_COUNT) return &PI_ADSR[id - P_SUS];
     if (id >= P_MODT) return &PI_MOD[(id - P_MODT) & 3];
     return &PI_LFO[(id - P_LFO) % 24];
 }
@@ -402,8 +406,21 @@ static void fmt(const pi_t *pi, int t, int v, char *out, const char **unit)
     case K_SRR: if (!v) { s_cpy(out, "OFF"); break; } s_hz(out, unit, T_SRRHZ[v]); break;
     case K_FOCT: s_sdec1(out, ((v - 16) * 10) / 8); *unit = "OCT"; break;     /* the filter follows the note: 16 is on it */
     case K_FWID: s_sdec1(out, (v * 10) / 8); *unit = "OCT"; break;
-    case K_FATK: case K_FDEC: {
-        if (pi->kind == K_FDEC && v == 127) { s_cpy(out, "INF"); break; }
+    case K_SUS: {                      /* the amp's sustain in dB under full ((v / 127)^2); 0 none: the one-shot */
+        if (!v) { s_cpy(out, "OFF"); *unit = "ONE-SHOT"; break; }
+        int d = T_SUS_DB10[v & 127];
+        if (!d) s_cpy(out, "0");
+        else if (d > -100) s_sdec1(out, d);
+        else s_int(out, -((-d + 5) / 10));
+        *unit = "DB";
+        break;
+    }
+    case K_FSUS:                       /* the filter's: a share of its envelope's full; 0 none (its AD) */
+        if (!v) { s_cpy(out, "OFF"); *unit = "AD"; break; }
+        s_int(out, (v * 100 + 63) / 127); *unit = "%";
+        break;
+    case K_FATK: case K_FDEC: case K_FREL: {
+        if (pi->kind != K_FATK && v == 127) { s_cpy(out, "INF"); break; }
         uint32_t ms10 = pi->kind == K_FATK ? T_FATK_MS10[v] : T_FDEC_MS10[v];
         if (ms10 < 100) { s_dec1(out, (int)ms10); *unit = "MS"; }
         else if (ms10 < 10000) { s_int(out, (int)(ms10 / 10)); *unit = "MS"; }
@@ -517,8 +534,9 @@ static void fmt(const pi_t *pi, int t, int v, char *out, const char **unit)
 
 enum { PG_HOME, PG_SYN, PG_AMP, PG_FILT, PG_FX, PG_LFO, PG_ARP, PG_GLO, PG_COUNT };
 enum { GS_TIME, GS_BUS, GS_SET, GS_MIDI, GS_IN, GS_PLAY, GS_HELP, GS_COUNT };   /* GLO's (1.5: GLITCH and VERB one page, BUS) */
-static const uint8_t NSUB[PG_COUNT] = {2, 3, 2, 2, 4, 6, 3, GS_COUNT};   /* HOME: the pattern's, the track's sequencing; SYN:
-                                                                             * its two, then SND (BANK before it); ARP, GRIDS */
+static const uint8_t NSUB[PG_COUNT] = {2, 3, 3, 3, 4, 6, 3, GS_COUNT};   /* HOME: the pattern's, the track's sequencing; SYN:
+                                                                             * its two, then SND (BANK before it); AMP and
+                                                                             * FILT three (AMP_K, FILT_K); ARP, GRIDS */
 static int nsub(int page);                     /* SYN has a third page, the bank, where the machine plays waves */
 #define SETTING(i) (0xC0 | (i))
 #define GL(g) (0x80 | (g))
@@ -528,6 +546,11 @@ static int view_trk(void);                     /* the track in view (LANE is its
 /* the bus's four, GLO > BUS's and PERFORM's knobs: the reverb, the crunch, the drive (the owner's "the important") */
 static const uint8_t BUS_K[4] = {GL(G_VERB), GL(G_DAMP), GL(G_ADPC), GL(G_DRIV)};
 
+/* AMP's and FILT's pages (the owner's, format 22: regular ADSRs): AMP 1 the envelope, AMP 2 the chain, AMP 3 HOLD and
+ * three free; FILT 1 the band, FILT 2 its envelope, FILT 3 how far it takes the band, two free */
+static const uint8_t AMP_K[3][4] = {{P_ATK, P_DEC, P_SUS, P_REL}, {P_DIST, P_VOL, P_PAN, P_PORT}, {P_HOLD, NONE, NONE, NONE}};
+static const uint8_t FILT_K[3][4] = {{P_BASE, P_WDTH, P_HPQ, P_LPQ}, {P_FATK, P_FDEC, P_FSUS, P_FREL}, {P_BOF, P_WOF, NONE, NONE}};
+
 static int knob_param(int page, int sub, int k)
 {
     switch (page) {
@@ -535,8 +558,8 @@ static int knob_param(int page, int sub, int k)
                     return sub ? GL(g[k] + view_trk()) : m[k]; }   /* (HOME 2: the track in view's sequencing) */
     case PG_SYN: return sub < 2 ? P_SYN + sub * 4 + k : sub == nsub(PG_SYN) - 1 ? SETTING(18 + k)
                         : k == 0 ? P_WBNK : NONE;
-    case PG_AMP: return P_ATK + sub * 4 + k;
-    case PG_FILT: return P_BASE + sub * 4 + k;
+    case PG_AMP: return AMP_K[sub % 3][k & 3];
+    case PG_FILT: return FILT_K[sub % 3][k & 3];
     case PG_FX: return sub < 3 ? P_EQF + sub * 4 + k : P_MODT + k;
     case PG_LFO: {                                  /* the three LFOs' pages, then the three's rest: what makes it move comes first */
         static const uint8_t m[2][4] = {{L_DEST, L_WAVE, L_SPD, L_DPTH}, {L_TRCK, L_TRIG, L_MULT, L_PHAS}};
@@ -1292,15 +1315,24 @@ static void held_remove(int s)
 }
 
 /* a note's length (the OP-XY's gesture, the owner's): one step held past a tap, a later empty step pressed: the note
- * lasts to it. Two of the step's locks, nothing new in the pattern: GATE the length (16 a step, so 8 steps at most) and
- * HOLD 127, the amp open that long whatever the sound's own HOLD and DEC, then its REL. The same last step again gives
- * the sound's own length back. Within a tap it is two steps pressed together, as ever. The Move's controller too */
+ * lasts to it. The step's locks, nothing new in the pattern: GATE the length (16 a step, so 8 steps at most) and HOLD
+ * 127, the amp open that long whatever the sound's own HOLD and DEC, then its REL; on a sound with a sustain (SUS past
+ * 0, an ADSR: format 22) GATE alone, the envelope holding its sustain that long, then its REL. The same last step again
+ * gives the sound's own length back. Within a tap it is two steps pressed together, as ever. The Move's controller too */
 #define TAP_MS 300
 #define SPAN_MAX 8
-static int span_of(int t, int s)       /* a step's length so set, in steps; 0 none (a GATE alone is the sound's) */
+static int sus_at(int t, int s)        /* the track's SUS on step s: its lock there, else its kit's */
+{
+    const m2k_pattern_t *p = PAT(cur_pat);
+    const int i = lock_find(t, s, P_SUS);
+    return i >= 0 ? p->lock[i].val : p->kit[t][P_SUS];
+}
+static int span_of(int t, int s)       /* a step's length so set, in steps; 0 none (a GATE alone is the sound's, but on an
+                                        * ADSR's: there it is the note's length) */
 {
     const m2k_pattern_t *p = PAT(cur_pat);
     const int g = lock_find(t, s, P_GATE), h = lock_find(t, s, P_HOLD);
+    if (sus_at(t, s)) return g < 0 ? 0 : (p->lock[g].val + 8) >> 4;
     return g < 0 || h < 0 || p->lock[h].val != 127 ? 0 : (p->lock[g].val + 8) >> 4;
 }
 
@@ -1313,10 +1345,14 @@ static int span_tap(int end)           /* step end pressed: 1 if it set the leng
     ui.focus_t = 0;
     if (n > SPAN_MAX) { toast("LENGTH", "8 STEPS AT MOST"); return 1; }
     undo_mark(N_STEP, 20);
+    const int sus = sus_at(t, s) != 0, h = lock_find(t, s, P_HOLD);
     if (span_of(t, s) == n) {
         p->lock[lock_find(t, s, P_GATE)].trk = 0xFF;
-        p->lock[lock_find(t, s, P_HOLD)].trk = 0xFF;
+        if (h >= 0 && (!sus || p->lock[h].val == 127)) p->lock[h].trk = 0xFF;
         lockmap_build();
+    } else if (sus) {                  /* an ADSR's: GATE alone (a HOLD 127 lock would hold it full, not at its sustain) */
+        if (h >= 0 && p->lock[h].val == 127) { p->lock[h].trk = 0xFF; lockmap_build(); }
+        if (!lock_set(t, s, P_GATE, n * 16 > 127 ? 127 : n * 16)) toast("LOCKS FULL", "SOME LOCKS LOST");
     } else if (!lock_set(t, s, P_GATE, n * 16 > 127 ? 127 : n * 16) || !lock_set(t, s, P_HOLD, 127))
         toast("LOCKS FULL", "SOME LOCKS LOST");
     return 1;
@@ -2828,7 +2864,7 @@ static const int8_t DIAL_PT[33][2] = {
     {-3, -5}, {-3, -5}, {-2, -6}, {-1, -6}, {0, -6}, {1, -6}, {2, -6}, {3, -5}, {3, -5}, {4, -4}, {5, -4}, {5, -3},
     {6, -2}, {6, -1}, {6, -1}, {6, 0}, {6, 1}, {6, 2}, {5, 3}, {5, 4}, {4, 4}};
 
-enum { IC_DIAL, IC_SLIDER, IC_NUM, IC_BOX, IC_WAVE, IC_ENV, IC_FILT, IC_PAN };
+enum { IC_DIAL, IC_SLIDER, IC_NUM, IC_BOX, IC_WAVE, IC_ENV, IC_FILT, IC_PAN, IC_LVL };
 static int s_is(const char *a, const char *b) { while (*a && *a == *b) { a++; b++; } return *a == *b; }
 
 /* the picture a parameter is drawn as (the label's for the few the kind leaves open: levels, a filter's resonance) */
@@ -2844,9 +2880,10 @@ static int icon_of(const pi_t *pi)
     case K_BI: case K_PCT: case K_LSPD: case K_LDPT: case K_DCAY: case K_DAMP: case K_GATE: case K_SWNG: case K_DMUL:
         return IC_DIAL;
     case K_PAN: return IC_PAN;
-    case K_ATIM: case K_AHLD: case K_ADEC: case K_AREL: case K_FATK: case K_FDEC: case K_TIME: case K_DECT: case K_DRA:
-    case K_DRD: case K_DOPN:
+    case K_ATIM: case K_AHLD: case K_ADEC: case K_AREL: case K_FATK: case K_FDEC: case K_FREL: case K_TIME: case K_DECT:
+    case K_DRA: case K_DRD: case K_DOPN:
         return IC_ENV;
+    case K_SUS: case K_FSUS: return IC_LVL;
     case K_FOCT: case K_FWID: return IC_FILT;
     case K_LWAV: case K_DWV4: case K_DWV5: case K_SIDW: return IC_WAVE;
     case K_ALGO: case K_VOIC: case K_VOF1: case K_VOF2: case K_CONS: case K_TRK: case K_DEST: case K_LTRG: case K_AMOD:
@@ -2923,7 +2960,19 @@ static void icon(int ic, const pi_t *pi, int x, int y, int v, int q, const char 
         const int rise = pi->s4[0] == 'A' && pi->s4[1] == 'T', hold = kind == K_AHLD;
         if (hold) { line2(x0, bot, x0, top); line2(x0, top, x0 + L, top); line2(x0 + L, top, x0 + L, bot); }
         else if (rise) { line2(x0, bot, x0 + L, top); if (x0 + L < x1) line2(x0 + L, top, x1, top); }
+        else if (kind == K_AREL || kind == K_FREL) {   /* a release: from a sustained level, its fall the value */
+            const int r = 2 + ((CLAMP(q, 0, 256) * 22) >> 8), mid = top + 4;
+            line2(x0, mid, x0 + 4, mid); line2(x0 + 4, mid, x0 + 4 + r, bot);
+            if (x0 + 4 + r < x1) line2(x0 + 4 + r, bot, x1, bot);
+        }
         else { line2(x0, top, x0 + L, bot); if (x0 + L < x1) line2(x0 + L, bot, x1, bot); }
+        break;
+    }
+    case IC_LVL: {                                  /* a sustain: the decay down to a level held, the level the value */
+        rframe(x + 6, y, 40, 20, 2, 1);
+        const int x0 = x + 10, x1 = x + 40, top = y + 5, bot = y + 13, ly = bot - (((bot - top) * CLAMP(q, 0, 256)) >> 8);
+        line2(x0, top, x0 + 6, ly);
+        line2(x0 + 6, ly, x1, ly);
         break;
     }
     case IC_FILT: {
@@ -3439,41 +3488,98 @@ static void filt_curve(int X, int W, int top, int yb, int hp, int lp, int hq, in
     *yl = filt_row(filt_db(lp, hp, lp, hq, lq), top, yb);
 }
 
-/* the amp's level at a point of its picture (q 0..256 along its segment): Q8, 0..256, on the sound's own curves
- * (env_block): the attack the square of its time (ATK 0 straight), the hold, the decay straight in dB to where the key
- * is let go (a quarter: -12 dB), the release on down 48 dB (-60 under full) */
-static int env_level(int seg, int q, int dec_inf, int atk0)
+/* the amp envelope's pictures, five segments: 0 attack, 1 hold, 2 decay, 3 sustain, 4 release (ENV_*) */
+enum { ENV_A, ENV_H, ENV_D, ENV_S, ENV_R, ENV_N };
+
+/* the level its sustain is drawn at, Q8 of full: 0 none (SUS 0, the one-shot); full where nothing decays (HOLD 127, the
+ * hold the note; DEC 127, no decay); else (SUS / 127)^2 as heard (T_SUS), a row's worth at least */
+static int env_sus(int sus, int hold, int dec)
 {
-    if (seg == 0) return atk0 ? q : (q * q) >> 8;
-    if (seg == 1) return 256;
-    if (seg == 2) return dec_inf ? 256 : (int)(iexp2_q16(-(q * 2)) >> 8);                      /* two halvings */
+    if (!sus) return 0;
+    if (hold == 127 || dec == 127) return 256;
+    return CLAMP((int)(T_SUS[sus & 127] >> 22), 1, 256);
+}
+
+/* the amp's level at a point of its picture (q 0..256 along segment seg): Q8, 0..256, on the sound's own curves
+ * (env_block): the attack the square of its time (ATK 0 straight), the hold; with no sustain (s 0, the one-shot) the
+ * decay straight in dB to where the key is let go (a quarter: -12 dB), the release on down 48 dB (-60 under full);
+ * with one (env_sus) the decay toward it on DEC's own law (four halvings of the way), the sustain, the release from it
+ * on down 48 dB */
+static int env_level(int seg, int q, int dec_inf, int atk0, int s)
+{
+    if (seg == ENV_A) return atk0 ? q : (q * q) >> 8;
+    if (seg == ENV_H) return 256;
+    if (s) {
+        if (seg == ENV_D) return s + (int)(((uint32_t)(256 - s) * (iexp2_q16(-(q * 4)) >> 8)) >> 8);
+        if (seg == ENV_S) return s;
+        return (int)(((uint32_t)s * (iexp2_q16(-(q * 8)) >> 8)) >> 8);
+    }
+    if (seg == ENV_D) return dec_inf ? 256 : (int)(iexp2_q16(-(q * 2)) >> 8);                  /* two halvings */
     int from = dec_inf ? 256 : 64;
     return (int)(((uint32_t)from * (iexp2_q16(-(q * 8)) >> 8)) >> 8);                          /* eight */
 }
 
-/* a kit's amp envelope, attack, hold, decay, release as lengths on a log scale (a long decay does not crowd the attack
- * out) and the level on the voice's own curves (env_level), in the library's bars [top, yb) over [X, X + W) on a
- * dotted floor: all solid, or with fk a segment's knob turning that one solid and the others light. xs: where each
- * segment begins and the last ends, ys the level's row there */
-static void env_bars(const uint8_t *k, int X, int W, int top, int yb, int fk, int *xs, int *ys)
+/* its segments' lengths before they are scaled to a picture, on a log scale (a long decay does not crowd the attack
+ * out): HOLD 0 none; with a sustain none to decay where nothing does (HOLD 127: the hold is the note; DEC 127: the
+ * sustain full), the sustain a fixed length */
+static void env_widths(int a, int h, int d, int sus, int r, int *w)
 {
-    int dec_inf = k[P_DEC] == 127, hgt = yb - top;
-    int wa = 6 + k[P_ATK] * 24 / 127, wh = k[P_HOLD] == 127 ? 18 : 2 + k[P_HOLD] * 18 / 127;
-    int wd = dec_inf ? 18 : 12 + k[P_DEC] * 30 / 127, wr = 8 + k[P_REL] * 24 / 127;
-    int tot = wa + wh + wd + wr, PW = W - 8;
-    wa = wa * PW / tot; wh = wh * PW / tot; wd = wd * PW / tot; wr = PW - wa - wh - wd;
-    xs[0] = X + 3; xs[1] = xs[0] + wa; xs[2] = xs[1] + wh; xs[3] = xs[2] + wd; xs[4] = xs[3] + wr;
-    for (int b = 0; b < 5; b++) ys[b] = yb;
-    dots_h(X, yb + 1, W);
-    for (int x = xs[0]; x <= xs[4] && x < X + W; x++) {
-        int seg = x < xs[1] ? 0 : x < xs[2] ? 1 : x < xs[3] ? 2 : 3;
-        int len = xs[seg + 1] - xs[seg];
-        int q = (x - xs[seg]) * 256 / (len ? len : 1);
-        int y = yb - hgt * env_level(seg, q, dec_inf, !k[P_ATK]) / 256;
-        bar_col(x, X, y, yb, fk >= 0 && seg != fk);
-        for (int b = 1; b < 5; b++) if (x == xs[b]) ys[b] = y;
+    w[ENV_A] = 6 + a * 24 / 127;
+    w[ENV_H] = h == 127 ? 18 : h ? 2 + h * 18 / 127 : 0;
+    if (!sus) { w[ENV_D] = d == 127 ? 18 : 12 + d * 30 / 127; w[ENV_S] = 0; }
+    else { w[ENV_D] = h == 127 || d == 127 ? 0 : 12 + d * 30 / 127; w[ENV_S] = h == 127 ? 0 : 18; }
+    w[ENV_R] = 8 + r * 24 / 127;
+}
+
+/* the segment of the picture x falls in (the last that starts at or before it: an empty one passed over) */
+static int env_seg_at(const int *xs, int x) { int g = ENV_R; while (g > 0 && x < xs[g]) g--; return g; }
+
+/* where the live voice is along the picture (xs: env_bars'), by its stage st and level lv (Q15): the attack's square
+ * root (ATK 0: straight), the hold's middle; the one-shot's decay and release by their halvings (two to a quarter,
+ * eight on); an ADSR's decay by the halvings of its way to the sustain s (Q8: four drawn, then the sustain), its release
+ * by those under the sustain */
+static int env_marker_x(const int *xs, int st, int lv, int atk, int dec, int s)
+{
+    if (st == 1) { int ra = !atk ? lv : (int)(atk_from((uint32_t)lv << 15) >> 15); return xs[ENV_A] + (xs[ENV_H] - xs[ENV_A]) * ra / 32768; }
+    if (st == 2) return (xs[ENV_H] + xs[ENV_D]) / 2;
+    if (!s) {
+        int dn = lv ? (ilog2_q8(32768) - ilog2_q8((uint32_t)lv)) : 8 * 256;              /* halvings under full, Q8 */
+        return st == 3 ? xs[ENV_D] + (xs[ENV_S] - xs[ENV_D]) * CLAMP(dn, 0, 512) / 512
+                       : xs[ENV_R] + (xs[ENV_N] - xs[ENV_R]) * CLAMP(dn - (dec == 127 ? 0 : 512), 0, 2048) / 2048;
     }
-    ys[4] = yb;
+    if (st == 3) {
+        int s15 = s << 7, gap = lv - s15;
+        int dn = gap > 0 && s15 < 32768 ? ilog2_q8((uint32_t)(32768 - s15)) - ilog2_q8((uint32_t)gap) : 4 * 256;
+        return dn >= 4 * 256 || xs[ENV_S] == xs[ENV_D] ? (xs[ENV_S] + xs[ENV_R]) / 2
+                                                       : xs[ENV_D] + (xs[ENV_S] - xs[ENV_D]) * CLAMP(dn, 0, 1024) / 1024;
+    }
+    int dn = lv ? ilog2_q8((uint32_t)(s << 7)) - ilog2_q8((uint32_t)lv) : 8 * 256;
+    return xs[ENV_R] + (xs[ENV_N] - xs[ENV_R]) * CLAMP(dn, 0, 2048) / 2048;
+}
+
+/* a kit's amp envelope, its segments' lengths (env_widths) over [X, X + W) and the level on the voice's own curves
+ * (env_level), in the library's bars [top, yb) on a dotted floor: all solid, or with fseg a segment's knob turning
+ * that one solid and the others light. xs: where each segment begins and the last ends (ENV_N + 1), ys the level's row
+ * there */
+static void env_bars(const uint8_t *k, int X, int W, int top, int yb, int fseg, int *xs, int *ys)
+{
+    const int s = env_sus(k[P_SUS], k[P_HOLD], k[P_DEC]), dec_inf = k[P_DEC] == 127, hgt = yb - top, PW = W - 8;
+    int w[ENV_N], tot = 0;
+    env_widths(k[P_ATK], k[P_HOLD], k[P_DEC], k[P_SUS], k[P_REL], w);
+    for (int i = 0; i < ENV_N; i++) tot += w[i];
+    xs[0] = X + 3;
+    for (int i = 0; i < ENV_N - 1; i++) xs[i + 1] = xs[i] + w[i] * PW / tot;
+    xs[ENV_N] = xs[0] + PW;
+    for (int b = 0; b <= ENV_N; b++) ys[b] = yb;
+    dots_h(X, yb + 1, W);
+    for (int x = xs[0]; x <= xs[ENV_N] && x < X + W; x++) {
+        int seg = env_seg_at(xs, x), len = xs[seg + 1] - xs[seg];
+        int q = (x - xs[seg]) * 256 / (len ? len : 1);
+        int y = yb - hgt * env_level(seg, q, dec_inf, !k[P_ATK], s) / 256;
+        bar_col(x, X, y, yb, fseg >= 0 && seg != fseg);
+        for (int b = 1; b <= ENV_N; b++) if (x == xs[b]) ys[b] = y;
+    }
+    ys[ENV_N] = yb;
 }
 
 /* GRIDS' pictures. A lane's K playing now: the track in view's when it follows the lane, else the first that does, else
@@ -3576,36 +3682,31 @@ static void snd_picture(int busy)
     if (!busy) snd_meta(SX0, SX1, INFO_B);
 }
 
-/* AMP: the envelope, attack hold decay release on the voice's own curves in bars on a dotted floor, full and half
- * dotted; dotted lines and handles where each segment ends; the live voice a dotted cursor and a marker where its
- * level is; the letters under their segments */
-static void amp_env(int busy, const uint8_t *k, int fk)
+/* AMP 1 and 3: the envelope as an ADSR on the voice's own curves in bars on a dotted floor, full and half dotted: the
+ * rise, HOLD's flat top where it has one, the fall to the sustain and the sustain held (SUS 0: the one-shot's fall, on
+ * to where a key let go would release it), the release; dotted lines and handles where each segment ends; the live
+ * voice a dotted cursor and a marker where its level is; the letters under their segments. fseg: the segment whose
+ * knob turns (ENV_*), solid */
+static void amp_env(int busy, const uint8_t *k, int fseg)
 {
-    const int top = 72, yb = 176, hgt = yb - top;
-    int xs[5], ys[5], dec_inf = k[P_DEC] == 127;
+    const int top = 72, yb = 176, hgt = yb - top, s = env_sus(k[P_SUS], k[P_HOLD], k[P_DEC]);
+    int xs[ENV_N + 1], ys[ENV_N + 1];
     dots_h(SX0, top, STW);
     dots_h(SX0, top + hgt / 2, STW);
-    env_bars(k, SX0, STW, top, yb, fk, xs, ys);
-    for (int b = 1; b < 4; b++) if (ys[b] - top > 5) dots_v(xs[b], top + 2, ys[b] - top - 5);
-    for (int b = 1; b < 5; b++) handle(xs[b], ys[b], b - 1 == fk);
-    int wa = xs[1] - xs[0], wh = xs[2] - xs[1], wd = xs[3] - xs[2], wr = xs[4] - xs[3];
+    env_bars(k, SX0, STW, top, yb, fseg, xs, ys);
+    for (int b = 1; b < ENV_N; b++) if (xs[b] > xs[b - 1] && ys[b] - top > 5) dots_v(xs[b], top + 2, ys[b] - top - 5);
+    for (int b = 1; b <= ENV_N; b++) if (xs[b] > xs[b - 1]) handle(xs[b], ys[b], b - 1 == fseg);
     int st = mon.astage[ui.trk], lv = mon.aenv[ui.trk];
-    if (st) {
-        int y = yb - (hgt * lv >> 15);
-        /* along its segment as its level says: the attack's square root (ATK 0: straight), the decay's and the
-         * release's halvings (two to a quarter, eight on) */
-        int dn = lv ? (ilog2_q8(32768) - ilog2_q8((uint32_t)lv)) : 8 * 256;          /* halvings under full, Q8 */
-        int ra = !k[P_ATK] ? lv : (int)(atk_from((uint32_t)lv << 15) >> 15);
-        int x = st == 1 ? xs[0] + wa * ra / 32768 : st == 2 ? xs[1] + wh / 2
-              : st == 3 ? xs[2] + wd * CLAMP(dn, 0, 512) / 512
-              : xs[3] + wr * CLAMP(dn - (dec_inf ? 0 : 512), 0, 2048) / 2048;
+    if (st) {                                       /* along its segment as its level says */
+        int x = env_marker_x(xs, st, lv, k[P_ATK], k[P_DEC], s);
         dots_v(x, top, yb - top);
-        marker(x, y);
+        marker(x, yb - (hgt * lv >> 15));
     }
     if (busy) return;
-    static const char *const L[4] = {"A", "H", "D", "R"};
+    static const char *const L[ENV_N] = {"A", "H", "D", "S", "R"};
     int lx = -100;
-    for (int i = 0; i < 4; i++) {          /* under its segment; a letter that would touch the last is left out */
+    for (int i = 0; i < ENV_N; i++) {      /* under its segment; a letter that would touch the last is left out */
+        if (xs[i + 1] <= xs[i]) continue;
         int c = (xs[i] + xs[i + 1]) / 2, w = text_w(&F_S, L[i], 0), x = CLAMP(c - w / 2, SX0, SX1 - w);
         if (x > lx + 4) { tx_b(&F_S, x, INFO_B, L[i], 1); lx = x + w; }
     }
@@ -3651,10 +3752,41 @@ static void amp_chain(int busy, const uint8_t *k, int fk)
     }
 }
 
+/* the filter envelope's picture ew wide, as env_block plays it: a straight attack, a straight decay to zero (FSUS 0),
+ * or to the sustain, held, then a straight release (FDEC 127: no decay, the sustain full; FREL 127: it stays). w: its
+ * segments' lengths (attack, decay, sustain, release); returns the sustain's level, Q8 (0 none) */
+static int fenv_shape(int fa, int fd, int fs, int fr, int ew, int *w)
+{
+    if (!fs) { w[0] = 2 + fa * (ew / 3 - 2) / 127; w[1] = 3 + fd * (ew - w[0] - 4) / 127; w[2] = w[3] = 0; return 0; }
+    w[0] = 2 + fa * (ew / 4 - 2) / 127;
+    w[1] = fd == 127 ? 0 : 3 + fd * (ew / 4) / 127;
+    w[2] = ew / 5;
+    w[3] = 3 + fr * (ew - w[0] - w[1] - w[2] - 4) / 127;
+    return fd == 127 ? 256 : (fs * 256 + 63) / 127;
+}
+/* its segment at x (xs: where each begins, w its lengths), and its height there of eh (hs the sustain's) */
+static int fenv_seg(const int *xs, int x) { return x <= xs[1] ? 0 : x <= xs[2] ? 1 : x <= xs[3] ? 2 : 3; }
+static int fenv_h(const int *xs, const int *w, int x, int eh, int hs, int frel_inf)
+{
+    const int g = fenv_seg(xs, x);
+    return g == 0 ? eh * x / (w[0] ? w[0] : 1) : g == 1 ? hs + (eh - hs) * (xs[2] - x) / (w[1] ? w[1] : 1)
+         : g == 2 || frel_inf ? hs : hs * (xs[4] - x) / (w[3] ? w[3] : 1);
+}
+/* where the voice's filter envelope is along it: its stage fst, its level fe (Q8 of full), sl the sustain's (fs: one) */
+static int fenv_marker_x(const int *xs, const int *w, int fst, int fe, int fs, int sl)
+{
+    int x = fst == 1 ? (w[0] * fe) >> 8
+          : fst == 2 ? (!fs ? xs[1] + ((w[1] * (256 - fe)) >> 8) : fe > sl && sl < 256 ? xs[1] + w[1] * (256 - fe) / (256 - sl)
+                                                                  : (xs[2] + xs[3]) / 2)
+          : xs[3] + (sl ? w[3] * (sl - CLAMP(fe, 0, sl)) / sl : w[3]);
+    return CLAMP(x, 0, xs[4]);
+}
+
 /* FILT: the band, the chain's response in bars on its floor, its resonances as they peak, 0 dB dotted; the cutoffs
- * dotted down to their handles, the width solid on the floor while WDTH turns; the decades under it. Page 2 the
- * filter envelope: the curve where the envelope takes it, its reach dotted at each cutoff, then the envelope in bars,
- * the part turned solid, where it is now a marker, ATK and DEC under their segments */
+ * dotted down to their handles, the width solid on the floor while WDTH turns; the decades under it. FILT 2 and 3 the
+ * filter envelope: the curve where the envelope takes it, its reach dotted at each cutoff, then the envelope in bars
+ * (an ADSR where FSUS has a sustain), where it is now a marker, its segments' names under them; on FILT 2 the segment
+ * turned solid, on FILT 3 (B-OF W-OF) the curve at the envelope's reach and its handle solid */
 static void filt_picture(int busy, const uint8_t *k, int fk)
 {
     const trk_t *t = &trk[ui.trk];
@@ -3666,35 +3798,41 @@ static void filt_picture(int busy, const uint8_t *k, int fk)
      * now, so it moves as it plays */
     int live = t->sounding && (mon.cut_hp[ui.trk] != hp0 || mon.cut_lp[ui.trk] != lp0);
     int hp = live ? mon.cut_hp[ui.trk] : hp0, lp = live ? mon.cut_lp[ui.trk] : lp0, yh, yl;
-    if (ui.sub == 1) {
+    if (ui.sub) {
+        const int env = ui.sub == 1;    /* FILT 2: its four the envelope's segments; FILT 3: B-OF and W-OF */
         int hp1 = filt_q3(ui.trk, (k[P_BASE] << 8) + ob);
         int lp1 = filt_q3(ui.trk, ((k[P_BASE] + k[P_WDTH]) << 8) + ob + ow);
-        if (fk == 2 || fk == 3) { hp = hp1; lp = lp1; }
+        if (!env && (fk == 0 || fk == 1)) { hp = hp1; lp = lp1; }
         const int top = 68, yb = 112;
-        filt_curve(SX0, FW, top, yb, hp, lp, hq, lq, fk == 0 || fk == 1, &yh, &yl);
+        filt_curve(SX0, FW, top, yb, hp, lp, hq, lq, env && fk >= 0, &yh, &yl);
         int xh1 = SX0 + hp1 * (FW - 1) / FQ_MAX, xl1 = SX0 + lp1 * (FW - 1) / FQ_MAX;
         dots_v(xh1, top, yb - top + 1);
         dots_v(xl1, top, yb - top + 1);
-        handle(SX0 + hp * (FW - 1) / FQ_MAX, yh, fk == 2);
-        handle(SX0 + lp * (FW - 1) / FQ_MAX, yl, fk == 3);
-        const int ex = SX0, ew = FW, et = 128, eb = 176;
-        int a = 2 + k[P_FATK] * (ew / 3 - 2) / 127, d = 3 + k[P_FDEC] * (ew - a - 4) / 127;
-        for (int x = 0; x <= a + d; x++) {
-            int y = x <= a ? eb - (eb - et) * x / (a ? a : 1) : eb - (eb - et) * (a + d - x) / (d ? d : 1);
-            bar_col(ex + x, ex, y, eb, fk >= 0 && (fk >= 2 || (x <= a) != (fk == 0)));
-        }
+        handle(SX0 + hp * (FW - 1) / FQ_MAX, yh, !env && fk == 0);
+        handle(SX0 + lp * (FW - 1) / FQ_MAX, yl, !env && fk == 1);
+        /* the envelope (fenv_shape), the segment turned solid on FILT 2, all light while B-OF or W-OF turn */
+        const int ex = SX0, ew = FW, et = 128, eb = 176, eh = eb - et, fs = k[P_FSUS];
+        int w[4], xs[5] = {0};
+        const int sl = fenv_shape(k[P_FATK], k[P_FDEC], fs, k[P_FREL], ew, w), hs = eh * sl / 256;
+        for (int i = 0; i < 4; i++) xs[i + 1] = xs[i] + w[i];
+        for (int x = 0; x <= xs[4]; x++)
+            bar_col(ex + x, ex, eb - fenv_h(xs, w, x, eh, hs, k[P_FREL] == 127), eb, fk >= 0 && (!env || fenv_seg(xs, x) != fk));
         dots_h(ex, eb + 1, ew);
-        uint32_t fe = t->fenv >> 22;                    /* (Q8 of full) */
+        const int fe = (int)(t->fenv >> 22);            /* (Q8 of full) */
         if (t->sounding && (t->fstage == 1 || fe)) {
-            int x = ex + (t->fstage == 1 ? (int)(a * fe >> 8) : a + (int)(d * (256 - fe) >> 8));
+            int x = ex + fenv_marker_x(xs, w, t->fstage, fe, fs, sl);
             dots_v(x, et - 4, eb - et + 4);
-            marker(x, eb - (int)((eb - et) * fe >> 8));
+            marker(x, eb - (eh * fe >> 8));
         }
         if (busy) return;
-        int wa = text_w(&F_S, "ATK", 0), xa = CLAMP(ex + a / 2 - wa / 2, SX0, SX1 - wa);
-        int wd = text_w(&F_S, "DEC", 0), xd = CLAMP(ex + a + d / 2 - wd / 2, xa + wa + 8, SX1 - wd);
-        tx_b(&F_S, xa, INFO_B, "ATK", 1);
-        tx_b(&F_S, xd, INFO_B, "DEC", 1);
+        static const char *const N[4] = {"ATK", "DEC", "SUS", "REL"};
+        for (int i = 0, lx = SX0 - 8; i < 4; i++) {     /* under its segment, clear of the last */
+            if (!w[i]) continue;
+            int wn = text_w(&F_S, N[i], 0), x = CLAMP(ex + (xs[i] + xs[i + 1]) / 2 - wn / 2, lx + 8, SX1 - wn);
+            if (x < lx + 8 || x + wn > SX1) break;
+            tx_b(&F_S, x, INFO_B, N[i], 1);
+            lx = x + wn;
+        }
         return;
     }
     const int top = 72, yb = 176;
@@ -3996,7 +4134,7 @@ static const char *const HELP[HELP_N][7] = {
      "BLACK 7-10: THE PAGE", "BLACK 11: MUTE"},
     {"A HELD STEP", "A KNOB: A LOCK ON IT", "OCT- + KNOB: LOCK OFF", "ITS CARD SAYS THE REST", "BLACK 1-5: ITS TRIG TYPE",
      "A LATER KEY: ITS LENGTH", "BLACK 6-11: QUICK CHANCES"},
-    {"SOUND", "EDIT: THE MACHINE'S KNOBS", "ENV: THE AMP", "SEL: THE FILTER", "FX: DELAY, DSTR, MOD",
+    {"SOUND", "EDIT: THE MACHINE'S KNOBS", "ENV: AMP ADSR, VOL, HOLD", "SEL: FILTER AND ITS ADSR", "FX: DELAY, DSTR, MOD",
      "OCT- + KNOB: ITS DEFAULT", "EDIT + SAVE: KEEP A SOUND"},
     {"LFO", "GLO + LFO, TURN ANY KNOB:", "IT MOVES THAT, ANY PAGE", "LFO: ALL THREE AT ONCE", "SELECT PICKS LFO 1 2 3",
      "A RULE UNDER A KNOB: MOVED", "LFO HELD: KNOBS COME BACK"},
@@ -4119,7 +4257,12 @@ static void picture(int busy)
     CELL(0, STAGE_Y - 3, 240, STEPS_R + 2, SX0, STAGE_Y, SX1, STEPS_R);
     switch (ui.page) {
     case PG_SYN: if (snd_page()) snd_picture(busy); else syn_picture(busy); break;
-    case PG_AMP: if (ui.sub) amp_chain(busy, k, fk); else amp_env(busy, k, fk); break;
+    case PG_AMP: {                      /* AMP 1 the envelope (ATCK DEC SUS REL), 2 the chain, 3 the envelope (HOLD) */
+        static const int8_t SEG1[4] = {ENV_A, ENV_D, ENV_S, ENV_R};
+        if (ui.sub == 1) amp_chain(busy, k, fk);
+        else amp_env(busy, k, fk < 0 ? -1 : ui.sub ? (fk == 0 ? ENV_H : -1) : SEG1[fk & 3]);
+        break;
+    }
     case PG_FILT: filt_picture(busy, k, fk); break;
     case PG_FX: fx_picture(busy, k, fk); break;
     case PG_LFO: lfo_page(k); break;
@@ -4577,9 +4720,9 @@ static void lay_help(void)
 static void card_draw(void)
 {
     if (!card_up()) return;
-    static const char *const C_SEL[] = {"THE FILTER", "TAP", "ITS PAGES IN TURN", "STEP +", "A KNOB LOCKS IT",
+    static const char *const C_SEL[] = {"THE FILTER", "TAP", "BAND, ADSR, REACH", "STEP +", "A KNOB LOCKS IT",
                                         "OCT- +", "A KNOB TO DEFAULT", 0};
-    static const char *const C_ENV[] = {"THE AMP", "TAP", "ITS PAGES IN TURN", "STEP +", "A KNOB LOCKS IT",
+    static const char *const C_ENV[] = {"THE AMP", "TAP", "ADSR, CHAIN, HOLD", "STEP +", "A KNOB LOCKS IT",
                                         "OCT- +", "A KNOB TO DEFAULT", 0};
     static const char *const C_ARP[] = {"AND GRIDS", "TAP", "ARP, GRIDS, LANES", "TWICE", "HOLD: NOTES STAY", "GLO +",
                                         "PADS: KEYS T1-T6", "OCT+", "LANES TO STEPS", 0};

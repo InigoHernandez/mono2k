@@ -19,7 +19,7 @@ y 16-59   knobs    four columns of 60: the value as a picture (rows 20-39), the 
 y 60      rule     dotted, the only line between bands
 y 64-199  stage    the page's picture across [4, 236) x [68, 180); its info line on baseline 196
 y 204-223 steps    16 cells 8 x 8, 12 apart, a beat's four under each knob (x 60k + 8)
-y 224-239 footer   ink bar: [bars] T2 > DRM-SNAR > AMP                 1/2
+y 224-239 footer   ink bar: [bars] T2 > DRM-SNAR > AMP                 1/3
 ```
 
 ## Type
@@ -56,7 +56,8 @@ rows 20-39 of its column, its label under it on baseline 56, all in the type's 2
 | number | a value whose number is the point (BPM, TUNE, PTCH, LEN, ratios, Hz, divisions) | the value over a 40 px ruler: segments for 8 choices or fewer, else a dotted track, the part up to it solid |
 | box | a named choice (TRCK, DEST, TRIG, MODE, SCRN, the slots, the actions) | its name in a rounded 52 x 20 box (where it fits in 44 px, else the number's) |
 | wave | a wave (the LFOs', the drums', the SID's) | the wave between braces, a cycle |
-| envelope | a segment's time (ATCK, HOLD, DEC, REL, the drops) | in a rounded box, the segment rising, holding or falling, its run the value |
+| envelope | a segment's time (ATCK, HOLD, DEC, REL, the drops) | in a rounded box, the segment rising, holding or falling (a release from a level held), its run the value |
+| sustain | a level (SUS, FSUS) | in a rounded box, a fall from the top to the level, held, the level the value |
 | filter | BASE, WDTH, HPQ, LPQ | in a rounded box, the response: its cutoff, its width, a resonance's peak |
 | pan | PAN | a dotted line, its middle marked, a solid block where it sits |
 
@@ -112,9 +113,12 @@ message's tail. Dark mode inverts the whole screen.
   dotted edge, ratchets dots, a length a line through the steps it lasts over.
 - **SYN**: the class and style, the model in F_L, punch, metal, plastic five cells each; the mark at the right, a cell
   a machine under it; at the foot which machine and `[ALGO] MACHINE`. SND: the library as a menu.
-- **AMP**: the envelope on the voice's curves; page 2 a picture under each knob (drive, level, pan, glide).
-- **FILT**: the response, its cutoffs' handles, the width on the floor while WDTH turns, the decades; page 2 the
-  curve where the envelope takes it and the envelope.
+- **AMP**: the envelope on the voice's curves as an ADSR (A H D S R under their segments; HOLD's flat top where it
+  has one, SUS 0 the one-shot's fall); page 2 a picture under each knob (drive, level, pan, glide); page 3 the
+  envelope again, HOLD its knob.
+- **FILT**: the response, its cutoffs' handles, the width on the floor while WDTH turns, the decades; pages 2 and 3
+  the curve where the envelope takes it and the envelope (an ADSR where FSUS has a sustain): page 2's knobs its
+  segments, page 3's (B-OF W-OF) the curve at its reach.
 - **FX**: EQ and RATE each a row named at its left; DELAY's echoes; DSTR's sine; MOD's sweep and its mix.
 - **LFO**: the three in rows 36 px apart (`lfo_page`), each its number (solid for the one the knobs turn), its wave
   72 wide at its depth with a cursor and a marker live, a cable to its destination's name and track; NO DEPTH or TURN
