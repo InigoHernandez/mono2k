@@ -6,7 +6,8 @@
  *   cc -O2 -fno-builtin -fno-vectorize -fno-slp-vectorize -DM2K_MUL_OUT -Ifirmware/src -Ifirmware/gen \
  *      -o build/host/m2k_draw host/m2k_draw.c && build/host/m2k_draw [--splash | --perform]
  * (--perform: the sound's cost with each PERFORM effect held, perform_cpu; --library [DIR]: each library sound's,
- * library_cpu; --cpu: the render's yardstick, bank A's four and DENSE on one core and two; --hash [SKIP]: their renders'
+ * library_cpu; --cpu: the render's yardstick, bank A's four and DENSE on one core and two; --poly-cpu: POLY's, a lead's
+ * six voices (m2k_poly.c) and the owner's two renders, likewise; --hash [SKIP]: their renders'
  * FNV-1a, on one core and two, to hold a change of the engine to the same sound bit for bit; SKIP samples left out
  * first, 16 against an engine from before 1.6.1, whose bus played in the block) */
 #include <stdio.h>
@@ -18,6 +19,7 @@
 #include "m2k_core.c"
 #include "m2k_lib_play.c"
 #include "m2k_dense.c"
+#include "m2k_poly.c"
 
 static uint64_t instr(void)
 {
@@ -131,11 +133,14 @@ static int library_cpu(const char *dir)
     return 0;
 }
 
-/* --cpu and --hash: bank A's demo p (0..3), or DENSE (4, m2k_dense.c), from its start */
+/* --cpu and --hash: bank A's demo p (0..3), or DENSE (4, m2k_dense.c), from its start; FXS (5); POLY's (m2k_poly.c):
+ * a lead of six voices, SID-6581 (6), SWAV-ENS (7), VO-6 (8), SID with a delay (9), the owner's renders (10, 11) */
 static void play_from(int p)
 {
     m2k_init(2000);
     if (p == 4) { dense_pattern(&pat[46]); p = 46; }
+    if (p >= 6 && p <= 9) { poly_pattern(&pat[48], p - 6); p = 48; }
+    if (p >= 10 && p <= 11) { poly_demo(&pat[49], p - 10); p = 49; }
     if (p == 5) {                      /* FXS: the FX machines each hearing a track with the chain's every stage on */
         static const uint8_t MS[M2K_TRACKS6] = {M_SAW, M_FXC, M_GSIN, M_GSIN, M_FXR, M_FXD};
         dense_pattern(&pat[47]);
@@ -171,14 +176,14 @@ static void cpu_end(void)
     wall_x += (job_i > own_i ? job_i - own_i : 0);      /* (the first core waits for the second this long) */
 }
 
-static int cpu_yard(void)
+static int cpu_rows(const int *P, const char *const *N, int np)
 {
-    static const char *const N[5] = {"A01", "A02", "A03", "A04", "DENSE"};
     static int16_t b[2 * M2K_SUB];
     const int warm = 2 * 44100, len = 4 * 44100;
     printf("Mac instructions a sample, built as the FM-1 builds the core, 4 s after 2 s: one core; two cores: the "
            "first's work, the second's, the wall (the slower core's)\n");
-    for (int p = 0; p < 5; p++) {
+    for (int i = 0; i < np; i++) {
+        const int p = P[i];
         m2k_par_begin = 0; m2k_par_end = 0;
         play_from(p);
         for (int f = 0; f < warm; f += 128) { static int16_t w[256]; m2k_render(w, 128); }
@@ -200,10 +205,22 @@ static int cpu_yard(void)
             job += job_i;
         }
         m2k_par_begin = 0; m2k_par_end = 0;
-        printf("  %-6s %6.0f   %6.0f %6.0f %6.0f\n", N[p], (double)one / len, (double)tot / len, (double)job / len,
+        printf("  %-6s %6.0f   %6.0f %6.0f %6.0f\n", N[i], (double)one / len, (double)tot / len, (double)job / len,
                (double)(tot + wall_x) / len);
     }
     return 0;
+}
+static int cpu_yard(void)
+{
+    static const int P[5] = {0, 1, 2, 3, 4};
+    static const char *const N[5] = {"A01", "A02", "A03", "A04", "DENSE"};
+    return cpu_rows(P, N, 5);
+}
+static int poly_cpu(void)
+{
+    static const int P[6] = {6, 7, 8, 9, 10, 11};
+    static const char *const N[6] = {"P6 SID", "P6 ENS", "P6 VO6", "P6 DLY", "PADS", "STABS"};
+    return cpu_rows(P, N, 6);
 }
 
 /* --split: the split by measure, as the FM-1's clock gives it, on this computer: the instruction counter as the
@@ -361,6 +378,7 @@ int main(int argc, char **argv)
     if (argc > 1 && !strcmp(argv[1], "--perform")) return perform_cpu();
     if (argc > 1 && !strcmp(argv[1], "--library")) return library_cpu(argc > 2 ? argv[2] : 0);
     if (argc > 1 && !strcmp(argv[1], "--cpu")) return cpu_yard();
+    if (argc > 1 && !strcmp(argv[1], "--poly-cpu")) return poly_cpu();
     if (argc > 1 && !strcmp(argv[1], "--split")) return split_cmp();
     if (argc > 2 && !strcmp(argv[1], "--guard")) return guard_sim(argv[2], argc > 3 ? atoi(argv[3]) : 3, argc > 4 ? atoi(argv[4]) : 115);
     if (argc > 1 && !strcmp(argv[1], "--hash")) return render_hash(argc > 2 ? atoi(argv[2]) : 0, argc > 3 ? atoi(argv[3]) : 10 * 44100);

@@ -1359,7 +1359,7 @@ static int par_force = -1;             /* (the self-test: a set of its own, its 
 static uint8_t par_tie_last = 0xFF, par_age;
 static uint8_t par_split(void)
 {
-    const uint8_t *mc = PAT(cur_pat)->machine;
+    const uint8_t *mc = rmach;         /* (as they render: a POLY voice its lead's machine) */
     uint8_t tie = 0;                   /* track t's bit: it goes where track t - 1 goes */
     for (int t = 1; t < M2K_TRACKS; t++)
         if (mc[t] == M_FXC || mc[t] == M_FXR || mc[t] == M_FXD || (t + 1 < M2K_TRACKS && mc[t + 1] == M_FXR)) tie |= (uint8_t)(1u << t);

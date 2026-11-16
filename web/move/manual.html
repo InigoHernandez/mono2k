@@ -193,6 +193,26 @@
     <figure class="fig"><img class="oled" src="screens/23_pads.png" width="128" height="64" alt="HOME with PADS on: the mark of four pads in the header" loading="lazy"><figcaption>PADS on: its mark in the header.</figcaption></figure>
     <figure class="fig"><img class="oled" src="screens/24_capture.png" width="128" height="64" alt="CAPTURED 1 BAR, T1 T2 T3" loading="lazy"><figcaption>Capture: the bars taken, and where.</figcaption></figure>
   </div>
+  <h2 id="poly">Play chords: POLY</h2>
+  <p>Any sound as a polysynth: the track lends its sound to the tracks after it, each one a voice.</p>
+  <ol class="steps">
+    <li>Pick the chords' track, say T1. TRK pad, knob 3: MODE to POLY.</li>
+    <li>Knob 4, VOIC: how many voices, up to eight. T1 on four plays T1 to T4.</li>
+    <li>Hold a chord on the keys: each note a voice; past VOIC the oldest gives its voice up. Loop: the chord holds until the next.</li>
+    <li>Rec while playing, or Capture: the chords go into the steps.</li>
+    <li>MODE back to OFF: T2 to T4 are themselves again.</li>
+  </ol>
+  <div class="figs">
+    <figure class="fig"><img class="oled" src="screens/10_trk_poly.png" width="128" height="64" alt="TRK on POLY: four voices, a chord held" loading="lazy"><figcaption>TRK on POLY: the voices, their notes, HOLD.</figcaption></figure>
+    <figure class="fig"><img class="oled" src="screens/10_trk_voic.png" width="128" height="64" alt="VOIC touched: 4, T1-T4" loading="lazy"><figcaption>VOIC: four voices, T1 to T4.</figcaption></figure>
+    <figure class="fig"><img class="oled" src="screens/01_home_poly.png" width="128" height="64" alt="HOME: lanes 1 to 4 bracketed" loading="lazy"><figcaption>HOME: T2–T4 bracketed to T1.</figcaption></figure>
+  </div>
+  <ul>
+    <li><b>A voice is a track:</b> T1's machine, every knob, its locks, LFOs and effects. Their own sounds wait, unheard; MODE off gives them back. A voice's track button shows T1; its mute mutes T1.</li>
+    <li><b>Recorded:</b> the lowest note on T1's step, the next on T2's, and on; past VOIC dropped. MODE off leaves them in T2's to T4's steps, played with their own sounds.</li>
+    <li><b>T1's step is the chord's:</b> its condition, chance, trig type, accent, ratchets and locks. A note on T2 where T1 has none plays on its own step, in T1's sound.</li>
+    <li>MIDI on T1's channel plays chords. T8, the last, has no track after it: POLY passes it by. The FM-1 has the same (<a href="../manual.html#poly">its manual</a>).</li>
+  </ul>
   <h2 id="slip">A slip</h2>
   <p>Undo; Shift + Undo, redo. Delete held + a track button: its steps cleared.</p>
 </article>
@@ -344,7 +364,7 @@
   <h2 id="mutes">Mutes and the arp</h2>
   <ul>
     <li>Mute tapped: the track in view. Held: steps 1–8 and the track buttons mute and unmute tracks; at the bar when GLO says so.</li>
-    <li>Loop: the track's arp HOLD (TRK: its mode, speed, range and gate).</li>
+    <li>Loop: the track's arp HOLD (TRK: its mode, speed, range and gate); on POLY, its chord's.</li>
   </ul>
 </article>
 
@@ -409,7 +429,7 @@
       <tr><td>Play</td><td>Move's and MONO2K's: one press starts both.</td></tr>
       <tr><td>Rec</td><td>Live record: keys, and knobs as locks on the step playing.</td></tr>
       <tr><td>Shift + Rec</td><td>Save.</td></tr>
-      <tr><td>Loop</td><td>The track's arp HOLD.</td></tr>
+      <tr><td>Loop</td><td>The track's arp HOLD; on POLY, its chord's.</td></tr>
       <tr><td>Sample</td><td>PADS on and off: the eight tracks on the bottom row, their mutes above (<a href="#pads-row">PADS</a>).</td></tr>
       <tr><td>Capture</td><td>What you just played on the keys, into the steps in whole bars; lit when there is something to take.</td></tr>
       <tr><td>Mute</td><td>Tapped: the track in view. Held: steps 1–8 and the track buttons mute and unmute tracks.</td></tr>
@@ -440,7 +460,7 @@
       <tr><td>DSTR</td><td>BITS · FOLD · XOR · VERB · TYPE · RATE · DPTH · MIX</td></tr>
       <tr><td>LFO1–3</td><td>TRCK · DEST · WAVE · TRIG · MULT · SPD · PHAS · DPTH</td></tr>
       <tr><td>HOME</td><td>LEVL · PTCH · BPM · SWNG · TLEN · SPD · PROB · LANE</td></tr>
-      <tr><td>TRK</td><td>PTCH · LEVL · MODE · SPD · RNG · GATE · BANK (DIGI-WAV's wave bank)</td></tr>
+      <tr><td>TRK</td><td>PTCH · LEVL · MODE · SPD · RNG · GATE · BANK (DIGI-WAV's wave bank); MODE on POLY: PTCH · LEVL · MODE · VOIC · – · GATE</td></tr>
       <tr><td>PAT</td><td>BPM · SWNG · LEN · ACNT · TLEN · SPD · PROB · LANE</td></tr>
       <tr><td>GRID</td><td>X · Y · CHAOS · RES · BD · SD · HH · LANE</td></tr>
       <tr><td>MIX</td><td>The eight tracks' levels, a knob a track</td></tr>
@@ -448,7 +468,7 @@
       <tr><td>PERFORM</td><td>DCAY · DAMP · ADPC · DRIV</td></tr>
     </tbody>
   </table>
-  <p>SYN to LFO3 and TRK are the track's. TRK holds the arp (the FM-1's ARP). PAT is the pattern's time and the track's own length, speed, chance and lane (the FM-1's HOME 2). HOME is the FM-1's HOME 1 and 2 on one page. GLO is the bus. The FM-1's MIDI settings have no page here: the Move routes no MIDI to them.</p>
+  <p>SYN to LFO3 and TRK are the track's. TRK holds the arp and POLY (the FM-1's ARP). PAT is the pattern's time and the track's own length, speed, chance and lane (the FM-1's HOME 2). HOME is the FM-1's HOME 1 and 2 on one page. GLO is the bus. The FM-1's MIDI settings have no page here: the Move routes no MIDI to them.</p>
   <div class="figs">
     <figure class="fig"><img class="oled" src="screens/09_lfo1.png" width="128" height="64" alt="LFO1" loading="lazy"><figcaption>LFO1: what it moves, its wave, a cycle of 2 bars.</figcaption></figure>
     <figure class="fig"><img class="oled" src="screens/10_trk.png" width="128" height="64" alt="TRK: the arp held" loading="lazy"><figcaption>TRK: the arp's notes, HOLD on.</figcaption></figure>
@@ -486,7 +506,7 @@
 </footer>
 <script src="../site.js?v=4"></script>
 <script src="../switch.js?v=2"></script>
-<script src="changelog.js?v=9"></script>
-<script src="../manual.js?v=66"></script>
+<script src="changelog.js?v=10"></script>
+<script src="../manual.js?v=67"></script>
 </body>
 </html>

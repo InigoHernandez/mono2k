@@ -7,6 +7,18 @@ window.M2K_KINDS = {
 };
 window.M2K_CHANGES = [
   {
+    date: "2026-11-16", title: "MONO2K 1.11: POLY, chords on one track",
+    items: [
+      ["sequencer", "1.11: POLY plays chords on one track. On ARP, turn MODE to POLY: the track becomes a lead and the tracks after it its voices, as many as KNOB 2 (VOIC) says. T4 on three plays T4, T5 and T6; T1 to T3 play on as always."],
+      ["sound", "1.11: Every voice plays the lead's machine and its whole sound: every knob, its locks, its LFOs and its effects. The voices' own sounds wait unheard and come back when POLY is off."],
+      ["workflow", "1.11: Hold a chord on the keys or play it over MIDI on the lead's channel: each note takes a free voice; past VOIC the oldest note gives its voice up. ARP twice holds the chord until the next one."],
+      ["workflow", "1.11: Hold GLO and press the black key printed POLY: the track in view plays chords; the key printed MONO: one note again. While GLO is held, the one the track is lights up."],
+      ["sequencer", "1.11: Recorded, live or in step entry (keys held together are one step), a chord's lowest note goes on the lead's step and the others on its voices' steps. The lead's step decides the chord: its condition, chance, trig type, accent and locks."],
+      ["screen", "1.11: ARP on POLY shows the voices and their notes; HOME and GLO > PLAY name the lead in its voices' cells, and SELECT passes them. GLO > HELP has a page for chords."],
+      ["patterns", "1.11: Your patterns, sounds and projects load and play exactly as before. A pattern with POLY on saves in a new format that 1.10 cannot open."],
+    ],
+  },
+  {
     date: "2026-11-16", title: "MONO2K 1.10: regular ADSR envelopes",
     items: [
       ["sound", "1.10: The amp is a regular ADSR: AMP 1 is ATCK DEC SUS REL. SUS holds a level while the note lasts, a key held or the step's length, and REL takes it down when the note ends. SUS at 0 is the envelope as it was, so every pattern and sound you have plays exactly as before."],

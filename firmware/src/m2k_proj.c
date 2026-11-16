@@ -13,15 +13,15 @@
 #define M2K_IMG_DATA (160u * 1024u)        /* a project's packed patterns (the FM-1's first build: 28 KB, 16 of them) */
 #endif
 #define IMG_DATA M2K_IMG_DATA
-/* the most a pattern of NT tracks packs to: its head (2 + 8 + NT + its globals + 1: six tracks fill the 60 since format
- * 20, the 54 since 19, the 48 since 18), every kit (74 wide since format 22), its trig mask, every step a trig, every
- * lock. BLOB_MAX is this build's (six: 3626, the Patch Editor's, editor.js's; 3608 before 22), BLOB_ANY format 23's,
- * eight wide (4312: what a store may hold) */
-#define BLOB_OF(nt) (2 + 8 + (nt) + G_COUNT_OF(20, nt) + 1 + (nt) * P_COUNT + (nt) * M2K_STEPS / 8 + \
+/* the most a pattern of NT tracks packs to: its head (2 + 8 + NT + its globals + 1: six tracks fill the 66 since format
+ * 24, the 60 since 20, the 54 since 19, the 48 since 18), every kit (74 wide since format 22), its trig mask, every step
+ * a trig, every lock. BLOB_MAX is this build's (six: 3632, the Patch Editor's, editor.js's; 3626 before 24, 3608 before
+ * 22), BLOB_ANY format 25's, eight wide (4320: what a store may hold) */
+#define BLOB_OF(nt) (2 + 8 + (nt) + G_COUNT_OF(24, nt) + 1 + (nt) * P_COUNT + (nt) * M2K_STEPS / 8 + \
                      (nt) * M2K_STEPS * 4 + 2 + M2K_LOCKS * 4)
 #define BLOB_MAX BLOB_OF(M2K_TRACKS)
 #define BLOB_ANY BLOB_OF(M2K_TRACKS21)
-_Static_assert(BLOB_OF(M2K_TRACKS6) == 3626, "a pattern of six packs to 3626 at most (editor.js's BLOB_MAX)");
+_Static_assert(BLOB_OF(M2K_TRACKS6) == 3632, "a pattern of six packs to 3632 at most (editor.js's BLOB_MAX)");
 
 typedef struct {
     char name[8];
@@ -37,22 +37,22 @@ static int cur_proj;
 
 /* -------------------------------------------------------------------------------------- one pattern, packed */
 
-/* a format's tracks: 21 and 23 eight (a pattern that uses a track past the sixth, in a build of eight), 22 and every
- * one before 21 six */
-static inline int fmt_nt(int ver) { return ver == 21 || ver >= 23 ? M2K_TRACKS21 : M2K_TRACKS6; }
+/* a format's tracks: 21, 23 and 25 eight (a pattern that uses a track past the sixth, in a build of eight), 22, 24 and
+ * every one before 21 six */
+static inline int fmt_nt(int ver) { return ver == 21 || ver == 23 || ver == 25 ? M2K_TRACKS21 : M2K_TRACKS6; }
 /* a format's kit: from 22 the ADSR's three after the bank (74), from 8 the bank (71), from 3 the MOD effect (70) */
 static inline int fmt_kit(int ver) { return ver >= 22 ? P_COUNT : ver >= 8 ? P_COUNT_V21 : ver >= 3 ? P_WBNK : P_MODT; }
 
 /* the globals from s to d between a pattern and a format's layout, GL of them, its per-track blocks (the speeds;
- * Grids' map, then the lanes; the lengths; the chances) NT wide where the pattern's are M2K_TRACKS: OUT, s the
+ * Grids' map, then the lanes; the lengths; the chances; POLY) NT wide where the pattern's are M2K_TRACKS: OUT, s the
  * pattern's and d the format's, or the other way. In, a track the build has not is passed over, one the format has
  * not left as it was */
 static void glob_io(const uint8_t *s, uint8_t *d, int gl, int nt, int out)
 {
     if (nt == M2K_TRACKS) { m_cpy(d, s, (uint32_t)gl); return; }   /* (the same layout) */
-    static const uint8_t AT[6] = {0, G_SPD1, G_GRX, G_LANE1, G_TLEN1, G_TPRB1};
+    static const uint8_t AT[7] = {0, G_SPD1, G_GRX, G_LANE1, G_TLEN1, G_TPRB1, G_POLY1};
     int n = 0;
-    for (int k = 0; k < 6 && n < gl; k++) {
+    for (int k = 0; k < 7 && n < gl; k++) {
         const int per = k == 1 || k >= 3, w = !per ? (k ? G_LANE1 - G_GRX : G_SPD1) : nt;   /* a track each, or a run */
         for (int i = 0; i < w && n < gl; i++, n++) {
             if (per && i >= M2K_TRACKS) continue;
@@ -61,13 +61,14 @@ static void glob_io(const uint8_t *s, uint8_t *d, int gl, int nt, int out)
     }
 }
 
-/* a pattern in the layout of a version (21 and 23 in a build of eight; 22, 20, 19 and 18, today's; the self-test writes
- * the older ones, 3..17; 3..7 kits 70 wide). Format 21 is 20 eight tracks wide: the machines, the per-track globals,
- * the mutes' bits, the kits, the trig mask, the trigs and the locks of eight; an LFO's TRCK past 127 aims past the
- * sixth. Format 22 is 20 with kits 74 wide (the ADSR's SUS FSUS FREL after the bank), 23 is 22 eight wide (21's) */
+/* a pattern in the layout of a version (21, 23 and 25 in a build of eight; 24, 22, 20, 19 and 18, today's; the self-test
+ * writes the older ones, 3..17; 3..7 kits 70 wide). Format 21 is 20 eight tracks wide: the machines, the per-track
+ * globals, the mutes' bits, the kits, the trig mask, the trigs and the locks of eight; an LFO's TRCK past 127 aims past
+ * the sixth. Format 22 is 20 with kits 74 wide (the ADSR's SUS FSUS FREL after the bank), 23 is 22 eight wide (21's).
+ * Format 24 is 22 with POLY's voices after the chances (a track's each), 25 is 24 eight wide */
 static int pat_pack_v(const m2k_pattern_t *p, uint8_t *o, int ver)
 {
-    const int nt = fmt_nt(ver);        /* (no more than the build has: 21 and 23 only in a build of eight) */
+    const int nt = fmt_nt(ver);        /* (no more than the build has: 21, 23 and 25 only in a build of eight) */
     int n = 0, stride = fmt_kit(ver);
     o[n++] = 'P';
     o[n++] = (uint8_t)ver;             /* 2: amp envelope on the Monomachine's times; 3: MOD; 4: SWAV-SAW's new page;
@@ -81,7 +82,8 @@ static int pat_pack_v(const m2k_pattern_t *p, uint8_t *o, int ver)
                                         * lanes, after the speeds) and four more chances, after the conditions; 19:
                                         * the tracks' own lengths, after the lanes; 20: the tracks' chances (PROB),
                                         * after the lengths; 21: eight tracks; 22: the amp's and the filter's ADSR
-                                        * (SUS FSUS FREL, kits 74 wide); 23: 22 eight tracks wide */
+                                        * (SUS FSUS FREL, kits 74 wide); 23: 22 eight tracks wide; 24: POLY, after
+                                        * the chances; 25: 24 eight tracks wide */
     m_cpy(o + n, p->name, 8); n += 8;
     m_cpy(o + n, p->machine, (uint32_t)nt); n += nt;
     const int gl = G_COUNT_OF(ver, nt);
@@ -159,7 +161,8 @@ static int pat_wide(const m2k_pattern_t *p)
     for (int t = M2K_TRACKS6; t < M2K_TRACKS; t++) {
         if (p->machine[t] != ref.machine[t]) return 1;
         for (int k = 0; k < P_COUNT; k++) if (p->kit[t][k] != ref.kit[t][k]) return 1;
-        if (p->glob[G_SPD1 + t] != SPD_1X || p->glob[G_LANE1 + t] || p->glob[G_TLEN1 + t] || p->glob[G_TPRB1 + t]) return 1;
+        if (p->glob[G_SPD1 + t] != SPD_1X || p->glob[G_LANE1 + t] || p->glob[G_TLEN1 + t] || p->glob[G_TPRB1 + t] ||
+            p->glob[G_POLY1 + t]) return 1;
         for (int s = 0; s < M2K_STEPS; s++) if (p->step[t][s].flags & ST_TRIG) return 1;
     }
     for (int t = 0; t < M2K_TRACKS6; t++)
@@ -172,19 +175,27 @@ static int pat_wide(const m2k_pattern_t *p)
 }
 #endif
 
+/* a pattern with a track on POLY (format 24): its voices off none */
+static int pat_poly(const m2k_pattern_t *p)
+{
+    for (int t = 0; t < M2K_TRACKS; t++) if (p->glob[G_POLY1 + t]) return 1;
+    return 0;
+}
+
 /* a pattern none of whose tracks has a length of its own packs as format 18, byte for byte as before (bank A's, a
  * blank's: the stores' demos and blanks still match, and 1.4 reads it); one with a length, as 19; one with a track's
  * chance under 100 %, as 20 (1.5 reads 19); one that uses the ADSR's three (pat_adsr), as 22 (1.9 reads 20 and 21);
- * one that uses a track past the sixth (a build of eight), as 21, or as 23 with the ADSR's */
+ * one with a track on POLY (pat_poly), as 24 (1.10 reads 22 and before); one that uses a track past the sixth (a build
+ * of eight), as 21, or as 23 with the ADSR's, 25 with POLY */
 static int pat_pack(const m2k_pattern_t *p, uint8_t *o)
 {
     int own = 0, prb = 0;
     for (int t = 0; t < M2K_TRACKS; t++) { own |= p->glob[G_TLEN1 + t]; prb |= p->glob[G_TPRB1 + t]; }
-    const int adsr = pat_adsr(p);
+    const int adsr = pat_adsr(p), poly = pat_poly(p);
 #if M2K_TRACKS > M2K_TRACKS6
-    if (pat_wide(p)) return pat_pack_v(p, o, adsr ? 23 : 21);
+    if (pat_wide(p)) return pat_pack_v(p, o, poly ? 25 : adsr ? 23 : 21);
 #endif
-    return pat_pack_v(p, o, adsr ? 22 : prb ? 20 : own ? 19 : 18);
+    return pat_pack_v(p, o, poly ? 24 : adsr ? 22 : prb ? 20 : own ? 19 : 18);
 }
 
 static uint8_t tune_v5(int v)
@@ -212,6 +223,10 @@ static void pat_clamp(m2k_pattern_t *p, int wide)
     p->glob[G_LEN] = (uint8_t)CLAMP(p->glob[G_LEN], 1, 64);
     for (int t = 0; t < M2K_TRACKS; t++) if (p->glob[G_TLEN1 + t] > 64) p->glob[G_TLEN1 + t] = 64;
     for (int t = 0; t < M2K_TRACKS; t++) if (p->glob[G_TPRB1 + t] > 15) p->glob[G_TPRB1 + t] = 15;
+    for (int t = 0; t < M2K_TRACKS; t++) {           /* POLY: none, or 2..8 voices (one is none) */
+        uint8_t *v = &p->glob[G_POLY1 + t];
+        *v = *v < 2 ? 0 : *v > M2K_TRACKS21 ? M2K_TRACKS21 : *v;
+    }
     for (int i = 0; i < M2K_LOCKS; i++) if (p->lock[i].val > (is_trck(p->lock[i].param) ? tmax : 127)) p->lock[i].val = 127;
 }
 
@@ -248,12 +263,13 @@ static void trck_past(m2k_pattern_t *p)
 static int pat_unpack(m2k_pattern_t *p, const uint8_t *o, int len)
 {
     int n = 0;
-    if (len < 2 || o[0] != 'P' || o[1] < 1 || o[1] > 23) return 0;
+    if (len < 2 || o[0] != 'P' || o[1] < 1 || o[1] > 25) return 0;
     int ver = o[1], stride = fmt_kit(ver);    /* before 3 a kit ended before the MOD effect, before 8 before the bank,
                                                * before 22 before the ADSR's three */
     /* before 15 no speeds, 18 no Grids, 19 no lengths of the tracks' own (0: each the pattern's, as they played), 20
-     * no chances (0: every trig), 22 no ADSR (kit_v21: SUS 0, FSUS 0, FREL 32, as they played); before 21 (and 22) six
-     * tracks (those past them blank, track_blank), 21 and 23 eight (those past this build's passed over) */
+     * no chances (0: every trig), 22 no ADSR (kit_v21: SUS 0, FSUS 0, FREL 32, as they played), 24 no POLY (0: none);
+     * before 21 (and 22, 24) six tracks (those past them blank, track_blank), 21, 23 and 25 eight (those past this
+     * build's passed over) */
     const int nt = fmt_nt(ver), gl = G_COUNT_OF(ver, nt);
     const int nc = ver >= 18 ? C_COUNT : C_COUNT_V17;                       /* (a condition past them was ALWAYS) */
     const int head = 2 + 8 + nt + gl + 1 + nt * stride + nt * M2K_STEPS / 8 + 2;

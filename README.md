@@ -35,6 +35,12 @@ WebAssembly, with sound).
 - **Regular ADSR envelopes** (1.10). The amp is ATCK DEC SUS REL on AMP 1 (DIST VOL PAN PORT on AMP 2, HOLD on AMP 3),
   the filter's envelope ATCK DEC SUS REL on FILT 2 (B-OF W-OF on FILT 3). SUS holds a level while the note lasts, a key
   or the step's length, and REL follows its end. SUS 0 is the envelope as before, so every older sound plays bit for bit.
+- **POLY, chords on one track** (1.11; the Move's 0.6). ARP's MODE on POLY (or GLO + the black key printed POLY) makes
+  the track a lead and the tracks after it its voices, VOIC of them (2-6 on the FM-1, 2-8 on the Move): each a whole
+  track playing the lead's machine and sound, its own kept for when POLY is off. Keys, MIDI on the lead's channel and
+  the Move's pads play chords (a free voice first, past VOIC the oldest); recorded, a chord's lowest note goes on the
+  lead's step and the rest on its voices', and the lead's step decides how the chord plays. A pattern with POLY packs
+  as format 24 (25 eight wide); every other one as before, byte for byte.
 
 ## Run it
 

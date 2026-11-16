@@ -105,7 +105,7 @@ static void mx_note_off(int t)
 static void mx_note_on(int t, int note, int vel)
 {
     mx_note_off(t);
-    mx.onch[t] = (uint8_t)((midi_ch() + t) & 15);
+    mx.onch[t] = (uint8_t)((midi_ch() + pv.lead[t]) & 15);     /* (a POLY voice's on its lead's: the chord on one) */
     mx_out(3, 0x90 | mx.onch[t], note, vel);
     mx.on[t] = (uint8_t)note;
 }
@@ -299,14 +299,78 @@ static void lane_fire(int t, uint32_t k)
     sq.rt_left[t] = 0;
 }
 
+/* a trig of step ST on track t (its sound set: apply_locks, poly_eff) at NOTE: the voice, its note out, its gate (the
+ * step's GATE at the track's speed), its ratchets in the step's LEN */
+static void step_sound(int t, const m2k_step_t *st, int note, int32_t len)
+{
+    unsigned skip = st->flags & ST_TTYPE;
+    voice_trig(t, note, (st->flags & ST_ACC) ? 127 : 100, st->flags & ST_SLD, skip);
+    if (set_on(S_NOTO) && !(skip & ST_NOAMP)) mx_note_on(t, note, (st->flags & ST_ACC) ? 127 : 100);
+    if (!(skip & ST_NOAMP)) {                    /* no AMP trig: the gate runs on as it was */
+        int c = spd_of(pv.lead[t]);              /* (a POLY voice on its lead's clock) */
+        trk[t].gate_left = c == 4 ? gate_blocks(t) : (gate_blocks(t) - 1) * SPD_NUM[c] / SPD_DEN[c] + 1;
+    }
+    int n = st->rtrg < 1 ? 1 : st->rtrg > 4 ? 4 : st->rtrg;
+    sq.rt_left[t] = (uint8_t)(n - 1);
+    if (n > 1) {
+        sq.rt_len[t] = len / n;
+        sq.rt_ctr[t] = sq.rt_len[t];
+        sq.rt_note[t] = (uint8_t)note;
+        sq.rt_skip[t] = (uint8_t)skip;
+        if (!(skip & ST_NOAMP)) trk[t].gate_left = sq.rt_len[t] / (M2K_SUB << 8) * 3 / 4 + 1;
+    }
+}
+
+static void poly_eff(int v);
+static void poly_lfo(int v);
+
+/* a POLY lead's step s (format 24): the chord. Where the lead has a trig, its step is the chord's: whether it plays (the
+ * lead's mute, condition, PROB) and how (trig type, accent, slide, ratchets, its locks in the lead's sound), for every
+ * voice with a trig there, each at its own note. Where the lead has none, a voice's own trig plays on its own step
+ * (condition, trig type, accent, slide, ratchets) in the lead's sound as it is */
+static void poly_fire(int t, int s, int32_t len)
+{
+    m2k_pattern_t *p = PAT(cur_pat);
+    if ((p->mute >> t & 1) || (sq.solo && !(sq.solo >> t & 1))) return;
+    const int n = pv.nv[t];
+    const m2k_step_t st = p->step[t][s];
+    if (st.flags & ST_TRIG) {
+        if (sq.rec_skip[t] == s) { sq.rec_skip[t] = -1; return; }
+        if (sq.nheld[t]) return;                    /* the player has the lead and its voices */
+        if (!cond_pass(t, st.cond) || !prob_pass(t)) return;
+        apply_locks(t, s);
+        step_sound(t, &st, st.note, len);
+        for (int v = t + 1; v < t + n; v++) {
+            const m2k_step_t *vs = &p->step[v][s];
+            if (!(vs->flags & ST_TRIG)) continue;
+            poly_eff(v);
+            poly_lfo(v);
+            step_sound(v, &st, vs->note, len);
+        }
+        return;
+    }
+    if (sq.nheld[t]) return;
+    for (int v = t + 1; v < t + n; v++) {
+        const m2k_step_t vs = p->step[v][s];
+        if (!(vs.flags & ST_TRIG)) continue;
+        sq.loops[v] = sq.loops[t];                  /* (its A:B on the lead's loops) */
+        if (!cond_pass(v, vs.cond)) continue;
+        poly_eff(v);
+        poly_lfo(v);
+        step_sound(v, &vs, vs.note, len);
+    }
+}
+
 /* track t's step s, its K-th since the pattern's start, LEN Q8 samples long */
 static void fire_track(int t, int s, int32_t len, uint32_t k)
 {
     m2k_pattern_t *p = PAT(cur_pat);
+    if (pv.lead[t] != t) return;                    /* a POLY voice: its lead plays it, on the lead's step */
     if (lane_of(p, t)) {
         if (!(p->mute >> t & 1) && !(sq.solo && !(sq.solo >> t & 1)) && !sq.nheld[t]) lane_fire(t, k);
         return;
     }
+    if (pv.nv[t] > 1) { poly_fire(t, s, len); return; }
     {
         m2k_step_t st = p->step[t][s];
         if (!(st.flags & ST_TRIG) || (p->mute >> t & 1) || (sq.solo && !(sq.solo >> t & 1))) return;
@@ -314,22 +378,7 @@ static void fire_track(int t, int s, int32_t len, uint32_t k)
         if (sq.nheld[t]) return;                    /* the player (or its arp) has the track */
         if (!cond_pass(t, st.cond) || !prob_pass(t)) return;
         apply_locks(t, s);
-        unsigned skip = st.flags & ST_TTYPE;
-        voice_trig(t, st.note, (st.flags & ST_ACC) ? 127 : 100, st.flags & ST_SLD, skip);
-        if (set_on(S_NOTO) && !(skip & ST_NOAMP)) mx_note_on(t, st.note, (st.flags & ST_ACC) ? 127 : 100);
-        if (!(skip & ST_NOAMP)) {                    /* no AMP trig: the gate runs on as it was */
-            int c = spd_of(t);
-            trk[t].gate_left = c == 4 ? gate_blocks(t) : (gate_blocks(t) - 1) * SPD_NUM[c] / SPD_DEN[c] + 1;
-        }
-        int n = st.rtrg < 1 ? 1 : st.rtrg > 4 ? 4 : st.rtrg;
-        sq.rt_left[t] = (uint8_t)(n - 1);
-        if (n > 1) {
-            sq.rt_len[t] = len / n;
-            sq.rt_ctr[t] = sq.rt_len[t];
-            sq.rt_note[t] = st.note;
-            sq.rt_skip[t] = (uint8_t)skip;
-            if (!(skip & ST_NOAMP)) trk[t].gate_left = sq.rt_len[t] / (M2K_SUB << 8) * 3 / 4 + 1;
-        }
+        step_sound(t, &st, st.note, len);
     }
 }
 
@@ -461,6 +510,8 @@ static inline int pat_coming_in(void) { return sq.queued != cur_pat && (sq.jump 
 static inline int step_due(void) { return sq.step >= seq_len() || (sq.jump && sq.queued != cur_pat) ? 0 : sq.step; }
 
 static void keys_home(void);           /* (m2k_ui.c) each track's keys and new trigs where the open pattern plays it */
+static void poly_sync(void);
+static void poly_effs(void);
 
 /* right before the pattern's next step, the wrap: past the end (or a length made shorter), or a pattern jumped to,
  * it starts over, the queued pattern in. So the last step plays out on its own pattern, kit and locks, and a note
@@ -480,7 +531,9 @@ static void step_wrap(void)
     if (sq.queued != cur_pat) {
         cur_pat = sq.queued;
         lockmap_build();
+        poly_sync();                   /* (its POLY: the voices its) */
         for (int t = 0; t < M2K_TRACKS; t++) m_cpy(trk[t].eff, PAT(cur_pat)->kit[t], P_COUNT);
+        poly_effs();
         m_set(sq.loops, 0, sizeof sq.loops);       /* its conditions count its own loops */
         tracks_restart();
         keys_home();
@@ -494,14 +547,16 @@ static void step_wrap(void)
 static inline int mute_waits(void) { return sq.playing && !set_on(S_MUTQ); }
 static inline int mute_pending(void) { return (sq.mq_m | sq.sq_m | sq.solo_rel) != 0; }
 
-static int mute_will(int t)            /* track t muted, as it will be */
+static int mute_will(int t)            /* track t muted, as it will be (a POLY voice: its lead) */
 {
+    t = pv.lead[t];
     const uint8_t b = (uint8_t)(1u << t);
     return (((sq.mq_m & b) ? sq.mq_v : PAT(cur_pat)->mute) & b) != 0;
 }
 
 static void mute_to(int t, int on)
 {
+    t = pv.lead[t];                    /* (a POLY voice follows its lead's: its key mutes the lead) */
     m2k_pattern_t *p = PAT(cur_pat);
     const uint8_t b = (uint8_t)(1u << t);
     if (!mute_waits()) { p->mute = (uint8_t)((p->mute & ~b) | (on ? b : 0)); sq.mq_m &= (uint8_t)~b; return; }
@@ -512,6 +567,7 @@ static void mute_to(int t, int on)
 /* a solo key down or let go. Let go before its solo came, the solo plays its bar and goes at the next */
 static void solo_key(int t, int down)
 {
+    t = pv.lead[t];
     const uint8_t b = (uint8_t)(1u << t);
     if (!mute_waits()) {
         sq.solo = (uint8_t)(down ? sq.solo | b : sq.solo & ~b);
@@ -562,6 +618,7 @@ static int step_fire(int32_t ph)
 static int rec_step(int t);
 static void arp_block(int t)
 {
+    if (pv.on && (pv.nv[t] > 1 || pv.lead[t] != t)) return;   /* (POLY: its keys the voices', no arp; a voice none of its own) */
     const uint8_t *k = PAT(cur_pat)->kit[t];
     int mode = (k[P_AMOD] * 6) >> 7, nh = sq.nheld[t];
     uint8_t *held = sq.held[t];
@@ -606,6 +663,7 @@ static void arp_block(int t)
 static void seq_block(void)
 {
     sq.tick++;
+    poly_sync();
     if (mute_pending() && !mute_waits()) mutes_now();
     mx.now += M2K_SUB;
     seq_tempo();
@@ -637,7 +695,8 @@ static void seq_block(void)
     const m2k_pattern_t *rp = PAT(cur_pat);
     for (int t = 0; t < M2K_TRACKS; t++) {
         if (!sq.rt_left[t]) continue;
-        if (!sq.playing || (rp->mute >> t & 1) || (sq.solo && !(sq.solo >> t & 1)) || sq.nheld[t]) {
+        const int l = pv.lead[t];                    /* (a POLY voice's on its lead's mute and keys) */
+        if (!sq.playing || (rp->mute >> l & 1) || (sq.solo && !(sq.solo >> l & 1)) || sq.nheld[l]) {
             sq.rt_left[t] = 0;
             continue;
         }
@@ -650,6 +709,8 @@ static void seq_block(void)
         }
     }
     for (int t = 0; t < M2K_TRACKS; t++) arp_block(t);
+    poly_effs();
+    for (int t = 0; t < M2K_TRACKS; t++) rmach[t] = rp->machine[pv.lead[t]];   /* (what each track renders) */
 }
 
 static int seq_running(void) { return sq.playing; }
@@ -749,6 +810,206 @@ static int rec_step(int t)
     return nx;
 }
 
+/* ------------------------------------------------------------------------------------------------- POLY */
+
+/* POLY (the owner's, 1.11; format 24): ARP's MODE on POLY makes a track a lead that plays chords on itself and the
+ * tracks right after it, VOIC of them (G_POLY1 + t: 2..8, as many as there are). Each voice is a whole track rendering
+ * the lead's machine and sound, its own kept for when POLY is off (no voice pool: a voice costs what a track does). The
+ * keys, MIDI on the lead's channel and the Move's pads play chords; a chord recorded goes into the voices' own steps,
+ * the lowest note the lead's; the lead's step is the chord's */
+static inline uint8_t trck_enc(int t);
+
+/* a track's voices: G_POLY1's, as many as there are from it to the last; 1 none */
+static inline int poly_want(const m2k_pattern_t *p, int t)
+{
+    const int v = p->glob[G_POLY1 + t];
+    return v < 2 ? 1 : v > M2K_TRACKS - t ? M2K_TRACKS - t : v;
+}
+
+/* voice v's sound: its lead's as it plays (its kit with its step's locks), each LFO aimed at the lead aimed at the voice
+ * (one aimed elsewhere moves that from the lead alone): a block at a time, so a knob turned moves every voice */
+static void poly_eff(int v)
+{
+    const int l = pv.lead[v];
+    uint8_t *e = trk[v].eff;
+    m_cpy(e, trk[l].eff, P_COUNT);
+    for (int i = 0; i < 3; i++) {
+        uint8_t *b = &e[P_LFO + 8 * i];
+        if (trck_of(b[L_TRCK]) == l) b[L_TRCK] = trck_enc(v); else b[L_DEST] = 0;
+    }
+}
+
+/* every voice's, after the sequencer's block (the lead's step may have brought its locks) */
+static void poly_effs(void)
+{
+    if (!pv.on) return;
+    for (int t = 0; t < M2K_TRACKS; t++) if (pv.lead[t] != t) poly_eff(t);
+}
+
+/* at a voice's trig: its LFOs where the lead's are (a free one in phase with it; a trigged one restarts after) */
+static void poly_lfo(int v)
+{
+    trk_t *d = &trk[v];
+    const trk_t *s = &trk[pv.lead[v]];
+    m_cpy(d->lph, s->lph, sizeof d->lph);
+    m_cpy(d->lval, s->lval, sizeof d->lval);
+    m_cpy(d->lhold, s->lhold, sizeof d->lhold);
+    m_cpy(d->lrnd, s->lrnd, sizeof d->lrnd);
+    m_cpy(d->ldone, s->ldone, sizeof d->ldone);
+}
+
+/* the leads and their voices from the open pattern's POLY, left to right: a track inside a lead's voices is borrowed (its
+ * own POLY waits). A change (MODE, VOIC, another pattern) lets go of what the tracks it touches were playing; a
+ * borrowed track's own keys and arp stop with it */
+static void poly_sync(void)
+{
+    const m2k_pattern_t *p = PAT(cur_pat);
+    uint32_t any = 0;                  /* (no POLY in the pattern nor in play: nothing to do, a block's check) */
+    for (int t = 0; t < M2K_TRACKS; t++) any |= p->glob[G_POLY1 + t];
+    if (!any && !pv.on) return;
+    uint8_t ld[M2K_TRACKS], nv[M2K_TRACKS];
+    int change = 0;
+    for (int t = 0, l = 0, end = 0; t < M2K_TRACKS; t++) {
+        if (t >= end) { l = t; end = t + poly_want(p, t); }
+        ld[t] = (uint8_t)l;
+        nv[t] = (uint8_t)(l == t ? end - t : 1);
+        change |= ld[t] != pv.lead[t] || nv[t] != pv.nv[t];
+    }
+    if (!change) return;
+    uint8_t moved = 0;                 /* the tracks whose part changed: their lead's, or their lead's voices */
+    for (int t = 0; t < M2K_TRACKS; t++)
+        if (ld[t] != pv.lead[t] || nv[ld[t]] != pv.nv[ld[t]] || nv[pv.lead[t]] != pv.nv[pv.lead[t]]) moved |= (uint8_t)(1u << t);
+    for (int t = 0; t < M2K_TRACKS; t++) {
+        if (!(moved >> t & 1)) continue;
+        if (trk[t].gate || trk[t].sounding) voice_off(t);
+        sq.rt_left[t] = 0;
+        pv.key[t] = 0xFF;
+        if (ld[t] != t) { sq.nkeys[t] = 0; sq.nheld[t] = 0; }
+    }
+    m_cpy(pv.lead, ld, sizeof ld);
+    m_cpy(pv.nv, nv, sizeof nv);
+    pv.on = 0;
+    for (int t = 0; t < M2K_TRACKS; t++) pv.on |= (uint8_t)(nv[t] > 1);
+    for (int t = 0; t < M2K_TRACKS; t++)
+        if (moved >> t & 1) { if (ld[t] != t) poly_eff(t); else m_cpy(trk[t].eff, p->kit[t], P_COUNT); }
+}
+
+static inline int poly_older(uint32_t a, uint32_t b) { return (int32_t)(a - b) < 0; }
+
+/* the voice a key takes on lead t: the one holding it already; else a free one, let go longest (one the CPU guard rests
+ * last); past VOIC, the oldest note's. A key held keeps its voice */
+static int poly_pick(int t, int note)
+{
+    const int n = pv.nv[t];
+    int best = -1;
+    for (int v = t; v < t + n; v++) if (pv.key[v] == note) return v;
+    for (int pass = 0; pass < 2 && best < 0; pass++)
+        for (int v = t; v < t + n; v++)
+            if (pv.key[v] == 0xFF && (pass || !trk[v].held) && (best < 0 || poly_older(pv.age[v], pv.age[best]))) best = v;
+    if (best >= 0) return best;
+    for (int v = t; v < t + n; v++) if (best < 0 || poly_older(pv.age[v], pv.age[best])) best = v;
+    return best;
+}
+
+/* for the CPU guard (m2k_ui.c), POLY's state asked, never changed: whose sound track t plays (itself, or the POLY lead
+ * that borrows it: a voice when it is not t), and which of lead t's voices holds the oldest note a key holds (-1: none,
+ * or t no lead), the one a new key would take past VOIC */
+static int poly_lead_of(int t) { return t >= 0 && t < M2K_TRACKS ? pv.lead[t] : t; }
+static int poly_oldest(int t)
+{
+    if (t < 0 || t >= M2K_TRACKS || pv.lead[t] != t || pv.nv[t] < 2) return -1;
+    int best = -1;
+    for (int v = t; v < t + pv.nv[t]; v++)
+        if (pv.key[v] != 0xFF && (best < 0 || poly_older(pv.age[v], pv.age[best]))) best = v;
+    return best;
+}
+
+/* lead t's voices let go of their keys (all, or those no longer down: HOLD off) */
+static void poly_release(int t, int all)
+{
+    for (int v = t; v < t + pv.nv[t]; v++) {
+        if (pv.key[v] == 0xFF) continue;
+        int down = 0;
+        for (int i = 0; !all && i < sq.nkeys[t]; i++) down |= sq.keys[t][i] == pv.key[v];
+        if (down) continue;
+        voice_off(v);
+        pv.key[v] = 0xFF;
+        pv.age[v] = ++pv.clock;
+    }
+}
+
+/* a chord's note written at step s of lead t (live REC, step entry, the Move's Capture). FRESH starts the chord there
+ * over: the voices' trigs there go, the lead's step is this note's. Else the note joins those there: the lowest the
+ * lead's, the next T+1's and on; past its voices it is dropped */
+static void poly_note(int t, int s, int note, int acc, int fresh)
+{
+    m2k_pattern_t *p = PAT(cur_pat);
+    const int n = pv.nv[t];
+    uint8_t c[M2K_TRACKS];
+    int k = 0;
+    if (fresh) { pv.ct = (uint8_t)t; pv.cs = (uint8_t)s; pv.ctick = sq.tick; }
+    else
+        for (int v = t; v < t + n; v++) {
+            const m2k_step_t *st = &p->step[v][s];
+            if (!(st->flags & ST_TRIG)) continue;
+            if (st->note == note) { if (acc) p->step[t][s].flags |= ST_ACC; return; }
+            c[k++] = st->note;
+        }
+    if (k >= n) return;
+    int j = k++;
+    while (j > 0 && c[j - 1] > note) { c[j] = c[j - 1]; j--; }
+    c[j] = (uint8_t)note;
+    for (int i = 0; i < n; i++) {
+        m2k_step_t *st = &p->step[t + i][s];
+        if (i >= k) { if (fresh) st->flags = 0; continue; }
+        st->note = c[i];
+        st->flags = !i ? (uint8_t)((fresh ? 0 : st->flags) | ST_TRIG | (acc ? ST_ACC : 0)) : (uint8_t)ST_TRIG;
+    }
+}
+
+/* keys a moment apart are one chord as REC writes it (the second may round to the next step): 62 ms */
+#define POLY_WIN (M2K_SR / 16 / M2K_SUB)
+
+/* a key on lead t: a voice (poly_pick) plays it, in the lead's sound (its kit: a live note's); with HOLD the chord
+ * latched stays until a key comes after all were let go; while REC plays, the chord into the steps */
+static void poly_key_on(int t, int note, int vel)
+{
+    const int fresh = sq.nkeys[t] == 0;
+    int in = 0;
+    for (int i = 0; i < sq.nkeys[t]; i++) in |= sq.keys[t][i] == note;
+    if (!in && sq.nkeys[t] < 8) sq.keys[t][sq.nkeys[t]++] = (uint8_t)note;
+    if (sq.arp_hold[t] && fresh) { poly_release(t, 1); sq.nheld[t] = 0; }
+    in = 0;
+    for (int i = 0; i < sq.nheld[t]; i++) in |= sq.held[t][i] == note;
+    if (!in && sq.nheld[t] < 8) sq.held[t][sq.nheld[t]++] = (uint8_t)note;
+    const int v = poly_pick(t, note);
+    pv.key[v] = (uint8_t)note;
+    pv.age[v] = ++pv.clock;
+    m_cpy(trk[t].eff, PAT(cur_pat)->kit[t], P_COUNT);
+    if (v != t) { poly_eff(v); poly_lfo(v); }
+    voice_on(v, note, 100, 0);
+    mx_note_off(v);                    /* (the gate the player's now: a step's note out ends) */
+    trk[v].gate_left = -1;
+    if (sq.rec && sq.playing) {
+        const int8_t was = sq.rec_skip[t];
+        int s = rec_step(t), join = !fresh && pv.ct == t && sq.tick - pv.ctick < POLY_WIN;
+        if (join && s != pv.cs) { sq.rec_skip[t] = was; s = pv.cs; }
+        poly_note(t, s, note, vel > 110, !join);
+    }
+}
+
+static void poly_key_off(int t, int note)
+{
+    int j = 0;
+    for (int i = 0; i < sq.nkeys[t]; i++) if (sq.keys[t][i] != note) sq.keys[t][j++] = sq.keys[t][i];
+    sq.nkeys[t] = (uint8_t)j;
+    if (sq.arp_hold[t]) return;        /* HOLD: the chord latched */
+    j = 0;
+    for (int i = 0; i < sq.nheld[t]; i++) if (sq.held[t][i] != note) sq.held[t][j++] = sq.held[t][i];
+    sq.nheld[t] = (uint8_t)j;
+    poly_release(t, 0);
+}
+
 /* Ready: the first note (a key, a pad, MIDI in) starts the pattern from its first step, and is recorded there */
 static void ready_go(void) { if (sq.ready && !sq.playing) seq_play(1); }
 
@@ -756,6 +1017,9 @@ static void ready_go(void) { if (sq.ready && !sq.playing) seq_play(1); }
 static void live_on_t(int t, int note, int vel)
 {
     ready_go();
+    poly_sync();
+    t = pv.lead[t];                    /* (a POLY voice's keys play its lead) */
+    if (pv.nv[t] > 1) { poly_key_on(t, note, vel); return; }
     int mode = (PAT(cur_pat)->kit[t][P_AMOD] * 6) >> 7, fresh = sq.nkeys[t] == 0;
     int down = 0;
     for (int i = 0; i < sq.nkeys[t]; i++) down |= sq.keys[t][i] == note;
@@ -784,6 +1048,8 @@ static void live_on_t(int t, int note, int vel)
 static void pad_hit(int t, int note)
 {
     ready_go();
+    poly_sync();
+    t = pv.lead[t];                    /* (a POLY voice's pad plays its lead) */
     m_cpy(trk[t].eff, PAT(cur_pat)->kit[t], P_COUNT);
     voice_trig(t, note, 100, 0, 0);
     trk[t].gate_left = gate_blocks(t);
@@ -797,6 +1063,9 @@ static void pad_hit(int t, int note)
 
 static void live_off_t(int t, int note)
 {
+    poly_sync();
+    t = pv.lead[t];
+    if (pv.nv[t] > 1) { poly_key_off(t, note); return; }
     int j = 0;
     for (int i = 0; i < sq.nkeys[t]; i++) if (sq.keys[t][i] != note) sq.keys[t][j++] = sq.keys[t][i];
     sq.nkeys[t] = (uint8_t)j;
@@ -820,8 +1089,10 @@ static void live_off(int note) { live_off_t(sq.ktrk, note); }
  * the arp keeps only the keys still down (none: it stops, its last note let ring out) */
 static void arp_hold_set(int t, int on)
 {
+    t = pv.lead[t];                    /* (a POLY voice's: its lead's, whose chord latches) */
     sq.arp_hold[t] = (uint8_t)(on != 0);
     if (!on) { m_cpy(sq.held[t], sq.keys[t], sq.nkeys[t]); sq.nheld[t] = sq.nkeys[t]; }
+    if (!on && pv.nv[t] > 1) poly_release(t, 0);
 }
 
 /* the Monomachine's CC map (its MIDI implementation, as the gearmulator emulator encodes it): a channel per track,
@@ -880,6 +1151,8 @@ void m2k_midi_from(int src, int status, int d1, int d2)
         return;
     }
     if (!(notes_from() & from)) return;   /* notes, CCs and mutes only from NOTE IN's */
+    poly_sync();
+    t = pv.lead[t];                    /* (a POLY voice's channel plays and turns its lead) */
     if (cmd == 0xB0) {
         if (d1 == 64) { arp_hold_set(t, d2 >= 64); return; }   /* a sustain pedal holds its channel's track's arp */
         if (d1 == 3) { mute_to(t, d2 != 0); return; }   /* (with BAR, while playing: at the next bar) */
@@ -893,13 +1166,13 @@ void m2k_midi_from(int src, int status, int d1, int d2)
     }
     if (cmd == 0x90 && d2) {
         ready_go();
-        if (t == sq.ktrk || (PAT(cur_pat)->kit[t][P_AMOD] * 6) >> 7) { live_on_t(t, d1, d2); return; }   /* (its arp) */
+        if (t == sq.ktrk || (PAT(cur_pat)->kit[t][P_AMOD] * 6) >> 7 || pv.nv[t] > 1) { live_on_t(t, d1, d2); return; }   /* (its arp, POLY) */
         m_cpy(trk[t].eff, PAT(cur_pat)->kit[t], P_COUNT);
         voice_on(t, d1, 100, 0);                    /* any velocity alike, as the Monomachine's (no accent) */
         mx_note_off(t);                             /* (the gate the player's now: a step's note out ends) */
         trk[t].gate_left = -1;
     } else if (cmd == 0x80 || cmd == 0x90) {
-        if (t == sq.ktrk || (PAT(cur_pat)->kit[t][P_AMOD] * 6) >> 7 || sq.nkeys[t]) { live_off_t(t, d1); return; }
+        if (t == sq.ktrk || (PAT(cur_pat)->kit[t][P_AMOD] * 6) >> 7 || sq.nkeys[t] || pv.nv[t] > 1) { live_off_t(t, d1); return; }
         if (trk[t].note == d1) voice_off(t);
     }
 }
@@ -1077,6 +1350,7 @@ static void track_blank(m2k_pattern_t *p, int t)
     p->glob[G_LANE1 + t] = 0;
     p->glob[G_TLEN1 + t] = 0;
     p->glob[G_TPRB1 + t] = 0;
+    p->glob[G_POLY1 + t] = 0;
     p->mute &= (uint8_t)~(1u << t);
     for (int i = 0; i < M2K_LOCKS; i++) if (p->lock[i].trk == t) p->lock[i].trk = 0xFF;
 }
@@ -1141,6 +1415,9 @@ void m2k_init(uint32_t seed)
     perf.kill = 32767;
     m_set(&sq, 0, sizeof sq);
     m_set(&mx, 0, sizeof mx);
+    m_set(&pv, 0, sizeof pv);                    /* POLY: every track its own lead */
+    for (int t = 0; t < M2K_TRACKS; t++) { pv.lead[t] = (uint8_t)t; pv.nv[t] = 1; pv.key[t] = 0xFF; }
+    pv.ct = 0xFF;
     modn = modpn = 0;
     m_set(mx.on, 0xFF, sizeof mx.on);
     mx.last = 0u - M2K_SR;                       /* no pulse in yet: the first only starts the timing */

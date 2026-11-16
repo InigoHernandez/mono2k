@@ -678,6 +678,30 @@ int main(int argc, char **argv)
     padmap("keys");
     pad(0, 0); pad(2, 0); pad(4, 0);
 
+    /* TRK on POLY (1.11): A05, a blank, T1 a SWAV-SAW pad; MODE turned to POLY, VOIC up to four (T1-T4), a chord held
+     * (Loop: HOLD); VOIC touched; HOME with T2-T4 bracketed to T1 */
+    open_at(4);
+    machine_to(0, M_SAW);
+    PAT(cur_pat)->kit[0][P_ATK] = 40; PAT(cur_pat)->kit[0][P_SUS] = 100; PAT(cur_pat)->kit[0][P_REL] = 90;
+    m_cpy(trk[0].eff, PAT(cur_pat)->kit[0], P_COUNT);
+    page_go(MS_TRK);
+    knob(2, 1);
+    knob(3, 1);
+    blocks(2);
+    pad(0, 1); pad(2, 1); pad(4, 1); pad(6, 1);        /* (C E G B) */
+    tap(58);
+    pad(0, 0); pad(2, 0); pad(4, 0); pad(6, 0);
+    run_ms(1800);                                      /* (the message gone) */
+    shot("10_trk_poly", "TRK  POLY: FOUR VOICES, A CHORD HELD");
+    touch(3, 1); blocks(VW_EVERY);
+    shot("10_trk_voic", "TRK  POLY: VOIC TOUCHED");
+    touch(3, 0);
+    page_go(MS_HOME);
+    blocks(VW_EVERY);
+    shot("01_home_poly", "HOME  T2-T4 T1'S VOICES");
+    tap(58);
+    blocks(200);
+
     /* a step held: its locks (A02's T1 has eight); a knob touched on one of them */
     open_at(1);
     int ls = -1;

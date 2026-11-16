@@ -23,7 +23,8 @@ enum {
     K_MUTQ, K_MOTN,                                                        /* GLO > PLAY's, the screen's motion */
     K_TLEN,                                                                /* a track's own length (SEQ held) */
     K_PROB,                                                                /* its chance (HOME 2: 16 steps, 100 % first) */
-    K_SUS, K_FSUS, K_FREL                                                  /* the ADSR's: the levels, the filter's release */
+    K_SUS, K_FSUS, K_FREL,                                                 /* the ADSR's: the levels, the filter's release */
+    K_PVOI                                                                 /* POLY's voices (ARP's KNOB 2 on POLY) */
 };
 typedef struct { const char *s4, *name; uint8_t kind; } pi_t;
 
@@ -69,6 +70,7 @@ static const pi_t PI_GLOB[G_COUNT] = {
     PI_TRK("LANE", "LANE", K_LANE),
     PI_TRK("TLEN", "LENGTH", K_TLEN),
     PI_TRK("PROB", "CHANCE", K_PROB),
+    PI_TRK("VOIC", "POLY VOICES", K_PVOI),
 };
 
 static const pi_t PI_SET[18] = {
@@ -171,7 +173,8 @@ static const char *const SIDM_N[4] = {"OFF", "RING", "SYNC", "R+S"};
 static const char *const ALGO_N[4] = {"STCK", "PAR", "2CAR", "RING"};
 static const char *const LWAV_N[7] = {"TRI", "SIN", "SQR", "SAW", "EXP", "RMP", "RND"};
 static const char *const LTRG_N[5] = {"FREE", "TRIG", "HOLD", "ONE", "HALF"};
-static const char *const AMOD_N[6] = {"OFF", "UP", "DOWN", "U/D", "RND", "ORDR"};
+/* MODE (ARP's KNOB 1): POLY second (the owner's), the arp's five after it (amod_value, amod_set) */
+static const char *const AMOD_N[7] = {"OFF", "POLY", "UP", "DOWN", "U/D", "RND", "ORDR"};
 static const char *const ASPD_N[4] = {"1/32", "1/16", "1/8", "1/4"};
 /* the trig types a held step steps through with VOL (the expert's order): what each masks, and its name */
 static const uint8_t TTYPE[8] = {0, ST_NOFLT | ST_NOLFO, ST_NOAMP | ST_NOLFO, ST_NOAMP | ST_NOFLT, ST_NOLFO, ST_NOFLT,
@@ -237,7 +240,7 @@ static int kind_choices(int k)
     case K_PROJ: return M2K_PROJECTS;
     case K_VOIC: case K_LWAV: return 7;
     case K_TRK: return M2K_TRACKS;
-    case K_AMOD: return 6;
+    case K_AMOD: return 7;
     case K_LTRG: return 5;
     case K_MULT: return 8;
     case K_DWV4: return 4;
@@ -249,12 +252,14 @@ static int kind_choices(int k)
     }
 }
 
-static int kind_max(int k) { return k == K_BPM ? 255 : k == K_LEN || k == K_TLEN ? 64 : k == K_DEST ? P_COUNT : k == K_PROB ? 15 : 127; }
-static int kind_min(int k) { return k == K_LEN ? 1 : 0; }
+static int kind_max(int k) { return k == K_BPM ? 255 : k == K_LEN || k == K_TLEN ? 64 : k == K_DEST ? P_COUNT : k == K_PROB ? 15 :
+                                    k == K_PVOI ? M2K_TRACKS : 127; }
+static int kind_min(int k) { return k == K_LEN ? 1 : k == K_PVOI ? 2 : 0; }
 
 /* ------------------------------------------------------------------------------------------------ strings */
 
 static char *s_cpy(char *d, const char *s) { while (*s) *d++ = *s++; *d = 0; return d; }
+static char *s_trk(char *d, int t);
 static void s_cpyn(char *d, const char *s, int n) { while (*s && n-- > 1) *d++ = *s++; *d = 0; }   /* into n bytes */
 static char *s_int(char *d, int v)
 {
@@ -469,7 +474,16 @@ static void fmt(const pi_t *pi, int t, int v, char *out, const char **unit)
     case K_LWAV: s_cpy(out, LWAV_N[c]); break;
     case K_LTRG: s_cpy(out, LTRG_N[c]); break;
     case K_MULT: { char *e = s_cpy(out, "X"); s_int(e, 1 << c); break; }
-    case K_AMOD: s_cpy(out, AMOD_N[c]); break;
+    case K_AMOD: s_cpy(out, AMOD_N[c]); *unit = c == 1 ? "CHORDS" : c ? "ARP" : ""; break;
+    case K_PVOI: {                     /* the voices as played: on the lead and the tracks after it ("T4-T6") */
+        const int n = v < 2 ? 1 : v > M2K_TRACKS - t ? M2K_TRACKS - t : v;
+        static char u[8];
+        char *e = s_trk(u, t);
+        if (n > 1) s_trk(s_cpy(e, "-"), t + n - 1);
+        s_int(out, n);
+        *unit = u;
+        break;
+    }
     case K_ASPD: s_cpy(out, ASPD_N[c]); *unit = "NOTE"; break;
     case K_ARNG: s_int(out, c + 1); *unit = "OCT"; break;
     case K_GATE: { int v10 = (v * 10) / 16; s_dec1(out, v10); *unit = "STEPS"; break; }
@@ -541,7 +555,7 @@ static int nsub(int page);                     /* SYN has a third page, the bank
 #define SETTING(i) (0xC0 | (i))
 #define GL(g) (0x80 | (g))
 #define NONE 0xFF
-#define HELP_N 9                        /* GLO > HELP's pages */
+#define HELP_N 10                       /* GLO > HELP's pages */
 static int view_trk(void);                     /* the track in view (LANE is its own) */
 /* the bus's four, GLO > BUS's and PERFORM's knobs: the reverb, the crunch, the drive (the owner's "the important") */
 static const uint8_t BUS_K[4] = {GL(G_VERB), GL(G_DAMP), GL(G_ADPC), GL(G_DRIV)};
@@ -564,7 +578,9 @@ static int knob_param(int page, int sub, int k)
     case PG_LFO: {                                  /* the three LFOs' pages, then the three's rest: what makes it move comes first */
         static const uint8_t m[2][4] = {{L_DEST, L_WAVE, L_SPD, L_DPTH}, {L_TRCK, L_TRIG, L_MULT, L_PHAS}};
         return P_LFO + (sub % 3) * 8 + m[sub >= 3][k]; }
-    case PG_ARP: return sub == 0 ? P_AMOD + k : sub == 1 ? GL(G_GRX + k) : k < 3 ? GL(G_GRBD + k) : GL(G_LANE1 + view_trk());
+    case PG_ARP:                    /* (on POLY: KNOB 2 its voices, RNG none) */
+        if (sub == 0 && pv.nv[view_trk()] > 1 && (k == 1 || k == 2)) return k == 1 ? GL(G_POLY1 + view_trk()) : NONE;
+        return sub == 0 ? P_AMOD + k : sub == 1 ? GL(G_GRX + k) : k < 3 ? GL(G_GRBD + k) : GL(G_LANE1 + view_trk());
     case PG_GLO: return sub == GS_HELP ? (k == 0 ? SETTING(24) : NONE) : sub == GS_PLAY ? (k == 0 ? SETTING(S_MUTQ) : k == 1 && M2K_PROJECTS > 1 ? SETTING(S_MOTN) : NONE)
                         : sub == GS_IN ? (k == 0 ? SETTING(S_NTIN) : k == 1 ? SETTING(S_THRU) : NONE)
                         : sub == GS_TIME ? GL(G_TMPO + k) : sub == GS_BUS ? BUS_K[k] : sub == GS_MIDI ? SETTING(S_MCH + k)
@@ -1027,7 +1043,7 @@ static int knob_at(int k)
 static struct { uint8_t n, keep, pn[16], trk[16], code[16], val[16]; } mom;
 static void mom_note(int code)
 {
-    if (!mom_layer() || code >= 0xC0) return;
+    if (!mom_layer() || code >= 0xC0 || code == P_AMOD || code == GL(G_POLY1 + ui.trk)) return;   /* (POLY stays as turned) */
     for (int i = 0; i < mom.n; i++) if (mom.code[i] == code && mom.trk[i] == ui.trk && mom.pn[i] == cur_pat) return;
     if (mom.n >= 16) return;
     m2k_pattern_t *p = PAT(cur_pat);
@@ -1052,10 +1068,72 @@ static void mom_release(void)
     mom.keep = 0;
 }
 
+/* MODE's place among OFF POLY UP DOWN U/D RND ORDR: POLY the pattern's (G_POLY1 + t: its voices, the arp off under
+ * it), the rest the arp's (P_AMOD, as ever), as its knob's value (seven even choices) */
+static int amod_value(int t)
+{
+    const m2k_pattern_t *p = PAT(cur_pat);
+    const int m = (p->kit[t][P_AMOD] * 6) >> 7;
+    return enc(poly_want(p, t) > 1 ? 1 : m ? m + 1 : 0, 7);
+}
+
+/* the player's next POLY: three voices, or as many as there are */
+static int poly_room(int t) { return M2K_TRACKS - t; }
+
+/* MODE turned to choice c, from the way it turned (dir): POLY its voices (three, as many as there are; the last ones
+ * kept), the arp's OFF under it; an arp's mode, POLY off. The last track has none after it to borrow: POLY passes it by,
+ * said. A track inside a lead's voices is never in view (track_to) */
+static void amod_set(int t, int c, int dir)
+{
+    m2k_pattern_t *p = PAT(cur_pat);
+    if (c == 1 && poly_room(t) < 2) { c = dir > 0 ? 2 : 0; toast("POLY", "NO TRACK AFTER THIS ONE"); }
+    if (c == 1) {
+        if (p->glob[G_POLY1 + t] < 2) p->glob[G_POLY1 + t] = (uint8_t)(poly_room(t) < 3 ? poly_room(t) : 3);
+        p->kit[t][P_AMOD] = enc(0, 6);
+    } else {
+        p->glob[G_POLY1 + t] = 0;
+        p->kit[t][P_AMOD] = enc(c ? c - 1 : 0, 6);
+    }
+    trk[t].eff[P_AMOD] = p->kit[t][P_AMOD];
+    poly_sync();
+}
+
+/* the black keys printed MONO and POLY on the FM-1's panel (the stock firmware's), with GLO: the track in view's POLY
+ * on and off, as the Monomachine's FUNCTION + POLY (the owner's, 1.11). The 8th and 9th black keys from the left
+ * (0-based 7 and 8 of F#3 G#3 A#3 C#4 D#4 F#4 G#4 A#4 C#5 D#5 F#5: A#4 and C#5), the owner's confirmed */
+#define BK_MONO 7
+#define BK_POLY 8
+
+static void undo_mark(int noun, int verb);
+static char *s_tracks(char *e, int m);
+
+/* GLO + POLY: the track in view POLY (three voices, as many as there are after it; one with none after it: said, as
+ * it was); GLO + MONO: POLY off, MODE OFF. An arp running stays (MONO is POLY's opposite, not the arp's): said */
+static void glo_poly(int on)
+{
+    m2k_pattern_t *p = PAT(cur_pat);
+    const int t = ui.trk;
+    char a[24], o[24];
+    if (on && poly_room(t) < 2) { s_cpy(s_trk(a, t), " IS THE LAST"); toast(a, "POLY: NO TRACK AFTER IT"); return; }
+    const int was = pv.nv[t] > 1, arp = (p->kit[t][P_AMOD] * 6) >> 7;
+    if (on != was) undo_mark(N_PAT, 24);
+    amod_set(t, on ? 1 : was ? 0 : arp ? arp + 1 : 0, on ? 1 : -1);
+    if (on) {
+        s_int(s_cpy(s_trk(a, t), " POLY "), pv.nv[t]);
+        s_tracks(o, ((1 << pv.nv[t]) - 2) << t);
+        toast(a, o + 1);
+    } else {
+        s_cpy(s_trk(a, t), " MONO");
+        if (!was && arp) s_cpy(s_cpy(o, "ARP STAYS: "), AMOD_N[arp + 1]);
+        toast(a, !was && arp ? o : 0);
+    }
+}
+
 static int knob_value(int code)
 {
     const m2k_pattern_t *p = PAT(cur_pat);
     if (code == NONE) return 0;                       /* (not store_.set[63]) */
+    if (code == P_AMOD) return amod_value(ui.trk);
     if (code == SETTING(16)) return enc(ui.proj_sel, M2K_PROJECTS);
     if (code == SETTING(17)) return 0;
     if (code == SETTING(18)) { int n = 0, at = snd_list(ui.snd_sel, &n); return enc(at, n ? n : 1); }
@@ -1150,6 +1228,11 @@ static void edit(int k, int d)
             trk[ui.trk].eff[code] = q->kit[ui.trk][code];
             ui.held_edit = 1;
             toast(pi0->s4, "LOCK REMOVED");
+        } else if (code == P_AMOD || pi0->kind == K_PVOI) {      /* MODE: OFF; VOIC: three, as many as there are */
+            undo_mark(N_PAT, 21);
+            if (code == P_AMOD) amod_set(ui.trk, 0, 0);
+            else { q->glob[code & 0x7F] = (uint8_t)(poly_room(ui.trk) < 3 ? poly_room(ui.trk) : 3); poly_sync(); }
+            toast(pi0->s4, "BACK TO ITS START");
         } else {
             undo_mark(N_PAT, 21);
             if (code >= 0x80) { pat_init(&pat_tmp, "X"); q->glob[code & 0x7F] = pat_tmp.glob[code & 0x7F]; }
@@ -1170,10 +1253,17 @@ static void edit(int k, int d)
     int v = knob_value(code);
     fmt(pi, ui.trk, v, old, &u);
     int n = kind_choices(pi->kind), nv;
-    const int lo = kind_min(pi->kind), hi = kind_max(pi->kind), ds = knob_speed(k, d, n ? n - 1 : hi - lo);
+    const int lo = kind_min(pi->kind), hi = pi->kind == K_PVOI ? poly_room(ui.trk) : kind_max(pi->kind);
+    const int ds = knob_speed(k, d, n ? n - 1 : hi - lo);
     if (n) { int c = CLAMP(choice_of(pi->kind, v) + ds, 0, n - 1); nv = pi->kind == K_TRK ? trck_enc(c) : enc(c, n); }
     else nv = CLAMP(v + ds, lo, hi);
-    if (code == SETTING(24)) {
+    if (code == P_AMOD) {                                         /* MODE: POLY or the arp's (never a lock) */
+        amod_set(ui.trk, choice_of(K_AMOD, nv), d);
+        nv = amod_value(ui.trk);
+    } else if (pi->kind == K_PVOI) {                              /* VOIC: as many as there are after the lead */
+        p->glob[code & 0x7F] = (uint8_t)nv;
+        poly_sync();
+    } else if (code == SETTING(24)) {
         ui.help = (uint8_t)CLAMP(ui.help + (d > 0 ? 1 : -1), 0, HELP_N - 1);
     } else if (code == SETTING(16)) {
         ui.proj_sel = (uint8_t)((nv * M2K_PROJECTS) >> 7);
@@ -1295,9 +1385,17 @@ static void keys_off(void)
     for (int i = 0; i < 8 && sq.nkeys[t]; i++) live_off_t(t, sq.keys[t][0]);
 }
 
-/* the track in view (SELECT, a black key in GRID or PADS, the web's cells): the keys play it */
+/* the track in view (SELECT, a black key in GRID or PADS, the web's cells): the keys play it. A POLY lead's voice is
+ * never in view (its sound is the lead's, its own hidden): the lead is, said */
 static void track_to(int t)
 {
+    if (pv.lead[t] != t) {
+        char a[24], o[24];
+        s_cpy(s_trk(s_cpy(s_trk(a, t), " IS "), pv.lead[t]), "'S VOICE");
+        s_cpy(s_trk(s_cpy(o, "POLY: "), pv.lead[t]), " IN VIEW");
+        toast(a, o);
+        t = pv.lead[t];
+    }
     if (t == ui.trk) return;
     keys_off();                        /* (a held arp stays with its track, playing on) */
     ui.trk = (uint8_t)t;
@@ -1416,6 +1514,7 @@ static void step_remove(int t, int s)
     st->cond = 0;
     st->rtrg = 0;
     lock_clear_step(t, s);
+    for (int v = t + 1; v < t + pv.nv[t]; v++) PAT(cur_pat)->step[v][s].flags = 0;   /* (a POLY lead's: its chord too) */
 }
 static int step_entry(void) { return sq.rec && !sq.playing && !ui.grid && !sq.ready; }
 
@@ -1430,6 +1529,14 @@ static void entry_show(const char *what)
 
 static void entry_write(int note)
 {
+    if (pv.nv[ui.trk] > 1 && sq.nkeys[ui.trk] > 1 && pv.ct == ui.trk) {   /* POLY: a key with others down joins their chord */
+        poly_note(ui.trk, pv.cs, note, 0, 0);
+        step_pop(ui.trk, pv.cs);
+        char n[8];
+        s_note(n, note);
+        toast("CHORD", n);
+        return;
+    }
     if (ui.cursor >= tlen_of(ui.trk)) ui.cursor = 0;   /* (a shorter track picked meanwhile: its first step) */
     m2k_step_t *st = &PAT(cur_pat)->step[ui.trk][ui.cursor];
     step_pop(ui.trk, ui.cursor);
@@ -1438,6 +1545,7 @@ static void entry_write(int note)
     st->cond = C_ALWAYS;
     st->rtrg = 0;
     lock_clear_step(ui.trk, ui.cursor);
+    if (pv.nv[ui.trk] > 1) poly_note(ui.trk, ui.cursor, note, 0, 1);   /* (POLY: the chord starts, its voices' steps cleared) */
     char n[8];
     s_note(n, note);
     entry_show(n);
@@ -1459,30 +1567,40 @@ static void seq_tool(int i)
     int t = ui.trk, len = i == 5 || i == 7 ? seq_len() : tlen_of(t);
     m2k_step_t *st = p->step[t];
     char o[24] = {'T', (char)('1' + t), ' ', 0};
-    switch (i) {
-    case 0:                                            /* CLEAR: its steps and locks */
-        for (int s = 0; s < M2K_STEPS; s++) { st[s].flags = 0; st[s].cond = 0; st[s].rtrg = 0; }
-        for (int k = 0; k < M2K_LOCKS; k++) if (p->lock[k].trk == t) p->lock[k].trk = 0xFF;
-        break;
-    case 1:                                            /* REVERSE */
-        for (int s = 0; s < len / 2; s++) { m2k_step_t x = st[s]; st[s] = st[len - 1 - s]; st[len - 1 - s] = x; }
-        for (int k = 0; k < M2K_LOCKS; k++) if (p->lock[k].trk == t && p->lock[k].step < len) p->lock[k].step = (uint8_t)(len - 1 - p->lock[k].step);
-        break;
-    case 2: case 3: {                                  /* SHIFT: a step earlier or later, round the length */
-        int d = i == 2 ? len - 1 : 1;
-        m2k_step_t tmp[M2K_STEPS];
-        for (int s = 0; s < len; s++) tmp[(s + d) % len] = st[s];
-        for (int s = 0; s < len; s++) st[s] = tmp[s];
-        for (int k = 0; k < M2K_LOCKS; k++) if (p->lock[k].trk == t && p->lock[k].step < len) p->lock[k].step = (uint8_t)((p->lock[k].step + d) % len);
-        break;
-    }
-    case 4:                                            /* RANDOM: a quarter of the steps, at the track's note */
-        for (int k = 0; k < M2K_LOCKS; k++) if (p->lock[k].trk == t) p->lock[k].trk = 0xFF;
-        for (int s = 0; s < M2K_STEPS; s++) {
-            st[s].flags = (uint8_t)(s < len && (rnd32() & 3) == 0 ? ST_TRIG : 0);
-            st[s].note = ui.note[t]; st[s].cond = 0; st[s].rtrg = 0;
+    /* a POLY lead's tools take its voices' steps with its own (its chords kept together); RANDOM, new steps of the
+     * lead's, takes their chords away */
+    for (int v = t; v < t + pv.nv[t] && i <= 4; v++) {
+        st = p->step[v];
+        switch (i) {
+        case 0:                                        /* CLEAR: its steps and locks */
+            for (int s = 0; s < M2K_STEPS; s++) { st[s].flags = 0; st[s].cond = 0; st[s].rtrg = 0; }
+            for (int k = 0; k < M2K_LOCKS; k++) if (p->lock[k].trk == v) p->lock[k].trk = 0xFF;
+            break;
+        case 1:                                        /* REVERSE */
+            for (int s = 0; s < len / 2; s++) { m2k_step_t x = st[s]; st[s] = st[len - 1 - s]; st[len - 1 - s] = x; }
+            for (int k = 0; k < M2K_LOCKS; k++) if (p->lock[k].trk == v && p->lock[k].step < len) p->lock[k].step = (uint8_t)(len - 1 - p->lock[k].step);
+            break;
+        case 2: case 3: {                              /* SHIFT: a step earlier or later, round the length */
+            int d = i == 2 ? len - 1 : 1;
+            m2k_step_t tmp[M2K_STEPS];
+            for (int s = 0; s < len; s++) tmp[(s + d) % len] = st[s];
+            for (int s = 0; s < len; s++) st[s] = tmp[s];
+            for (int k = 0; k < M2K_LOCKS; k++) if (p->lock[k].trk == v && p->lock[k].step < len) p->lock[k].step = (uint8_t)((p->lock[k].step + d) % len);
+            break;
         }
-        break;
+        case 4:                                        /* RANDOM: a quarter of the steps, at the track's note */
+            if (v != t) { for (int s = 0; s < M2K_STEPS; s++) st[s].flags = 0; break; }
+            for (int k = 0; k < M2K_LOCKS; k++) if (p->lock[k].trk == t) p->lock[k].trk = 0xFF;
+            for (int s = 0; s < M2K_STEPS; s++) {
+                st[s].flags = (uint8_t)(s < len && (rnd32() & 3) == 0 ? ST_TRIG : 0);
+                st[s].note = ui.note[t]; st[s].cond = 0; st[s].rtrg = 0;
+            }
+            break;
+        }
+    }
+    st = p->step[t];
+    switch (i) {
+    case 0: case 1: case 2: case 3: case 4: break;
     case 5:                                            /* LEN X2: the pattern twice as long, the new bars a copy */
         if (len > 32 || len % 16) { toast("LEN X2", "TO 64 STEPS AT MOST"); return; }
         if (!page_length(len * 2 / 16 - 1)) {        /* (else its message: the locks full) */
@@ -1513,6 +1631,7 @@ static void seq_tool(int i)
 /* a track muted or heard again (F#5 in GRID and PADS, the web's cells), and said so: at the next bar, when it waits */
 static void mute_flip(int t)
 {
+    t = pv.lead[t];                    /* (a POLY voice's: its lead's, named) */
     mute_to(t, !mute_will(t));
     char o[4] = {'T', (char)('1' + t), 0, 0};
     if ((sq.mq_m >> t) & 1) toast(mute_will(t) ? "MUTE AT THE BAR" : "UNMUTE AT THE BAR", o);
@@ -1561,6 +1680,11 @@ static void key_event(int k, int down)
     }
     ui.kact[k] = KA_NONE;
     ui.kt0[k] = ui.now;
+    if (held(B_GLO) && (b == BK_MONO || b == BK_POLY)) {   /* GLO + MONO / POLY: the track in view's POLY */
+        ui.glo_used = 1;
+        glo_poly(b == BK_POLY);
+        return;
+    }
     if (held(B_GLO) && w >= 0) {       /* GLO + white: 1-6 mute, 7 fill next loop, 8 tap tempo, 9-14 solo, 15 unmute */
         ui.glo_used = 1;
         if (w >= 8 && w < 8 + UI_KT) {              /* solo while held, several together (with BAR, from the bar) */
@@ -1721,6 +1845,10 @@ static void held_note(int d)
         m2k_step_t *st = &p->step[ui.trk][ui.held[i]];
         st->note = (uint8_t)CLAMP(st->note + d, 12, 120);
         ui.note[ui.trk] = st->note;
+        for (int v = ui.trk + 1; v < ui.trk + pv.nv[ui.trk]; v++) {   /* (a POLY lead's: its chord moves with it) */
+            m2k_step_t *vs = &p->step[v][ui.held[i]];
+            if (vs->flags & ST_TRIG) vs->note = (uint8_t)CLAMP(vs->note + d, 12, 120);
+        }
     }
     ui.held_edit = 1;
     /* audition */
@@ -2445,7 +2573,7 @@ static void button_event(int b, int down)
             if (ui.arp_sub && ui.page == PG_ARP) ui.sub = (uint8_t)(ui.arp_sub - 1);
             arp_hold_set(ui.trk, !sq.arp_hold[ui.trk]);   /* (the track in view's alone) */
             char ht[12] = {'T', (char)('1' + ui.trk), ' ', 0};
-            s_cpy(ht + 3, sq.arp_hold[ui.trk] ? "ARP HOLD" : "HOLD OFF");
+            s_cpy(ht + 3, !sq.arp_hold[ui.trk] ? "HOLD OFF" : pv.nv[ui.trk] > 1 ? "CHORD HOLD" : "ARP HOLD");
             toast(ht, sq.arp_hold[ui.trk] ? "ARP TWICE: LET GO" : 0);
             break;
         }
@@ -2562,7 +2690,11 @@ void m2k_encoder(int e, int d)
             ui.focus_t = 0;
             break;
         }
-        track_to((ui.trk + M2K_TRACKS + (d > 0 ? 1 : -1)) % M2K_TRACKS);   /* the track (Demake's synth) */
+        {                                              /* the track (Demake's synth), past a POLY lead's voices */
+            int t = ui.trk;
+            do t = (t + M2K_TRACKS + (d > 0 ? 1 : -1)) % M2K_TRACKS; while (pv.lead[t] != t);
+            track_to(t);
+        }
         break;
     case E_ALGO:
         if (seq_layer()) {                             /* SEQ held: the accent's amount */
@@ -3272,8 +3404,9 @@ static const char *model_of(const mi_t *mi)
 static void lane_step(int x, int b, int t, int s)
 {
     const m2k_pattern_t *p = PAT(cur_pat);
-    if (s >= tlen_of(t)) return;
-    int muted = (p->mute >> t) & 1, h = 0, lk = 0, pr = PROB_PCT[p->glob[G_TPRB1 + t] & 15];
+    const int lt = pv.lead[t];         /* (a POLY voice: its steps on its lead's length and clock, its mute and chance) */
+    if (s >= tlen_of(lt)) return;
+    int muted = (p->mute >> lt) & 1, h = 0, lk = 0, pr = PROB_PCT[p->glob[G_TPRB1 + lt] & 15];
     if (lane_of(p, t)) {
         uint32_t len = (uint32_t)seq_len(), n = !sq.playing ? 0 : spd_of(t) == 4 ? sq.n1x : sq.tk[t];
         int hit = grids_hit(p, lane_of(p, t) - 1, (n ? (n - 1) / len * len : 0) + (uint32_t)s, 0);
@@ -3287,7 +3420,7 @@ static void lane_step(int x, int b, int t, int s)
     else if (lk) { frame(x, b - h, 6, h, 1); for (int j = 1; j < h - 1; j++) dots_h(x + 1, b - h + j, 4); }
     else if (pr < 100) { int f = (h * pr + 50) / 100; frame(x, b - h, 6, h, 1); if (f) rect(x, b - f, 6, f, 1); }   /* PROB */
     else rect(x, b - h, 6, h, 1);
-    if (sq.playing && track_pos(t) == s) rect(x, b + 2, 6, 2, 1);
+    if (sq.playing && track_pos(lt) == s) rect(x, b + 2, 6, 2, 1);
     int blink = (step_held(t, s) && ((ui.now >> 7) & 1)) || (step_entry() && t == ui.trk && s == ui.cursor && ((ui.now >> 8) & 1)) ||
                 (ui.pop_t && t == ui.pop_trk && s == ui.pop_s && ui.now - ui.pop_t < 160);
     if (blink) rect(x - 1, b - 11, 8, 12, 2);
@@ -3321,6 +3454,9 @@ static void note_cells(void)
             const int solid = st.cond == C_ALWAYS, ink = !solid;
             char nt[8];
             s_note(nt, st.note);
+            int ch = 0;                                 /* (a POLY lead's chord: its voices' notes there, counted) */
+            for (int v = t + 1; v < t + pv.nv[t]; v++) ch += (p->step[v][s].flags & ST_TRIG) != 0;
+            if (ch) { char *e = nt; while (*e) e++; *e++ = '+'; *e++ = (char)('0' + ch); *e = 0; }
             if (solid) rfill(x, y, w, h, 1); else rframe(x, y, w, h, 1, 1);
             tx_b(&F_S, x + 6, y + 17, nt, ink);
             if (has_locks(t, s)) rect(x + w - 8, y + 4, 4, 4, ink);
@@ -3352,6 +3488,8 @@ static void home(void)
         if (inv) rect(SX0 - 2, b - 11, 60, 13, 1);
         tx_b(&F_S, SX0, b, n, !inv);
         const char *mn = model_of(&MI[p->machine[t]]);
+        char ld[4];
+        if (pv.lead[t] != t) { s_trk(ld, pv.lead[t]); mn = ld; }   /* (a POLY voice: its lead's) */
         text_fit_f(&F_S, 20, b - F_S.base, text_w(&F_S, mn, 0) <= 40 ? mn : MI[p->machine[t]].badge, 40, !inv);
         if (sq.arp_hold[t] && sq.nheld[t])           /* its arp holding: a little staircase (the arp's picture's) */
             for (int j = 0; j < 3; j++) rect(61 + 2 * j, b - 2 - 3 * j, 2, 2, 2);
@@ -3983,9 +4121,36 @@ static void lfo_page(const uint8_t *k)
 
 /* ARP: the notes it plays in its order, a bar each rising (an octave's range up the staircase), the one sounding
  * solid; HOLD solid in the corner; no keys: what to do */
+/* POLY: its voices side by side, the lead's first, each its track over a bar of its amp as it sounds and the note it
+ * plays (a key holding it: solid); HOLD solid in the corner */
+static void poly_picture(int t)
+{
+    const int n = pv.nv[t], w = STW / n, yt = 108, yb = 164;
+    if (sq.arp_hold[t]) inv_tag(&F_S, SX0 + 2, 80, "HOLD");
+    char o[24];
+    s_cpy(s_int(o, n), " VOICES");
+    tx_br(&F_S, SX1, 80, o, 1);
+    for (int i = 0; i < n; i++) {
+        const int v = t + i, x = SX0 + i * w, cx = x + w / 2, bw = w - 12;
+        char lb[4], nt[8];
+        s_trk(lb, v);
+        if (pv.key[v] != 0xFF) inv_tag(&F_S, cx - text_w(&F_S, lb, 0) / 2 - 2, 100, lb); else tx_bc(&F_S, cx, 100, lb, 1);
+        const int h = (int)(((uint32_t)CLAMP(mon.aenv[v], 0, 32767) * (uint32_t)(yb - yt)) >> 15);
+        frame(cx - bw / 2, yt, bw, yb - yt, 1);
+        for (int c = 0; c < bw - 4 && h > 2; c++) bar_col(cx - bw / 2 + 2 + c, cx - bw / 2 + 2, yb - h + 2, yb - 2, pv.key[v] == 0xFF);
+        if (trk[v].sounding || pv.key[v] != 0xFF) {
+            char *e = s_note(nt, pv.key[v] != 0xFF ? pv.key[v] : trk[v].note);
+            if (text_w(&F_S, nt, 0) > w - 4) e[-1] = 0;     /* (eight across: its octave left out) */
+            tx_bc(&F_S, cx, 180, nt, 1);
+        }
+        else dots_h(cx - 6, 179, 12);
+    }
+}
+
 static void arp_picture(const uint8_t *k)
 {
     const int t = ui.trk;
+    if (pv.nv[t] > 1) { poly_picture(t); return; }
     int n = sq.nheld[t], rng = 1 + ((k[P_ARNG] * 4) >> 7), tot = n * rng;
     if (sq.arp_hold[t]) inv_tag(&F_S, SX0 + 2, 80, "HOLD");
     if (!n) {
@@ -4073,7 +4238,7 @@ static void play_picture(int busy)
     const m2k_pattern_t *p = PAT(cur_pat);
     const int fast = (ui.now >> 7) & 1;
     for (int j = 0; j < UI_KT; j++) {
-        const int i = ui_tr0() + j, x = SX0 + (j % 3) * 80, y = 72 + (j / 3) * 32, w = 72, b = 1 << i;
+        const int i = ui_tr0() + j, x = SX0 + (j % 3) * 80, y = 72 + (j / 3) * 32, w = 72, b = 1 << pv.lead[i];
         int muted = p->mute & b, solo = sq.solo;
         if (fast && (sq.mq_m & b)) muted = sq.mq_v & b;
         if (fast && (sq.sq_m & b)) solo = (solo & ~b) | (sq.sq_v & b);
@@ -4085,6 +4250,7 @@ static void play_picture(int busy)
          * alone where nothing measures: the browser, the host); REST while the CPU guard keeps it silent */
         int lc = !heard, lx = x + 28, ly = y + 16, ld = track_load(i);
         if (trk[i].held) { tx_b(&F_S, lx, ly, "REST", lc); continue; }
+        if (pv.lead[i] != i) { char ld[4]; s_trk(ld, pv.lead[i]); tx_b(&F_S, lx, ly, ld, lc); continue; }   /* (POLY: its lead's) */
         for (int j = 0; j < 40; j += 2) px(lx + j, ly + 1, lc);
         if (ld > 0) rect(lx, ly, (ld > 50 ? 50 : ld) * 40 / 50, 2, lc);
     }
@@ -4146,6 +4312,8 @@ static const char *const HELP[HELP_N][7] = {
      "WHITE 9-14 SOLO", "WHITE 7 FILL, 8 TAP"},
     {"SAVE", "SAVE: KEEP THE PATTERN", "GLO + SAVE: BACK TO IT", "SAVE HELD: THE PROJECT", "GLO + OCT- UNDO",
      "GLO + OCT+ REDO", 0},
+    {"CHORDS", "ARP, KNOB 1: MODE POLY", "KNOB 2: HOW MANY VOICES", "THE NEXT TRACKS PLAY IT", "GLO + POLY KEY: ON",
+     "GLO + MONO KEY: OFF", "ARP TWICE: CHORD HOLD"},
 };
 
 static void help_page(void)
@@ -4621,11 +4789,12 @@ static void glo_help(void)
         hints(P_X + P_IN + 3, P_FB, SX1 - P_IN, H, 1);
         return;
     }
-    static const char *const L[16] = {"REC", "COPY", "PLAY", "PASTE", "SEQ", "CLEAR", "SAVE", "RELOAD",
-                                      "OCT-", "UNDO", "OCT+", "REDO", "LFO", "LINK", "HOME", "KEYS"};
+    static const char *const L[20] = {"REC", "COPY", "PLAY", "PASTE", "SEQ", "CLEAR", "SAVE", "RELOAD",
+                                      "OCT-", "UNDO", "OCT+", "REDO", "LFO", "LINK", "HOME", "KEYS", "POLY", "CHORDS",
+                                      "MONO", "1 NOTE"};   /* (the black keys printed so: 1.11's POLY) */
     int b = panel(P_X, P_TOP, P_W, P_H, "GLO HELD", 1);
-    pairs(P_X + P_IN, b, P_W - 2 * P_IN, L, 8, 2);
-    white_keys(32, 160);                               /* (GLO + SELECT's tempo: the help's, no room here) */
+    pairs(P_X + P_IN, b, P_W - 2 * P_IN, L, 10, 2);
+    white_keys(32, 172);                               /* (GLO + SELECT's tempo: the help's, no room here) */
 }
 
 /* HOME held a moment: the bank's 16 patterns as the white keys pick them (the open one solid, those picked a square
@@ -4855,6 +5024,7 @@ const uint8_t *m2k_frame(uint32_t ms)
     ui.fdt = (uint16_t)(dt > 1000u ? 1000u : dt);   /* (the motions by the time gone, not the frames drawn) */
     if (ui.boot_t0 == 0xFFFFFFFFu) ui.boot_t0 = ms;
     ui.now = ms;
+    if (pv.lead[ui.trk] != ui.trk) track_to(pv.lead[ui.trk]);   /* (a pattern made the track in view a POLY voice) */
     if (sq.full) { sq.full = 0; toast("PATTERNS FULL", "THE NEXT DID NOT OPEN"); }
     if (cpu.full || cpu.shed) {         /* the sound ran short, or a track faded so it would not: never a mystery, never
                                          * a nag; the dearest track named, the one to lighten */
@@ -4979,6 +5149,8 @@ const uint8_t *m2k_leds(void)
             else if (w >= 8 && w < 8 + UI_KT)
                 v = ((sq.sq_m | sq.solo_rel) >> (w - 8)) & 1 ? (fast ? 255 : 0) : (sq.solo >> (w - 8)) & 1 ? 255 : 16;
             else if (w == 14) v = mute_pending() ? (fast ? 255 : 16) : p->mute || sq.solo ? 90 : 16;
+        } else if (lay == 1 && (b == BK_MONO || b == BK_POLY)) {
+            v = (pv.nv[ui.trk] > 1) == (b == BK_POLY) ? 255 : 16;   /* (the one the track in view is: POLY or MONO) */
         } else if (lay == 2) {
             if (b >= 0 && b < PF_BANK) v = perf.on[b + ui.pfb * PF_BANK] ? 255 : ui.kact[k] == KA_PERF ? 90 : 24;   /* (90: the other bank's, held) */
             else if (w >= 0) { int note = 53 + k + 12 * ui.oct[ui.trk]; v = ui.keys[k] ? 255 : trk[ui.trk].sounding && trk[ui.trk].note == note ? 120 : 0; }

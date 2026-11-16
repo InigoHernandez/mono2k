@@ -118,7 +118,7 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   LFO's pages LFO 1 2 3, the half kept (an armed link follows it), the track on every other page (the owner's, 2026-11-08); `knob_mod`
   a marker under any knob an LFO moves; HOME in GRID or step entry the track's notes (`note_cells`, four rows under the knobs'
   columns; a Grids lane track keeps the lanes); `step_card` a held step's card after 500 ms, gone while a knob's value shows;
-  GLO > HELP the manual on the device (`HELP`, nine pages, KNOB 1). UI only: `m2k_draw --hash` the same, its page rows at
+  GLO > HELP the manual on the device (`HELP`, ten pages, KNOB 1; the tenth POLY's, 1.11). UI only: `m2k_draw --hash` the same, its page rows at
   their worst for the audit of both cores (the owner's rule, 2026-11-07: every build, the screen's cost included).
   An arp a track (1.6.1, the owner's: "keep HOLD when switching to another track. So each arp per track"): each track
   its own keys, held notes, HOLD and clock (`sq.keys[t]`, `held[t]`, `arp_hold[t]`, `arp_block`), the panel's keys the
@@ -127,6 +127,31 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   with the pattern, STOP and a pattern coming in keep the holds; HOME a staircase on each lane whose arp holds. With
   REC playing every playing arp writes its notes as played notes are (`rec_step`), the last landing on a step staying
   (a 1/32's on-beat note).
+  POLY (1.11, the owner's; `poly_*` in m2k_seq.c, `pv` in m2k_dsp.c): ARP's MODE OFF POLY UP DOWN U/D RND ORDR (POLY
+  the pattern's `G_POLY1` + t, the voices 2..8, format 24; the arp's P_AMOD as ever, OFF under POLY: `amod_value`,
+  `amod_set`; the last track passes POLY by, said), KNOB 2 VOIC (`K_PVOI`, 2 to the tracks after it; not lockable, no
+  LFO target: a global), RNG a free knob; on the Move TRK's knobs 3 and 4 likewise; on the FM-1 also GLO + the black
+  keys printed MONO and POLY (A#4 and C#5, the 8th and 9th: `BK_MONO` `BK_POLY`, the owner's), POLY three voices, MONO
+  POLY off leaving an arp running, lit while GLO is held, undoable. The lead borrows the tracks right after it, left
+  to right (a track inside a lead's voices: its own POLY waits): each voice a whole track rendering the lead's machine
+  (`rmach`, set each block, so `track_block`'s code stays as it was: a voice-machine lookup there cost +20..60 Mac
+  instructions a sample in bank A by its code alone) and its `eff` (`poly_eff` a block: every knob, the lead's step's
+  locks; its LFOs aimed at the lead aimed at the voice, others off on it; `poly_lfo` at a voice's trig: their phases
+  the lead's), its own kit, steps and settings kept. Another track's LFO aimed at the lead moves its voices too (`fanq`,
+  apart from the LFOs' own queue, untouched). Keys (`poly_key_on`), MIDI on the lead's or a voice's channel and the
+  Move's pads take a voice (`poly_pick`: the one holding the key, a free one let go longest, one the CPU guard rests
+  last, past VOIC the oldest note's); ARP twice (the Move's Loop, CC 64) latches the chord until a key after all were
+  let go. Recorded (`poly_note`: live REC, keys within 62 ms one chord; step entry, keys held together; the Move's
+  Capture, a step's notes): sorted, the lowest the lead's step, then T+1's..., past VOIC dropped. The sequencer fires a
+  voice only from its lead (`poly_fire`, the lead's step and clock): where the lead has a trig, its condition, PROB,
+  trig type, accent, slide, ratchets and locks for every voice's note there; where it has none, a voice's own trig on
+  its own step's condition (the lead's loops), in the lead's sound. A voice follows the lead's mute and solo (its own
+  keys act on the lead: `mute_to`, `solo_key`); never in view (`track_to`: the lead, said; SELECT passes it); HOME and
+  GLO > PLAY name its lead, the Move's HOME brackets it. Its notes out on the lead's channel. A change of the leads (MODE,
+  VOIC, a pattern) lets go of what the tracks it touches played. Without POLY none of it runs past one check a block
+  (`pv.on`): bank A, DENSE and FXS render bit for bit (`m2k_draw --hash`), `--cpu` at its noise. `poly_lead_of`,
+  `poly_oldest`: the CPU guard's to ask. Fixtures: `host/m2k_poly.c` (`m2k_draw --poly-cpu`, `m2k_host DIR
+  --poly-demo`).
   HOME has two pages (1.6, the owner's): HOME 1 LEVL PTCH BPM SWNG, HOME 2 the track in view's sequencing, TLEN SPD
   PROB LANE (the same globals as SEQ held's TLEN and SPD and ARP > LANES' LANE); its picture the six lanes, a trig on
   a track under 100 % framed and filled to its chance.
@@ -284,6 +309,11 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   before (`SND_REC` 80) and the three of every slot in a section of their own after 'R', `'A'` count, 3 a slot, only
   when a named sound uses them: a library without them stores byte for byte as before (LIB_HASH, LIB_OLD, no LIB_REV,
   FACTORY_REV or store version), an older build reads it without them; a store without 'A' reads its sounds at 0 0 32.
+  24 POLY (1.11): `G_POLY1` + t after the chances, 22's layout (kits 74) with it, only for a pattern with a track on
+  POLY (`pat_poly`), else it packs as 18-22, byte for byte (1.10 reads those); 25 is 24 eight wide, in a build of eight
+  (`pat_wide` sees a POLY on T7 or T8). An older format loads with none; a voices' byte of 1 is none, past 8 is 8
+  (`pat_clamp`); a build of six reads 25 as its first six, a lead's voices clamped to the tracks there. BLOB_MAX 3632
+  since 24 (editor.js's), BLOB_ANY 4320. The store, the library and the sounds unchanged (POLY is the pattern's).
   The engine: `env_block` as it was where SUS and FSUS are 0 (and no LFO on them), bit for bit (`m2k_draw --hash`), one
   check before it (its cost at `--cpu`'s noise, +0..9 Mac instructions a sample: inlined, a fuller env_block cost +20);
   the rest out of line, `env_adsr`: SUS past 0 the decay

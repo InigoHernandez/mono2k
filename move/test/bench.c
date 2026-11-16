@@ -446,6 +446,91 @@ static void ctl_pads(void)
     api->destroy_instance(inst);
 }
 
+/* the voices' steps (dump's vs): voice i's (0 the first after the lead) step s's note, 0 none, -1 no such voice */
+static int voice_note(int i, int s)
+{
+    char b[2000];
+    vstr(dump(), "vs", b, sizeof b);
+    const char *q = b;
+    for (int k = 0; k < i && q; k++) { q = strchr(q, '/'); if (q) q++; }
+    for (int k = 0; k < s && q; k++) { q = strchr(q, ','); if (q) q++; }
+    return q && *q != '-' ? atoi(q) : -1;
+}
+
+/* POLY (1.11, the owner's): TRK's MODE to POLY (three voices: T1 the lead, T2 T3), its KNOB 4 VOIC, RNG none; the
+ * keyboard's chord on the voices, the lowest key T1's; a voice's track button shows the lead; Loop latches the chord;
+ * REC playing writes it into the voices' steps, the lowest note the lead's; Capture a chord likewise; MODE OFF: the notes
+ * stay, the tracks their own */
+static void ctl_poly(void)
+{
+    char s[64];
+    int ld[8], tn[8], kvs[8];
+    inst = open_at(15, 2000);                               /* A16: a blank, 16 steps; stopped */
+    blocks(4);
+    const int c = 60 + 12 * vint(view(), "oct");
+    page(MS_TRK);
+    knob(2, 1); blocks(1);                                  /* MODE: OFF to POLY */
+    const char *v = view();
+    vlist(dump(), "lead", ld, 8);
+    vlist(v, "k", kvs, 8);
+    check(ld[0] == 0 && ld[1] == 0 && ld[2] == 0 && ld[3] == 3 && kvs[3] == 3 && vint(v, "spg") == MS_TRK,
+          "TRK, MODE turned once: POLY, three voices (T1 the lead, T2 T3 its), KNOB 4 its VOIC");
+    check(kf(4) == MV_K_FREE && kf(3) != MV_K_FREE, "RNG under POLY: a free knob (VOIC beside it)");
+    knob(3, 1); blocks(1);
+    vlist(dump(), "lead", ld, 8);
+    check(ld[3] == 0 && ld[4] == 4 && kv(3) == 4, "VOIC up: four (T1-T4)");
+    knob(3, -1); blocks(1);
+    pad(4, 1, 100); blocks(1); pad(0, 1, 100); blocks(1); pad(2, 1, 100); blocks(2);   /* G, C, E */
+    v = view();
+    vlist(v, "tnote", tn, 8);
+    check((vint(v, "gates") & 7) == 7 && tn[0] == c + 7 && tn[1] == c && tn[2] == c + 4,
+          "the keyboard's chord: three voices, a key each (G on T1, C on T2, E on T3, free ones in turn)");
+    tap(58);                                                /* Loop: the chord latched */
+    pad(4, 0, 0); pad(0, 0, 0); pad(2, 0, 0); blocks(2);
+    v = view();
+    check((vint(v, "gates") & 7) == 7 && strstr(v, " toast=T1 CHORD HOLD|"), "Loop: CHORD HOLD, the chord sounding after the keys let go");
+    pad(5, 1, 100); blocks(2); pad(5, 0, 0); blocks(2);    /* the next chord: one key */
+    v = view();
+    check(vint(v, "gates") & 7 && __builtin_popcount(vint(v, "gates") & 7) == 1, "a key after them: the latched chord let go, one voice");
+    tap(58);
+    blocks(2);
+    view_track(2);
+    check(vint(view(), "trk") == 0 && strstr(view(), " toast=T3 IS T1'S VOICE|POLY: T1 IN VIEW"),
+          "T3's button: T1 in view (a voice is never), said (T3 IS T1'S VOICE)");
+    /* REC playing: a chord at a step, the lowest the lead's */
+    A_set("play", "1"); blocks(2);
+    tap(86);
+    until_step(4);
+    pad(4, 1, 100); A_render(); pad(0, 1, 120); A_render(); pad(2, 1, 100); blocks(3);
+    pad(4, 0, 0); pad(0, 0, 0); pad(2, 0, 0); blocks(2);
+    tap(86);
+    int n4 = -1;
+    const int f4 = dump_step(4, &n4);
+    check((f4 & 3) == 3 && n4 == c && voice_note(0, 4) == c + 4 && voice_note(1, 4) == c + 7,
+          "REC playing: the chord on step 5, C the lead's (accented), E T2's, G T3's");
+    A_set("play", "0"); blocks(4);
+    /* Capture, stopped: a chord played (a moment apart) one step's chord */
+    pad(5, 1, 100); A_render(); pad(7, 1, 100); A_render(); pad(3, 1, 100); blocks(3);
+    pad(5, 0, 0); pad(7, 0, 0); pad(3, 0, 0); blocks(2);
+    tap(52);
+    int n0 = -1;
+    const int f0 = dump_step(0, &n0);
+    check((f0 & 1) && n0 == c + 5 && voice_note(0, 0) == c + 9 && voice_note(1, 0) == c + 12,
+          "Capture: the chord on the downbeat, F the lead's, A T2's, C T3's");
+    tap(56);
+    /* MODE OFF: the notes stay, the tracks their own */
+    page(MS_TRK);
+    knob(2, -1); blocks(1);
+    vlist(dump(), "lead", ld, 8);
+    view_track(1);
+    int n1 = -1;
+    const int f1 = dump_step(4, &n1);
+    check(ld[1] == 1 && ld[2] == 2 && vint(view(), "trk") == 1 && (f1 & 1) && n1 == c + 4 && kv(3) != 3,
+          "MODE OFF: T2 its own again, in view, its note of the chord kept on step 5");
+    (void)s;
+    api->destroy_instance(inst);
+}
+
 /* Capture (CC 52): stopped and playing, whole bars, the track's length, overdub, one Undo, PADS' several tracks */
 static void ctl_capture(void)
 {
@@ -1136,6 +1221,7 @@ static int do_ctl(void)
     api->destroy_instance(inst);
     ctl_pads();
     ctl_capture();
+    ctl_poly();
     printf("  ctl: %d checks, %d failed\n", checks, fails);
     return fails != 0;
 }

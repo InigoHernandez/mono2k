@@ -7,6 +7,17 @@ window.M2K_KINDS = window.M2K_KINDS || {
 };
 window.M2K_CHANGES = [
   {
+    date: "2026-11-16", title: "MONO2K for the Move 0.6: POLY, chords on one track",
+    items: [
+      ["sequencer", "POLY plays chords on one track. On TRK, turn MODE to POLY: the track becomes a lead and the tracks after it its voices, as many as VOIC (knob 4) says, up to eight. T1 on four plays T1 to T4; the rest play on as always."],
+      ["sound", "Every voice plays the lead's machine and its whole sound: every knob, its locks, its LFOs and its effects. The voices' own sounds wait unheard and come back when POLY is off."],
+      ["workflow", "Hold a chord on the keys or play it over MIDI on the lead's channel: each note takes a free voice; past VOIC the oldest gives its voice up. Loop holds the chord until the next one."],
+      ["sequencer", "Rec while playing, or Capture: a chord's lowest note goes on the lead's step and the others on its voices' steps. The lead's step decides the chord: its condition, chance, trig type, accent and locks."],
+      ["screen", "TRK on POLY shows the voices and their notes; HOME brackets the voices to their lead, and a voice's track button shows the lead."],
+      ["patterns", "Your patterns and sounds load and play exactly as before."],
+    ],
+  },
+  {
     date: "2026-11-16", title: "MONO2K for the Move 0.5: regular ADSR envelopes",
     items: [
       ["sound", "The amp is a regular ADSR: AMP's knobs 1-4 are ATCK DEC SUS REL. SUS holds a level while the note lasts and REL takes it down after; at 0 the envelope is as it was, so your patterns play exactly as before."],

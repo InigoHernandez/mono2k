@@ -86,7 +86,7 @@
   <div class="cards path">
     <a href="#demos"><b><i>01</i>Play the demos</b><span>Hear the four parts, chain them, mute and solo</span></a>
     <a href="#beat"><b><i>02</i>Build a beat</b><span>A new pattern, sounds, steps, tempo, bars</span></a>
-    <a href="#notes"><b><i>03</i>Add a bass line</b><span>Play it in, step entry, notes, the arp</span></a>
+    <a href="#notes"><b><i>03</i>Add a bass line</b><span>Play it in, step entry, notes, the arp, chords</span></a>
     <a href="#sound"><b><i>04</i>Shape a sound</b><span>Machines, amp, filter, the sound library</span></a>
     <a href="#effects"><b><i>05</i>Add effects</b><span>Delay, crush, reverb, drive, FX machines</span></a>
     <a href="#movement"><b><i>06</i>Add movement</b><span>Locks, LFOs, trig types</span></a>
@@ -323,7 +323,7 @@
     <li>A long note: hold a step a moment, then press a later empty step. The note lasts to it, up to 8 steps: LEN on the info line, a dash through the steps. A nearer key shortens it; the same last key again gives the sound's own length back. The next trig on the track still cuts it.</li>
   </ul>
   <h2 id="arp">The arpeggiator</h2>
-  <p>On ARP: MODE (OFF, UP, DOWN, U/D, RND, ORDR, the order you played them), SPD (1/32 to 1/4), RNG (one to four octaves) and GATE. Hold keys and it plays them in turn.</p>
+  <p>On ARP: MODE (OFF, UP, DOWN, U/D, RND, ORDR, the order you played them; POLY plays chords instead, <a href="#poly">below</a>), SPD (1/32 to 1/4), RNG (one to four octaves) and GATE. Hold keys and it plays them in turn.</p>
   <ul>
     <li><b>HOLD:</b> tap ARP twice (or press a sustain pedal, CC 64): the notes keep playing after you let go; a chord played after your hands leave the keys replaces them. ARP twice again stops it. Its LED pulses while it holds.</li>
     <li><b>An arp a track:</b> pick another track and a held one plays on; build a second there. On HOME a small staircase marks each lane whose arp holds. PLAY starts every arp with the pattern; STOP and a new pattern leave the holds playing.</li>
@@ -331,6 +331,28 @@
   </ul>
   <h2 id="chords">Chords on one track</h2>
   <p>SWAV-ENS plays three more voices at their intervals over each note: a chord, a pad or a stab from one key, on one track. Its INIT is a minor-7 pad.</p>
+  <h2 id="poly">Play chords: POLY</h2>
+  <p>Any sound as a polysynth: the track lends its sound to the tracks after it, each one a voice.</p>
+  <ol class="steps">
+    <li>Pick the chords' track with SELECT, say T4. On ARP turn MODE to POLY, or hold GLO and press the black key printed POLY.</li>
+    <li>KNOB 2, VOIC: how many voices. T4 on three plays T4, T5 and T6.</li>
+    <li>Hold a chord on the keys. Each note takes a free voice; past VOIC the oldest note gives its voice up.</li>
+    <li>PLAY and REC: the chords go into the steps. ARP twice: a chord holds until the next.</li>
+    <li>MODE back to OFF, or GLO + the key printed MONO: T5 and T6 are themselves again.</li>
+  </ol>
+  <div class="figs">
+    <figure class="fig"><canvas data-scr="49_arp_poly"></canvas><figcaption>ARP on POLY: MODE, VOIC, GATE; the voices and their notes.</figcaption></figure>
+    <figure class="fig"><canvas data-scr="50_arp_voic"></canvas><figcaption>VOIC turned: three voices, T4 to T6.</figcaption></figure>
+    <figure class="fig"><canvas data-scr="51_home_poly"></canvas><figcaption>HOME: T5 and T6 say T4, whose voices they are.</figcaption></figure>
+  </div>
+  <ul>
+    <li><b>A voice is a track.</b> Like the Monomachine's POLY, but on as many tracks as you give it: each voice plays T4's machine and every knob of it, its locks, its LFOs and its effects. T1–T3 play on as always. A voice costs what a track costs.</li>
+    <li><b>Their own sounds wait.</b> T5's and T6's sounds and settings stay as they were, unheard. While they are voices HOME and GLO &gt; PLAY name T4 in their cells, SELECT passes them, and their black key shows T4. Their mute keys mute T4.</li>
+    <li><b>Recorded:</b> live or in step entry (keys held together are one step's chord), the lowest note goes on T4's step, the next on T5's, then T6's; notes past VOIC are dropped. MODE off leaves them in T5's and T6's steps, played with their own sounds.</li>
+    <li><b>T4's step is the chord's:</b> its condition, chance, trig type, accent, slide, ratchets and locks. A note on T5 where T4 has none plays on its own step's settings, in T4's sound.</li>
+    <li><b>In GRID</b> a step of T4 held and SELECT moves the whole chord; tapped off, the chord goes; the step tools take the voices along.</li>
+    <li><b>MIDI:</b> notes on T4's channel play chords (T5's and T6's too), and the notes out go on T4's channel. T6, the last, has no track after it: POLY passes it by.</li>
+  </ul>
 </article>
 
 <article id="sound" data-group="Make a track">
@@ -747,7 +769,7 @@
     <tbody>
       <tr><td>HOME</td><td>HOME</td><td>Pick patterns (below)</td></tr>
       <tr><td>EDIT</td><td>SYN, then its next pages</td><td>The track's sound (below)</td></tr>
-      <tr><td>ENV, SEL, ARP</td><td>AMP, FILT, ARP; pressed again, the next page (ARP: GRIDS, LANES); ARP twice: the arp's HOLD</td><td>A second: its card</td></tr>
+      <tr><td>ENV, SEL, ARP</td><td>AMP, FILT, ARP; pressed again, the next page (ARP: GRIDS, LANES); ARP twice: the arp's HOLD (on POLY, the chord's)</td><td>A second: its card</td></tr>
       <tr><td>FX</td><td>FX, then its next pages</td><td>PERFORM (<a href="#perform">Play it live</a>)</td></tr>
       <tr><td>LFO</td><td>LFO, then its next pages</td><td>The knobs come back when let go</td></tr>
       <tr><td>GLO</td><td>GLO, then its next pages</td><td>FUNC: the combinations below</td></tr>
@@ -775,6 +797,8 @@
       <tr><td>White 8</td><td>Tap the tempo: two taps or more, on the beat.</td></tr>
       <tr><td>White 9–14</td><td>Solo tracks 1–6 while held; several add up. Playing: from the next bar; a tap solos one bar.</td></tr>
       <tr><td>White 15</td><td>Unmute every track (playing: at the next bar).</td></tr>
+      <tr><td>Black POLY (C#5)</td><td>The track in view plays chords: POLY, three voices or as many tracks as follow it (<a href="#poly">POLY</a>). Undo: GLO + OCT−.</td></tr>
+      <tr><td>Black MONO (A#4)</td><td>POLY off, MODE OFF; an arp running stays.</td></tr>
       <tr><td>SELECT</td><td>The tempo.</td></tr>
     </tbody>
   </table>
@@ -855,7 +879,7 @@
   </table>
   <h2>Cards and lights</h2>
   <p>Hold SEL, ENV, ARP, PLAY, OCT− or OCT+ a second, touching nothing else, and the screen shows what it does alone and with the others; letting go then does nothing more.</p>
-  <p>The keys light for the layer held: with GLO, white 1–6 for the tracks heard and 9–14 for those soloed; with HOME, the bank's patterns (lit used, the open one winking, the queued one blinking) and the bank on the black keys; with FX, the effects on; with SEQ, the eight tools. In GRID, steps with a trig are lit, the playhead too.</p>
+  <p>The keys light for the layer held: with GLO, white 1–6 for the tracks heard and 9–14 for those soloed, POLY or MONO for the track in view; with HOME, the bank's patterns (lit used, the open one winking, the queued one blinking) and the bank on the black keys; with FX, the effects on; with SEQ, the eight tools. In GRID, steps with a trig are lit, the playhead too.</p>
   <h2>Knobs that act</h2>
   <table>
     <thead><tr><th>Where</th><th>Knob</th><th>Does</th></tr></thead>
@@ -914,6 +938,7 @@
     </tbody>
   </table>
   <p>A long release or HOLD keeps a track sounding, and costing, longer. The bus (reverb, ADPC, DRIV) runs on the second processor.</p>
+  <p><b>POLY:</b> each voice is a track playing the lead's sound, and costs what that sound costs on a track. Six voices of a plain machine weigh six plain tracks, about bank A's busiest part, a delay on the lead one line a voice; six of VO-6 or of SWAV-ENS with its chorus are more than the FM-1 carries, and it rests the quietest voices.</p>
 </article>
 
 <article id="credits" data-group="Reference">
@@ -941,7 +966,7 @@
 <script src="site.js?v=4"></script>
 <script src="switch.js?v=2"></script>
 <script src="panel.js?v=2"></script>
-<script src="changelog.js?v=60"></script>
-<script src="manual.js?v=66"></script>
+<script src="changelog.js?v=61"></script>
+<script src="manual.js?v=67"></script>
 </body>
 </html>

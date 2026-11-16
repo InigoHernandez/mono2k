@@ -79,17 +79,22 @@ enum {
     G_TLEN1 = G_LANE1 + M2K_TRACKS,          /* + t: track t's own length, 1..64 steps; 0 the pattern's (format 19) */
     G_TPRB1 = G_TLEN1 + M2K_TRACKS,          /* + t: track t's chance, PROB's step 0..15 (100 % .. 0 %): 0 every trig
                                               * (format 20) */
-    G_COUNT = G_TPRB1 + M2K_TRACKS
+    G_POLY1 = G_TPRB1 + M2K_TRACKS,          /* + t: POLY (format 24): track t plays chords on itself and the tracks after
+                                              * it, this many voices (2..8, as many as there are); 0 none */
+    G_COUNT = G_POLY1 + M2K_TRACKS
 };
 /* the globals a format packs, its per-track blocks NT wide (six before 21): before 15 those before the speeds, then
- * with them, from 18 with Grids' and the lanes, 19 the lengths, 20 the chances (the pattern's own: NT M2K_TRACKS) */
+ * with them, from 18 with Grids' and the lanes, 19 the lengths, 20 the chances, 24 POLY (the pattern's own: NT
+ * M2K_TRACKS) */
 #define G_COUNT_OF(ver, nt) ((ver) < 15 ? G_SPD1 : G_SPD1 + (nt) + ((ver) >= 18 ? G_LANE1 - G_GRX + (nt) : 0) + \
-                             ((ver) >= 19 ? (nt) : 0) + ((ver) >= 20 ? (nt) : 0))
-_Static_assert(G_COUNT_OF(20, M2K_TRACKS) == G_COUNT, "the globals' blocks");
+                             ((ver) >= 19 ? (nt) : 0) + ((ver) >= 20 ? (nt) : 0) + ((ver) >= 24 ? (nt) : 0))
+_Static_assert(G_COUNT_OF(24, M2K_TRACKS) == G_COUNT, "the globals' blocks");
+_Static_assert(G_COUNT <= 64, "a global's knob code is 0x80 | g, under the settings' 0xC0");
 #define G_COUNT_V14 G_SPD1                   /* the globals before the speeds */
 #define G_COUNT_V17 G_GRX                    /* and before Grids */
 #define G_COUNT_V18 G_TLEN1                  /* and before the tracks' lengths */
 #define G_COUNT_V19 G_TPRB1                  /* and before their chances */
+#define G_COUNT_V23 G_POLY1                  /* and before POLY */
 #define SPD_1X 82                            /* a speed's value at 1x (the fifth of seven) */
 
 /* machines */

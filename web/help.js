@@ -54,7 +54,7 @@ window.M2K_HELP = (() => {
         case 5: return `${k}: tempo, bus, settings. Held: copy, paste, mutes.`;
         case 6: return `${k}: six lanes; again, the track's TLEN SPD PROB LANE. Held: pick patterns.`;
         case 7: return `${k}: keeps the pattern; held, the project.`;
-        case 8: return `${k}: the arpeggiator. Twice: the track's HOLD. GLO + ARP: PADS.`;
+        case 8: return `${k}: the arpeggiator; MODE POLY plays chords. Twice: the track's HOLD. GLO + ARP: PADS.`;
         case 9: return `${k}: ${c.grid ? "back to notes" : "GRID, the keys become steps"}. Held: step tools.`;
         case 10: return `${k}: ${c.playing ? "stops" : c.rec && !c.grid && !c.ready ? "Ready: the first note starts it" : "starts the pattern"}.`;
         case 11: return `${k}: ${c.rec ? "recording off" : c.playing ? "records live" : "step entry"}. Held: FILL.`;
@@ -71,7 +71,7 @@ window.M2K_HELP = (() => {
         return `White ${w + 1} (${KW[w]}): ${now}.${GLO_W[w] ? ` GLO held: ${GLO_W[w]}.` : ""}`;
       }
       const now = mode === "KEYS" ? `plays ${note(n)}` : b < 6 ? `T${b + 1}` : b < 10 ? (mode === "GRID" ? `page P${b - 5}` : "nothing") : "mutes the track";
-      return `Black ${b + 1} (${KB[b]}): ${now}. FX held: ${PERF_S[b]}.`;
+      return `Black ${b + 1} (${KB[b]}): ${now}. FX held: ${PERF_S[b]}.${b === 7 ? " GLO held: MONO, POLY off." : b === 8 ? " GLO held: POLY, chords." : ""}`;
     }
     return "";
   }
@@ -103,7 +103,7 @@ window.M2K_HELP = (() => {
     { g: "Buttons", id: "b3", tag: "LFO", hi: ["b3"], short: "Three LFOs on one page, then their rest; SELECT picks one.", screen: "b LFO; w 400",
       long: "Three LFOs a track, each moving any track's parameter, wave to target in view. GLO + LFO, then turn any knob on any page: it moves that. Held: what you turn comes back.", where: "L or F4" },
     { g: "Buttons", id: "b8", tag: "ARP", hi: ["b8"], short: "The track's arpeggiator.", screen: "b ARP; w 400",
-      long: "Hold keys and it plays them in turn. Tap twice: HOLD, the notes keep going, on that track while you play another. With REC, its notes are written.", where: "K or F9" },
+      long: "Hold keys and it plays them in turn. Tap twice: HOLD, the notes keep going, on that track while you play another. With REC, its notes are written. MODE on POLY: chords, the tracks after it its voices (KNOB 2, VOIC).", where: "K or F9" },
     { g: "Buttons", id: "b5", tag: "GLO", hi: ["b5"], short: "Tempo, the bus, settings, HELP; held, FUNC.", screen: "b GLO; w 400",
       long: "TIME, BUS, SET, MIDI, IN, PLAY (the mutes, and the FM-1's CPU meter), HELP (the manual on the FM-1). Held: copy, paste, clear, undo; the white keys mute, fill, tap, solo.", where: "G or F6" },
     { g: "Buttons", id: "b6", tag: "HOME", hi: ["b6"], short: "The pattern in six lanes; in GRID, the notes; held, pick patterns.", screen: "b PLAY; w 1500",
@@ -125,7 +125,7 @@ window.M2K_HELP = (() => {
     { g: "Keys", id: "lcd", tag: "Screen", hi: ["lcd"], short: "One grid of five bands on every page.", screen: "b PLAY; w 1200",
       long: "The page and track, the four knobs, the stage, the steps, the bars. Light or dark: GLO > SET.", where: "GLO > SET, SCRN" },
     { g: "Held", id: "hGLO", tag: "GLO held", hi: ["b5", "b11", "b10", "b9", "b12", "b13", "b7"], short: "FUNC: copy, paste, clear, undo; mutes and solos.", screen: "B GLO; w 900",
-      long: "REC copies, PLAY pastes, SEQ clears, OCT− OCT+ undo and redo, LFO links. White 1–6 mute, 9–14 solo.", where: "Hold GLO" },
+      long: "REC copies, PLAY pastes, SEQ clears, OCT− OCT+ undo and redo, LFO links. White 1–6 mute, 9–14 solo. The black keys printed POLY and MONO: chords on the track, or not.", where: "Hold GLO" },
     { g: "Held", id: "hHOME", tag: "HOME held", hi: ["b6", ...ALLW, "k1", "k3", "k5", "k8"], short: "Pick patterns and banks.", screen: "B HOME; w 900",
       long: "White keys open the bank's patterns, queued while playing. Black 1–4 pick the bank.", where: "Hold HOME" },
     { g: "Held", id: "hEDIT", tag: "EDIT held", hi: ["b4", "e3", "e0", "e4", "b13", "b12", "b9", "b7", "b11", "b10"], short: "The sound catalogue: KNOB 1 or SELECT plays each sound.", screen: "B EDIT; w 600; e 3 2; w 400",

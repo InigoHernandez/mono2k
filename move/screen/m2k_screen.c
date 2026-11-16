@@ -287,7 +287,9 @@ int m2k_screen_param(int page, int t, int k)
     case MS_EFX: return P_EQF + k;
     case MS_DSTR: return k < 4 ? P_BITS + k : P_MODT + k - 4;
     case MS_LFO1: case MS_LFO2: case MS_LFO3: return P_LFO + 8 * (page - MS_LFO1) + k;
-    case MS_TRK: return k < 6 ? P_PTCH + k : k == 6 && PAT(cur_pat)->machine[t] == M_WAV ? P_WBNK : NONE;
+    case MS_TRK:                       /* (on POLY: SPD's knob its voices, RNG none: the FM-1's ARP) */
+        if (pv.nv[t] > 1 && (k == 3 || k == 4)) return k == 3 ? GL(G_POLY1 + t) : NONE;
+        return k < 6 ? P_PTCH + k : k == 6 && PAT(cur_pat)->machine[t] == M_WAV ? P_WBNK : NONE;
     case MS_PAT: { static const uint8_t g[8] = {G_TMPO, G_SWNG, G_LEN, G_ACNT, G_TLEN1, G_SPD1, G_TPRB1, G_LANE1};
                    return k < 4 ? GL(g[k]) : GL(g[k] + t); }   /* (the pattern's time, then the track's: the FM-1's SEQ) */
     case MS_GRID: return k < 7 ? GL(G_GRX + k) : GL(G_LANE1 + t);
@@ -298,7 +300,8 @@ int m2k_screen_param(int page, int t, int k)
     }
 }
 
-int m2k_screen_knob_track(int page, int t, int k) { return page == MS_MIX && k >= 0 && k < M2K_TRACKS ? k : t; }
+int m2k_screen_knob_track(int page, int t, int k) { return page == MS_MIX && k >= 0 && k < M2K_TRACKS ? pv.lead[k] : t; }   /* (a POLY
+                                                                                            * voice's knob its lead's level) */
 
 /* ======================================================================================== the gather (core) */
 
@@ -309,6 +312,7 @@ static int ms_value(const m2k_scr_t *s, int t, int code)
     if (code == NONE) return 0;
     if (code >= 0xC0) return store_.set[code & 0x3F];
     if (code >= 0x80) return p->glob[code & 0x7F];
+    if (code == P_AMOD) return amod_value(t);              /* (MODE: OFF POLY UP..., never a lock) */
     if (t == s->track && s->held < M2K_STEPS) { int i = lock_find(t, s->held, code); if (i >= 0) return p->lock[i].val; }
     return p->kit[t][code];
 }
@@ -411,7 +415,8 @@ static int ms_pic_of(const pi_t *pi, int t)
     default:
         if (n == 2) return MP_TOGGLE;
         if (ms_writes(pi, t)) return n && n <= 8 ? MP_CHOICE : icon_of(pi) == IC_BOX ? MP_TEXT : MP_NUM;
-        return n && n <= 6 ? MP_SEGS : bipolar(k) ? MP_BIDIAL : MP_DIAL;   /* (7 or 8: rates, a dial) */
+        return n && (n <= 6 || k == K_AMOD) ? MP_SEGS : bipolar(k) ? MP_BIDIAL : MP_DIAL;   /* (7 or 8: rates, a dial;
+                                                                                            * MODE's seven its places) */
     }
 }
 
@@ -590,7 +595,8 @@ static void g_home(ms_view_t *v, const m2k_scr_t *s)
 {
     const m2k_pattern_t *p = PAT(cur_pat);
     for (int t = 0; t < M2K_TRACKS && t < 8; t++) {
-        const int len = tlen_of(t), pr = PROB_PCT[p->glob[G_TPRB1 + t] & 15], ln = lane_of(p, t);
+        const int lt = pv.lead[t];     /* (a POLY voice: on its lead's length and clock) */
+        const int len = tlen_of(lt), pr = PROB_PCT[p->glob[G_TPRB1 + lt] & 15], ln = lane_of(p, t);
         uint16_t tr = 0, ho = 0;
         int n = 0;
         for (int i = 0; i < 16; i++) {
@@ -608,10 +614,11 @@ static void g_home(ms_view_t *v, const m2k_scr_t *s)
             }
             if (hit) tr |= (uint16_t)(1u << i);
         }
+        v->st.home.lead[t] = pv.lead[t];
         v->st.home.trig[t] = tr;
         v->st.home.hollow[t] = ho;
         v->st.home.len[t] = (uint8_t)n;
-        const int tp = sq.playing ? track_pos(t) - s->spage * 16 : -1;
+        const int tp = sq.playing ? track_pos(lt) - s->spage * 16 : -1;
         v->st.home.pos[t] = (int8_t)(tp >= 0 && tp < 16 ? tp : -1);
     }
 }
@@ -673,7 +680,24 @@ static void g_stage(ms_view_t *v, const m2k_scr_t *s)
         break;
     case MS_TRK: {
         const int n = sq.nheld[t], rng = 1 + ((ms_value(s, t, P_ARNG) * 4) >> 7), tot = n * rng;
-        st->arp.mode = (uint8_t)((ms_value(s, t, P_AMOD) * 6) >> 7);
+        if (pv.nv[t] > 1) {            /* POLY: its voices, each its key, its note and its amp */
+            st->poly.mode = MS_POLY;
+            st->poly.nv = pv.nv[t];
+            st->poly.hold = sq.arp_hold[t];
+            st->poly.t0 = (uint8_t)t;
+            for (int i = 0; i < pv.nv[t] && i < 8; i++) {
+                const int v = t + i;
+                st->poly.key[i] = (uint8_t)(pv.key[v] != 0xFF);
+                st->poly.lv[i] = (uint8_t)(CLAMP(mon.aenv[v], 0, 32767) >> 7);
+                if (trk[v].sounding || pv.key[v] != 0xFF) {
+                    char nt[8];
+                    s_note(nt, pv.key[v] != 0xFF ? pv.key[v] : trk[v].note);
+                    s_cpyn(st->poly.note[i], nt, sizeof st->poly.note[i]);
+                }
+            }
+            break;
+        }
+        st->arp.mode = (uint8_t)((p->kit[t][P_AMOD] * 6) >> 7);
         st->arp.n = (uint8_t)n;
         st->arp.rng = (uint8_t)rng;
         st->arp.hold = sq.arp_hold[t];
@@ -937,7 +961,8 @@ static void ms_pic(const ms_knob_t *kn, int X, int Y)
         ms_hline(X, Y + e, MS_KS, 1);
         for (int i = 0; i < n; i++) {
             const int a = x1 + i * pt, mid = a + (cw - 1) / 2;
-            if (i == c) ms_rect(cw < 3 ? mid - 1 : a, Y, w, MS_KS, 1); else ms_vline(mid, Y + e - 2, 2, 1);
+            const int rx = CLAMP(cw < 3 ? mid - 1 : a, X, X + MS_KS - w);   /* (seven: the ends' kept in the box) */
+            if (i == c) ms_rect(rx, Y, w, MS_KS, 1); else ms_vline(mid, Y + e - 2, 2, 1);
         }
         break;
     }
@@ -1194,8 +1219,32 @@ static void d_dstr(const ms_view_t *v)
 
 /* TRK: the arp's notes in its order, a step each rising (its range's octaves up the staircase), the one sounding lit;
  * HOLD in a tag; nothing held: what to do */
+/* TRK on POLY: its voices side by side (eight to the width), each its track over a bar of its amp, its note under it;
+ * a key holding it, its track lit; HOLD in the corner, the voices beside it */
+static void d_poly(const ms_view_t *v)
+{
+    const int hw = v->st.poly.hold ? ms_tw("HOLD") + 8 : 0, aw = MS_W - hw;
+    const int n = v->st.poly.nv, w = aw / (n < 4 ? 4 : n), x0 = (aw - n * w) / 2, top = MS_ST_T + 8, yb = MS_ST_B - 8;
+    if (v->st.poly.hold) ms_tag(MS_W - ms_tw("HOLD") - 4, MS_ST_T + 6, "HOLD", 1);
+    for (int i = 0; i < n; i++) {
+        const int x = x0 + i * w, cx = x + w / 2;
+        char tn[4];
+        ms_tname(tn, v->st.poly.t0 + i);
+        if (v->st.poly.key[i]) { const int tw = ms_tw(tn); ms_rfill(cx - tw / 2 - 2, MS_ST_T, tw + 4, 7, 1); ms_text_c(cx, MS_ST_T + 6, tn, 0); }
+        else ms_text_c(cx, MS_ST_T + 6, tn, 1);
+        const int h = v->st.poly.lv[i] * (yb - top) / 255;
+        ms_frame(cx - 3, top, 7, yb - top + 1, 1);
+        if (h) ms_rect(cx - 2, yb - h + 1, 5, h, 1);
+        char nt[4];
+        s_cpyn(nt, v->st.poly.note[i], sizeof nt);
+        if (nt[0] && ms_tw(nt) > w - 2) nt[2] = 0;   /* (eight across: the octave left out) */
+        if (nt[0]) ms_text_c(cx, MS_ST_B, nt, 1); else ms_dots_h(cx - 2, MS_ST_B - 1, 5);
+    }
+}
+
 static void d_trk(const ms_view_t *v)
 {
+    if (v->st.poly.mode == MS_POLY) { d_poly(v); return; }
     const int n = v->st.arp.n, tot = n * v->st.arp.rng, mid = (MS_ST_T + MS_ST_B) / 2;
     if (v->st.arp.hold) ms_tag(MS_W - ms_tw("HOLD") - 4, MS_ST_T + 6, "HOLD", 1);
     if (!v->st.arp.mode) { ms_text_c(64, mid + 3, "ARP OFF", 1); return; }
@@ -1438,6 +1487,7 @@ static void d_home(const ms_view_t *v)
         const int y = 13 + t * 6, b = y + 4, muted = (v->mutes >> t) & 1;
         char n[2] = {(char)('1' + t), 0};
         if (t == v->track) ms_rect(0, b - 5, 2, 5, 1);
+        if (v->st.home.lead[t] != t) ms_vline(1, y - 2, 6, 1);   /* (a POLY voice: its lead's bracket) */
         ms_text(4, b, n, 1);
         const uint16_t tr = v->st.home.trig[t], ho = v->st.home.hollow[t];
         for (int i = 0; i < v->st.home.len[t]; i++) {
