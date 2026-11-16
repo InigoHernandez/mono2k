@@ -180,6 +180,7 @@ M = [
                                             "    for (int v = t; v < t + n; v++) if (best < 0 || !poly_older(pv.age[v], pv.age[best])) best = v;\n    return best;"),
  ("POLY voices on their own machines", S, "rmach[t] = rp->machine[pv.lead[t]];", "rmach[t] = rp->machine[t];"),
  ("POLY voices on their own sound", S, "    m_cpy(e, trk[l].eff, P_COUNT);", "    m_cpy(e, PAT(cur_pat)->kit[v], P_COUNT);"),
+ ("POLY the voices' LFOs out of phase", S, "    m_cpy(d->lph, s->lph, sizeof d->lph);", "    (void)s;"),
  ("POLY the lead's step not the chord's", S, "            step_sound(v, &st, vs->note, len);", "            step_sound(v, vs, vs->note, len);"),
  ("POLY a voice's own trig silent", S, "        if (!cond_pass(v, vs.cond)) continue;", "        continue;"),
  ("POLY chords recorded unsorted", S, "    while (j > 0 && c[j - 1] > note) { c[j] = c[j - 1]; j--; }", "    while (0) { c[j] = c[j - 1]; j--; }"),

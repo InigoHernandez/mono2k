@@ -5540,6 +5540,10 @@ static int selftest(void)
         l2[L_DEST] = P_EQF + 1; l2[L_DPTH] = 120; l2[L_TRCK] = trck_enc(0);
         l0[L_DEST] = P_PAN + 1; l0[L_DPTH] = 120; l0[L_SPD] = 90; l0[L_TRCK] = trck_enc(1);
         m_cpy(trk[0].eff, q->kit[0], P_COUNT);
+        q->glob[G_POLY1 + 1] = 0; poly_sync();                /* (the lead's free LFO under way before POLY: */
+        m_cpy(trk[1].eff, q->kit[1], P_COUNT);
+        for (int i = 0; i < 40; i++) sblk();
+        q->glob[G_POLY1 + 1] = 3; poly_sync();                /*  its voices take its phase at their notes) */
         live_on_t(1, 48, 100); live_on_t(1, 52, 100); live_on_t(1, 55, 100);
         for (int i = 0; i < 64; i++) sblk();
         int snd = trk[2].mach == q->machine[1] && trk[3].mach == q->machine[1] && trk[2].eff[P_LEVL] == 77 &&
