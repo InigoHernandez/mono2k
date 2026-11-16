@@ -12,6 +12,7 @@ window.M2K_CHANGES = [
       ["screen", "1.9.3: While MONO2K is installed, the FM-1's screen shows it: the firmware's 143 blocks fill one by one, a blinking block where it writes, the percentage under them, and MONO2K's M at the end before it starts."],
       ["screen", "1.9.3: An FM-1 waiting for an installer, also after a power cut in the middle of an update, says UPDATE MODE, OPEN THE INSTALLER; an update cut short says STOPPED, PRESS INSTALL AGAIN. Press Install and it finishes."],
       ["screen", "1.9.3: The first seconds of an update from MONO2K show the same screen, its five steps under the grid."],
+      ["web", "The manual in the order you make music: Start here, then Make a track (play the demos, build a beat, add a bass line, shape a sound, add effects, add movement, make it vary) and Make a song (patterns into a song, play it live, save). Each page starts with a few steps to do, then the detail. Commands, the machines and every parameter are under Reference; the contents list the sections of the page you are on. Old links still land on their section."],
       ["web", "The Installer takes the page while it writes: the FM-1's flash drawn as its sectors, filling as the update reaches them, one percentage for the whole update, its four steps, Try again if it stops, and MONO2K's isotype at the end. The computer stays awake meanwhile. installer.html?demo plays it without an FM-1."],
     ],
   },

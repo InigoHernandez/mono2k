@@ -6,9 +6,16 @@
   "use strict";
   /* a manual's page and the other manual's nearest */
   const PAGE = {
-    introduction: "introduction", status: "status", "the-panel": "controls", controls: "the-panel", pages: "pages",
-    tracks: "tracks", machines: "machines", steps: "steps", locks: "steps", "trig-types": "steps", conditions: "steps",
-    recording: "steps", projects: "saving", saving: "projects", credits: "credits", changelog: "changelog",
+    /* the FM-1's (pages, and sections that were pages before 2026-11-16) to the Move's */
+    introduction: "introduction", status: "status", "the-panel": "controls", parameters: "pages", pages: "pages",
+    machines: "machines", demos: "demos", beat: "steps", notes: "steps", sound: "tracks", tracks: "tracks",
+    effects: "effects", movement: "movement", locks: "movement", "trig-types": "movement", variation: "variation",
+    conditions: "variation", grids: "variation",
+    recording: "steps", song: "patterns", live: "perform", perform: "perform", library: "sounds", projects: "saving",
+    credits: "credits", changelog: "changelog",
+    /* the Move's to the FM-1's */
+    controls: "the-panel", "in-out": "status", pads: "pads", steps: "beat", patterns: "song", sounds: "library",
+    tempo: "tempo", saving: "projects",
   };
   const still = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
   const segs = [...document.querySelectorAll("nav .seg")];

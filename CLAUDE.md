@@ -40,7 +40,7 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   approved. New parts go to the owner as ~30-40 s renders and are committed once approved. (`tools/demo_levels.py`
   balances by role and was the old banks' tool; the owner rejected a fixed mix rule.)
 - Web: `sh web/build.sh`, serve `web/` (`.claude/launch.json`: mono2k-web on port 8742). Four pages share `style.css`
-  and a sub-header: the emulator (`index.html`, `app.js`), the manual (`manual.html`, `manual.js`: one page at a time,
+  and a sub-header: the emulator (`index.html`, `app.js`), the manual (`manual.html`, `manual.js`: in the order you make music since 2026-11-16, after a player found the old order erratic: Start here, Make a track (demos, beat, notes, sound, effects, movement, variation), Make a song, Connect, Reference; each page a few numbered steps first, then its sections, `h2` ids an address can name (an old page's id lands on the section its text went to, `MOVED` for the three that became pages; the contents list the page's sections; the Move's manual the same order); one page at a time,
   the machines and knobs read off `m2k.wasm`, the screens `web/manual/*.png` from the host's tour and its manual
   scenes, `m2k_host DIR`, each PBM saved as a 1-bit PNG of the same name), the installer
   (`installer.html`: installs `web/firmware/mono2k.fwsc`, or a `.fwsc` from a file; while it writes, `installing.js` takes the page: the flash's 256 sectors filled from the updater's steps, one percentage, the four steps, MONO2K's isotype at the end; `?demo` rehearses it with nothing sent, `?demo=fail` stops it) and the patch editor (`editor.html`, `editor.js`: the same worklet and

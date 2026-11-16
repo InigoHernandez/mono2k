@@ -27,20 +27,50 @@
     crumb.innerHTML = `<span>Manual</span><span>${esc(a.dataset.group)}</span><span>${esc(h.textContent)}</span>`;
     a.insertBefore(crumb, h);
   });
+  /* an address names a page, or a section of one (an h2's id: the FM-1's pages before 2026-11-16 are sections now,
+   * so old links land where their text went); a few old pages became a whole new one */
+  const MOVED = { chain: "sound", steps: "beat", workflows: "beat" };
+  function find(id) {
+    let a = arts.find((x) => x.id === id);
+    if (!a && MOVED[id]) a = arts.find((x) => x.id === MOVED[id]);
+    if (a) return { i: arts.indexOf(a), el: null };
+    const el = id ? document.getElementById(id) : null;
+    const in_ = el && el.closest(".doc article");
+    return in_ ? { i: arts.indexOf(in_), el } : { i: 0, el: null };
+  }
+  /* the page in view's sections under its name in the contents: where a long page's jobs are, at a glance */
+  function sections(a) {
+    $$(".docs__sec", side).forEach((o) => o.remove());
+    const hs = $$("h2[id]", a);
+    const li = $(`a[href="#${a.id}"]`, side);
+    if (hs.length < 2 || !li) return;
+    const ol = document.createElement("ol");
+    ol.className = "docs__sec";
+    ol.innerHTML = hs.map((h) => `<li><a href="#${h.id}">${esc(h.textContent)}</a></li>`).join("");
+    li.parentElement.appendChild(ol);
+  }
   function show(id, scroll) {
-    const i = Math.max(0, arts.findIndex((a) => a.id === id));
+    const { i, el } = find(id);
     arts.forEach((a, j) => a.classList.toggle("on", j === i));
     $$("a", side).forEach((l) => { if (l.getAttribute("href") === "#" + arts[i].id) l.setAttribute("aria-current", "page"); else l.removeAttribute("aria-current"); });
+    sections(arts[i]);
     const pg = $("#pager");
     const link = (a, cls, what) => a ? `<a class="${cls}" href="#${a.id}"><small>${what}</small><b>${esc($("h1", a).textContent)}</b></a>` : "";
     pg.innerHTML = link(arts[i - 1], "prev", "Previous") + link(arts[i + 1], "next", "Next");
     document.title = `${$("h1", arts[i]).textContent} · ${TITLE}`;
     if (matchMedia("(max-width: 720px)").matches) side.open = false;
-    if (scroll) window.scrollTo({ top: 0 });
+    if (el) {
+      requestAnimationFrame(() => {
+        el.scrollIntoView({ block: "start" });
+        el.classList.remove("seen");
+        void el.offsetWidth;                        /* the mark again, on a second visit too */
+        el.classList.add("seen");
+      });
+    } else if (scroll) window.scrollTo({ top: 0 });
   }
   /* an address naming a page would also scroll to it, as to an anchor: the page starts at the top instead */
   if ("scrollRestoration" in history) history.scrollRestoration = "manual";
-  requestAnimationFrame(() => window.scrollTo({ top: 0 }));
+  if (!find(decodeURIComponent(location.hash.slice(1))).el) requestAnimationFrame(() => window.scrollTo({ top: 0 }));
   const fromHash = (scroll) => show(decodeURIComponent(location.hash.slice(1)) || "introduction", scroll);
   window.addEventListener("hashchange", () => fromHash(true));
   fromHash(false);

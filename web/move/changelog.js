@@ -7,6 +7,12 @@ window.M2K_KINDS = window.M2K_KINDS || {
 };
 window.M2K_CHANGES = [
   {
+    date: "2026-11-16", title: "The manual, in the order you make music",
+    items: [
+      ["web", "The Move's manual in the order you make music: play the demos, build a beat, shape a sound, add effects, add movement, make it vary, then patterns into a song, play it live, in time with Move. Each page starts with a few steps to do; every control and page is under Reference."],
+    ],
+  },
+  {
     date: "2026-11-07", title: "MONO2K for the Move 0.4.1: a step's chance with one hand",
     items: [
       ["workflow", "Hold a step and click the jog: the jog now sets the step's chance instead of its note, so one hand holds and the other turns. It stays on the chance for the next step you hold; click again for the note. The screen tags JOG under what it sets. Shift + jog still works."],
