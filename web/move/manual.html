@@ -202,7 +202,7 @@
   <p class="sub">Eight tracks, each one mono machine with its own sound, chain and steps.</p>
   <ol class="steps">
     <li>Pick the track with its button. Shift + jog: its machine.</li>
-    <li>SYN pad: the machine's eight knobs. AMP: the note's shape. FILT: the filters.</li>
+    <li>SYN pad: the machine's eight knobs. AMP: the note's shape, an ADSR (the pad again: HOLD). FILT: the filters and their ADSR (again: how far it moves them).</li>
     <li>Gone too far? Delete + a knob: back to its INIT.</li>
     <li>SOUNDS pad: the library on the jog, each sound heard on the track; a click keeps it.</li>
   </ol>
@@ -432,8 +432,10 @@
     <thead><tr><th>Page</th><th>Knobs 1–8</th></tr></thead>
     <tbody>
       <tr><td>SYN</td><td>The machine's A–H</td></tr>
-      <tr><td>AMP</td><td>ATCK · HOLD · DEC · REL · DIST · VOL · PAN · PORT</td></tr>
-      <tr><td>FILT</td><td>BASE · WDTH · HPQ · LPQ · ATK · DEC · B-OF · W-OF</td></tr>
+      <tr><td>AMP</td><td>ATCK · DEC · SUS · REL · DIST · VOL · PAN · PORT</td></tr>
+      <tr><td>AMP again</td><td>HOLD</td></tr>
+      <tr><td>FILT</td><td>BASE · WDTH · HPQ · LPQ · ATCK · DEC · SUS · REL</td></tr>
+      <tr><td>FILT again</td><td>B-OF · W-OF</td></tr>
       <tr><td>EFX</td><td>EQF · EQG · SRR · DTIM · DSND · DFB · DBAS · DWID</td></tr>
       <tr><td>DSTR</td><td>BITS · FOLD · XOR · VERB · TYPE · RATE · DPTH · MIX</td></tr>
       <tr><td>LFO1–3</td><td>TRCK · DEST · WAVE · TRIG · MULT · SPD · PHAS · DPTH</td></tr>
@@ -484,7 +486,7 @@
 </footer>
 <script src="../site.js?v=4"></script>
 <script src="../switch.js?v=2"></script>
-<script src="changelog.js?v=8"></script>
-<script src="../manual.js?v=65"></script>
+<script src="changelog.js?v=9"></script>
+<script src="../manual.js?v=66"></script>
 </body>
 </html>

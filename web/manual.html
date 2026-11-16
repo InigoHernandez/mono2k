@@ -162,8 +162,8 @@
     <thead><tr><th>Button</th><th>Page</th><th>What it does</th></tr></thead>
     <tbody>
       <tr><td>EDIT</td><td>SYN</td><td>The track's machine: its knobs A–H.</td></tr>
-      <tr><td>ENV</td><td>AMP</td><td>The amp envelope, distortion, volume, pan, portamento.</td></tr>
-      <tr><td>SEL</td><td>FILT</td><td>The filters: base and width, resonance, the filter's envelope.</td></tr>
+      <tr><td>ENV</td><td>AMP</td><td>The amp's ADSR; then distortion, volume, pan, portamento; then HOLD.</td></tr>
+      <tr><td>SEL</td><td>FILT</td><td>The filters: base and width, resonance; then the filter's ADSR; then how far it moves them.</td></tr>
       <tr><td>FX</td><td>FX</td><td>EQ and rate reduction, the delay, the destroy effects, the modulation effect. Held: PERFORM.</td></tr>
       <tr><td>LFO</td><td>LFO</td><td>Three LFOs on one page: LFO 1, 2, 3, then their rest; SELECT picks one. Held: the knobs come back when let go.</td></tr>
       <tr><td>ARP</td><td>ARP</td><td>The track's arpeggiator, then GRIDS and LANES.</td></tr>
@@ -345,24 +345,39 @@
   </ol>
   <div class="figs">
     <figure class="fig"><canvas data-scr="07_syn_focus"></canvas><figcaption>SYN: the machine's card and its first four knobs.</figcaption></figure>
-    <figure class="fig"><canvas data-scr="09b_amp_swell"></canvas><figcaption>AMP: ATCK 0.17 s, the swell drawn as you hear it.</figcaption></figure>
+    <figure class="fig"><canvas data-scr="44_amp_adsr"></canvas><figcaption>AMP 1: ATCK DEC SUS REL, the sustain held while the note lasts.</figcaption></figure>
     <figure class="fig"><canvas data-scr="10_filt"></canvas><figcaption>FILT: the high-pass and low-pass as a band.</figcaption></figure>
   </div>
   <h2 id="tracks">Machines</h2>
   <p>ALGORITHM changes the track's machine, on any page. A track still at its machine's INIT takes the new machine's whole INIT; a sound you have shaped keeps its chain, its LFOs and its steps, and only the eight knobs start from the new machine's. The order: the ten that play notes first (GND-SIN, SWAV-SAW, SWAV-PUL, SWAV-ENS, FM+STAT, FM+PAR, FM+DYN, VOX-6, DIGI-WAV, SID-6581), then the drums (DRM-KICK, DRM-SNAR, DRM-HATS, DRM-CYMB), GND-PERC and GND-NOIS, and the three FX last. Each machine's knobs: <a href="#machines">Machines</a>.</p>
   <h2 id="init">INIT: each machine's own sound</h2>
   <p>Every machine starts as a sound for what it is for: GND-SIN a round sine bass, SWAV-SAW a wide supersaw pad, SWAV-PUL a hollow reed lead, SWAV-ENS a minor-7 pad on one key, FM+STAT an e-piano, FM+PAR a gong-like bell, FM+DYN an FM bass, VOX-6 an "aah", DIGI-WAV a pluck that scans as it falls, SID-6581 a sync lead, the DRM- drums a kick, a snare, a closed hat and a crash, GND-PERC a metal hit, GND-NOIS a wind you play. Each is levelled to sit with the others. INIT is what ALGORITHM gives a track at its INIT, what EDIT + SEQ and an INIT slot of the library start a track with, and where OCT− and a knob take that knob back.</p>
-  <h2 id="amp">Amp</h2>
-  <p>ATCK, HOLD, DEC and REL shape each note, and each shows the time you hear: ATCK to full level, DEC and REL down to silence (60 dB under).</p>
+  <h2 id="amp">Amp: an ADSR</h2>
+  <p>AMP 1 is ATCK DEC SUS REL, AMP 2 DIST VOL PAN PORT, AMP 3 HOLD: press ENV again for each. The times are the ones you hear.</p>
   <ul>
-    <li><b>ATCK</b> swells as the square of its time, evenly to the ear: 20 ms at 16, 67 ms at 32, 0.4 s at 64, 2 s at 96, 10 s at 127; 0 is the Monomachine's percussive 1 ms.</li>
-    <li><b>HOLD</b> keeps the note at full level before it decays, so most sounds need no note-off. It counts in beats at the pattern's tempo (32 a beat, 8 a sixteenth), as on the Monomachine.</li>
-    <li><b>DEC and REL</b>: 0.14 s at 32, 0.8 s at 64, 4 s at 96, 20 s at the top; DEC at 127 holds while the note is held.</li>
+    <li><b>ATCK</b> rises to full, as the square of its time, evenly to the ear: 20 ms at 16, 67 ms at 32, 0.4 s at 64, 2 s at 96, 10 s at 127; 0 is a percussive 1 ms.</li>
+    <li><b>DEC</b> falls to SUS's level: 0.14 s at 32, 0.8 s at 64, 4 s at 96, 20 s at the top; at 127 it stays at full while the note lasts.</li>
+    <li><b>SUS</b> is the level held while the note lasts, shown in dB. At 0 there is none: the note falls to silence over DEC however long it is, the way a drum does and every sound made before 1.10 does.</li>
+    <li><b>REL</b> takes it down once the note ends, a key let go or the step's length run out, from wherever it is.</li>
+    <li><b>A note's length:</b> a key, as long as you hold it; a trig, the track's GATE (ARP's fourth knob; just under a step at INIT), or as long as you make it: hold the step, press a later one (<a href="#accent">Accent, slide and length</a>).</li>
+    <li><b>HOLD</b> (AMP 3) keeps full level before the decay. It counts in beats at the pattern's tempo (32 a beat, 8 a sixteenth); 127 holds while the note lasts.</li>
     <li><b>DIST</b> drives the machine into a clip of its own, <b>VOL</b> sets the track's level into the chain, <b>PAN</b> places it, <b>PORT</b> glides between notes.</li>
   </ul>
   <p>A note played over one still sounding rises from where that one is.</p>
+  <div class="figs">
+    <figure class="fig"><canvas data-scr="46_amp_hold"></canvas><figcaption>AMP 3: HOLD, the flat top before the decay.</figcaption></figure>
+    <figure class="fig"><canvas data-scr="45_amp_chain"></canvas><figcaption>AMP 2: drive, level, pan, glide.</figcaption></figure>
+  </div>
   <h2 id="filter">Filter</h2>
-  <p>A high-pass and a low-pass as one band: BASE is the bottom of the band, WDTH its width (at the top, BASE alone is a high-pass; at the bottom, WDTH alone is a low-pass), HPQ and LPQ their resonance. The filter follows the note. Its envelope (ATCK, DEC) moves the base and the width by B-OF and W-OF.</p>
+  <p>A high-pass and a low-pass as one band: BASE is the bottom of the band, WDTH its width (at the top, BASE alone is a high-pass; at the bottom, WDTH alone is a low-pass), HPQ and LPQ their resonance. The filter follows the note.</p>
+  <ul>
+    <li><b>FILT 2</b> is its envelope, an ADSR too: ATCK and DEC, SUS the share held while the note lasts, REL its fall once the note ends. At SUS 0 it rises and falls to zero whatever the note's length, as before 1.10.</li>
+    <li><b>FILT 3</b>: B-OF and W-OF, how far the envelope moves the base and the width, either way.</li>
+  </ul>
+  <div class="figs">
+    <figure class="fig"><canvas data-scr="47_filt_adsr"></canvas><figcaption>FILT 2: the filter's ADSR under the band it moves.</figcaption></figure>
+    <figure class="fig"><canvas data-scr="48_filt_reach"></canvas><figcaption>FILT 3: how far it moves the base and the width.</figcaption></figure>
+  </div>
   <h2 id="level">Level, pitch, mute</h2>
   <p>On HOME, KNOB 1 and 2 are the track's level and pitch. In GRID the MUTE key mutes the track in view; GLO held with white 1–6 mutes a track from anywhere.</p>
   <h2 id="library">Keep it, find it again: the sound library</h2>
@@ -696,7 +711,7 @@
       <tr><td>112–119</td><td>LFO 3</td><td>The same</td></tr>
     </tbody>
   </table>
-  <p>These are the Monomachine's numbers, so a controller set up for one plays the other. MONO2K's own parameters (the destroy effects, MOD, the arpeggiator, pitch) have no controller: set them on the panel or in the <a href="editor.html">Patch Editor</a>.</p>
+  <p>These are the Monomachine's numbers, so a controller set up for one plays the other. MONO2K's own parameters (the sustains and the filter's release, the destroy effects, MOD, the arpeggiator, pitch) have no controller: set them on the panel or in the <a href="editor.html">Patch Editor</a>.</p>
   <h2>Clock and sync</h2>
   <p>GLO &gt; MIDI. <b>SYIN</b> (sync in) follows a MIDI clock: its tempo, start, continue, stop and the song position, from the input you pick: OFF, USB, TRS or BOTH; the other input's clock and transport are ignored. <b>SYOU</b> (sync out) sends MONO2K's clock, 24 pulses a beat, with start and stop; following a clock, it passes that one on. <b>NOTE</b> (notes out) sends each track's trigs on its channel. With SYIN off, start and continue still play and stop still stops, at MONO2K's own tempo, from where the notes come (NOTE on GLO &gt; IN).</p>
   <p>The clock comes in over USB, from a computer, phone or iPad, or on the TRS jack from any MIDI device. The FM-1's USB port is a device, like a keyboard's, and its TRS jack is an input only, so two FM-1s cabled to each other don't hear each other. Put a host between them: a computer or an iPad with a DAW or a MIDI router, or a USB MIDI host box. The one that leads must send a clock: MONO2K does (SYOU on); set the other's SYIN to USB.</p>
@@ -926,7 +941,7 @@
 <script src="site.js?v=4"></script>
 <script src="switch.js?v=2"></script>
 <script src="panel.js?v=2"></script>
-<script src="changelog.js?v=59"></script>
-<script src="manual.js?v=65"></script>
+<script src="changelog.js?v=60"></script>
+<script src="manual.js?v=66"></script>
 </body>
 </html>

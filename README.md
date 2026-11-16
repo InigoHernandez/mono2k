@@ -32,6 +32,9 @@ WebAssembly, with sound).
 - **The update on the FM-1's screen** (1.9.3). While it is installed, the FM-1 shows its firmware's 143 sectors of
   4 KB filling one by one, the percentage, and MONO2K's M at the end. Waiting for an installer (also after a power cut
   in the middle of an update) it says "UPDATE MODE / OPEN THE INSTALLER"; cut short, "STOPPED / PRESS INSTALL AGAIN".
+- **Regular ADSR envelopes** (1.10). The amp is ATCK DEC SUS REL on AMP 1 (DIST VOL PAN PORT on AMP 2, HOLD on AMP 3),
+  the filter's envelope ATCK DEC SUS REL on FILT 2 (B-OF W-OF on FILT 3). SUS holds a level while the note lasts, a key
+  or the step's length, and REL follows its end. SUS 0 is the envelope as before, so every older sound plays bit for bit.
 
 ## Run it
 
