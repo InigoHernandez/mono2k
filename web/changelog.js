@@ -7,6 +7,15 @@ window.M2K_KINDS = {
 };
 window.M2K_CHANGES = [
   {
+    date: "2026-11-16", title: "MONO2K 1.11: a calmer CPU guard",
+    items: [
+      ["sound", "1.11: When the FM-1's CPU is full it gives way a step at a time, the least heard first: the screen's frames further apart, then a ringing tail (a note's release, its echoes) faded out, its next note as ever, and only then a whole track rests. Each step waits for the last to take effect, so one tight moment no longer silences two or three tracks."],
+      ["sound", "1.11: More room: a short drop that the sound did not cause (a flash write, a page turned) only moves the screen, and nothing is cut for it. A track that rests comes back as soon as there has been room for a second."],
+      ["workflow", "1.11: GLO > PLAY, KNOB 2, REST: which track rests when one must. AUTO, the quietest for what it costs, never the track you are on; T1–T6, that track first; NONE, no track rests (the sound may then drop: DROP counts it). FM-1 only."],
+      ["screen", "1.11: CPU FULL says what it did: T2 TAIL CUT, or T2 RESTS, T4 HEAVIEST. On GLO > PLAY a cut tail shows CUT for a moment, a resting track REST. In the browser, GLO > PLAY's MOTN moved to KNOB 3."],
+    ],
+  },
+  {
     date: "2026-11-16", title: "MONO2K 1.10: regular ADSR envelopes",
     items: [
       ["sound", "1.10: The amp is a regular ADSR: AMP 1 is ATCK DEC SUS REL. SUS holds a level while the note lasts, a key held or the step's length, and REL takes it down when the note ends. SUS at 0 is the envelope as it was, so every pattern and sound you have plays exactly as before."],

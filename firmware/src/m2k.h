@@ -148,8 +148,10 @@ _Static_assert(M2K_TRACKS <= 8, "a byte a mask of the tracks");
  * the TRS jack's MIDI out over USB (from 64 on). GLO > PLAY: S_MUTQ when a mute made while playing comes: at the next
  * bar below 64 (the default, an old store's 0), at once from 64. S_MOTN the screen's motion (GLO > SET on the FM-1,
  * GLO > PLAY where SET has projects): below 64 CALM (the default, an old store's 0: pages and values cut clean, no
- * glitch on an action), from 64 GLITCH (the transitions, the glitches and the values' slip) */
-enum { S_SCREEN, S_MCH, S_SYNI, S_SYNO, S_NOTO, S_NTIN, S_THRU, S_MUTQ, S_MOTN, S_COUNT = 16 };
+ * glitch on an action), from 64 GLITCH (the transitions, the glitches and the values' slip). S_REST (GLO > PLAY, the
+ * FM-1's CPU guard): which track rests when one must, (v * 8) >> 7: AUTO (the default, an old store's 0), T1..T6
+ * that one first, NONE never */
+enum { S_SCREEN, S_MCH, S_SYNI, S_SYNO, S_NOTO, S_NTIN, S_THRU, S_MUTQ, S_MOTN, S_REST, S_COUNT = 16 };
 /* where a message came in (m2k_midi_from): the FM-1's USB or its TRS jack */
 enum { M2K_USB, M2K_TRS };
 
@@ -192,12 +194,15 @@ extern void (*m2k_par_end)(void);                              /* 1 while the se
  * audio interrupt found the ring empty). GLO > PLAY shows them (a dash where none came: the browser, the host); a short
  * one more says CPU FULL, at most every few seconds */
 void m2k_cpu(int core1_pct, int core2_pct, int shorts);
-/* the platform's CPU guard (the FM-1's), called before each render with the render's load (% of its real time) and
- * whether the sound is about to run short. Then the track sounding quietest for what it costs fades out over a block
- * and rests (its trigs silent; the track in view the last to go and never kept resting), and CPU FULL names it and the
- * dearest track; with room for it again it plays from its next trig. Returns the track faded, or -1. Elsewhere never
- * called: the sound as ever */
-int m2k_guard(int load_pct, int danger);
+/* the platform's CPU guard (the FM-1's), called before each render with the render's load (its time followed over ~8
+ * renders, % of its real time), the blocks rendered ahead of the audio interrupt (AHEAD of RING) and the times the
+ * interrupt found them gone since power-on (SHORTS). When the sound is about to run short and the render is the
+ * cause, it lightens the sound one step at a time, the least heard first: a ringing tail faded out, then a track
+ * rested (S_REST's; its trigs silent until there is room), and CPU FULL says what it did; while the screen could be
+ * the cause it asks the screen to give way first (m2k_guard_gap: the least ms between frames meanwhile, 0 none).
+ * Returns the track it faded, or -1. Elsewhere never called: the sound as ever */
+int m2k_guard(int load_pct, int ahead, int ring, int shorts);
+int m2k_guard_gap(void);
 /* the platform's clock (the FM-1's ticks; unset elsewhere): the render times each track, the bus and its own part where
  * they run, and shares the tracks between the cores by what they took (the host's and the browser's split stays the
  * estimates': the same every time); its ticks a millisecond, for the tracks' loads on GLO > PLAY */

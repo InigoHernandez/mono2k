@@ -35,6 +35,9 @@ WebAssembly, with sound).
 - **Regular ADSR envelopes** (1.10). The amp is ATCK DEC SUS REL on AMP 1 (DIST VOL PAN PORT on AMP 2, HOLD on AMP 3),
   the filter's envelope ATCK DEC SUS REL on FILT 2 (B-OF W-OF on FILT 3). SUS holds a level while the note lasts, a key
   or the step's length, and REL follows its end. SUS 0 is the envelope as before, so every older sound plays bit for bit.
+- **A calmer CPU guard** (1.11). When the FM-1 is full it gives way a step at a time, the least heard first: the
+  screen's frames further apart, a ringing tail faded, then a track rests; a drop it did not cause (a flash write)
+  moves only the screen. GLO > PLAY's REST picks the track: AUTO, T1–T6 or NONE (FM-1 only).
 
 ## Run it
 

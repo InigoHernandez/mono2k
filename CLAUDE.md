@@ -138,7 +138,8 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   every value of ADPC DRIV DCAY DAMP, held to `tools/ref/bus_m2k.json`; each old ADPC and DRIV through `T_V9_*` to the
   old engine's, `tools/ref/bus_v8.json`, and `T_V17_RV` to `tools/ref/conv17.json`; the reference mix's kits turned to
   today's amp, so under -25 dB DRIV's residual against the old engine may only not grow; GLCH HISS TAPE measured too
-  until 1.5, their rows kept in `bus_v8.json` / `bus_v16.json`, their conversions held by the self-test alone).
+  until 1.5, their rows kept in `bus_v8.json` / `bus_v16.json`, their conversions held by the self-test alone); the FM-1's CPU guard (the
+  guard bench plain and under the sanitizers, `tools/guard_mutants.py`: ~4 min).
 - The FM-1 build (`firmware/fm1/README.md`): `.venv/bin/python tools/fm1/build.py [--diag] [--release X.Y]` makes
   `build/fm1/mono2k.fwsc` (identity FM-1_980 for every build and release: the hub's FM-1_981 and _983 are others'; a
   release sets APP_VER and names the file `mono2k-X.Y.fwsc`, the one the installer and the GitHub release share) with JieLi's toolchain in a linux/amd64 container
@@ -203,16 +204,37 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   (`meter_tick`, m2k_fm1.c) hands the core `m2k_cpu(first core %, second's or -1, the ring's shorts since power-on)`;
   GLO > PLAY shows CPU, CPU2 and DROP (dashes where none came: the browser, the host), and a short more than the last
   toasts CPU FULL (at most every 5 s). The CPU guard (1.7, the owner's, after a player's "running out of CPU juice
-  fast with some audio dropouts"): the glue calls `m2k_guard(load %, danger)` before every render (danger: a third of
-  the ring left and the render over 95 % of a block's real time, or a new short and over 70 %); in danger the track
-  sounding quietest for what it costs (`lvl`, its peaks by its LEVL followed ~93 ms, over `trk_cost`) fades over
-  PARK_N blocks (`trk_park`, `env_block`) and rests (`held`: its trigs silent; the track in view the last to go and
-  never kept), back from its next trig once the load over ~64 renders plus what it cost is under 90 %, the last to go
-  first; 8 renders' wait after a fade, 32 after a return. CPU FULL names it and the dearest (`trk_dearest`); GLO >
-  PLAY says REST in its cell. Never called elsewhere (the browser, the host, the Move): the sound bit for bit
-  (`m2k_draw --hash`). `m2k_draw --guard DIR [P] [LOAD]` plays bank A's P on an FM-1 pretended LOAD % short (the ring,
-  the interrupt and the glue's rule, simulated) into before.wav and after.wav; the self-test's GUARD holds the pick,
-  the ramp, the rest and the return. `--diag` packages show the same CPU, W (the second's) and F (drawing) in %
+  fast with some audio dropouts"; 1.11 calmer, the owner's after playing 1.10: "a bit intense cutting the track ...
+  give more room and also give the option to which one and/or be smarter"): before every render the glue
+  (`m2k_pace.h`, firmware/fm1, shared with the bench: `pace_guard`, `pace_rendered`, `pace_busy`, `pace_frame_due`)
+  hands the core `m2k_guard(render load %, blocks ahead, RING, shorts since power-on)`; the core judges the load less
+  what its last steps will still take off the ~8-render average (`grd.credit`, a step's saving `grd_saving`: its
+  voice and chain's share of `trk_cost`, half on two cores). Danger: over (the render over its real time, the ring
+  empty within GRD_SEC / 8 at that rate), tight (over 95 % with a third left: the screen gives way first,
+  `m2k_guard_gap` 200 ms between frames for 2 s, the sound only if still tight 0.1 s on), a short the render's (over
+  90 %; over 80 % a second episode within a second, or one that has not refilled the ring in a third of a second;
+  episodes end when the ring is half full again). A short at less (a flash write, a stall) only moves the screen. In
+  danger one step, then GRD_SETTLE (4) renders: a tail first (`grd_tail`: a note ended that only rings, astage 4 or 3
+  past its gate, or its delay's echoes alone, `dcut`, the line faded over PARK_N and wiped), the quietest for what it
+  saves, not resting (`trk_park(.., hold 0)`; `env_park` gives way to a note that comes in its fade); then
+  `guard_voice_steal()` (POLY's hook, -1 until it lands); then a rest (`held`), only when the danger is over / a
+  short / the ~64-render load over 100 %: REST's (`S_REST`, GLO > PLAY KNOB 2: AUTO, T1..T6 first, NONE never; an
+  old store's 0 AUTO; the browser's MOTN on KNOB 3), AUTO the quietest for what it costs by `grd.lv` (its `lvl` held
+  ~0.4 s, `GRD_FALL`, then followed ~1.5 s: a hit a beat counts as loud, a rare one little), never the track in view.
+  Back from its next trig once for a second (`grd.calm`, doubled up to 8 s for one back only to rest again within
+  4 s) nothing was in danger and the ~64-render load with its cost was under 85 %, the ring half full, the last to go
+  first; the track in view back at once unless REST names it. CPU FULL says what it did (`T2 TAIL CUT`, `T2 RESTS,
+  T4 HEAVIEST`; a rest after a tail's cut at once); GLO > PLAY's cells REST, and CUT 1.5 s. Never called elsewhere
+  (the browser, the host, the Move): the sound bit for bit (`m2k_draw --hash`). The guard bench
+  (`host/m2k_guard_bench.c`, check.sh): the FM-1's ring, interrupt, main loop (frames, strips, flash writes, stalls)
+  and guard on the core's own render timed by its cost model through `m2k_clock` (DENSE's render = the FM-1's real
+  time), 1.7's rule copied in for the comparison, no guard too; traces near the limit, spikes, a ramp, bars heavy and
+  light, a fall, stalls at 70-85 %, bank A as it is and 15 % slower, DENSE, REST T3 and NONE; it holds bank A never
+  shedding, shorts never above 1.7's, a stall cutting nothing, no cascade, no more rests or longer, a tail first, the
+  return, REST; `--wav DIR` writes each run, `-v` each step. `tools/guard_mutants.py` (check.sh): 19 mutants of the
+  guard, its fades and the glue, in copies under build/guard_mut, each caught by the bench or the self-test's GUARD
+  (the ladder, the fades without a step, a note in a tail's fade, REST, AUTO's level, CPU FULL's words).
+  `--diag` packages show the same CPU, W (the second's) and F (drawing) in %
   over the screen's top. The 2026-10-29 owner: "dont make the sound engine worst": CPU savings must keep the sound
   bit for bit; 1.6's owner (a pattern of every track's effects, LFOs, chances and locks overloaded the FM-1): nothing
   cut from the engine (the Ableton Move port will have the power), FM-1-only measures fine. The yardstick:

@@ -893,12 +893,29 @@
   <h1>The FM-1's CPU</h1>
   <p class="sub">What the FM-1 can carry, how it shows its load, and what it does when it is full.</p>
   <div class="figs">
-    <figure class="fig"><canvas data-scr="36_glo_meter"></canvas><figcaption>GLO &gt; PLAY on the FM-1: the mutes, the bar, the load.</figcaption></figure>
+    <figure class="fig"><canvas data-scr="36_glo_meter"></canvas><figcaption>GLO &gt; PLAY on the FM-1: the mutes, REST, the load.</figcaption></figure>
+    <figure class="fig"><canvas data-scr="37b_cpu_rest"></canvas><figcaption>Full: T5 rests, CPU FULL says so.</figcaption></figure>
   </div>
   <h2>The load</h2>
   <p>GLO &gt; PLAY shows it, every half second: CPU, the first core's share of real time making the sound; CPU2, the second core's; DROP, the times the sound ran short since power-on. In the browser, dashes. Each track's cell has a bar of what that track takes (full at 50 %). The FM-1 shares the tracks between its two processors by what each takes there, measured as it plays, and the bus runs on the second a block behind, so the sound comes out 0.36 ms later.</p>
   <h2>When it is full</h2>
-  <p>Rather than crack, the FM-1 fades out the quietest track for what it costs (in 3 ms) and lets it rest: its cell on GLO &gt; PLAY says REST. It plays again from its next note once there is room. The track you are on is never kept resting. CPU FULL names both, at most every 5 seconds: <b>T2 FADED, T4 HEAVIEST</b>. Lighten the heaviest one.</p>
+  <p>Rather than crack, the FM-1 gives way a step at a time, the least heard first. Each step waits for the last to take effect.</p>
+  <ol>
+    <li><b>The screen.</b> Its frames come further apart. The sound is untouched.</li>
+    <li><b>A tail.</b> A note that has ended and only rings (its release, its echoes) fades out in 3 ms. Its next note plays as ever. Its cell says CUT for a moment.</li>
+    <li><b>A track rests.</b> It fades out in 3 ms, its notes silent; its cell says REST. It plays again from its next note once there has been room for a second.</li>
+  </ol>
+  <p>A drop the sound did not cause (a flash write, a page turned) only moves the screen: nothing is cut for it.</p>
+  <h2 id="rest">REST: which track</h2>
+  <p>GLO &gt; PLAY, KNOB 2. FM-1 only: the browser has no limit, so there it does nothing.</p>
+  <table>
+    <tbody>
+      <tr><td>AUTO</td><td>The quietest for what it costs; a hit every beat counts as loud. Never the track you are on. The default.</td></tr>
+      <tr><td>T1–T6</td><td>That track rests first, even the one you are on. Then AUTO.</td></tr>
+      <tr><td>NONE</td><td>No track rests. The screen and tails still give way; past them the sound may drop, and DROP counts it.</td></tr>
+    </tbody>
+  </table>
+  <p>CPU FULL says what it did, at most every 5 seconds: <b>T2 TAIL CUT</b>, or <b>T2 RESTS, T4 HEAVIEST</b>. Lighten the heaviest one.</p>
   <h2>What costs the most</h2>
   <table>
     <thead><tr><th>A plain track that sounds = 1</th><th>About</th></tr></thead>
@@ -941,7 +958,7 @@
 <script src="site.js?v=4"></script>
 <script src="switch.js?v=2"></script>
 <script src="panel.js?v=2"></script>
-<script src="changelog.js?v=60"></script>
-<script src="manual.js?v=66"></script>
+<script src="changelog.js?v=61"></script>
+<script src="manual.js?v=67"></script>
 </body>
 </html>

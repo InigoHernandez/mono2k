@@ -170,6 +170,7 @@ typedef struct {
                                         * guard's: a hat between its hits still counts) */
     uint8_t park;                      /* the CPU guard's fade (m2k_guard): blocks left of it and one, its note ended then */
     uint8_t held;                      /* and the guard keeps it resting: its trigs silent until there is room for it */
+    uint8_t dcut;                      /* the guard's cut of its delay's echoes (a tail): blocks left of the fade and one */
     uint32_t park_lv;                  /* the amp when the fade began (Q30) */
     int32_t park_cost;                 /* what it cost sounding (trk_cost), to know when there is room */
     /* the modulation effect; its side (chorus and flanger across the stereo) high-passed and resampled as the mid */
@@ -1329,16 +1330,20 @@ static uint32_t atk_from(uint32_t lv)
 static inline uint32_t fsus_of(int32_t fs8) { return (uint32_t)fs8 * 33026u; }
 
 /* the CPU guard's fade (m2k_guard): the amp straight down to nothing over PARK_N blocks, then the note ends as a
- * release would; the amp's end the track's (both envelopes' paths) */
+ * release would; the amp's end the track's (both envelopes' paths). A tail's cut (not resting) gives way to a note
+ * that comes meanwhile: it plays as ever */
 static inline void env_park(trk_t *t)
 {
     if (t->park) {
-        if (t->park == 1) { t->aenv = 0; t->astage = 0; }
+        if (t->astage == 1 && !t->held) t->park = 0;
         else {
-            uint32_t cap = (t->park_lv / PARK_N) * (uint32_t)(t->park - 2);   /* (2^30 at most) */
-            if (t->aenv > cap) t->aenv = cap;
+            if (t->park == 1) { t->aenv = 0; t->astage = 0; }
+            else {
+                uint32_t cap = (t->park_lv / PARK_N) * (uint32_t)(t->park - 2);   /* (2^30 at most) */
+                if (t->aenv > cap) t->aenv = cap;
+            }
+            t->park--;
         }
-        t->park--;
     }
     if (t->astage == 0) t->sounding = 0;
 }
@@ -1610,14 +1615,15 @@ static inline m2k_pattern_t *PAT(int i)
 static int pat_can_open(int j);                  /* (m2k_proj.c) may pattern j become the playing one */
 static uint8_t master_vol = 100;
 
-/* the CPU guard (m2k_guard): a sounding track faded out, its note ended (env_block), its trigs silent while it rests */
-static void trk_park(int ti, int32_t cost)
+/* the CPU guard (m2k_guard): a sounding track faded out, its note ended (env_block); resting (hold), its trigs silent
+ * until there is room, else (a tail's cut) its next note as ever */
+static void trk_park(int ti, int32_t cost, int hold)
 {
     trk_t *t = &trk[ti];
     t->park = PARK_N + 1;
     t->park_lv = t->aenv;
     t->park_cost = cost;
-    t->held = 1;
+    t->held = (uint8_t)(hold != 0);
 }
 
 /* a trig: the note always (a trigless trig moves the pitch too), then the amp (and the machine with it), the filter's
