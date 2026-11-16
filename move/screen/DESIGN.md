@@ -108,7 +108,7 @@ Calm: pages cut, no transitions, no glitches. What moves is the sound: HOME's pl
 | top 5 | DSTR | BIT FLD XOR VRB TYP SPD DPT MIX | a sine through the crush; the modulation's sweep |
 | top 6–8 | LFO1–3 | TRK DES WAV TRG MUL SPD PHS DPT | where it goes and its cycle, small; the wave as deep as it swings, live |
 | 2nd 1 | HOME | LEVL PTCH BPM SWNG TLEN SPD PROB LANE (no pictures) | 8 lanes: the number (the track in view's marked), 16 steps by the beat, a trig a block, one that may not play framed, a muted lane's dashes, each playhead a line under its step |
-| 2nd 2 | TRK | PCH LEV ARP SPD RNG GAT (BNK) | the arp's notes as a staircase, the one sounding lit; HOLD |
+| 2nd 2 | TRK | PCH LEV ARP SPD RNG GAT (BNK); on POLY PCH LEV ARP VOI – GAT | the arp's notes as a staircase, the one sounding lit; HOLD. On POLY (`d_poly`) the voices side by side, each its track (lit while a key holds it) over a bar of its amp and its note under it (eight across: no octave), HOLD in the corner, the voices beside it; MODE's seven choices as places |
 | 2nd 3 | PAT | BPM SW LEN ACC TLN SPD PRB LAN | the tempo at x3 (SYNC's link when the Move's, INT when MONO2K's own), the bar's beats; the pattern's length and the track's, each playhead a marker |
 | (Shift + knob 1) | any | the tempo | as a knob touched: TEMPO, its value at x3 with its tenths, SYNC or INT beside it, a ruler from 30 to 285 |
 | 2nd 4 | GRID | X Y CHA RES BD SD HH LAN | Grids' map; the three lanes' cycles, the track's in a tag |
