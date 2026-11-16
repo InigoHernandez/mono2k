@@ -585,6 +585,17 @@ details.gl-dealt[open] > :not(summary) { animation: gl-deal 240ms steps(1, end);
 .docs__side a { display: block; padding: 6px var(--s1); font: var(--small); color: var(--ink); text-decoration: none; border-bottom: 1px dotted var(--ink); }
 .docs__side a:hover { background-image: var(--d-check); background-size: 2px 2px; image-rendering: pixelated; }
 .docs__side a[aria-current="page"] { background: var(--ink); color: var(--paper); }
+/* the path (Make a track, Make a song) numbered in order; the page in view's sections under its name */
+.docs__side { counter-reset: path; }
+.docs__side ol.path > li > a::before { counter-increment: path; content: counter(path, decimal-leading-zero); display: inline-block; width: 2.2em; opacity: 0.55; font-variant-numeric: tabular-nums; }
+.docs__side .docs__sec a { padding: 4px var(--s1) 4px calc(var(--s1) + 2.2em); border-bottom: none; opacity: 0.75; }
+.docs__side .docs__sec a:hover { opacity: 1; }
+.docs__side .docs__sec li:last-child a { border-bottom: 1px dotted var(--ink); }
+/* a section an address names: a bar beside its title, stepping away */
+.doc h2[id] { scroll-margin-top: var(--s4); }
+.doc h2.seen { animation: seen 1200ms steps(4, end); }
+@keyframes seen { from { box-shadow: -12px 0 0 var(--ink); } to { box-shadow: -12px 0 0 transparent; } }
+@media (prefers-reduced-motion: reduce) { .doc h2.seen { animation: none; } }
 .doc { grid-column: 5 / span 7; padding: var(--s4) 0 var(--s12); min-width: 0; }
 .doc article { display: none; }
 .doc article.on { display: block; }
@@ -621,6 +632,7 @@ details.gl-dealt[open] > :not(summary) { animation: gl-deal 240ms steps(1, end);
 .cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--gut); margin-top: var(--s3); }
 .cards a { display: block; min-height: 120px; padding: var(--s2); border: 1px solid var(--ink); color: var(--ink); text-decoration: none; }
 .cards a b { display: block; margin-bottom: var(--s1); font: 700 16px / 20px var(--head); text-transform: uppercase; }
+.cards a b i { display: block; margin-bottom: 4px; font: var(--label); font-style: normal; letter-spacing: 0.1em; opacity: 0.55; }
 .cards a span { font: var(--small); opacity: 0.7; }
 .cards a:hover { background-image: var(--d-check); background-size: 2px 2px; image-rendering: pixelated; }
 .cards a:hover b, .cards a:hover span { background: var(--paper); }
