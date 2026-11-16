@@ -154,8 +154,8 @@ M = [
  ("ADSR a FREL off 32 unseen", P, "    if (k[P_SUS] || k[P_FSUS] || k[P_FREL] != FREL_DEF) return 1;", "    if (k[P_SUS] || k[P_FSUS]) return 1;"),
  ("ADSR a lock on them unseen", P, "        if (l->trk < M2K_TRACKS && (l->param >= P_COUNT_V21 || (is_dest(l->param) && dest_adsr(l->val)))) return 1;",
                                    "        if (l->trk < M2K_TRACKS && (is_dest(l->param) && dest_adsr(l->val))) return 1;"),
- ("ADSR the store's 'A' never written", P, "    if (snd_adsr()) {", "    if (0 * snd_adsr()) {"),
- ("ADSR the store's 'A' always written", P, "    if (snd_adsr()) {", "    if (1 + 0 * snd_adsr()) {"),
+ ("ADSR the store's 'A' never written", P, "    if (snd_adsr(snd)) {", "    if (0 * snd_adsr(snd)) {"),
+ ("ADSR the store's 'A' always written", P, "    if (snd_adsr(snd)) {", "    if (1 + 0 * snd_adsr(snd)) {"),
  ("ADSR 'A' read and dropped", P, "                        for (int k = 0; k < 3; k++) snd[i].kit[P_COUNT_V21 + k] = a[k] > 127 ? 127 : a[k];", "                        (void)a;"),
  ("ADSR an older store's sounds not at 0 0 32", P, "if (snd[i].name[0]) kit_v21(snd[i].kit);", "(void)0;"),
 ]
