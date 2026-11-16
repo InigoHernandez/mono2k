@@ -8,9 +8,11 @@
  *   frames/NAME/NNNN.pbm, .led the motions' frames, each with its 65 LEDs (hex)
  *   padmap_*.tsv               the 32 pads, 16 steps and 4 track buttons of a state: their labels and palette colours
  *   rows/NAME.pbm, manifest    every page's knob row (SYN on every machine, a step's locks, a knob touched), whole frames
+ *   marks/NN_mMM.pbm, manifest SYN on every machine (in the catalogue's order), its mark; frames/marks: a few playing
  *   timing.txt                 the cost a frame: the publish (the audio thread's) and the drawing (the drawer's)
  * and checks: every value a column writes and every touched name and value fits; every knob's picture, at every value,
- * stays in its 13 x 13 box (a name in its column less a pixel a side); the header's two ends never meet; every message
+ * stays in its 13 x 13 box (a name in its column less a pixel a side); SYN's mark on every machine, at every frame, hop
+ * and tooth, stays clear of the words, the header and the knob row; the header's two ends never meet; every message
  * PADS and Capture say fits its box; a frame drawn later from the same view, with the core in another state, is the
  * same frame (the drawing reads the view alone).
  * move/screen/sheets.py makes the PNGs, the overview, the knob rows, the pad map and the GIFs.
@@ -329,6 +331,57 @@ static void held_audit(void)
     if (ms_tw("UP/DN") > MS_W - MS_HC2 - 1 || ms_tw_z("X4", 2) > MS_W - MS_HC2 - 1) fail("the card: the ratchet's column is too narrow");
 }
 
+/* SYN's mark on every machine (the FM-1's, move/screen/m2k_icons_move.h): drawn alone at every frame, every hop's
+ * height and, for SWAV-SAW, every tooth's level, its ink stays between the header and the knob row (rows 8..46: a
+ * row clear of each) and inside the screen, and never within MK_GAP - 1 px of the stage's words (the class, the model:
+ * x3, or x2 where x3 would come near) */
+static void syn_audit(void)
+{
+    static uint8_t txt[MS_BYTES], all[MS_BYTES], one[MS_BYTES];
+    open_at(0);
+    track(6);
+    page_go(MS_SYN);
+    char w[160], x2[200] = "";
+    int ok = 1;
+    for (int m = 0; m < M_COUNT; m++) {
+        machine_to(6, m);
+        blocks(VW_EVERY);
+        ms_view_t v = now_view()->scr;
+        if (v.st.syn.mk != m) { snprintf(w, sizeof w, "SYN %s: its mark is %d", MI[m].name, v.st.syn.mk); fail(w); ok = 0; continue; }
+        if (ms_tw_z(v.st.syn.model, 3) > MK_LEFT - MK_GAP - 2) { strcat(x2, " "); strcat(x2, v.st.syn.model); }
+        ms_view_t tv = v;
+        tv.st.syn.mk = 0xFF;                           /* (the words alone) */
+        m2k_screen_draw(&tv, txt);
+        m_set(all, 0, MS_BYTES);
+        for (int lift = 0; lift <= 3; lift++)          /* (the hardest hop: 1 + 63 / 24) */
+            for (int f = 0; f < MK_FRAMES + (m == M_SAW ? 8 : 0); f++) {
+                v.st.syn.lift = (uint8_t)lift;
+                v.st.syn.saw = (uint8_t)(f >= MK_FRAMES);
+                v.st.syn.fr = (uint8_t)(f % MK_FRAMES);
+                for (int k = 0; k < 3; k++) v.st.syn.lv[k] = (uint8_t)(f - MK_FRAMES);
+                ms_fb = one;
+                m_set(one, 0, MS_BYTES);
+                ms_mark(&v);
+                for (int i = 0; i < MS_BYTES; i++) all[i] |= one[i];
+            }
+        int bad_rows = 0, near = 0;
+        for (int y = 0; y < MS_H; y++)
+            for (int x = 0; x < MS_W; x++) {
+                if (!((all[y * MS_RB + (x >> 3)] >> (7 - (x & 7))) & 1)) continue;
+                if (y < 8 || y > 46 || x > MS_W - 2) bad_rows = 1;
+                for (int dy = -(MK_GAP - 1); dy <= MK_GAP - 1; dy++)
+                    for (int dx = -(MK_GAP - 1); dx <= MK_GAP - 1; dx++) {
+                        const int yy = y + dy, xx = x + dx;
+                        if (yy >= 8 && yy <= 46 && xx >= 0 && xx < MS_W && ((txt[yy * MS_RB + (xx >> 3)] >> (7 - (xx & 7))) & 1)) near = 1;
+                    }
+            }
+        if (bad_rows) { snprintf(w, sizeof w, "SYN %s: its mark leaves rows 8..46", MI[m].name); fail(w); ok = 0; }
+        if (near) { snprintf(w, sizeof w, "SYN %s: its mark comes within %d px of the words", MI[m].name, MK_GAP - 1); fail(w); ok = 0; }
+    }
+    if (ok) printf("audit: SYN's mark on all %d machines, every frame, hop and tooth: clear of the words, the header and the "
+                   "knob row; the model at x2:%s\n", M_COUNT, x2[0] ? x2 : " none");
+}
+
 /* the drawing reads the view alone: each still drawn again now, the core long since elsewhere, is the same frame */
 static void purity_audit(void)
 {
@@ -370,7 +423,7 @@ static void timing(FILE *f)
     play(1);
     run_ms(1500);
     static const uint8_t PG[] = {MS_HOME, MS_SYN, MS_AMP, MS_FILT, MS_EFX, MS_DSTR, MS_LFO1, MS_TRK, MS_PAT, MS_GRID,
-                                 MS_MIX, MS_GLO, MS_PERF, MS_CAT, MS_PATS};
+                                 MS_MIX, MS_GLO, MS_PERF, MS_CAT, MS_PATS, MS_SYN};
     const int N = 2000;
     double pw = 0, dw = 0;
     uint64_t pi = 0, di = 0;
@@ -395,10 +448,11 @@ static void timing(FILE *f)
         if (du > dw) dw = du;
         if (pn > pi) pi = pn;
         if (dn > di) di = dn;
-        fprintf(f, "%-9s  %10.2f  %12llu  %8.2f  %12llu\n", MS_PAGE_N[PG[i]], pu, (unsigned long long)pn, du, (unsigned long long)dn);
+        fprintf(f, "%-9s  %10.2f  %12llu  %8.2f  %12llu\n", i == sizeof PG - 1 && PG[i] == MS_SYN ? "SYN SAW" : MS_PAGE_N[PG[i]],
+                pu, (unsigned long long)pn, du, (unsigned long long)dn);
         if (PG[i] == MS_CAT) page_go(MS_CAT);
         if (PG[i] == MS_PERF) page_go(MS_PERF);
-        if (PG[i] == MS_PATS) { tap(50); }
+        if (PG[i] == MS_PATS) { tap(50); machine_to(0, M_SAW); }   /* (then SYN on SWAV-SAW: its teeth, the dearest mark) */
     }
     fprintf(f, "most: publish %.2f us (%llu instructions), draw %.2f us (%llu instructions)\n", pw, (unsigned long long)pi,
             dw, (unsigned long long)di);
@@ -556,6 +610,55 @@ static void knob_rows(void)
         row_shot(nm, lb);
     }
     fclose(rman);
+}
+
+/* --------------------------------------------------------------------------------------------- SYN's marks */
+
+/* every machine's SYN page, its mark stopped (marks/NN_mMM.pbm, marks/manifest.tsv), and a few machines playing, at the
+ * screen's pace (frames/marks: sheets.py's marks.gif): each on the track of A02 with the most trigs, so it hops */
+static void marks(void)
+{
+    char p[700], nm[32];
+    snprintf(p, sizeof p, "%s/marks", out);
+    mkdir(p, 0755);
+    snprintf(p, sizeof p, "%s/marks/manifest.tsv", out);
+    FILE *mf = fopen(p, "w");
+    if (!mf) { perror(p); exit(1); }
+    open_at(0);
+    track(6);
+    page_go(MS_SYN);
+    for (int i = 0; i < M_COUNT; i++) {
+        const int m = M_ORDER[i];
+        machine_to(6, m);
+        run_ms(100 + 170 * i);                       /* (each caught at another point of its sway) */
+        now_view();
+        snprintf(nm, sizeof nm, "%02d_m%02d", i, m);
+        snprintf(p, sizeof p, "%s/marks/%s.pbm", out, nm);
+        pbm(p, sfb);
+        fprintf(mf, "%s\tSYN  %s\n", nm, MI[m].name);
+    }
+    fclose(mf);
+    static const uint8_t PLAYS[] = {M_GSIN, M_SAW, M_FMS, M_VOX, M_DKIK, M_GPRC};
+    int n = 0;
+    for (unsigned i = 0; i < sizeof PLAYS; i++) {
+        open_at(1);
+        int best = 0, bt = 0;
+        for (int t = 0; t < M2K_TRACKS; t++) {
+            int c = 0;
+            for (int s = 0; s < 16; s++) c += (PAT(cur_pat)->step[t][s].flags & ST_TRIG) != 0;
+            if (c > best) { best = c; bt = t; }
+        }
+        machine_to(bt, PLAYS[i]);
+        if (PLAYS[i] == M_SAW) {                       /* (staged: short notes, so the teeth fall between them) */
+            uint8_t *k = PAT(cur_pat)->kit[bt];
+            k[P_HOLD] = 0; k[P_DEC] = 44;
+            m_cpy(trk[bt].eff, k, P_COUNT);
+        }
+        track(bt);
+        page_go(MS_SYN);
+        play(1);
+        for (int f = 0; f < 60; f++) { blocks(12); frame_of("marks", n++); }
+    }
 }
 
 /* ------------------------------------------------------------------------------------------------- the scenes */
@@ -828,6 +931,7 @@ int main(int argc, char **argv)
 
     specimens();
     knob_rows();
+    marks();
 
     /* the motions, at the screen's pace (two panel frames, 34.8 ms: 12 blocks a sfb) */
     /* a knob touched: A02 T1's DEC on AMP (its knob 2: ATCK DEC SUS REL), touched, turned down and back, let go (shown a
@@ -862,8 +966,9 @@ int main(int argc, char **argv)
     header_audit();
     toast_audit();
     held_audit();
+    syn_audit();
     purity_audit();
-    printf("audit: %s\n", bad ? "FAILED" : "every value, name, header and message fits, every picture in its box; the drawing reads the view alone");
+    printf("audit: %s\n", bad ? "FAILED" : "every value, name, header and message fits, every picture in its box, every mark clear; the drawing reads the view alone");
     snprintf(p, sizeof p, "%s/timing.txt", out);
     FILE *f = fopen(p, "w");
     timing(stdout);

@@ -23,7 +23,7 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
 ## Build, test
 
 - Generators: `.venv/bin/python tools/gen_tables.py`, `tools/gen_font.py [--sheet build/fonts.png]`,
-  `tools/gen_icons.py [--sheet build/icons.png]`.
+  `tools/gen_icons.py [--sheet build/icons.png]` (`--move`: the Move's 36 px marks, `move/screen/m2k_icons_move.h`, SYN's).
 - Host: `cc -O2 -Wall -Wno-unused-function -Ifirmware/src -Ifirmware/gen -o build/host/m2k_host host/m2k_host.c -lm && build/host/m2k_host build/host`,
   then `.venv/bin/python tools/montage.py build/host build/screens.png 2` to see every page.
   `build/host/m2k_host --selftest` checks the projects (save, reload, store, export / import, full images);

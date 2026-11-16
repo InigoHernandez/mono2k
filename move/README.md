@@ -176,6 +176,8 @@ A module cannot set Move's tempo through any API (the plugin and JS APIs only re
   | The render of a block, for scale | 161 µs mean (25 µs in a hot loop) | |
 
   The paced numbers are cold caches in the VM: the render itself costs 6× its hot-loop time there, and the maxima are the VM's preemptions (a block's own most was 8.8 ms). Either way a publish is a few percent of one block's render, once in 6 blocks. On the Move's A72, measure with `bench time` on the device (step 4).
+
+  SYN's mark (2026-11-16): on the Mac a publish on SYN 10.8 k → 11.5 k instructions (its sway, hop and teeth worked out in the gather), its draw 36.3 k → 39.5 k (SWAV-SAW's teeth, playing: 35.3 k with its own knobs); no other page changed. In the container, main and this build in turn, twice each: a publish 12.1, 11.2 → 13.0, 11.0 µs mean, a draw 17.0, 15.0 → 18.5, 15.2 µs mean, within the runs' own spread.
 - **The LEDs:**
   - **Steps:** trig azure, p-locked trig dimmer azure, playhead and held white, beats faint. With Shift held, the bank's patterns; with Mute held, the tracks.
   - **Pads:** the page pads in their families' colours (the page in view bright); the keyboard's white keys grey, black keys darker, the root orange, notes playing white; PERFORM's keys magenta (bank A) and pink (bank B), the effects playing white. PADS: the tracks dim azure, white while sounding (by hand or by the sequencer); their mutes azure heard, dark red muted, a mute waiting for the bar blinking (dark, every 128 ms, as the FM-1's GLO > PLAY).

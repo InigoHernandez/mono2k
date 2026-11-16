@@ -7,6 +7,12 @@ window.M2K_KINDS = window.M2K_KINDS || {
 };
 window.M2K_CHANGES = [
   {
+    date: "2026-11-16", title: "The machines' marks on the Move's screen",
+    items: [
+      ["screen", "SYN shows the machine's mark, the FM-1's 3D picture of it, beside its name: it sways in time with the music and hops on the track's hits, higher for a louder one. SWAV-SAW's three teeth rise and fall with its level while it plays."],
+    ],
+  },
+  {
     date: "2026-11-16", title: "MONO2K for the Move 0.5: regular ADSR envelopes",
     items: [
       ["sound", "The amp is a regular ADSR: AMP's knobs 1-4 are ATCK DEC SUS REL. SUS holds a level while the note lasts and REL takes it down after; at 0 the envelope is as it was, so your patterns play exactly as before."],

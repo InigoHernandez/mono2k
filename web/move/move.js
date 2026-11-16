@@ -27,7 +27,7 @@
   // ------------------------------------------------------------------------------------------- the pads
   /* the two page rows (move/README.md, the controls): name, family, the screen it leads to, what it shows */
   const PAGES = [
-    ["SYN", "snd", "04_syn_0", "The machine: its kind and name; A–H on the knobs."],
+    ["SYN", "snd", "04_syn_0", "The machine: its kind, name and mark; A–H on the knobs."],
     ["AMP", "snd", "05_amp", "The envelope, drawn live."],
     ["FILT", "snd", "06_filt", "The filter's response, live; the envelope's reach dotted."],
     ["EFX", "snd", "07_efx", "The EQ's band and the echoes."],
