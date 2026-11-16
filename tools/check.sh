@@ -85,8 +85,8 @@ mkdir -p "$B/screens" "$B/pitch" "$B/ref" "$B/link" "$B/upd"
 } > "$B/san.log" 2>&1
 h1=$("$B/m2k_host_san" --bank-hash 2>/dev/null); h2=$(grep "bank hash" "$B/san.log" | head -1)
 [ -n "$h1" ] && [ "$h1" = "$h2" ] || echo "LINK FAILED: bank A through the cache ($h2) is not the browser's ($h1)" >> "$B/san.log"
-rep=$(grep -E "runtime error|ERROR: AddressSanitizer|SELFTEST FAILED|LINK FAILED|FLASH TEST FAILED|^FAIL|^TEXT " "$B/san.log" | sort | uniq -c)
-if [ -n "$rep" ]; then echo "$rep"; FAIL=1; else echo "  self-test, the FM-1 link, the flash on both chips, screens and their text, bank A, $(ls tools/ref/*.spec | wc -l | tr -d ' ') specs, the power loop: clean"; fi
+rep=$(grep -E "runtime error|ERROR: AddressSanitizer|SELFTEST FAILED|LINK FAILED|FLASH TEST FAILED|UPDATE SCREEN FAILED|^FAIL|^TEXT " "$B/san.log" | sort | uniq -c)
+if [ -n "$rep" ]; then echo "$rep"; FAIL=1; else echo "  self-test, the FM-1 link, the flash on both chips, the update screen, screens and their text, bank A, $(ls tools/ref/*.spec | wc -l | tr -d ' ') specs, the power loop: clean"; fi
 
 echo "== eight tracks (M2K_TRACKS=8, the Move's build)"
 # its self-test (format 21 both ways: the build of six reads its bytes, FMT21; both pack a pattern of six alike), every
