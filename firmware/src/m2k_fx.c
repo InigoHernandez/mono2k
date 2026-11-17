@@ -119,6 +119,17 @@ static void delay_run(int ti, const dl_par_t *p, int sent, uint32_t sps, int dub
         t->dhr[0] = t->dhr[1] = t->dlr[0] = t->dlr[1] = 0;
         t->dquiet = DL_LEN;
     }
+    if (t->dcut == 1 && !dio) {        /* the CPU guard's cut faded out (m2k_guard): the line wiped, asleep */
+        m_set(t->dl, 0x7F, DL_LEN);
+        t->dacc[0] = t->dacc[1] = t->dn = 0;
+        t->dhp[0] = t->dhp[1] = t->dlp[0] = t->dlp[1] = t->dprev[0] = t->dprev[1] = 0;
+        t->dhr[0] = t->dhr[1] = t->dlr[0] = t->dlr[1] = 0;
+        t->dquiet = DL_LEN;
+        t->dcut = 0;
+        t->dsleep = 1;
+        mon.dly[ti] = 0;
+        return;
+    }
     uint32_t n = dual ? DL_LEN / 2 : DL_LEN, mask = n - 1;
     /* nothing sent, every entry of the line written silent since, the filters settled: nothing to hear, nothing to
      * work out (most tracks, most of the time; the FM-1's time) */
@@ -136,6 +147,7 @@ static void delay_run(int ti, const dl_par_t *p, int sent, uint32_t sps, int dub
             mon.dly[ti] = 0;
             if (dio && !dub_on()) dub_end();
             t->dsleep = 1;
+            t->dcut = 0;
             return;
         }
     }
@@ -157,7 +169,14 @@ static void delay_run(int ti, const dl_par_t *p, int sent, uint32_t sps, int dub
     int dbas = dio ? DUB_BAS : p->dbas;
     int32_t ahp = T_DLY_HP[dbas], alp = T_DLY_LP[CLAMP(dbas + (dio ? DUB_WID : p->dwid), 0, 127)];
     int pan = dio ? DUB_PAN : p->pan;
-    int32_t gl = T_PAN[pan], gr = T_PAN[127 - pan], lev = T_VOL[dio ? DUB_LEV : p->levl];
+    int32_t gl = T_PAN[pan], gr = T_PAN[127 - pan], lev = T_VOL[dio ? DUB_LEV : p->levl], dlev = 0;
+    if (t->dcut > 1 && !dio) {         /* the guard's cut (a tail): the echoes straight down over PARK_N blocks, a line
+                                        * across each (2^15 by 8 at most) */
+        const int32_t l0 = lev * (t->dcut - 1) / PARK_N, l1 = lev * (t->dcut - 2) / PARK_N;
+        lev = l0;
+        dlev = (l1 - l0) / (M2K_SUB / 2);
+        t->dcut--;
+    }
     uint8_t *b = t->dl;
     int32_t pk = 0;
     for (int i = 0; i < M2K_SUB; i += 2) {
@@ -205,6 +224,7 @@ static void delay_run(int ti, const dl_par_t *p, int sent, uint32_t sps, int dub
         }
         l = (l * lev) >> 15;
         r = (r * lev) >> 15;
+        lev += dlev;
         L[i] += (t->dprev[0] + l) >> 1;
         R[i] += (t->dprev[1] + r) >> 1;
         L[i + 1] += l;
@@ -268,6 +288,7 @@ static struct {
     /* glitch: the ring (half rate) and the one event it plays, a PERFORM key's */
     uint32_t gw;                       /* the ring's write place */
     uint32_t g_start, g_len;           /* the slice (or, stopping, the read's start) and its length */
+    uint32_t g_lenq;                   /* a repeat's lap, Q12: the sixteenth's own, to a 4096th of a sample */
     uint32_t g_pos, g_rate;            /* the read: Q12 into the slice; its step Q24 (1 << 24 at pitch) */
     uint32_t g_dec;                    /* a stop's slowing */
     int32_t g_env, g_wet;              /* its level, Q10, fading in and out; the wet's, Q15 (it takes the dry's place) */
@@ -366,6 +387,7 @@ static void gl_start(uint32_t start, uint32_t len, uint32_t pos, int mode, int32
 {
     bus.g_start = start;
     bus.g_len = len;
+    bus.g_lenq = len << 12;
     bus.g_pos = pos << 12;
     bus.g_rate = G_UNITY;
     bus.g_held = 1;
@@ -450,16 +472,19 @@ static void gl_perform(int k)
     }
     static const uint8_t EIGHTHS[7] = {32, 16, 8, 4, 32, 0, 4};   /* the slice in eighths of a sixteenth */
     static const uint8_t GRID[7] = {2, 1, 0, 0, 2, 0, 0};         /* locked to the last beat, eighth, sixteenth */
-    uint32_t len = (six * EIGHTHS[k]) >> 3;
+    /* its lap to a 4096th of a sample, as the sequencer's sixteenth is (bsps, Q8): a lap of whole samples drifted off
+     * the beat, up to 5 ms a minute at 120 BPM, heard once a repeat could be latched for minutes (1.11) */
+    uint32_t lq = bsps * EIGHTHS[k], len = lq >> 12;      /* (bsps * 32 under 2^28 down to 30 BPM: a word) */
     int res = GRID[k];
-    while (len > GL_MAX) { len >>= 1; if (res) res--; }   /* (slower than 85 BPM a quarter is too long: an eighth) */
-    if (len < 32) len = 32;
+    while (len > GL_MAX) { lq >>= 1; len = lq >> 12; if (res) res--; }   /* (slower than 85 BPM a quarter is too long: an eighth) */
+    if (len < 32) { len = 32; lq = 32u << 12; }
     uint32_t space = six << res, e = bus.gw - bus.g_grid[res];
     if (!brun || e >= space + (six >> 1)) e = 0, bus.g_grid[res] = bus.gw;   /* no grid: from now */
     /* a repeat's slice begins on the grid (its first time round the live sound coming in, so it starts on the
      * attack); the reverse plays the beat that ended there */
     uint32_t at = bus.g_grid[res] - (k == PF_REV ? len : 0);
     gl_start(at, len, e % len, mk >= 0 ? mk : k == PF_REV ? GM_REV : k == PF_STUT ? GM_GATE : GM_RPT, 32768);
+    bus.g_lenq = lq;
     bus.g_sc[0] = bus.g_sc[1] = (uint8_t)((e % len) / (len >> 2));   /* (a scatter starts where it is, a beat back) */
     bus.g_rl = 0;
     bus.g_pk = (uint8_t)((mk == GM_SCAT ? PF_SCAT : mk == GM_PROLL ? PF_ROLL : k) + 1);
@@ -712,10 +737,15 @@ static void gl_tick(void)
     bus.gout_l = l;
     bus.gout_r = r;
     bus.g_pos += bus.g_rate >> 12;
-    if (mode != GM_STOP && (bus.g_pos >> 12) >= len) {
-        bus.g_pos -= len << 12;
+    if (mode != GM_STOP && bus.g_pos >= bus.g_lenq) {     /* (a lap a sample longer now and then: its read reaches
+                                                           * len, the seam's crossfade then wholly its start's) */
+        bus.g_pos -= bus.g_lenq;
         /* ROLL: halved once its laps make a beat (a quarter, two eighths, four sixteenths), to a 1/32 */
-        if (mode == GM_PROLL && ++bus.g_rl >= (bsps >> 9) * 4 / len && len > (bsps >> 10)) { bus.g_len = len >> 1; bus.g_rl = 0; }
+        if (mode == GM_PROLL && ++bus.g_rl >= (bsps >> 9) * 4 / len && len > (bsps >> 10)) {
+            bus.g_lenq >>= 1;
+            bus.g_len = bus.g_lenq >> 12;
+            bus.g_rl = 0;
+        }
     }
 }
 
@@ -1359,7 +1389,7 @@ static int par_force = -1;             /* (the self-test: a set of its own, its 
 static uint8_t par_tie_last = 0xFF, par_age;
 static uint8_t par_split(void)
 {
-    const uint8_t *mc = PAT(cur_pat)->machine;
+    const uint8_t *mc = rmach;         /* (as they render: a POLY voice its lead's machine) */
     uint8_t tie = 0;                   /* track t's bit: it goes where track t - 1 goes */
     for (int t = 1; t < M2K_TRACKS; t++)
         if (mc[t] == M_FXC || mc[t] == M_FXR || mc[t] == M_FXD || (t + 1 < M2K_TRACKS && mc[t + 1] == M_FXR)) tie |= (uint8_t)(1u << t);

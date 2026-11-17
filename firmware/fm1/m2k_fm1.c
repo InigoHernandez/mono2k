@@ -51,41 +51,30 @@ static void app_audio(int32_t *out, uint32_t n)
 /* at most half the ring a pass: were the core slower than the sound, the loop still reaches the panel and the
  * watchdog (the sound would stutter, the FM-1 would not reset) */
 static uint32_t load_ticks, load_frames;        /* render time against the frames rendered, the meter's */
-static uint32_t busy_ticks, busy_t0;            /* and the same over each quarter second, for the screen's pace */
-static uint32_t frame_gap = 33u;                /* ms between frames: 33 (30 a second) to 100, as the first core has room */
 
-/* the CPU guard (1.7): rather than the sound running short, the core rests its quietest track for what it costs
- * (m2k_guard, a call a render) when a third of the ring is left and the render alone takes over 95 % of a block's real
- * time (it cannot catch up), or when the interrupt found the ring short again and the render takes over 70 % (what is
- * left of the loop could not); the core brings it back when there is room */
+/* the CPU guard (1.7; 1.11 calmer, the core's m2k_guard): before each render the core hears the render's load, the
+ * blocks ahead and the shorts, and lightens the sound a step at a time when the render is what runs it short (a tail,
+ * then a track, as GLO > PLAY's REST says), or has the screen give way when a short could be the screen's or a flash
+ * write's (its frames further apart: pace_frame_due). The pacing is m2k_pace.h's, which the host's guard bench runs */
 #define BLK_TICKS (BLK * 10000u / 441u * FM1_TICKS_PER_US)   /* a render's real time: 2.9 ms */
-static uint32_t ravg, shed_shorts;              /* the render's time, followed over ~8 renders */
+#define PACE_TICKS_MS (1000u * FM1_TICKS_PER_US)
+#include "m2k_pace.h"
 
 static void render_ahead(void)
 {
     uint32_t k;
     for (k = 0; k < RING / 2u && ring_w - ring_r < RING; k++) {
-        uint32_t pct = ravg / (BLK_TICKS / 100u);
-        m2k_guard((int)pct, (ring_w - ring_r <= RING / 3u && pct > 95u) || (ring_short != shed_shorts && pct > 70u));
-        shed_shorts = ring_short;
+        pace_guard(ring_w - ring_r, ring_short);
         uint32_t t0 = fm1_ticks(), dt;
         m2k_render(ring[ring_w % RING], (int)BLK);
         dt = fm1_ticks() - t0;
-        ravg = ravg - (ravg >> 3) + (dt >> 3);
+        pace_rendered(dt);
         load_ticks += dt;
-        busy_ticks += dt;
         load_frames += BLK;
         RING_PUBLISH();
         ring_w++;
     }
-    uint32_t span = fm1_ticks() - busy_t0;
-    if (span >= 250u * 1000u * FM1_TICKS_PER_US) {       /* the first core's share (the sound, the frames, the strips): */
-        uint32_t pct = busy_ticks / (span / 100u);         /* over 85 % the frames come further apart, under 70 % closer */
-        if (pct > 85u) frame_gap = frame_gap + 8u > 100u ? 100u : frame_gap + 8u;
-        else if (pct < 70u) frame_gap = frame_gap < 37u ? 33u : frame_gap - 4u;
-        busy_ticks = 0;
-        busy_t0 += span;
-    }
+    pace_busy(fm1_ticks());
 }
 
 /* ---- the second core: the core hands it some tracks of each block (m2k_par_begin), CS-1's audio worker runs them */
@@ -452,11 +441,9 @@ static void app_loop(void)
     midi_drain();
     render_ahead();
     midi_drain();
-    /* a frame once the last has gone out, 30 a second at most; the sound first: while
-     * the ring is under half full the frame waits for the render to catch up (a frame is drawn whole, the sound not
-     * rendered meanwhile), and while the render is busy (frame_gap) they come further apart; never more than 150 ms */
+    /* a frame once the last has gone out, 30 a second at most, the sound first (pace_frame_due) */
     uint32_t since = fm1_ms - frame_ms;
-    if (!pending && since >= frame_gap && (ring_w - ring_r >= RING / 2u || since >= 150u)) {
+    if (!pending && pace_frame_due(since, ring_w - ring_r)) {
         lights();
         screen_frame();
     }

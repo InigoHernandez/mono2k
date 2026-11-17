@@ -292,8 +292,9 @@ static int isqrt(int x)
     return r;
 }
 
-/* a ratio (Q8) to FM+STAT's step, as its knob value, and the 1FIN that makes up the rest */
-static int fms_ratio(int q8, int *fin)
+/* a ratio (Q8) to FM+STAT's step, as its knob value, and the 1FIN that makes up the rest. Out of line: inlined into
+ * pat_unpack its square (r * r) was spilled and loaded back beside a 64-bit multiply (build.py's mul64_check, 1.11) */
+static __attribute__((noinline)) int fms_ratio(int q8, int *fin)
 {
     int best = 0;
     uint64_t r = (uint64_t)q8 << 8;

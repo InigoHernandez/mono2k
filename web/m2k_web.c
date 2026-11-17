@@ -78,19 +78,24 @@ EXPORT void w_set_machine(int t, int m)
 }
 /* in the page's own copy of the core: the machines the edited pattern has, so the labels and the formats follow them */
 EXPORT void w_mirror_machine(int t, int m) { if (m >= 0 && m < M_COUNT) pat[cur_pat].machine[t % M2K_TRACKS] = (uint8_t)m; }
+/* MODE (P_AMOD) as a sound keeps it, the arp's six (POLY is the pattern's, not a sound's): the screen's seven
+ * (amod_value's) from it, for its name */
+static int w_amod7(int v) { const int m = (v * 6) >> 7; return enc(m ? m + 1 : 0, 7); }
+
 EXPORT const char *w_fmt(int t, int code, int v)
 {
     static char o[32];
     const char *u = "";
+    if (code == P_AMOD) v = w_amod7(v);
     fmt(pinfo(t % M2K_TRACKS, code), t % M2K_TRACKS, v, o, &u);
     if (*u) { char *e = o; while (*e) e++; *e++ = ' '; s_cpy(e, u); }
     return o;
 }
 EXPORT int w_kmin(int t, int code) { return kind_min(pinfo(t % M2K_TRACKS, code)->kind); }
 EXPORT int w_kmax(int t, int code) { return kind_max(pinfo(t % M2K_TRACKS, code)->kind); }
-EXPORT int w_kchoices(int t, int code) { return kind_choices(pinfo(t % M2K_TRACKS, code)->kind); }
+EXPORT int w_kchoices(int t, int code) { return code == P_AMOD ? 6 : kind_choices(pinfo(t % M2K_TRACKS, code)->kind); }   /* (MODE: the arp's) */
 EXPORT int w_enc(int i, int n) { return enc(i, n); }
-EXPORT int w_choice(int t, int code, int v) { return choice_of(pinfo(t % M2K_TRACKS, code)->kind, v); }
+EXPORT int w_choice(int t, int code, int v) { return code == P_AMOD ? (v * 6) >> 7 : choice_of(pinfo(t % M2K_TRACKS, code)->kind, v); }
 EXPORT int w_cc_of(int code)
 {
     for (int cc = 0; cc < 128; cc++) if (mm_cc_param(cc) == code) return cc;

@@ -89,6 +89,7 @@ typedef struct {
 /* ---------------------------------------------------------------------------------------- the view, plain */
 
 #define MS_NROW 5                         /* a list's rows */
+#define MS_POLY 0xFE                      /* TRK's stage on POLY (its mode byte: the arp's are 0..5) */
 typedef struct {
     uint8_t pic;                          /* the picture (m2k_screen.c MP_*), 0xFF a free knob (nothing drawn) */
     uint8_t sub;                          /* its variant: a segment's shape, a filter knob's part, a square wave... */
@@ -122,13 +123,17 @@ typedef struct {
 #define MS_ROW_NEXT  4u                   /* the pattern queued */
 
 typedef union {
-    struct { uint16_t trig[8], hollow[8]; uint8_t len[8]; int8_t pos[8]; } home;
-    struct { char cls[12], style[12], model[10]; } syn;
+    struct { uint16_t trig[8], hollow[8]; uint8_t len[8], lead[8]; int8_t pos[8]; } home;
+    struct { char cls[12], style[12], model[10];
+             uint8_t mk, fr, lift, saw, lv[3]; } syn;   /* its mark (0xFF none), the frame, the hop's lift in px;
+                                                         * SWAV-SAW playing: its teeth's levels instead */
     struct { uint8_t a, h, d, s, r, st; int32_t lv; } amp;
     struct { int16_t hp, lp, hp1, lp1; uint8_t hq, lq, fa, fd, fs, fr, fst; uint16_t fe; } filt;
     struct { uint8_t f, g, dt, snd, fb, wid; } efx;
     struct { uint8_t bits, fold, xr, type, dep, mix; uint32_t inc; } dstr;
     struct { uint8_t mode, n, rng, hold; int16_t on; } arp;
+    struct { uint8_t mode, nv, hold, t0; uint8_t key[8], lv[8]; char note[8][4]; } poly;   /* (TRK on POLY: mode MS_POLY,
+                                                                                             * past the arp's 0..5) */
     struct { char dest[8], cyc[16]; uint8_t wave, on; int16_t dp; uint16_t ph; int32_t val; } lfo;
     struct { uint16_t bpm10; uint8_t sync, len, tlen; int8_t beat, ppos, tpos; } tm;
     struct { uint8_t x8, y8, lane, cyc; int8_t kn; uint8_t lv[3][32]; uint32_t hit[3]; } grid;

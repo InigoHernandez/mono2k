@@ -434,6 +434,7 @@ static int view_string(char *o)
     e = ap(e, " hjog="); e = s_int(e, v.scr.held.jog);
     e = ap(e, " focus="); e = s_int(e, v.focus);
     e = ap(e, " perf="); e = s_int(e, (int)v.perf_on);
+    e = ap(e, " plat="); e = s_int(e, (int)ui.pf_lat);    /* (the effects latched: a key double-tapped) */
     e = ap(e, " pkeys="); e = s_int(e, v.perf); *e++ = ','; e = s_int(e, v.perf_pg);
     e = ap(e, " kpads="); e = s_int(e, v.kpads);
     e = ap(e, " capn="); e = s_int(e, v.capn);
@@ -494,6 +495,15 @@ static int dump_string(char *o)
     e = ap(e, " glob=");
     for (int g = 0; g < G_COUNT; g++) { if (g) *e++ = ','; e = s_int(e, p->glob[g]); }
     e = ap(e, " mute="); e = s_int(e, p->mute);
+    e = ap(e, " lead=");                                   /* (POLY: whose sound each track plays) */
+    for (int k = 0; k < M2K_TRACKS; k++) { if (k) *e++ = ','; e = s_int(e, pv.lead[k]); }
+    e = ap(e, " vs=");                                     /* (and the voices' first 16 steps, a trig's note, 0 none; '/' the next) */
+    for (int v = t + 1; v < t + pv.nv[t]; v++) {
+        if (v > t + 1) *e++ = '/';
+        for (int s = 0; s < 16; s++) { if (s) *e++ = ','; const m2k_step_t *st = &p->step[v][s]; e = s_int(e, (st->flags & ST_TRIG) ? st->note : 0); }
+    }
+    if (pv.nv[t] < 2) *e++ = '-';
+    *e = 0;
     return (int)(e - o);
 }
 

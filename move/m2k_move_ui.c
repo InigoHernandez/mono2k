@@ -56,6 +56,7 @@ static struct {
     uint8_t sdown[16], sstep[16];      /* each step key: held, and the step it holds */
     uint32_t st0[16];
     uint8_t pkind[32], parg[32], ptrk[32];   /* each pad: 1 a note (arg), 2 a PERFORM effect (arg); on which track */
+    uint32_t pt0[16];                  /* each keyboard pad's press (ui.now): a quick one is a tap (an effect's double) */
 } mc;
 
 /* Capture's ring: every note played on the keyboard, the latest MV_CAP_N. A run is a stretch of one state (playing or
@@ -106,7 +107,7 @@ static void cat_left(void)
 }
 
 /* a page pad (16 + j): its page; SOUNDS opens the catalogue (again: the track's own sound back, the page before);
- * PERFORM puts its effects on the keyboard (again: the keyboard back) */
+ * PERFORM puts its effects on the keyboard (again: the keyboard back, the effects latched let go: pf_unlatch) */
 static void page_pad(int j)
 {
     const int pg = MS_PAD_PAGE[j & 15];
@@ -122,7 +123,7 @@ static void page_pad(int j)
     }
     if (cat.open) cat_back();          /* (leaving SOUNDS for a page: the track's own sound, as the FM-1's) */
     if (pg == MS_PERF) {
-        if (mc.perf) { mc.perf = 0; if (!page_plain(mc.page)) mc.page = mc.prev; return; }
+        if (mc.perf) { mc.perf = 0; pf_unlatch(); if (!page_plain(mc.page)) mc.page = mc.prev; return; }
         if (page_plain(mc.page)) mc.prev = mc.page;
         mc.perf = 1;
         mc.perf_pg = 0;
@@ -145,6 +146,7 @@ static int mv_value(int code, int t)
 {
     const m2k_pattern_t *p = PAT(cur_pat);
     if (code == NONE) return 0;
+    if (code == P_AMOD) return amod_value(t);          /* (MODE: OFF POLY UP..., POLY the pattern's) */
     if (code >= 0xC0) return store_.set[code & 0x3F];
     if (code >= 0x80) return p->glob[code & 0x7F];
     if (ui.nheld && t == ui.trk) {
@@ -245,6 +247,11 @@ static void mv_knob(int k, int d)
             trk[ui.trk].eff[code] = p->kit[ui.trk][code];
             ui.held_edit = 1;
             toast(pi->s4, "LOCK REMOVED");
+        } else if (code == P_AMOD || pi->kind == K_PVOI) {   /* MODE: OFF; VOIC: three, as many as there are */
+            undo_mark(N_PAT, 21);
+            if (code == P_AMOD) amod_set(t, 0, 0);
+            else { p->glob[code & 0x7F] = (uint8_t)(poly_room(t) < 3 ? poly_room(t) : 3); poly_sync(); }
+            toast(pi->s4, "BACK TO ITS START");
         } else {
             undo_mark(N_PAT, 21);
             if (code >= 0x80) { pat_init(&pat_tmp, "X"); p->glob[code & 0x7F] = pat_tmp.glob[code & 0x7F]; }
@@ -261,8 +268,10 @@ static void mv_knob(int k, int d)
     if (n) {                           /* a list: d options (ui.js turns a short one's slower: MV_KK_CHOICE) */
         int c = CLAMP(choice_of(pi->kind, v) + d, 0, n - 1);
         nv = pi->kind == K_TRK ? trck_enc(c) : enc(c, n);
-    } else nv = CLAMP(v + d, kind_min(pi->kind), kind_max(pi->kind));
-    if (code >= 0xC0) m2k_setting(code & 0x3F, nv);   /* (kept with the store: saved once it stands) */
+    } else nv = CLAMP(v + d, kind_min(pi->kind), pi->kind == K_PVOI ? poly_room(t) : kind_max(pi->kind));
+    if (code == P_AMOD) amod_set(t, choice_of(K_AMOD, nv), d);   /* MODE: POLY or the arp's (never a lock) */
+    else if (pi->kind == K_PVOI) { p->glob[code & 0x7F] = (uint8_t)nv; poly_sync(); }   /* VOIC: as many as there are */
+    else if (code >= 0xC0) m2k_setting(code & 0x3F, nv);   /* (kept with the store: saved once it stands) */
     else if (code >= 0x80) p->glob[code & 0x7F] = (uint8_t)nv;
     else if (ui.nheld && t == ui.trk) {   /* steps held: their locks */
         for (int i = 0; i < ui.nheld; i++) lock_set(ui.trk, ui.held[i], code, nv);
@@ -637,6 +646,7 @@ static void capture(void)
     int bars = 0;
     for (int t = 0; t < M2K_TRACKS; t++) {
         int len, shift = 0, lo, end, low = -1;
+        uint32_t chord[2] = {0, 0};    /* (a POLY lead's steps written: a step's next note joins its chord) */
         if (playing) {                 /* back from the bar the last note fell in, the track's length at most */
             len = cap.elen[t] ? cap.elen[t] : 1;
             end = cap_bar(cap.end[t], len);
@@ -657,8 +667,13 @@ static void capture(void)
             const int s = playing ? (int)(a % len) : (int)(a - shift);
             if (s < 0 || s >= len) continue;
             m2k_step_t *st = &p->step[t][s];   /* (as REC writes a played note: live_on_t) */
-            st->note = e->note;
-            st->flags = (uint8_t)(ST_TRIG | (e->acc ? ST_ACC : 0));
+            if (pv.nv[t] > 1) {        /* POLY: a step's notes a chord, the lowest the lead's, then T+1 ... */
+                poly_note(t, s, e->note, e->acc, !(chord[s >> 5] >> (s & 31) & 1));
+                chord[s >> 5] |= 1u << (s & 31);
+            } else {
+                st->note = e->note;
+                st->flags = (uint8_t)(ST_TRIG | (e->acc ? ST_ACC : 0));
+            }
             mask |= 1u << t;
             if (low < 0 || b < low) low = b;
         }
@@ -678,7 +693,7 @@ static void mv_pad(int i, int vel, int down)
     if (!down) {
         int kind = mc.pkind[i], a = mc.parg[i], t = mc.ptrk[i];
         mc.pkind[i] = 0;
-        if (kind == 2 && perf.on[a]) bus_perform(a, 0);
+        if (kind == 2) pf_released(a, ui.now - mc.pt0[i & 15]);   /* (latched meanwhile: on; a tap: for a double) */
         else if (kind == 1)
             for (int k = 0; k < sq.nkeys[t]; k++)
                 if (sq.keys[t][k] == a) { live_off_t(t, a); break; }   /* (a track left meanwhile let go of it) */
@@ -686,23 +701,26 @@ static void mv_pad(int i, int vel, int down)
     }
     if (mc.pkind[i]) mv_pad(i, 0, 0); /* (a press without its release: let go first) */
     if (i >= MS_PAD0) { page_pad(i - MS_PAD0); return; }
-    if (mc.perf) {                     /* PERFORM: held, its effect plays */
+    if (mc.perf) {                     /* PERFORM: held, its effect plays; tapped twice, it stays on (pf_press) */
         int e = perf_of_key(i);
         if (e < 0) return;
-        if (bus_perform(e, 1)) { mc.pkind[i] = 2; mc.parg[i] = (uint8_t)e; }
-        else toast(PF_NAME[e], "NO DELAY FREE");
+        const int r = pf_press(e);
+        if (!r) { mc.pkind[i] = 2; mc.parg[i] = (uint8_t)e; mc.pt0[i] = ui.now; }
+        else if (r < 0) toast(PF_NAME[e], "NO DELAY FREE");
         return;
     }
     if (mc.kpads) {                    /* PADS: the bottom row the tracks, the row over it their mutes */
         const int t = i & 7;
         if (t >= M2K_TRACKS) return;
         if (i >= 8) { mute_flip(t); return; }   /* (Mute + steps' rule: at the bar when GLO's MUTES says so) */
-        const int n = track_root(PAT(cur_pat), t);   /* (where the FM-1's PADS plays it) */
-        live_on_t(t, n, vel);          /* (the piano's way: held with the pad, an accent recorded over 110, its arp) */
-        cap_note(t, n, vel);
+        poly_sync();
+        const int lt = pv.lead[t];     /* (a POLY voice's pad plays its lead) */
+        const int n = track_root(PAT(cur_pat), lt);   /* (where the FM-1's PADS plays it) */
+        live_on_t(lt, n, vel);         /* (the piano's way: held with the pad, an accent recorded over 110, its arp) */
+        cap_note(lt, n, vel);
         mc.pkind[i] = 1;
         mc.parg[i] = (uint8_t)n;
-        mc.ptrk[i] = (uint8_t)t;
+        mc.ptrk[i] = (uint8_t)lt;
         return;
     }
     const int t = ui.trk, n = key_note(i);
@@ -857,10 +875,10 @@ static void mv_button(int cc, int v)
         toast(o, 0);
         break;
     }
-    case 58: {                                                                 /* Loop: the track's arp HOLD */
+    case 58: {                                                                 /* Loop: the track's arp HOLD (POLY: its chord) */
         arp_hold_set(ui.trk, !sq.arp_hold[ui.trk]);
-        char ht[12] = {'T', (char)('1' + ui.trk), ' ', 0};
-        s_cpy(ht + 3, sq.arp_hold[ui.trk] ? "ARP HOLD" : "HOLD OFF");
+        char ht[16] = {'T', (char)('1' + ui.trk), ' ', 0};
+        s_cpy(ht + 3, !sq.arp_hold[ui.trk] ? "HOLD OFF" : pv.nv[ui.trk] > 1 ? "CHORD HOLD" : "ARP HOLD");
         toast(ht, 0);
         break;
     }
@@ -872,6 +890,7 @@ static void mv_button(int cc, int v)
  * shows large a moment; Capture's step counts kept up */
 static void mv_tick(void)
 {
+    if (pv.lead[ui.trk] != ui.trk) track_to(pv.lead[ui.trk]);   /* (a pattern made the track in view a POLY voice) */
     cap_sync();
     if (ui.follow && sq.playing) {
         int s = track_pos(ui.trk);

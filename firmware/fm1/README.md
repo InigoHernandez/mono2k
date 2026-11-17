@@ -1,7 +1,8 @@
 # MONO2K on the M-VAVE FM-1
 
 The FM-1 build: MONO2K's core (`firmware/src`, the same code the browser and the host run) on the open FM-1
-platform. `m2k_fm1.c` is MONO2K's own glue; everything else here is the platform, taken from CS-1 (which stands on
+platform. `m2k_fm1.c` is MONO2K's own glue (its pacing of the sound and the screen, the CPU guard's side, in
+`m2k_pace.h`, which the host's guard bench runs too); everything else here is the platform, taken from CS-1 (which stands on
 Dinghy, SLOOP and Felucca) with the few changes listed below.
 
 ## Build

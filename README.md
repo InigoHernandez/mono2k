@@ -35,6 +35,22 @@ WebAssembly, with sound).
 - **Regular ADSR envelopes** (1.10). The amp is ATCK DEC SUS REL on AMP 1 (DIST VOL PAN PORT on AMP 2, HOLD on AMP 3),
   the filter's envelope ATCK DEC SUS REL on FILT 2 (B-OF W-OF on FILT 3). SUS holds a level while the note lasts, a key
   or the step's length, and REL follows its end. SUS 0 is the envelope as before, so every older sound plays bit for bit.
+- **POLY, chords on one track** (1.11; the Move's 0.6). ARP's MODE on POLY (or GLO + the black key printed POLY) makes
+  the track a lead and the tracks after it its voices, VOIC of them (2-6 on the FM-1, 2-8 on the Move): each a whole
+  track playing the lead's machine and sound, its own kept for when POLY is off. Keys, MIDI on the lead's channel and
+  the Move's pads play chords (a free voice first, past VOIC the oldest); recorded, a chord's lowest note goes on the
+  lead's step and the rest on its voices', and the lead's step decides how the chord plays. A pattern with POLY packs
+  as format 24 (25 eight wide); every other one as before, byte for byte.
+- **A calmer CPU guard** (1.11). When the FM-1 is full it gives way a step at a time, the least heard first: the
+  screen's frames further apart, a ringing tail faded, then a track rests; a drop it did not cause (a flash write)
+  moves only the screen. GLO > PLAY's REST picks the track: AUTO, T1–T6 or NONE (FM-1 only). With POLY, one voice
+  of a chord fades before a whole track rests (on the keys the oldest note, from the steps the quietest, never the
+  lead's), its next note as ever.
+- **PERFORM that stays** (1.11; the Move's 0.6). FX double-tapped stays on every page of the FM-1: the black keys stay
+  its effects while the knobs and screen are the page's, FX in the header; hold FX for its own knobs, tap it to let go.
+  On both, an effect's key tapped twice stays on until tapped again or PERFORM goes; a repeat stays on the beat.
+- **The machines' marks on the Move** (the Move's 0.6). SYN draws the track's machine as the FM-1's 3D mark, beside its
+  name: it sways in time with the music and hops on the track's hits, higher for a louder one.
 
 ## Run it
 

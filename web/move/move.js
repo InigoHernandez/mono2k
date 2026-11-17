@@ -27,7 +27,7 @@
   // ------------------------------------------------------------------------------------------- the pads
   /* the two page rows (move/README.md, the controls): name, family, the screen it leads to, what it shows */
   const PAGES = [
-    ["SYN", "snd", "04_syn_0", "The machine: its kind and name; A–H on the knobs."],
+    ["SYN", "snd", "04_syn_0", "The machine: its kind, name and mark; A–H on the knobs."],
     ["AMP", "snd", "05_amp", "The envelope, drawn live."],
     ["FILT", "snd", "06_filt", "The filter's response, live; the envelope's reach dotted."],
     ["EFX", "snd", "07_efx", "The EQ's band and the echoes."],
@@ -241,9 +241,9 @@
     const load = () => {
       if (loaded) return;
       loaded = true;
-      const bytes = fetch("../m2k.wasm?v=120").then((r) => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); });
+      const bytes = fetch("../m2k.wasm?v=121").then((r) => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); });
       window.M2K_CORE = window.M2K_CORE || { bytes, module: bytes.then((b) => WebAssembly.compile(b)) };
-      const chain = ["../help.js?v=13", "../screens.js?v=3", "../engines.js?v=4"];
+      const chain = ["../help.js?v=14", "../screens.js?v=3", "../engines.js?v=4"];
       const next = (i) => { if (i >= chain.length) return; const s = document.createElement("script"); s.src = chain[i]; s.onload = () => next(i + 1); document.body.appendChild(s); };
       next(0);
     };

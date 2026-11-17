@@ -170,6 +170,7 @@ typedef struct {
                                         * guard's: a hat between its hits still counts) */
     uint8_t park;                      /* the CPU guard's fade (m2k_guard): blocks left of it and one, its note ended then */
     uint8_t held;                      /* and the guard keeps it resting: its trigs silent until there is room for it */
+    uint8_t dcut;                      /* the guard's cut of its delay's echoes (a tail): blocks left of the fade and one */
     uint32_t park_lv;                  /* the amp when the fade began (Q30) */
     int32_t park_cost;                 /* what it cost sounding (trk_cost), to know when there is room */
     /* the modulation effect; its side (chorus and flanger across the stereo) high-passed and resampled as the mid */
@@ -185,6 +186,21 @@ typedef struct {
 
 static trk_t trk[M2K_TRACKS];
 static uint8_t dl_mem[M2K_TRACKS][DL_LEN] POOL;
+/* POLY (format 24; m2k_seq.c's poly_*): a lead plays chords on itself and the tracks after it, each a voice: that track
+ * rendering the lead's machine and sound (its own kept). lead[t]: whose sound track t plays (itself, or the lead that
+ * borrows it); nv[t]: a lead's voices, itself the first (1: none). Without POLY every track its own lead, as ever */
+static struct {
+    uint8_t lead[M2K_TRACKS], nv[M2K_TRACKS];
+    uint8_t on;                        /* a lead has voices (else nothing of POLY's runs: the engine as before 1.11) */
+    uint8_t key[M2K_TRACKS];           /* the key each voice holds (0xFF none) */
+    uint32_t age[M2K_TRACKS], clock;   /* when it was taken or let go: a free voice let go longest first, past VOIC the
+                                        * oldest note taken */
+    uint8_t ct, cs, cc, cn[8];         /* the chord being written: its lead (0xFF none), its step, its notes */
+    uint32_t ctick;                    /* (when its first came) */
+} pv;
+/* the machine each track renders this block: its own, a POLY voice its lead's (the sequencer's, every block: the
+ * tracks read it as they read the pattern's before, so their code is the same) */
+static uint8_t rmach[M2K_TRACKS];
 #define MOD_LEN 1024u                  /* 23 ms: room for the chorus' sweep */
 static int16_t mod_mem[M2K_TRACKS][MOD_LEN] POOL;
 #define ENS_LEN 1024u                  /* SWAV-ENS's chorus line: 46 ms at half rate */
@@ -1329,16 +1345,20 @@ static uint32_t atk_from(uint32_t lv)
 static inline uint32_t fsus_of(int32_t fs8) { return (uint32_t)fs8 * 33026u; }
 
 /* the CPU guard's fade (m2k_guard): the amp straight down to nothing over PARK_N blocks, then the note ends as a
- * release would; the amp's end the track's (both envelopes' paths) */
+ * release would; the amp's end the track's (both envelopes' paths). A tail's cut (not resting) gives way to a note
+ * that comes meanwhile: it plays as ever */
 static inline void env_park(trk_t *t)
 {
     if (t->park) {
-        if (t->park == 1) { t->aenv = 0; t->astage = 0; }
+        if (t->astage == 1 && !t->held) t->park = 0;
         else {
-            uint32_t cap = (t->park_lv / PARK_N) * (uint32_t)(t->park - 2);   /* (2^30 at most) */
-            if (t->aenv > cap) t->aenv = cap;
+            if (t->park == 1) { t->aenv = 0; t->astage = 0; }
+            else {
+                uint32_t cap = (t->park_lv / PARK_N) * (uint32_t)(t->park - 2);   /* (2^30 at most) */
+                if (t->aenv > cap) t->aenv = cap;
+            }
+            t->park--;
         }
-        t->park--;
     }
     if (t->astage == 0) t->sounding = 0;
 }
@@ -1508,6 +1528,11 @@ static uint32_t lfo_inc(int32_t spd8, int mult, uint32_t b10)
 typedef struct { uint8_t t, p; int32_t v; } modq_t;
 static modq_t modq[M2K_TRACKS * 3], modp[M2K_TRACKS * 3];
 static int modn, modpn;
+/* and POLY's: an LFO of another track aimed at a lead moves its voices too (each voice's own LFOs move it alone, in
+ * modq), added after: fanq this block's (the lead's first voice after it, how many, the parameter), fanp the last's */
+typedef struct { uint8_t t, n, p; int32_t v; } fanq_t;
+static fanq_t fanq[M2K_TRACKS * 3], fanp[M2K_TRACKS * 3];
+static int fann, fanpn;
 
 static void mod_add(int t, int p, int32_t v)
 {
@@ -1515,10 +1540,20 @@ static void mod_add(int t, int p, int32_t v)
     modq[modn++] = (modq_t){(uint8_t)t, (uint8_t)p, v};
 }
 
+static void mod_fan_apply(void)
+{
+    for (int i = 0; i < fanpn; i++) for (int k = 0; k < fanp[i].n; k++) trk[fanp[i].t + k].mod[fanp[i].p] = 0;
+    for (int i = 0; i < modn; i++) trk[modq[i].t].mod[modq[i].p] = modq[i].v;   /* (what a voice's own set, again) */
+    for (int i = 0; i < fann; i++) { for (int k = 0; k < fanq[i].n; k++) trk[fanq[i].t + k].mod[fanq[i].p] += fanq[i].v; fanp[i] = fanq[i]; }
+    fanpn = fann;
+    fann = 0;
+}
+
 static void mod_apply(void)
 {
     for (int i = 0; i < modpn; i++) trk[modp[i].t].mod[modp[i].p] = 0;
     for (int i = 0; i < modn; i++) { trk[modq[i].t].mod[modq[i].p] = modq[i].v; modp[i] = modq[i]; }
+    if (fann | fanpn) mod_fan_apply();
     modpn = modn;
     modn = 0;
 }
@@ -1559,7 +1594,12 @@ static void lfo_block(int ti)
         if (trig == 2) v = t->lhold[l];
         t->lval[l] = v;
         mon.lfo[ti][l] = v;
-        if (depth) mod_add(lfo_trk(t, b + L_TRCK), dest - 1, (v * depth) >> 14);   /* 2^15 by 2^14: a word */
+        if (depth) {                   /* (2^15 by 2^14: a word); aimed at a POLY lead from another track, its voices too */
+            const int tg = lfo_trk(t, b + L_TRCK), mv = (v * depth) >> 14;
+            mod_add(tg, dest - 1, mv);
+            if (__builtin_expect(pv.on, 0) && pv.lead[ti] == ti && tg != ti && pv.nv[tg] > 1)
+                fanq[fann++] = (fanq_t){(uint8_t)(tg + 1), (uint8_t)(pv.nv[tg] - 1), (uint8_t)(dest - 1), mv};
+        }
     }
 }
 
@@ -1610,14 +1650,15 @@ static inline m2k_pattern_t *PAT(int i)
 static int pat_can_open(int j);                  /* (m2k_proj.c) may pattern j become the playing one */
 static uint8_t master_vol = 100;
 
-/* the CPU guard (m2k_guard): a sounding track faded out, its note ended (env_block), its trigs silent while it rests */
-static void trk_park(int ti, int32_t cost)
+/* the CPU guard (m2k_guard): a sounding track faded out, its note ended (env_block); resting (hold), its trigs silent
+ * until there is room, else (a tail's cut) its next note as ever */
+static void trk_park(int ti, int32_t cost, int hold)
 {
     trk_t *t = &trk[ti];
     t->park = PARK_N + 1;
     t->park_lv = t->aenv;
     t->park_cost = cost;
-    t->held = 1;
+    t->held = (uint8_t)(hold != 0);
 }
 
 /* a trig: the note always (a trigless trig moves the pitch too), then the amp (and the machine with it), the filter's
@@ -1647,7 +1688,7 @@ static void voice_trig(int ti, int note, int vel, int slide, unsigned skip)
         /* ATK 0: percussive, from zero (its 1 ms rise the hit's edge, as bank A's drums have it); a slower attack goes
          * on from where the last note is, no step */
         t->aph = t->eff[P_ATK] ? atk_from(t->aenv) : 0;
-        mach_trig(t, PAT(cur_pat)->machine[ti], legato);
+        mach_trig(t, PAT(cur_pat)->machine[pv.lead[ti]], legato);
     }
     if (!(skip & ST_NOFLT)) {
         t->fstage = 1;
@@ -1794,13 +1835,13 @@ static void track_block(int ti, int32_t *restrict L, int32_t *restrict R, int32_
 {
     trk_t *t = &trk[ti];
     const m2k_pattern_t *pp = PAT(cur_pat);
-    int m = pp->machine[ti];
+    int m = rmach[ti];                                 /* (a POLY voice plays its lead's) */
     if (t->gate_left > 0 && --t->gate_left == 0) { t->gate = 0; t->gate_left = -1; mx_gate_end(ti); }   /* the step's gate:
                                                           * hold and decay go on; its note out marked, sent after */
     env_block(t);
     /* an FX machine hears this track (the next one; FX-RING two on, its EXT): only then its tout and tvol are kept (no
      * one else reads them; the FX machine is with it on its core, after it) */
-    const uint8_t *mc = pp->machine;
+    const uint8_t *mc = rmach;
     const int heard = (ti + 1 < M2K_TRACKS && mc[ti + 1] >= M_FXC && mc[ti + 1] <= M_FXD) ||
                       (ti + 2 < M2K_TRACKS && mc[ti + 2] == M_FXR);
     if (heard) {

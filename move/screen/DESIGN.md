@@ -43,7 +43,7 @@ The FM-1's 4 px grid at the type's x1: every box and rule sits on even rows and 
 | 49–61 | The 8 knob pictures: 16 px columns, each picture in a 13 x 13 box at columns 2–14 of its column (a 3 px gutter between two; the screen's left edge 2 px, its right 1) |
 | 63 | The knob touched: a line under its box, as wide as the box |
 
-Rows 8–11, 44–46, 48 and 62 stay black: the calm.
+Rows 8–11, 44–46, 48 and 62 stay black: the calm. (SYN's mark the one exception: its hop reaches row 9 for a moment, its shadow a tint on rows 44–45.)
 
 ## The header
 
@@ -93,22 +93,32 @@ Stage pictures share one language: 1 px curves, an area as a tint (a dot every 4
 
 7 x 5, the capitals' height. 1 px strokes, original (`zz_icons` in the sheets): the pages, play, stop, REC, SYNC's link, mute, speaker, lock, hold, MIX's faders, PADS' four pads (5 wide), and the machine families (GND sine, perc, noise; SID chip; FM operators; SWAV saw, pulse, chord; DIGI-WAV stepped wave; VOX speech bubble; DRM kick, snare, hats, cymbal; FX chorus, ring, dynamics).
 
+## SYN's mark
+
+The owner's ask (2026-11-16): "create the cool polygon graphics of the machines in Move". The FM-1's machine marks (`tools/gen_icons.py`: each machine's isotype extruded in 3D, ray-marched, its face solid, its sides dithered to 1 bit with screen-fixed patterns, 12 frames moving as the machine does while it sways), drawn again for the Move at 36 px (`gen_icons.py --move`, `move/screen/m2k_icons_move.h`; the FM-1 never includes it), the same shapes, motions, light and dithers. Look: `build/move/sheets/marks.png`, `marks.gif`, `marks_fm1_move.png`.
+
+- **Where:** a 35 x 31 box from column 87, rows 12–42 (a row clear of its shadow), right of the model; the model stays at x3 on every machine (x2 only if it came within 4 px of the box). Its shadow a dithered tint on rows 44–45 under its middle.
+- **Size:** at 40 px (35 rows) a hop reached the header. At 36 the marks still read: the face solid, the sides a grey of lines and checks; deeper extrusions (1.5 and 1.7 times the FM-1's) widened the sides, but FX-DYNMX's bars and DIGI-WAV's stripes ran together, so the FM-1's look is kept.
+- **Motion** (the FM-1's `mark_3d`): a loop of its frames a bar while playing, slow when stopped, kicked faster by each of the track's trigs; on each it hops 1 to 3 px (louder, higher) for 180 ms, its shadow narrowing as it rises. SWAV-SAW playing: its three teeth, each as tall as the track's level, each a little behind the one before, the back one falling first.
+- **Never** under a knob touched, a held step's card or a message: the stage is theirs.
+- **The audit** (`sheets.c`): every machine, every frame, hop and tooth: the mark keeps to rows 8–46 and 3 px from the stage's words.
+
 ## Motion
 
-Calm: pages cut, no transitions, no glitches. What moves is the sound: HOME's playheads, the amp's cursor, the filter's live curve, the LFO's marker, MIX's meters, the modulation's sweep, PERFORM's keys. A frame every two of the panel's (34.8 ms, ~28.7 a second: `move/README.md`, The screen).
+Calm: pages cut, no transitions, no glitches. What moves is the sound: HOME's playheads, SYN's mark, the amp's cursor, the filter's live curve, the LFO's marker, MIX's meters, the modulation's sweep, PERFORM's keys. A frame every two of the panel's (34.8 ms, ~28.7 a second: `move/README.md`, The screen).
 
 ## The pages
 
 | Pad | Page | Knobs | Stage |
 |---|---|---|---|
-| top 1 | SYN | the machine's A–H | its class and style; its model at x3 |
+| top 1 | SYN | the machine's A–H | its class and style; its model at x3; its mark at the right, swaying, hopping on the track's hits |
 | top 2 | AMP | ATK DEC SUS REL DST VOL PAN POR | the envelope as an ADSR, one live curve; its pad again AMP+: HLD |
 | top 3 | FILT | BAS WID HPQ LPQ ATK DEC SUS REL | the response, one live curve; the envelope's reach dotted; its envelope while one of its four is touched; its pad again FILT+: BOF WOF, the curve at the reach |
 | top 4 | EFX | EQF EQG SRR DTM DSN DFB DBS DWD | the EQ's band; the echoes (ping-pong each side in turn, dotted with no send) |
 | top 5 | DSTR | BIT FLD XOR VRB TYP SPD DPT MIX | a sine through the crush; the modulation's sweep |
 | top 6–8 | LFO1–3 | TRK DES WAV TRG MUL SPD PHS DPT | where it goes and its cycle, small; the wave as deep as it swings, live |
 | 2nd 1 | HOME | LEVL PTCH BPM SWNG TLEN SPD PROB LANE (no pictures) | 8 lanes: the number (the track in view's marked), 16 steps by the beat, a trig a block, one that may not play framed, a muted lane's dashes, each playhead a line under its step |
-| 2nd 2 | TRK | PCH LEV ARP SPD RNG GAT (BNK) | the arp's notes as a staircase, the one sounding lit; HOLD |
+| 2nd 2 | TRK | PCH LEV ARP SPD RNG GAT (BNK); on POLY PCH LEV ARP VOI – GAT | the arp's notes as a staircase, the one sounding lit; HOLD. On POLY (`d_poly`) the voices side by side, each its track (lit while a key holds it) over a bar of its amp and its note under it (eight across: no octave), HOLD in the corner, the voices beside it; MODE's seven choices as places |
 | 2nd 3 | PAT | BPM SW LEN ACC TLN SPD PRB LAN | the tempo at x3 (SYNC's link when the Move's, INT when MONO2K's own), the bar's beats; the pattern's length and the track's, each playhead a marker |
 | (Shift + knob 1) | any | the tempo | as a knob touched: TEMPO, its value at x3 with its tenths, SYNC or INT beside it, a ruler from 30 to 285 |
 | 2nd 4 | GRID | X Y CHA RES BD SD HH LAN | Grids' map; the three lanes' cycles, the track's in a tag |
@@ -146,4 +156,4 @@ The top two rows lead to the pages; the bottom two are the keyboard (or PADS); t
   - `m2k_screen()` does both into its own frame (the sheets).
 - **Held to it:** every still in the sheets is drawn again at the end from its kept view, with the core in another pattern and state: the same frame, every time.
 - **Constraints:** integer only, nothing allocated. `m2k_screen_init` sweeps every kind's values once at create (which values a column can write), so no gather ever does. The gather reads `mon.peak` and clears it, as `m2k_frame` does.
-- **Cost a frame:** on the Mac (hot, -O2) a publish (the controller's state, the LEDs, the gather) 0.3–0.6 µs, 6–15 k instructions; a draw 0.4–2.4 µs, 10–59 k (FILT the most; a solid dial ~2.5 k). In the Move's container paced to real time: a publish 11.8 µs mean, a draw 15.0 µs mean on the drawer thread (cold caches; the block's own render is 6x slower there than hot). `move/README.md` has the table.
+- **Cost a frame:** on the Mac (hot, -O2) a publish (the controller's state, the LEDs, the gather) 0.3–0.6 µs, 6–15 k instructions; a draw 0.4–2.4 µs, 10–59 k (FILT the most; a solid dial ~2.5 k; SYN's mark ~3.2 k). In the Move's container paced to real time: a publish 11.8 µs mean, a draw 15.0 µs mean on the drawer thread (cold caches; the block's own render is 6x slower there than hot). `move/README.md` has the table.

@@ -51,7 +51,7 @@ T4 ┃  T1     T2     T3     T4     T5     T6     T7     T8       each track at 
 | **Copy held** | A step, then other steps: pasted there. A track button, then another: steps and sound. Shift + a step (a pattern), then another: the pattern. Steps held when Copy is pressed: those steps are the source. |
 | **Delete held** | A step: its trig away. A track button: its steps cleared. Shift + a step: that pattern's steps cleared. A knob: the held step's lock away, else the value back to its INIT. Steps held when Delete is pressed: their locks cleared. |
 | **Undo** | Undo. **Shift + Undo**: redo. |
-| **Loop** | The track's arp HOLD. |
+| **Loop** | The track's arp HOLD; on POLY, its chord's. |
 | **Play** | Move's and MONO2K's: one press starts both (below). |
 | **Back** | Parks MONO2K (it plays on). **Shift + Back** closes it. Both the host's. |
 | **Shift + volume touch + jog click** | Back to Move, always (the host's). |
@@ -79,14 +79,14 @@ Gone since step 2: the jog turning pages and its page list (every page has a pad
 | DSTR | BITS | FOLD | XOR | VERB | TYPE | RATE | DPTH | MIX |
 | LFO1–3 | TRCK | DEST | WAVE | TRIG | MULT | SPD | PHAS | DPTH |
 | HOME | LEVL | PTCH | BPM² | SWNG | TLEN | SPD | PROB | LANE |
-| TRK | PTCH | LEVL | MODE | SPD | RNG | GATE | BANK¹ | – |
+| TRK | PTCH | LEVL | MODE⁶ | SPD | RNG | GATE | BANK¹ | – |
 | PAT | BPM² | SWNG | LEN | ACNT | TLEN | SPD | PROB | LANE |
 | GRID | X | Y | CHAOS | RES | BD | SD | HH | LANE |
 | MIX³ | T1 LEVL | T2 | T3 | T4 | T5 | T6 | T7 | T8 |
 | GLO | DCAY | DAMP | ADPC | DRIV | MUTE⁴ | – | – | – |
 | PERFORM | DCAY | DAMP | ADPC | DRIV | – | – | – | – |
 
-¹ DIGI-WAV's wave bank only. ² The tempo, as Shift + knob 1: Move's and MONO2K's under SYNC (turning it asks Move for it), the pattern's own (whole BPM) under INT. ³ A proposal for the owner: one knob a track, the eight levels (no locks: MIX edits the kits). ⁴ MUTES: a mute made while playing comes at the next bar, or at once (a setting, kept with the store). ⁵ AMP's and FILT's pad pressed again (and again back): the FM-1's AMP 3 and FILT 3. AMP and FILT are the FM-1's AMP 1 and 2, FILT 1 and 2, two of its pages to the Move's eight knobs: the amp's and the filter's ADSRs (SUS 0: the one-shot amp, the filter's AD, as every older pattern).
+¹ DIGI-WAV's wave bank only. ² The tempo, as Shift + knob 1: Move's and MONO2K's under SYNC (turning it asks Move for it), the pattern's own (whole BPM) under INT. ³ A proposal for the owner: one knob a track, the eight levels (no locks: MIX edits the kits). ⁴ MUTES: a mute made while playing comes at the next bar, or at once (a setting, kept with the store). ⁵ AMP's and FILT's pad pressed again (and again back): the FM-1's AMP 3 and FILT 3. AMP and FILT are the FM-1's AMP 1 and 2, FILT 1 and 2, two of its pages to the Move's eight knobs: the amp's and the filter's ADSRs (SUS 0: the one-shot amp, the filter's AD, as every older pattern). ⁶ OFF POLY UP DOWN U/D RND ORDR (0.6, the FM-1's 1.11): on POLY the track is a lead and the tracks after it its voices, knob 4 VOIC (2-8, as many as there are), knob 5 none; a voice plays the lead's machine and sound, its own kept; its track button shows the lead, its MIX knob is the lead's level, HOME brackets it; Loop latches the chord; REC and Capture write chords into the voices' steps, the lowest note the lead's.
 
 SYN to LFO3, TRK's are the track's (m2k.h's Monomachine pages); TRK holds the arp (the FM-1's ARP). PAT is the pattern's time and the track's own (the FM-1's HOME 2 and SEQ: there is no SEQ pad), HOME the FM-1's HOME 1 and 2 on one page, GRID the pattern's Grids and the track's lane, GLO the bus (the FM-1's GLO > BUS) and the one setting that matters on the Move (GLO > PLAY's MUTE). The FM-1's MIDI settings have no use here (the Move's glue routes no MIDI out or in), so they have no page.
 
@@ -176,6 +176,8 @@ A module cannot set Move's tempo through any API (the plugin and JS APIs only re
   | The render of a block, for scale | 161 µs mean (25 µs in a hot loop) | |
 
   The paced numbers are cold caches in the VM: the render itself costs 6× its hot-loop time there, and the maxima are the VM's preemptions (a block's own most was 8.8 ms). Either way a publish is a few percent of one block's render, once in 6 blocks. On the Move's A72, measure with `bench time` on the device (step 4).
+
+  SYN's mark (2026-11-16): on the Mac a publish on SYN 10.8 k → 11.5 k instructions (its sway, hop and teeth worked out in the gather), its draw 36.3 k → 39.5 k (SWAV-SAW's teeth, playing: 35.3 k with its own knobs); no other page changed. In the container, main and this build in turn, twice each: a publish 12.1, 11.2 → 13.0, 11.0 µs mean, a draw 17.0, 15.0 → 18.5, 15.2 µs mean, within the runs' own spread.
 - **The LEDs:**
   - **Steps:** trig azure, p-locked trig dimmer azure, playhead and held white, beats faint. With Shift held, the bank's patterns; with Mute held, the tracks.
   - **Pads:** the page pads in their families' colours (the page in view bright); the keyboard's white keys grey, black keys darker, the root orange, notes playing white; PERFORM's keys magenta (bank A) and pink (bank B), the effects playing white. PADS: the tracks dim azure, white while sounding (by hand or by the sequencer); their mutes azure heard, dark red muted, a mute waiting for the bar blinking (dark, every 128 ms, as the FM-1's GLO > PLAY).

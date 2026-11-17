@@ -13,6 +13,8 @@
 #                       and the steps as they light, at the screen's pace (34.8 ms a frame)
 #   knob_rows.png       every page's knob row (SYN on every machine, a step's locks, a knob touched), rows 45..63 x6
 #   knobs_before_after.png   with --before OLD (another build's sheets): each row as it was over as it is
+#   marks.png, marks.gif SYN's mark on every machine x6; a few machines playing x5 at the screen's pace
+#   marks_fm1_move.png  the FM-1's mark (firmware/gen/m2k_icons.h) beside the Move's (move/screen/m2k_icons_move.h)
 #   .venv/bin/python move/screen/sheets.py build/move/sheets [--before build/move/sheets_before]
 # The labels are set in the owner's pixel font (assets/fonts/mono2k-pixel, CC BY-SA), as the screen is. The LED colours
 # are the Move's palette entries MONO2K uses (Schwung's constants.mjs, MIT).
@@ -260,7 +262,7 @@ def main():
     pal.putpalette(flat + [0] * (768 - len(flat)))
     for mo in sorted(os.listdir(fdir)) if os.path.isdir(fdir) else []:
         files = sorted(f[:-4] for f in os.listdir(os.path.join(fdir, mo)) if f.endswith(".pbm"))
-        if not files:
+        if not files or mo == "marks":
             continue
         ims = []
         for f in files:
@@ -273,7 +275,84 @@ def main():
             ims.append(im.quantize(palette=pal, dither=Image.Dither.NONE))
         ims[0].save(os.path.join(src, "motion_%s.gif" % mo), save_all=True, append_images=ims[1:], duration=35,
                     loop=0, optimize=False, disposal=1)
+    marks_sheets(src, font)
     print("sheets:", len(man), "frames,", os.path.join(src, "overview.png"), os.path.join(src, "padmap.png"))
+
+
+def header_bits(path, name):
+    """a generated header's #defines and one of its arrays, flat"""
+    import re
+    txt = open(path).read()
+    defs = {k: int(v) for k, v in re.findall(r"#define (\w+) (\d+)", txt)}
+    body = txt.split("static const uint8_t %s[" % name, 1)[1].split("};", 1)[0].split("=", 1)[1]
+    return defs, [int(x, 16) for x in re.findall(r"0x([0-9a-f]{2})", body)]
+
+
+def bits_image(data, off, w, h, rb, ink, paper):
+    im = Image.new("L", (w, h), paper)
+    px = im.load()
+    for y in range(h):
+        for x in range(w):
+            if data[off + y * rb + x // 8] >> (7 - x % 8) & 1:
+                px[x, y] = ink
+    return im
+
+
+def marks_sheets(src, font):
+    """SYN's marks (sheets.c marks()): every machine's SYN page x6 (marks.png); a few machines playing, the screen alone
+    x5 at its pace, 34.8 ms a frame as 30 and 40 ms in turn (marks.gif); the FM-1's mark beside the Move's, frames
+    0 3 6 9 of each, from the two headers (marks_fm1_move.png)"""
+    mdir = os.path.join(src, "marks")
+    if not os.path.exists(os.path.join(mdir, "manifest.tsv")):
+        return
+    man = [l.rstrip("\n").split("\t") for l in open(os.path.join(mdir, "manifest.tsv")) if "\t" in l]
+    Z, cols, pad, lab = 6, 3, 30, 44
+    cw, ch = W * Z + 12, H * Z + 12
+    rows = (len(man) + cols - 1) // cols
+    sheet = Image.new("L", (pad + cols * (cw + pad), 80 + rows * (ch + lab + pad)), BG)
+    d = ImageDraw.Draw(sheet)
+    d.fontmode = "1"
+    d.text((pad, 26), "MONO2K ON THE MOVE  SYN: EVERY MACHINE'S MARK, X6", font=font, fill=200)
+    for i, (name, label) in enumerate(man):
+        x, y = pad + (i % cols) * (cw + pad), 80 + (i // cols) * (ch + lab + pad)
+        sheet.paste(framed(scaled(load(os.path.join(mdir, name + ".pbm")), Z), 6), (x, y))
+        d.text((x, y + ch + 12), label.upper(), font=font, fill=170)
+    sheet.save(os.path.join(src, "marks.png"))
+    fdir = os.path.join(src, "frames", "marks")
+    if os.path.isdir(fdir):
+        files = sorted(f for f in os.listdir(fdir) if f.endswith(".pbm"))
+        ims = [framed(scaled(load(os.path.join(fdir, f)), 5), 8).quantize(colors=4, dither=Image.Dither.NONE) for f in files]
+        if ims:
+            ims[0].save(os.path.join(src, "marks.gif"), save_all=True, append_images=ims[1:], loop=0, optimize=False,
+                        duration=[30 + 10 * (k & 1) for k in range(len(ims))], disposal=1)
+    fm1 = os.path.join(ROOT, "firmware", "gen", "m2k_icons.h")
+    mv = os.path.join(HERE, "m2k_icons_move.h")
+    if not (os.path.exists(fm1) and os.path.exists(mv)):
+        return
+    fd, fb = header_bits(fm1, "ICON_BITS")
+    md, mb = header_bits(mv, "MK_BITS")
+    n, fr = fd["ICON_N"], fd["ICON_FRAMES"]
+    mw, mh, mrb, mn = md["MK_W"], md["MK_H"], md["MK_RB"], md["MK_N"]
+    FZ, MZ, F4 = 3, 5, (0, 3, 6, 9)
+    fcell, mcell = n * FZ + 8, mn * MZ + 8
+    roww, cols2 = 4 * fcell + 24 + 4 * mcell, 2
+    rh = max(fcell, mcell) + lab
+    out = Image.new("L", (pad + cols2 * (roww + 60), 90 + ((len(man) + 1) // 2) * rh), BG)
+    d = ImageDraw.Draw(out)
+    d.fontmode = "1"
+    d.text((pad, 26), "THE FM-1'S MARK (64 PX, X3, ITS INK ON ITS PAPER) | THE MOVE'S (%d PX, X5, LIT)  FRAMES 0 3 6 9" % mn,
+           font=font, fill=200)
+    for i, (name, label) in enumerate(man):
+        m = int(name.split("_m")[1])                # (NN_mMM: the catalogue's place, the machine's number)
+        x, y = pad + (i % cols2) * (roww + 60), 90 + (i // cols2) * rh
+        d.text((x, y + 4), label.split("  ", 1)[1], font=font, fill=170)
+        for k, f in enumerate(F4):
+            im = bits_image(fb, (m * fr + f) * (n * n // 8), n, n, n // 8, 16, 236)
+            out.paste(scaled(im, FZ), (x + k * fcell, y + 30))
+            mm = Image.new("L", (mn, mn), 0)
+            mm.paste(bits_image(mb, (m * fr + f) * (mh * mrb), mw, mh, mrb, 236, 0), (md["MK_X0"], md["MK_Y0"]))
+            out.paste(scaled(mm, MZ), (x + 4 * fcell + 24 + k * mcell, y + 30 + (n * FZ - mn * MZ) // 2))
+    out.save(os.path.join(src, "marks_fm1_move.png"))
 
 
 main()

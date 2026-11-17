@@ -124,12 +124,16 @@ message's tail. Dark mode inverts the whole screen.
   72 wide at its depth with a cursor and a marker live, a cable to its destination's name and track; NO DEPTH or TURN
   DEST where it moves nothing. Pages LFO1 LFO2 LFO3 (DEST WAVE SPD DPTH), then LFO1+ .. LFO3+ (TRCK TRIG MULT PHAS).
   A knob an LFO moves, on any page: a marker 4 x 3 swinging on a dotted line under its picture (`knob_mod`).
-- **ARP**: the notes as a staircase, the sounding one solid; GRIDS Hortator's map (a dot a node, the four read solid,
-  the place a marker) and the three lanes; LANES the three, each its followers.
+- **ARP**: the notes as a staircase, the sounding one solid; on POLY (1.11, `poly_picture`) the voices side by side,
+  the lead's first, each its track over a box of its amp (filled as it sounds; a key holding it, its track solid) and
+  its note under it on baseline 180, VOICES at the top right, HOLD at the left; the knobs MODE VOIC (a free square
+  where RNG was) GATE. GRIDS Hortator's map (a dot a node, the four read solid, the place a marker) and the three
+  lanes; LANES the three, each its followers. A POLY voice's lane on HOME and its cell on GLO > PLAY name its lead
+  where the machine's model and the load are.
 - **GLO**: TIME the tempo in F_L and the four beats under the knobs; BUS the reverb's tail; SET the project and the
   disc; MIDI the channels and clocks; IN the ports; PLAY the mutes, the bar and the FM-1's meter (CPU, CPU2, DROP on
   baseline 168, a 2-row bar under each share; DROP solid a second after a short; dashes where the platform says
-  nothing), a mute's wait on the info line; HELP the manual, nine pages (KNOB 1), a title and seven lines each.
+  nothing), a mute's wait on the info line; HELP the manual, ten pages (KNOB 1), a title and seven lines each.
 
 ## Lists
 

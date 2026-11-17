@@ -19,8 +19,11 @@
  *   49..61   the knobs' pictures, 8 columns of 16 for the Move's 8 knobs, each in a 13 x 13 box at 2..14 of its
  *            column (a 3 px gutter between two); row 63 marks the knob touched, a line under its box
  * HOME, MIX's strips, SOUNDS and the patterns lay the middle out their own way under the same header.
- * Integer only, nothing allocated; the meters' fall is the one state kept between gathers. */
+ * Integer only, nothing allocated; the meters' fall and SYN's mark (its sway, hop and teeth) are the state kept between
+ * gathers. */
 #include "m2k_screen.h"
+#include "m2k_icons_move.h"             /* the machines' marks at the Move's size (tools/gen_icons.py --move) */
+_Static_assert(MK_COUNT == M_COUNT, "a mark a machine, in the machines' order");
 
 static uint8_t ms_own[MS_BYTES];        /* m2k_screen()'s frame */
 static uint8_t *ms_fb = ms_own;         /* the frame being drawn (m2k_screen_draw's) */
@@ -287,7 +290,9 @@ int m2k_screen_param(int page, int t, int k)
     case MS_EFX: return P_EQF + k;
     case MS_DSTR: return k < 4 ? P_BITS + k : P_MODT + k - 4;
     case MS_LFO1: case MS_LFO2: case MS_LFO3: return P_LFO + 8 * (page - MS_LFO1) + k;
-    case MS_TRK: return k < 6 ? P_PTCH + k : k == 6 && PAT(cur_pat)->machine[t] == M_WAV ? P_WBNK : NONE;
+    case MS_TRK:                       /* (on POLY: SPD's knob its voices, RNG none: the FM-1's ARP) */
+        if (pv.nv[t] > 1 && (k == 3 || k == 4)) return k == 3 ? GL(G_POLY1 + t) : NONE;
+        return k < 6 ? P_PTCH + k : k == 6 && PAT(cur_pat)->machine[t] == M_WAV ? P_WBNK : NONE;
     case MS_PAT: { static const uint8_t g[8] = {G_TMPO, G_SWNG, G_LEN, G_ACNT, G_TLEN1, G_SPD1, G_TPRB1, G_LANE1};
                    return k < 4 ? GL(g[k]) : GL(g[k] + t); }   /* (the pattern's time, then the track's: the FM-1's SEQ) */
     case MS_GRID: return k < 7 ? GL(G_GRX + k) : GL(G_LANE1 + t);
@@ -298,7 +303,8 @@ int m2k_screen_param(int page, int t, int k)
     }
 }
 
-int m2k_screen_knob_track(int page, int t, int k) { return page == MS_MIX && k >= 0 && k < M2K_TRACKS ? k : t; }
+int m2k_screen_knob_track(int page, int t, int k) { return page == MS_MIX && k >= 0 && k < M2K_TRACKS ? pv.lead[k] : t; }   /* (a POLY
+                                                                                            * voice's knob its lead's level) */
 
 /* ======================================================================================== the gather (core) */
 
@@ -309,6 +315,7 @@ static int ms_value(const m2k_scr_t *s, int t, int code)
     if (code == NONE) return 0;
     if (code >= 0xC0) return store_.set[code & 0x3F];
     if (code >= 0x80) return p->glob[code & 0x7F];
+    if (code == P_AMOD) return amod_value(t);              /* (MODE: OFF POLY UP..., never a lock) */
     if (t == s->track && s->held < M2K_STEPS) { int i = lock_find(t, s->held, code); if (i >= 0) return p->lock[i].val; }
     return p->kit[t][code];
 }
@@ -411,7 +418,8 @@ static int ms_pic_of(const pi_t *pi, int t)
     default:
         if (n == 2) return MP_TOGGLE;
         if (ms_writes(pi, t)) return n && n <= 8 ? MP_CHOICE : icon_of(pi) == IC_BOX ? MP_TEXT : MP_NUM;
-        return n && n <= 6 ? MP_SEGS : bipolar(k) ? MP_BIDIAL : MP_DIAL;   /* (7 or 8: rates, a dial) */
+        return n && (n <= 6 || k == K_AMOD) ? MP_SEGS : bipolar(k) ? MP_BIDIAL : MP_DIAL;   /* (7 or 8: rates, a dial;
+                                                                                            * MODE's seven its places) */
     }
 }
 
@@ -586,11 +594,62 @@ static void g_meters(uint32_t now)
     }
 }
 
+/* SYN's mark, the FM-1's mark_3d at the gathers' pace (17.4 ms, the FM-1's frames ~33): it sways through its frames, a
+ * loop a bar while playing (slow when stopped), kicked on by each of the track's trigs, and hops on them, higher for a
+ * louder one; SWAV-SAW's teeth each as tall as the track's level, each a little behind the one before. Kept only while
+ * SYN is in view: back on it, or on another track, nothing from before makes it hop */
+#define MK_HOP_MS 180u                 /* a hop: up at the trig, down again by then */
+static struct {
+    int32_t ph, spd;                   /* the frame, Q8; frames a second, Q8 */
+    uint32_t last, hit;                /* the last gather on SYN, the last trig (0 none) */
+    int32_t hist[16];                  /* the track's meter, a gather each (the teeth read it late) */
+    uint8_t t, seen, amp, h, lv[3], fall[3];
+} ms_mk;
+
+static void g_mark(ms_view_t *v, const m2k_scr_t *s, int t, int m)
+{
+    const uint32_t now = s->ms;
+    const int fresh = !ms_mk.last || now - ms_mk.last > 100u || ms_mk.t != t;
+    const uint32_t dt = fresh ? 0 : now - ms_mk.last;
+    const int b10 = s->bpm10 ? s->bpm10 : (int)seq_bpm() * 10;
+    const int32_t base = sq.playing ? (int32_t)((b10 << 8) / 200) : 6 << 8;   /* (a loop a bar: 12 frames, 4 beats) */
+    ms_mk.last = now | 1u;
+    if (fresh) {
+        ms_mk.t = (uint8_t)t; ms_mk.seen = mon.trig[t]; ms_mk.hit = 0; ms_mk.spd = base;
+        for (int i = 0; i < 16; i++) ms_mk.hist[i] = ms_meter[t];
+    }
+    if (mon.trig[t] != ms_mk.seen) {
+        ms_mk.seen = mon.trig[t];
+        ms_mk.spd = 30 << 8; ms_mk.hit = now | 1u; ms_mk.amp = (uint8_t)(ms_meter[t] >> 9);
+    }
+    ms_mk.spd += (base - ms_mk.spd) >> 4;              /* (the FM-1's eighth a frame, a gather half its frame) */
+    ms_mk.ph = (int32_t)((ms_mk.ph + ms_mk.spd * (int32_t)dt / 1000) % (MK_FRAMES << 8));
+    const uint32_t hd = ms_mk.hit ? now - ms_mk.hit : MK_HOP_MS;
+    int lift = 0;
+    if (hd < MK_HOP_MS) { const int top = 1 + ms_mk.amp / 24; lift = top - (int)((uint32_t)top * hd * hd / (MK_HOP_MS * MK_HOP_MS)); }
+    /* SWAV-SAW's teeth: the level on a log scale (-36 dB the lowest of 8), each tooth six gathers behind the one before;
+     * up at once, down a level every two gathers, four, six: the back falls first, the front lingers */
+    ms_mk.h = (uint8_t)((ms_mk.h + 1) & 15);
+    ms_mk.hist[ms_mk.h] = ms_meter[t];
+    for (int k = 0; k < 3; k++) {
+        const int32_t mv = ms_mk.hist[(ms_mk.h - 6 * k) & 15];
+        const int l = CLAMP(((ilog2_q8((uint32_t)mv | 1u) - 9 * 256) * 8) / (6 * 256), 0, 7);
+        if (fresh || l >= ms_mk.lv[k]) { ms_mk.lv[k] = (uint8_t)l; ms_mk.fall[k] = 0; }
+        else if (++ms_mk.fall[k] > 2 * k + 1) { ms_mk.fall[k] = 0; ms_mk.lv[k]--; }
+    }
+    v->st.syn.mk = (uint8_t)(m < MK_COUNT ? m : 0xFF);
+    v->st.syn.fr = (uint8_t)(ms_mk.ph >> 8);
+    v->st.syn.lift = (uint8_t)lift;
+    v->st.syn.saw = (uint8_t)(m == M_SAW && sq.playing);
+    for (int k = 0; k < 3; k++) v->st.syn.lv[k] = ms_mk.lv[k];
+}
+
 static void g_home(ms_view_t *v, const m2k_scr_t *s)
 {
     const m2k_pattern_t *p = PAT(cur_pat);
     for (int t = 0; t < M2K_TRACKS && t < 8; t++) {
-        const int len = tlen_of(t), pr = PROB_PCT[p->glob[G_TPRB1 + t] & 15], ln = lane_of(p, t);
+        const int lt = pv.lead[t];     /* (a POLY voice: on its lead's length and clock) */
+        const int len = tlen_of(lt), pr = PROB_PCT[p->glob[G_TPRB1 + lt] & 15], ln = lane_of(p, t);
         uint16_t tr = 0, ho = 0;
         int n = 0;
         for (int i = 0; i < 16; i++) {
@@ -608,10 +667,11 @@ static void g_home(ms_view_t *v, const m2k_scr_t *s)
             }
             if (hit) tr |= (uint16_t)(1u << i);
         }
+        v->st.home.lead[t] = pv.lead[t];
         v->st.home.trig[t] = tr;
         v->st.home.hollow[t] = ho;
         v->st.home.len[t] = (uint8_t)n;
-        const int tp = sq.playing ? track_pos(t) - s->spage * 16 : -1;
+        const int tp = sq.playing ? track_pos(lt) - s->spage * 16 : -1;
         v->st.home.pos[t] = (int8_t)(tp >= 0 && tp < 16 ? tp : -1);
     }
 }
@@ -629,6 +689,7 @@ static void g_stage(ms_view_t *v, const m2k_scr_t *s)
         s_cpyn(st->syn.cls, mi->cls, sizeof st->syn.cls);
         s_cpyn(st->syn.style, s_is(mi->style, mi->cls) ? "" : mi->style, sizeof st->syn.style);
         s_cpyn(st->syn.model, ms_model(p->machine[t]), sizeof st->syn.model);
+        g_mark(v, s, t, p->machine[t]);
         break;
     }
     case MS_AMP: case MS_AMP2:
@@ -673,7 +734,24 @@ static void g_stage(ms_view_t *v, const m2k_scr_t *s)
         break;
     case MS_TRK: {
         const int n = sq.nheld[t], rng = 1 + ((ms_value(s, t, P_ARNG) * 4) >> 7), tot = n * rng;
-        st->arp.mode = (uint8_t)((ms_value(s, t, P_AMOD) * 6) >> 7);
+        if (pv.nv[t] > 1) {            /* POLY: its voices, each its key, its note and its amp */
+            st->poly.mode = MS_POLY;
+            st->poly.nv = pv.nv[t];
+            st->poly.hold = sq.arp_hold[t];
+            st->poly.t0 = (uint8_t)t;
+            for (int i = 0; i < pv.nv[t] && i < 8; i++) {
+                const int v = t + i;
+                st->poly.key[i] = (uint8_t)(pv.key[v] != 0xFF);
+                st->poly.lv[i] = (uint8_t)(CLAMP(mon.aenv[v], 0, 32767) >> 7);
+                if (trk[v].sounding || pv.key[v] != 0xFF) {
+                    char nt[8];
+                    s_note(nt, pv.key[v] != 0xFF ? pv.key[v] : trk[v].note);
+                    s_cpyn(st->poly.note[i], nt, sizeof st->poly.note[i]);
+                }
+            }
+            break;
+        }
+        st->arp.mode = (uint8_t)((p->kit[t][P_AMOD] * 6) >> 7);
         st->arp.n = (uint8_t)n;
         st->arp.rng = (uint8_t)rng;
         st->arp.hold = sq.arp_hold[t];
@@ -937,7 +1015,8 @@ static void ms_pic(const ms_knob_t *kn, int X, int Y)
         ms_hline(X, Y + e, MS_KS, 1);
         for (int i = 0; i < n; i++) {
             const int a = x1 + i * pt, mid = a + (cw - 1) / 2;
-            if (i == c) ms_rect(cw < 3 ? mid - 1 : a, Y, w, MS_KS, 1); else ms_vline(mid, Y + e - 2, 2, 1);
+            const int rx = CLAMP(cw < 3 ? mid - 1 : a, X, X + MS_KS - w);   /* (seven: the ends' kept in the box) */
+            if (i == c) ms_rect(rx, Y, w, MS_KS, 1); else ms_vline(mid, Y + e - 2, 2, 1);
         }
         break;
     }
@@ -1194,8 +1273,32 @@ static void d_dstr(const ms_view_t *v)
 
 /* TRK: the arp's notes in its order, a step each rising (its range's octaves up the staircase), the one sounding lit;
  * HOLD in a tag; nothing held: what to do */
+/* TRK on POLY: its voices side by side (eight to the width), each its track over a bar of its amp, its note under it;
+ * a key holding it, its track lit; HOLD in the corner, the voices beside it */
+static void d_poly(const ms_view_t *v)
+{
+    const int hw = v->st.poly.hold ? ms_tw("HOLD") + 8 : 0, aw = MS_W - hw;
+    const int n = v->st.poly.nv, w = aw / (n < 4 ? 4 : n), x0 = (aw - n * w) / 2, top = MS_ST_T + 8, yb = MS_ST_B - 8;
+    if (v->st.poly.hold) ms_tag(MS_W - ms_tw("HOLD") - 4, MS_ST_T + 6, "HOLD", 1);
+    for (int i = 0; i < n; i++) {
+        const int x = x0 + i * w, cx = x + w / 2;
+        char tn[4];
+        ms_tname(tn, v->st.poly.t0 + i);
+        if (v->st.poly.key[i]) { const int tw = ms_tw(tn); ms_rfill(cx - tw / 2 - 2, MS_ST_T, tw + 4, 7, 1); ms_text_c(cx, MS_ST_T + 6, tn, 0); }
+        else ms_text_c(cx, MS_ST_T + 6, tn, 1);
+        const int h = v->st.poly.lv[i] * (yb - top) / 255;
+        ms_frame(cx - 3, top, 7, yb - top + 1, 1);
+        if (h) ms_rect(cx - 2, yb - h + 1, 5, h, 1);
+        char nt[4];
+        s_cpyn(nt, v->st.poly.note[i], sizeof nt);
+        if (nt[0] && ms_tw(nt) > w - 2) nt[2] = 0;   /* (eight across: the octave left out) */
+        if (nt[0]) ms_text_c(cx, MS_ST_B, nt, 1); else ms_dots_h(cx - 2, MS_ST_B - 1, 5);
+    }
+}
+
 static void d_trk(const ms_view_t *v)
 {
+    if (v->st.poly.mode == MS_POLY) { d_poly(v); return; }
     const int n = v->st.arp.n, tot = n * v->st.arp.rng, mid = (MS_ST_T + MS_ST_B) / 2;
     if (v->st.arp.hold) ms_tag(MS_W - ms_tw("HOLD") - 4, MS_ST_T + 6, "HOLD", 1);
     if (!v->st.arp.mode) { ms_text_c(64, mid + 3, "ARP OFF", 1); return; }
@@ -1295,7 +1398,44 @@ static void d_grid(const ms_view_t *v)
     }
 }
 
-/* SYN: the machine: its class and style small, its voice's model three times the type */
+/* SYN's mark: its box at rest in the stage, its foot a row over the stage's last (it stands clear of its shadow), its
+ * middle at column MK_MID; the shadow two rows under the stage (rows 44..45, the calm band's tint) */
+#define MK_MID  104
+#define MK_LEFT (MK_MID - (MK_N / 2 - MK_X0))
+#define MK_TOP  (MS_ST_B - MK_H)
+#define MK_GAP  4                      /* the most a model's ink may come to the mark's box */
+
+/* a 1-bit image, rows of rb bytes, MSB first, at x, y: lit where set (c 1), or dark (c 0: a cut-out) */
+static void ms_blit(const uint8_t *bits, int rb, int h, int x, int y, int c)
+{
+    for (int j = 0; j < h; j++, bits += rb)
+        for (int i = 0; i < rb; i++) ms_row8(x + 8 * i, y + j, bits[i], c);
+}
+
+/* the mark (the FM-1's mark_3d): its frame lifted by the hop, over a dithered shadow that narrows as it rises;
+ * SWAV-SAW playing, its three teeth stacked back to front, each cutting out what it covers */
+static void ms_mark(const ms_view_t *v)
+{
+    const int lift = v->st.syn.lift, y = MK_TOP - lift;
+    for (int j = 0; j < 2; j++) {
+        const int w = 26 - j * 8 - lift * 6, y0 = MS_ST_B + 1 + j;
+        for (int i = 0; i < w; i++) {                   /* (a Bayer level from 4 at its ends to 24 - 8j in its middle) */
+            const int x = MK_MID - w / 2 + i, d = i < w / 2 ? i : w - 1 - i, l = 4 + (20 - 8 * j) * 2 * d / (w > 1 ? w - 1 : 1);
+            if (T_BAYER[y0 & 7][x & 7] < l) ms_px(x, y0, 1);
+        }
+    }
+    if (v->st.syn.saw) {
+        for (int k = 0; k < 3; k++) {
+            if (k) ms_blit(MK_MASK[k][v->st.syn.lv[k] & 7], MK_RB, MK_H, MK_LEFT, y, 0);
+            ms_blit(MK_TEETH[k][v->st.syn.lv[k] & 7], MK_RB, MK_H, MK_LEFT, y, 1);
+        }
+        return;
+    }
+    ms_blit(MK_BITS[v->st.syn.mk][v->st.syn.fr % MK_FRAMES], MK_RB, MK_H, MK_LEFT, y, 1);
+}
+
+/* SYN: the machine: its class and style small, its voice's model three times the type (twice where three times would
+ * come within MK_GAP of the mark), its mark at the right (not under a knob's or a step's card, or a message) */
 static void d_syn(const ms_view_t *v)
 {
     char o[28];
@@ -1303,7 +1443,8 @@ static void d_syn(const ms_view_t *v)
     if (v->st.syn.style[0]) { *e++ = ' '; s_cpy(e, v->st.syn.style); }
     ms_text(2, MS_ST_T + 7, o, 1);
     const char *md = v->st.syn.model;
-    ms_text_z(2, MS_ST_B - 2, md, ms_tw_z(md, 3) <= 120 ? 3 : 2, 1);
+    ms_text_z(2, MS_ST_B - 2, md, ms_tw_z(md, 3) <= MK_LEFT - MK_GAP - 2 ? 3 : 2, 1);
+    if (v->st.syn.mk < MK_COUNT && v->touch.k < 0 && !v->held.n && !v->toast[0]) ms_mark(v);
 }
 
 /* MIX: a strip a track under its knob: its number (the track in view's in a tag), its level live as a bar from the
@@ -1438,6 +1579,7 @@ static void d_home(const ms_view_t *v)
         const int y = 13 + t * 6, b = y + 4, muted = (v->mutes >> t) & 1;
         char n[2] = {(char)('1' + t), 0};
         if (t == v->track) ms_rect(0, b - 5, 2, 5, 1);
+        if (v->st.home.lead[t] != t) ms_vline(1, y - 2, 6, 1);   /* (a POLY voice: its lead's bracket) */
         ms_text(4, b, n, 1);
         const uint16_t tr = v->st.home.trig[t], ho = v->st.home.hollow[t];
         for (int i = 0; i < v->st.home.len[t]; i++) {

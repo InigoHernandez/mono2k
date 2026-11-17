@@ -7,6 +7,27 @@ window.M2K_KINDS = {
 };
 window.M2K_CHANGES = [
   {
+    date: "2026-11-17", title: "MONO2K 1.11: POLY, and a calmer CPU guard",
+    items: [
+      ["sequencer", "1.11: POLY plays chords on one track. On ARP, turn MODE to POLY: the track becomes a lead and the tracks after it its voices, as many as KNOB 2 (VOIC) says. T4 on three plays T4, T5 and T6; T1 to T3 play on as always."],
+      ["sound", "1.11: Every voice plays the lead's machine and its whole sound: every knob, its locks, its LFOs and its effects. The voices' own sounds wait unheard and come back when POLY is off."],
+      ["workflow", "1.11: Hold a chord on the keys or play it over MIDI on the lead's channel: each note takes a free voice; past VOIC the oldest note gives its voice up. ARP twice holds the chord until the next one."],
+      ["workflow", "1.11: Hold GLO and press the black key printed POLY: the track in view plays chords; the key printed MONO: one note again. While GLO is held, the one the track is lights up."],
+      ["sequencer", "1.11: Recorded, live or in step entry (keys held together are one step), a chord's lowest note goes on the lead's step and the others on its voices' steps. The lead's step decides the chord: its condition, chance, trig type, accent and locks."],
+      ["screen", "1.11: ARP on POLY shows the voices and their notes; HOME and GLO > PLAY name the lead in its voices' cells, and SELECT passes them. GLO > HELP has a page for chords."],
+      ["patterns", "1.11: Your patterns, sounds and projects load and play exactly as before. A pattern with POLY on saves in a new format that 1.10 cannot open."],
+      ["sound", "1.11: When the FM-1's CPU is full it gives way a step at a time, the least heard first: the screen's frames further apart, then a ringing tail (a note's release, its echoes) faded out, its next note as ever, and only then a whole track rests. Each step waits for the last to take effect, so one tight moment no longer silences two or three tracks."],
+      ["sound", "1.11: More room: a short drop that the sound did not cause (a flash write, a page turned) only moves the screen, and nothing is cut for it. A track that rests comes back as soon as there has been room for a second."],
+      ["workflow", "1.11: GLO > PLAY, KNOB 2, REST: which track rests when one must. AUTO, the quietest for what it costs, never the track you are on; T1–T6, that track first; NONE, no track rests (the sound may then drop: DROP counts it). FM-1 only."],
+      ["sound", "1.11: With POLY, before a whole track rests, one note of a chord fades out: on the keys the oldest you hold, from the steps the quietest, never the lead's. Its next note plays as ever, and a chord keeps at least one. A key you press takes a voice the guard is not cutting."],
+      ["screen", "1.11: CPU FULL says what it did: T2 TAIL CUT, T5 VOICE CUT, or T2 RESTS, T4 HEAVIEST. On GLO > PLAY a cut tail or voice shows CUT for a moment, a resting track REST. In the browser, GLO > PLAY's MOTN moved to KNOB 3."],
+      ["workflow", "1.11: PERFORM latched stays on every page. Double-tap FX, then go to any page: the black keys stay its effects, the white keys play the track, and the knobs and screen are the page's, with FX in the header. Hold FX for PERFORM's own knobs and banks; tap FX to let go."],
+      ["workflow", "1.11: An effect that stays on: tap its black key twice and it plays after you let go, its key lit. Tap it again to let go. They stack with the ones you hold; a repeat or another one-at-a-time effect takes over from it. When PERFORM goes, they go too."],
+      ["sound", "1.11: A repeat keeps landing on the beat however long it plays: its loop is now the step's exact length (it drifted up to 5 ms a minute)."],
+      ["workflow", "1.11: GLO > HELP: PERFORM's page has the new latches, and a LIVE page has the mutes, solos, fill and tap tempo."],
+    ],
+  },
+  {
     date: "2026-11-16", title: "MONO2K 1.10: regular ADSR envelopes",
     items: [
       ["sound", "1.10: The amp is a regular ADSR: AMP 1 is ATCK DEC SUS REL. SUS holds a level while the note lasts, a key held or the step's length, and REL takes it down when the note ends. SUS at 0 is the envelope as it was, so every pattern and sound you have plays exactly as before."],
