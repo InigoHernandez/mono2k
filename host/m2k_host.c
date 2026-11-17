@@ -265,6 +265,19 @@ static const ev_t POLY_TOUR[] = {
     {7500, 'x', 0, 0, 0},
 };
 
+/* PERFORM latched (1.11) on A01, playing: FX double-tapped over AMP, then FILT (SEL): the page's knobs and screen, FX in
+ * the header; CRUSH's black key twice, latched (29p); FX held: PERFORM's own view, CRUSH on (29q); FX tapped: let go */
+static const ev_t PERF_TOUR[] = {
+    {2600, 'b', B_PLAY, 1, 0}, {2620, 'b', B_PLAY, 0, 0}, {2700, 'b', B_ENV, 1, 0}, {2720, 'b', B_ENV, 0, 0},
+    {3000, 'b', B_FX, 1, 0}, {3040, 'b', B_FX, 0, 0}, {3150, 'b', B_FX, 1, 0}, {3190, 'b', B_FX, 0, 0},
+    {3400, 'b', B_SEL, 1, 0}, {3420, 'b', B_SEL, 0, 0},
+    {3600, 'k', 17, 1, 0}, {3650, 'k', 17, 0, 0}, {3750, 'k', 17, 1, 0}, {3800, 'k', 17, 0, 0},
+    {5300, 's', 0, 0, "29p_perform_away"},
+    {5400, 'b', B_FX, 1, 0}, {6000, 's', 0, 0, "29q_perform_peek"}, {6100, 'b', B_FX, 0, 0},
+    {6400, 'b', B_FX, 1, 0}, {6440, 'b', B_FX, 0, 0},
+    {6800, 'x', 0, 0, 0},
+};
+
 static void poly_scene(void)
 {
     m2k_init(2005);
@@ -550,13 +563,23 @@ static int text_sweep(void)
         m2k_frame(now); ta_check((int)now);
     }
     ui.snd_sel = 0;
-    /* each layer latched, its map marked; each button's help card */
+    /* each layer latched, its map marked (FX's over the page it was latched on); each button's help card */
     static const uint8_t LAT[4] = {B_GLO, B_SEQ, B_HOME, B_FX};
     ui.page = PG_AMP; ui.sub = 0;
     for (int i = 0; i < 4; i++) {
         ui.latch = (uint8_t)(LAT[i] + 1);
+        ui.paway = 0; ui.lp_page = ui.page; ui.lp_sub = ui.sub; ui.lp_grid = ui.grid; ui.lp_pads = ui.pads;
         now += 3000; ui.trans_t = 0; ui.toast_t = 0; m2k_frame(now); ta_check((int)now);
     }
+    /* FX latched, a page away (1.11): every page with FX in the header, and with GRID, HOLD and FILL beside it */
+    ui.paway = 1;
+    for (int pg = 0; pg < PG_COUNT; pg++)
+        for (int f = 0; f < 2; f++) {
+            ui.page = (uint8_t)pg; ui.sub = 0; ui.grid = (uint8_t)f; sq.arp_hold[ui.trk] = (uint8_t)f; sq.fill = (uint8_t)f;
+            now += 3000; ui.trans_t = 0; ui.toast_t = 0; ui.card_t = 0; ui.focus_t = 0;
+            m2k_frame(now); ta_check((int)now);
+        }
+    ui.grid = 0; sq.arp_hold[ui.trk] = 0; sq.fill = 0; ui.paway = 0;
     ui.latch = 0;
     static const uint8_t CB[6] = {B_SEL, B_ENV, B_ARP, B_PLAY, B_OCTD, B_OCTU};
     for (int i = 0; i < 6; i++) {
@@ -3970,6 +3993,142 @@ static int selftest(void)
         seq_play(0);
         CHECK(tapped && sel && fillq && solo && unsolo && allon && saw_fill && fill_ends,
               "GLO: white 8 taps the tempo (120), SELECT turns it, 7 fills the next loop and only it, 9-14 solo while held, 15 unmutes all");
+    }
+    /* 1.11, PERFORM latched (the owner's, 2026-11-17: "lock the screen of performance effects"). FX double-tapped stays
+     * across pages: a page button, GRID, GLO tapped keep it; its black keys PERFORM's, the white keys the track's (GRID's
+     * steps), the knobs, OCT and the screen the page's, FX in the header; FX held its own view again (the bus's knobs,
+     * its banks), let go there still latched; FX tapped lets go, and of every effect. An effect's key double-tapped
+     * stays on after it is let go, lit; tapped again it goes; colours stack; a move takes a latched move's place (KILL
+     * stacks); leaving PERFORM (FX let go, or its latch) lets go of them all. A latched repeat keeps its lap on the
+     * grid for a minute (its lap the sixteenth's own to a 4096th of a sample: whole samples drifted 5 ms a minute) */
+    {
+        m2k_init(91);
+        int wk[16], bk[11];
+        for (int k = 0; k < M2K_KEYS; k++) { if (ui.kw[k] >= 0 && ui.kw[k] < 16) wk[ui.kw[k]] = k; if (ui.kb[k] >= 0 && ui.kb[k] < 11) bk[ui.kb[k]] = k; }
+        static int16_t pb[256];
+        PAT(cur_pat)->step[0][0] = (m2k_step_t){60, ST_TRIG, C_ALWAYS, 0};
+        seq_play(1);
+        for (int f = 0; f < M2K_SR / 2; f += 128) m2k_render(pb, 128);
+        ui.page = PG_AMP; ui.sub = 0; ui.trk = 0;
+        ui.now = 1000; m2k_button(B_FX, 1); ui.now = 1050; m2k_button(B_FX, 0);
+        ui.now = 1150; m2k_button(B_FX, 1); ui.now = 1200; m2k_button(B_FX, 0);
+        int own = ui.latch == B_FX + 1 && ui.page == PG_AMP && perf_own() && knob_at(0) == BUS_K[0];
+        ui.now = 2000; m2k_button(B_SEL, 1); ui.now = 2040; m2k_button(B_SEL, 0);   /* a page: FILT */
+        const int c0 = knob_param(PG_FILT, ui.sub, 0), v0 = PAT(cur_pat)->kit[0][c0], g0 = PAT(cur_pat)->glob[G_VERB];
+        int pages = ui.latch == B_FX + 1 && ui.page == PG_FILT && perf_layer() && !perf_own() && knob_at(0) == c0;
+        ui.now = 2100; edit(0, 6);                                   /* the page's knob, not the bus's */
+        pages &= PAT(cur_pat)->kit[0][c0] != v0 && PAT(cur_pat)->glob[G_VERB] == g0;
+        const int o0 = ui.oct[0];
+        ui.now = 2200; m2k_button(B_OCTU, 1); ui.now = 2240; m2k_button(B_OCTU, 0);   /* OCT: the page's, the octave */
+        pages &= ui.oct[0] == o0 + 1 && ui.pfb == 0;
+        ui.now = 2300; m2k_key(bk[7], 1);                            /* black 8: CRUSH, held */
+        int keys = perf.on[PF_CRSH];
+        ui.now = 2600; m2k_key(bk[7], 0);
+        keys &= !perf.on[PF_CRSH];
+        ui.now = 2700; m2k_key(wk[0], 1);                            /* a white key: the track's note */
+        keys &= trk[0].gate && sq.nkeys[0] == 1;
+        ui.now = 2900; m2k_key(wk[0], 0);
+        ui.now = 3000; m2k_button(B_SEQ, 1); ui.now = 3040; m2k_button(B_SEQ, 0);   /* GRID */
+        ui.now = 3400; m2k_button(B_GLO, 1); ui.now = 3440; m2k_button(B_GLO, 0);   /* GLO's page */
+        pages &= ui.latch == B_FX + 1 && ui.grid && ui.page == PG_GLO && !perf_own();
+        const uint8_t *L = m2k_leds();
+        int leds = L[wk[0]] >= 64 && L[M2K_KEYS + B_OCTU] != 24 && L[M2K_KEYS + B_OCTD] != 255;   /* (GRID's trig; OCT not the banks') */
+        m2k_frame(ui.now);                                           /* (the splash from here: the header after it) */
+        const uint32_t t0 = ui.now + 3000;
+        uint8_t head[30 * 16];                                       /* the header with FX latched, and without */
+        m_cpy(head, m2k_frame(t0), sizeof head);
+        ui.latch = 0;
+        const uint8_t *fr = m2k_frame(t0);
+        ui.latch = B_FX + 1;
+        int head_d = 0;
+        for (int i = 0; i < 30 * 16; i++) head_d += head[i] != fr[i];
+        int mark = head_d > 0;
+        m_cpy(head, m2k_frame(t0 + 1000), sizeof head);             /* (a second on: steady, no blink) */
+        fr = m2k_frame(t0 + 1250);
+        for (int i = 0; i < 30 * 16; i++) mark &= head[i] == fr[i];
+        ui.now = 14000; m2k_button(B_FX, 1);                          /* held: its own view */
+        int peek = perf_own() && knob_at(1) == BUS_K[1];
+        ui.now = 14100; m2k_button(B_OCTU, 1); m2k_button(B_OCTU, 0);
+        peek &= ui.pfb == 1;
+        L = m2k_leds();
+        peek &= L[M2K_KEYS + B_OCTU] == 255;
+        ui.now = 14700; m2k_button(B_FX, 0);
+        peek &= ui.latch == B_FX + 1 && !perf_own() && knob_at(1) != BUS_K[1];
+        /* effects latched: double-tapped, on after the key; colours stack; tapped again, off */
+        ui.pfb = 0;
+        ui.now = 15000; m2k_key(bk[9], 1); ui.now = 15060; m2k_key(bk[9], 0);   /* DRIVE twice */
+        ui.now = 15150; m2k_key(bk[9], 1); ui.now = 15210; m2k_key(bk[9], 0);
+        int lat = perf.on[PF_DRIV] && (ui.pf_lat >> PF_DRIV & 1);
+        ui.now = 15400; m2k_key(bk[7], 1); ui.now = 15450; m2k_key(bk[7], 0);   /* CRUSH twice */
+        ui.now = 15500; m2k_key(bk[7], 1); ui.now = 15550; m2k_key(bk[7], 0);
+        lat &= perf.on[PF_DRIV] && perf.on[PF_CRSH];
+        L = m2k_leds();
+        lat &= L[bk[9]] == 255 && L[bk[7]] == 255 && L[bk[8]] < 64;  /* (lit steady: blink or not, the same) */
+        const uint8_t l9 = L[bk[9]];
+        ui.now += 300; L = m2k_leds();
+        lat &= L[bk[9]] == l9;
+        ui.now = 16200; m2k_key(bk[9], 1); ui.now = 16250; m2k_key(bk[9], 0);   /* DRIVE tapped: off, CRUSH on */
+        lat &= !perf.on[PF_DRIV] && perf.on[PF_CRSH] && !(ui.pf_lat >> PF_DRIV & 1);
+        ui.now = 16600; m2k_key(bk[1], 1); ui.now = 16650; m2k_key(bk[1], 0);   /* RPT 1/8 twice: latched */
+        ui.now = 16750; m2k_key(bk[1], 1); ui.now = 16800; m2k_key(bk[1], 0);
+        for (int f = 0; f < 4410; f += 128) m2k_render(pb, 128);
+        int moves = perf.on[PF_R8] && bus.g_pk == PF_R8 + 1 && (ui.pf_lat >> PF_R8 & 1);
+        ui.now = 17500; m2k_key(bk[10], 1); ui.now = 17550; m2k_key(bk[10], 0);  /* KILL twice: stacks */
+        ui.now = 17650; m2k_key(bk[10], 1); ui.now = 17700; m2k_key(bk[10], 0);
+        moves &= perf.on[PF_KILL] && perf.on[PF_R8];
+        ui.now = 18000; m2k_key(bk[4], 1);                             /* REVERSE held: the latched repeat's place */
+        moves &= perf.on[PF_REV] && !perf.on[PF_R8] && !(ui.pf_lat >> PF_R8 & 1) && perf.on[PF_KILL] && perf.on[PF_CRSH];
+        for (int f = 0; f < 4410; f += 128) m2k_render(pb, 128);
+        moves &= bus.g_pk == PF_REV + 1;
+        ui.now = 18500; m2k_key(bk[4], 0);
+        moves &= !perf.on[PF_REV] && !perf.on[PF_R8];
+        /* FX tapped: let go, and of every effect latched */
+        ui.now = 19000; m2k_button(B_FX, 1); ui.now = 19050; m2k_button(B_FX, 0);
+        int off = !ui.latch && !ui.pf_lat && !perf.on[PF_KILL] && !perf.on[PF_CRSH] && ui.page == PG_GLO && !perf_layer();
+        /* held FX (not latched): an effect latched under it goes when FX is let go */
+        ui.now = 20000; m2k_button(B_FX, 1);
+        ui.now = 20100; m2k_key(bk[9], 1); ui.now = 20150; m2k_key(bk[9], 0);
+        ui.now = 20250; m2k_key(bk[9], 1); ui.now = 20300; m2k_key(bk[9], 0);
+        int held_fx = perf.on[PF_DRIV] && (ui.pf_lat >> PF_DRIV & 1);
+        ui.now = 21000; m2k_button(B_FX, 0);
+        held_fx &= !perf.on[PF_DRIV] && !ui.pf_lat;
+        /* slow taps (300 ms apart) latch nothing: each a press of its own */
+        ui.now = 22000; m2k_button(B_FX, 1);
+        ui.now = 22100; m2k_key(bk[9], 1); ui.now = 22150; m2k_key(bk[9], 0);
+        ui.now = 22450; m2k_key(bk[9], 1); ui.now = 22500; m2k_key(bk[9], 0);
+        int slow = !perf.on[PF_DRIV] && !ui.pf_lat;
+        m2k_button(B_FX, 0);
+        seq_play(0);
+        /* the latched repeat on the grid for a minute: RPT 1/16 at 120 BPM (a sixteenth 2756.25 half-rate samples), no
+         * swing, its read against the ring's place since the last beat */
+        m2k_init(92);
+        PAT(cur_pat)->glob[G_TMPO] = 120 - 30;
+        PAT(cur_pat)->glob[G_SWNG] = 0;
+        seq_play(1);
+        for (int f = 0; f < M2K_SR / 2; f += 128) m2k_render(pb, 128);
+        ui.now = 20000; m2k_button(B_FX, 1);
+        ui.now = 20100; m2k_key(bk[2], 1); ui.now = 20150; m2k_key(bk[2], 0);
+        ui.now = 20250; m2k_key(bk[2], 1); ui.now = 20300; m2k_key(bk[2], 0);
+        int32_t e0 = 0, e1 = 0, worst = 0;
+        for (int f = 0, n = 0; f < 60 * M2K_SR; f += M2K_SUB, n++) {
+            m2k_render(eng_out, M2K_SUB);
+            const int32_t len = (int32_t)bus.g_len, ph = (int32_t)(bus.gw - bus.g_grid[2]), p = (int32_t)(bus.g_pos >> 12);
+            int32_t e = ((ph - p) % len + len) % len;
+            if (e > len / 2) e -= len;
+            if (n == 100) e0 = e;
+            if (f >= 59 * M2K_SR) { e1 = e; if (abs(e - e0) > worst) worst = abs(e - e0); }
+        }
+        int beat = perf.on[PF_R16] && bus.g_pk == PF_R16 + 1 && worst <= 16;
+        m2k_button(B_FX, 0);
+        seq_play(0);
+        printf("     PERFORM latched: own %d, pages %d, keys %d, LEDs %d, peek %d, effects %d, moves %d, off %d, header %d, "
+               "held FX %d, slow %d; RPT 1/16 a minute on: %+d then %+d half-rate samples off its grid (worst %d)\n",
+               own, pages, keys, leds, peek, lat, moves, off, mark, held_fx, slow, (int)e0, (int)e1, (int)worst);
+        CHECK(own && pages && keys && leds && peek && off && mark,
+              "PERFORM latched across pages: its black keys stay, the page's knobs, OCT and screen, FX in the header; FX held its own view, tapped let go");
+        CHECK(lat && moves && held_fx && slow,
+              "PERFORM effects latched: a key twice stays on, lit; again, off; colours stack, a move takes a latched move's place; leaving lets go");
+        CHECK(beat, "PERFORM: a latched repeat lands on the beat after a minute (its lap the sixteenth's to a 4096th of a sample)");
     }
     /* the latch: GLO, SEQ, HOME, FX double-tapped stay as if held over the page the first tap left (taps slower step
      * through the pages); the button again lets go, and so does a page button the layer has no use for */
@@ -7483,7 +7642,8 @@ static int selftest(void)
     }
     {
         /* PERFORM's repeats on the grid: R8 pressed 40 ms past a step plays the eighth that began on the last eighth
-         * (a quarter is a quarter at 120 BPM: 11025 half-rate samples, it was cut to 8192), coming round on each eighth;
+         * (a quarter is a quarter at 120 BPM: 11025 half-rate samples, it was cut to 8192; 1.11 its lap the sixteenth's
+         * to a 4096th of a sample, 11024 before), coming round on each eighth;
          * the stop slows in a straight line to nothing within its beat and spins back up once let go; the stutter is
          * gated, about half of each 1/32 silent; DRIVE stays at the dry's level, never at full scale */
         m2k_pattern_t *q = eng_pat(78);
@@ -7493,14 +7653,18 @@ static int selftest(void)
         sine_on();
         eng_run(1.0 + 0.040);
         bus_perform(PF_R4, 1);
-        int r4 = bus.g_len == (sps_q8 >> 9) * 4;
+        int r4 = bus.g_len == 11025 && bus.g_lenq == sps_q8 * 32;
         bus_perform(PF_R4, 0);
         eng_run(0.3);
         bus_perform(PF_R8, 1);
-        int grid = bus.g_start == bus.g_grid[1] && bus.g_len == (sps_q8 >> 9) * 2, round_ok = 1, was = sq.step;
+        int grid = bus.g_start == bus.g_grid[1] && bus.g_lenq == sps_q8 * 16 && bus.g_len == (sps_q8 * 16) >> 12, round_ok = 1, was = sq.step;
         for (int f = 0; f < M2K_SR; f += M2K_SUB) {
             m2k_render(eng_out, M2K_SUB);
-            if (sq.step != was && !((sq.step - 1) & 1)) round_ok &= (bus.g_pos >> 12) < M2K_SUB;   /* (an eighth begins) */
+            if (sq.step != was && !((sq.step - 1) & 1)) {   /* (an eighth begins: its lap at its end or start, the bus a
+                                                             * block behind) */
+                const uint32_t p = bus.g_pos >> 12;
+                round_ok &= (p < bus.g_len / 2 ? p : bus.g_len - p) < M2K_SUB;
+            }
             was = sq.step;
         }
         bus_perform(PF_R8, 0);
@@ -8148,6 +8312,8 @@ int main(int argc, char **argv)
     run_events(ADSR_TOUR, out);
     poly_scene();
     run_events(POLY_TOUR, out);
+    m2k_init(2006);
+    run_events(PERF_TOUR, out);
     printf("tour done%s\n", ta_found ? ": TEXT TOUCHES OR IS CUT (above)" : ", every text clear");
     return ta_found != 0;
 }

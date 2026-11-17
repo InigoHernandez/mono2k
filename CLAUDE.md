@@ -120,8 +120,22 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   LFO's pages LFO 1 2 3, the half kept (an armed link follows it), the track on every other page (the owner's, 2026-11-08); `knob_mod`
   a marker under any knob an LFO moves; HOME in GRID or step entry the track's notes (`note_cells`, four rows under the knobs'
   columns; a Grids lane track keeps the lanes); `step_card` a held step's card after 500 ms, gone while a knob's value shows;
-  GLO > HELP the manual on the device (`HELP`, ten pages, KNOB 1; the tenth POLY's, 1.11). UI only: `m2k_draw --hash` the same, its page rows at
+  GLO > HELP the manual on the device (`HELP`, eleven pages, KNOB 1; the tenth POLY's, the eleventh LIVE, 1.11). UI only: `m2k_draw --hash` the same, its page rows at
   their worst for the audit of both cores (the owner's rule, 2026-11-07: every build, the screen's cost included).
+  PERFORM latched (1.11, the owner's: "I would like to lock the screen of performance effects some how"): FX
+  double-tapped survives every page button (`latch_frees` passes FX's; GLO's, SEQ's and HOME's latches as ever, one
+  latch at a time); over the page it was latched on it is PERFORM's own view (`perf_own`: its panel, the bus's knobs,
+  OCT its banks), once the page, sub, GRID, PADS or the catalogue changed (`ui.paway`, sticky, `ui.lp_*` the page) the
+  black keys stay PERFORM's, the white keys the track's (GRID's steps, lit as such), the knobs, OCT and the screen the
+  page's, a steady FX tag in the header; FX held there its own view while held, FX tapped lets go (on the release).
+  An effect's key double-tapped (`pf_press`, `pf_released`, `ui.pf_lat`; both devices: the FM-1's black keys, the
+  Move's keyboard pads) stays on, lit steady, toast LATCHED; tapped again LET GO; colours stack, a move (`pf_ring`) lets
+  go of a latched move as it takes over (KILL stacks); leaving PERFORM (FX let go or its latch let go, the Move's
+  PERFORM pad: `pf_unlatch`) lets go of them all, held ones too. A repeat's lap is the sixteenth's to a 4096th of a
+  sample (`g_lenq`, Q12 from `bsps`: whole samples drifted 5 ms a minute at 120 BPM). Self-test: PERFORM latched
+  (pages, keys, LEDs, the peek, the header), effects latched, a latched RPT 1/16 on the grid after a minute;
+  `tools/perform_mutants.py` (check.sh, 13 mutants); the Move's bench ctl (latch, stack, a move's place, slow taps,
+  across pages, the PERFORM pad letting go). Stills 29p (away) and 29q (FX held there).
   An arp a track (1.6.1, the owner's: "keep HOLD when switching to another track. So each arp per track"): each track
   its own keys, held notes, HOLD and clock (`sq.keys[t]`, `held[t]`, `arp_hold[t]`, `arp_block`), the panel's keys the
   track in view's, MIDI's their channel's; switching tracks lets go of the keys (a track without HOLD stops, nothing

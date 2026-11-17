@@ -562,7 +562,7 @@ static int nsub(int page);                     /* SYN has a third page, the bank
 #define SETTING(i) (0xC0 | (i))
 #define GL(g) (0x80 | (g))
 #define NONE 0xFF
-#define HELP_N 10                       /* GLO > HELP's pages */
+#define HELP_N 11                       /* GLO > HELP's pages */
 static int view_trk(void);                     /* the track in view (LANE is its own) */
 /* the bus's four, GLO > BUS's and PERFORM's knobs: the reverb, the crunch, the drive (the owner's "the important") */
 static const uint8_t BUS_K[4] = {GL(G_VERB), GL(G_DAMP), GL(G_ADPC), GL(G_DRIV)};
@@ -642,6 +642,11 @@ static struct {
     uint8_t ntap;
     uint8_t octd, octd_used;           /* OCT- held: a knob turned meanwhile takes its lock away (or its value home) */
     uint8_t latch;                     /* a layer double-tapped open (its button + 1): GLO, SEQ, HOME, FX */
+    uint8_t paway;                     /* FX latched and a page changed since (perf_own): its keys stay PERFORM's */
+    uint8_t lp_page, lp_sub, lp_grid, lp_pads;   /* (the page FX was latched over) */
+    uint32_t pf_lat;                   /* PERFORM's effects latched, a bit each (pf_press: a key double-tapped) */
+    uint32_t pf_tap_t;                 /* an effect's key tapped (pf_tap: the effect + 1), when: a press soon after latches */
+    uint8_t pf_tap;
     uint32_t arp_tap;                  /* ARP's last press: a second within 300 ms is the arp's HOLD */
     uint8_t arp_sub;                   /* (the page that press left, + 1, when it turned ARP's: HOLD puts it back) */
     uint8_t dt_b, dt_page, dt_sub, dt_grid, dt_pads;   /* the last clean tap (+ 1) and what it changed */
@@ -1217,11 +1222,23 @@ static int held(int b) { return ui.btn[b] || ui.latch == b + 1; }    /* (a latch
 static int seq_layer(void) { return held(B_SEQ) && !held(B_GLO) && !held(B_HOME) && !ui.btn[B_EDIT]; }
 static int perf_layer(void) { return held(B_FX) && !held(B_GLO) && !held(B_HOME) && !ui.btn[B_EDIT]; }
 static int mom_layer(void) { return ui.btn[B_LFO] && !held(B_GLO) && !held(B_HOME) && !ui.btn[B_EDIT]; }
+/* PERFORM's own view (its panel, the bus's knobs, OCT- and OCT+ its banks): FX held, or latched over the page it was
+ * latched on. Latched, a page changed (a page button, GRID, the catalogue: the owner's, 2026-11-17, "lock the screen of
+ * performance effects"): its black keys stay PERFORM's, the white keys the track's, and the knobs, OCT and the screen
+ * are the page's, its header marked FX, until FX is held (its own view while held) or tapped (let go) */
+static int perf_own(void)
+{
+    if (!perf_layer()) return 0;
+    if (ui.btn[B_FX] || ui.latch != B_FX + 1) return 1;
+    if (!ui.paway && (ui.page != ui.lp_page || ui.sub != ui.lp_sub || ui.grid != ui.lp_grid || ui.pads != ui.lp_pads || cat.open))
+        ui.paway = 1;
+    return !ui.paway;
+}
 static int knob_at(int k)
 {
     const uint8_t SEQ_K[4] = {GL(G_LEN), (uint8_t)GL(G_TLEN1 + ui.trk), (uint8_t)GL(G_SPD1 + ui.trk), GL(G_SWNG)};
     if (cat.open) return k == 0 ? SETTING(18) : k == 1 ? SETTING(21) : NONE;   /* the catalogue: SLOT, CAT */
-    return seq_layer() ? SEQ_K[k] : perf_layer() ? BUS_K[k] : knob_param(ui.page, ui.sub, k);   /* (PERFORM: the bus's) */
+    return seq_layer() ? SEQ_K[k] : perf_own() ? BUS_K[k] : knob_param(ui.page, ui.sub, k);   /* (PERFORM: the bus's) */
 }
 
 /* LFO held: what the knobs move snaps back when it is let go (OCT+ while held keeps it), into the pattern it was
@@ -1827,6 +1844,48 @@ static void mute_flip(int t)
 /* a key's press, for its release (ui.kact): its note, a solo, a PERFORM effect, a page key, a step held */
 enum { KA_NONE, KA_NOTE, KA_SOLO, KA_PERF, KA_PKEY, KA_STEP };
 
+/* PERFORM's effects latched (the owner's, 2026-11-17): an effect's key double-tapped (the FM-1's black keys, the Move's
+ * keyboard) stays on after it is let go, its key lit steady, as if held; tapped again it lets go. They stack as held
+ * ones do; a move (an effect of the ring, pf_ring: one at a time) pressed lets go of a latched move, as it takes over
+ * from a held one (KILL, not of the ring, stacks). Leaving PERFORM (FX let go, its latch let go; the Move's PERFORM pad)
+ * lets go of them all (pf_unlatch), as of the held ones: nothing is left running with no key in reach to stop it */
+#define PF_DT_MS 250
+/* an effect's key pressed: 0 it plays while held; 1 the press latched it (a double tap's second) or let it go (latched,
+ * tapped again); -1 it cannot play (DUB with no line free) */
+static int pf_press(int e)
+{
+    const uint32_t m = 1u << e;
+    if (ui.pf_lat & m) {
+        ui.pf_lat &= ~m;
+        ui.pf_tap = 0;
+        if (perf.on[e]) bus_perform(e, 0);
+        toast(PF_NAME[e], "LET GO");
+        return 1;
+    }
+    const int dbl = ui.pf_tap == e + 1 && ui.now - ui.pf_tap_t < PF_DT_MS;
+    ui.pf_tap = 0;
+    if (pf_ring(e))
+        for (int j = 0; j < PF_COUNT; j++)
+            if ((ui.pf_lat >> j & 1) && pf_ring(j)) { ui.pf_lat &= ~(1u << j); if (perf.on[j]) bus_perform(j, 0); }
+    if (!bus_perform(e, 1)) return -1;
+    if (!dbl) return 0;
+    ui.pf_lat |= m;
+    toast(PF_NAME[e], "LATCHED");
+    return 1;
+}
+/* its key let go after HELD_MS: the effect ends (unless latched meanwhile); a quick one is a tap, for a double */
+static void pf_released(int e, uint32_t held_ms)
+{
+    if (perf.on[e] && !(ui.pf_lat >> e & 1)) bus_perform(e, 0);
+    if (held_ms < PF_DT_MS) { ui.pf_tap = (uint8_t)(e + 1); ui.pf_tap_t = ui.now; }
+}
+static void pf_unlatch(void)
+{
+    for (int j = 0; j < PF_COUNT; j++) if ((ui.pf_lat >> j & 1) && perf.on[j]) bus_perform(j, 0);
+    ui.pf_lat = 0;
+    ui.pf_tap = 0;
+}
+
 /* a key let go: what its press did is undone, whatever layer is held by now (a note left on drones and silences its
  * track's sequence, a solo stays, a step stays held, a page key fires its length) */
 static void key_release(int k)
@@ -1838,7 +1897,7 @@ static void key_release(int k)
         for (int i = 0; i < sq.nkeys[sq.ktrk]; i++) if (sq.keys[sq.ktrk][i] == arg) { live_off(arg); break; }
         break;
     case KA_SOLO: solo_key(arg, 0); break;
-    case KA_PERF: if (perf.on[arg]) bus_perform(arg, 0); break;   /* (FX let go first has stopped it) */
+    case KA_PERF: pf_released(arg, ui.now - ui.kt0[k]); break;   /* (FX let go first has stopped it) */
     case KA_PKEY: if (ui.pkey == arg + 1) ui.pkey = 0; break;
     case KA_STEP: {                                /* a quick tap on a trig removes it; held longer, it was looked at */
         int added = 1, was = 0;
@@ -1898,8 +1957,9 @@ static void key_event(int k, int down)
     }
     if (perf_layer() && b >= 0) {      /* FX held: the black keys are PERFORM's effects, while held */
         int e = b + ui.pfb * PF_BANK;  /* the bank shown; its release lets go of this one, whichever is shown then */
-        if (b < PF_BANK && bus_perform(e, 1)) { ui.kact[k] = KA_PERF; ui.karg[k] = (uint8_t)e; }
-        else if (b < PF_BANK) toast(PF_NAME[e], "NO DELAY FREE");
+        const int r = b < PF_BANK ? pf_press(e) : 1;   /* (a double tap latches it: pf_press) */
+        if (!r) { ui.kact[k] = KA_PERF; ui.karg[k] = (uint8_t)e; }
+        else if (r < 0) toast(PF_NAME[e], "NO DELAY FREE");
         ui.lay_used[0] = 1;
         return;
     }
@@ -2459,13 +2519,15 @@ static const char *const BTN_N[B_COUNT] = {"FX", "SEL", "ENV", "LFO", "EDIT", "G
 
 /* double-tap GLO, SEQ, HOME or FX: its keys and knobs stay as if it were held, over the page the first tap left (the
  * button combos still want it held: PLAY, REC, SAVE and the octaves are themselves meanwhile); its button again lets
- * it go, and so does any other page button */
+ * it go, and so does any other page button, but FX's (perf_own: PERFORM stays across pages; another layer latched
+ * takes its place, one at a time) */
+static void pf_unlatch(void);
 static void latch_off(void)
 {
     if (!ui.latch) return;
     int b = ui.latch - 1;
     ui.latch = 0;
-    if (b == B_FX) for (int k = 0; k < PF_COUNT; k++) if (perf.on[k]) bus_perform(k, 0);
+    if (b == B_FX) { for (int k = 0; k < PF_COUNT; k++) if (perf.on[k]) bus_perform(k, 0); pf_unlatch(); ui.paway = 0; }
     char a[12];
     s_cpy(s_cpy(a, BTN_N[b]), " LET GO");
     toast(a, 0);
@@ -2484,6 +2546,7 @@ static int latch_press(int b)
         ui.nheld = 0;
         latch_off();
         ui.latch = (uint8_t)(b + 1);
+        if (b == B_FX) { ui.paway = 0; ui.lp_page = ui.page; ui.lp_sub = ui.sub; ui.lp_grid = ui.grid; ui.lp_pads = ui.pads; }
         char a[16], o[20];
         s_cpy(s_cpy(a, BTN_N[b]), " LATCHED");
         s_cpy(s_cpy(s_cpy(o, "TAP "), BTN_N[b]), ": LET GO");
@@ -2502,7 +2565,7 @@ static void latch_tapped(int b, uint32_t hd) { if (hd < 250) { ui.dt_b = (uint8_
 static int latch_frees(int b)
 {
     int l = ui.latch - 1;
-    return ui.latch && b != l && b != B_SAVE && b != B_PLAY && b != B_REC && b != B_OCTD && b != B_OCTU;
+    return ui.latch && l != B_FX && b != l && b != B_SAVE && b != B_PLAY && b != B_REC && b != B_OCTD && b != B_OCTU;
 }
 
 /* SEL ENV ARP PLAY OCT- OCT+ held a second with nothing else touched: a card of what they do; the release then
@@ -2634,7 +2697,7 @@ static void button_event(int b, int down)
         }
         return;
     }
-    if ((b == B_OCTU || b == B_OCTD) && perf_layer()) {   /* PERFORM's banks: OCT- A, OCT+ B (held effects go on) */
+    if ((b == B_OCTU || b == B_OCTD) && perf_own()) {     /* PERFORM's banks: OCT- A, OCT+ B (held effects go on) */
         if (down) { ui.pfb = b == B_OCTU; ui.lay_used[0] = 1; }
         if (b == B_OCTD) { ui.octd = 0; ui.octd_used = 1; }   /* (its release, FX let go first: nothing) */
         return;
@@ -2651,6 +2714,7 @@ static void button_event(int b, int down)
     if (b == B_FX || b == B_LFO) {    /* a tap: the page; held: PERFORM (FX), the momentary knobs (LFO) */
         int i = b == B_LFO;
         if (down) {
+            if (!i && ui.latch == B_FX + 1 && ui.paway) { ui.lay_t0[0] = ui.now | 1u; ui.lay_used[0] = 0; return; }
             if (!i && latch_press(b)) { ui.lay_t0[0] = 0; ui.lay_used[0] = 1; return; }
             ui.lay_t0[i] = ui.now | 1u; ui.lay_used[i] = 0;
             return;
@@ -2658,7 +2722,8 @@ static void button_event(int b, int down)
         uint32_t hd = ui.lay_t0[i] ? ui.now - (ui.lay_t0[i] & ~1u) : 0;
         int used = ui.lay_used[i] || !ui.lay_t0[i];
         ui.lay_t0[i] = 0;
-        if (b == B_FX) { if (ui.latch != B_FX + 1) for (int k = 0; k < PF_COUNT; k++) if (perf.on[k]) bus_perform(k, 0); }
+        if (!i && ui.latch == B_FX + 1) { if (!used && hd < 400) latch_off(); return; }   /* (away: tapped, let go) */
+        if (b == B_FX) { for (int k = 0; k < PF_COUNT; k++) if (perf.on[k]) bus_perform(k, 0); pf_unlatch(); }
         else mom_release();
         if (used || hd >= 400) return;
         if (i) ui.link = 0;
@@ -3117,14 +3182,15 @@ static void header(void)
     char a[8];
     s_pat(a, cur_pat);
     int pw = 2 + bar_tag(2, 0, a, 1);
-    /* (HOLD: the arp's; MUTE: a mute waiting for the bar, its box blinking) */
-    static const char *const MODE[6] = {"GRID", "PADS", "HOLD", "MUTE", "READY", "FILL"};
-    const int on[6] = {ui.grid, ui.pads, sq.arp_hold[ui.trk], mute_pending(), sq.ready, sq.fill};
-    for (int i = 0; i < 6; i++) {
+    /* (FX: PERFORM latched, its keys on every page; HOLD: the arp's; MUTE: a mute waiting for the bar, its box
+     * blinking) */
+    static const char *const MODE[7] = {"GRID", "PADS", "FX", "HOLD", "MUTE", "READY", "FILL"};
+    const int on[7] = {ui.grid, ui.pads, ui.latch == B_FX + 1, sq.arp_hold[ui.trk], mute_pending(), sq.ready, sq.fill};
+    for (int i = 0; i < 7; i++) {
         if (!on[i]) continue;
         int w = text_w(&F_S, MODE[i], 0) + 6;
         if (xr - w + 1 < pw + 6) continue;
-        bar_tag(xr - w + 1, 0, MODE[i], i == 3 ? (int)((ui.now >> 7) & 1) : i >= 2);
+        bar_tag(xr - w + 1, 0, MODE[i], i == 4 ? (int)((ui.now >> 7) & 1) : i >= 2);
         xr -= w + 4;
     }
     const char *nm = pat_name(cur_pat);
@@ -4495,12 +4561,14 @@ static const char *const HELP[HELP_N][7] = {
      "GLO + REC COPY, PLAY PASTE", "GLO + SEQ CLEAR"},
     {"RECORD", "PLAY, REC: NOTES LAND", "REC, STOPPED: NOTE BY NOTE", "EDIT RESTS, PRESETS MOVES", "REC HELD: FILL",
      "KNOBS WHILE REC: LOCKS", 0},
-    {"PERFORM", "FX HELD: BLACK KEYS, FX", "OCT- OCT+: THEIR TWO BANKS", "FX TWICE: IT STAYS", "GLO HELD: WHITE 1-6 MUTE",
-     "WHITE 9-14 SOLO", "WHITE 7 FILL, 8 TAP"},
+    {"PERFORM", "FX HELD: BLACK KEYS, FX", "OCT- OCT+: THEIR TWO BANKS", "FX TWICE: STAYS, ANY PAGE",
+     "HOLD FX: ITS KNOBS AGAIN", "BLACK KEY TWICE: STAYS ON", "TAP IT AGAIN: LET GO"},
     {"SAVE", "SAVE: KEEP THE PATTERN", "GLO + SAVE: BACK TO IT", "SAVE HELD: THE PROJECT", "GLO + OCT- UNDO",
      "GLO + OCT+ REDO", 0},
     {"CHORDS", "ARP, KNOB 1: MODE POLY", "KNOB 2: HOW MANY VOICES", "THE NEXT TRACKS PLAY IT", "GLO + POLY KEY: ON",
      "GLO + MONO KEY: OFF", "ARP TWICE: CHORD HOLD"},
+    {"LIVE", "GLO HELD: WHITE 1-6 MUTE", "WHITE 9-14 SOLO", "WHITE 7 FILL, 8 TAP", "GLO TWICE: IT STAYS",
+     "TAP IT AGAIN: LET GO", 0},
 };
 
 static void help_page(void)
@@ -5039,7 +5107,7 @@ static void seq_help(void)
 /* FX held a moment: PERFORM's effects on the black keys, the bus's knobs; LFO held: the knobs snap back */
 static void lay_help(void)
 {
-    int i = perf_layer() ? 0 : mom_layer() ? 1 : -1;
+    int i = perf_own() ? 0 : mom_layer() ? 1 : -1;
     if (i < 0 || ((i || ui.latch != B_FX + 1) && (!ui.lay_t0[i] || (!ui.lay_used[i] && ui.now - (ui.lay_t0[i] & ~1u) < 350)))) return;
     if (i) {
         static const char *const P[2] = {"OCT+", "KEEP THEM"};
@@ -5342,9 +5410,10 @@ const uint8_t *m2k_leds(void)
             else if (w == 14) v = mute_pending() ? (fast ? 255 : 16) : p->mute || sq.solo ? 90 : 16;
         } else if (lay == 1 && (b == BK_MONO || b == BK_POLY)) {
             v = (pv.nv[ui.trk] > 1) == (b == BK_POLY) ? 255 : 16;   /* (the one the track in view is: POLY or MONO) */
-        } else if (lay == 2) {
-            if (b >= 0 && b < PF_BANK) v = perf.on[b + ui.pfb * PF_BANK] ? 255 : ui.kact[k] == KA_PERF ? 90 : 24;   /* (90: the other bank's, held) */
-            else if (w >= 0) { int note = 53 + k + 12 * ui.oct[ui.trk]; v = ui.keys[k] ? 255 : trk[ui.trk].sounding && trk[ui.trk].note == note ? 120 : 0; }
+        } else if (lay == 2) {         /* (90: the other bank's, held or latched; the white keys the page's, below) */
+            if (b >= 0 && b < PF_BANK)
+                v = perf.on[b + ui.pfb * PF_BANK] ? 255 : ui.kact[k] == KA_PERF || (ui.pf_lat >> (b + (1 - ui.pfb) * PF_BANK) & 1) ? 90 : 24;
+            else if (w >= 0) continue;
         } else if (lay == 3) {
             if (w >= 0 && w < 8) v = 200;
         } else if (lay == 4) {
@@ -5358,7 +5427,8 @@ const uint8_t *m2k_leds(void)
         }
         L[k] = (uint8_t)v;
     }
-    for (int k = 0; !lay && k < M2K_KEYS; k++) {
+    for (int k = 0; k < M2K_KEYS; k++) {
+        if (lay && (lay != 2 || ui.kw[k] < 0)) continue;   /* (no layer; or PERFORM's, its white keys) */
         int w = ui.kw[k], b = ui.kb[k], v = 0;
         if (ui.grid) {
             if (w >= 0) {
@@ -5396,8 +5466,9 @@ const uint8_t *m2k_leds(void)
     B[B_SEQ] = ui.grid ? 255 : 0;
     B[B_PLAY] = sq.playing ? ((play_step() & 3) == 0 ? 255 : 70) : sq.ready && blink ? 255 : 0;   /* Ready: blinks */
     B[B_REC] = sq.rec ? 255 : 0;
-    B[B_OCTD] = lay == 2 ? (ui.pfb ? 24 : 255) : ui.oct[ui.trk] < 0 ? 200 : 0;   /* PERFORM: the bank shown lit */
-    B[B_OCTU] = lay == 2 ? (ui.pfb ? 255 : 24) : ui.oct[ui.trk] > 0 ? 200 : 0;
+    const int pown = lay == 2 && perf_own();
+    B[B_OCTD] = pown ? (ui.pfb ? 24 : 255) : ui.oct[ui.trk] < 0 ? 200 : 0;   /* PERFORM: the bank shown lit */
+    B[B_OCTU] = pown ? (ui.pfb ? 255 : 24) : ui.oct[ui.trk] > 0 ? 200 : 0;
     if (ui.latch) B[ui.latch - 1] = blink ? 255 : 0;   /* a latched layer's button blinks */
     return L;
 }

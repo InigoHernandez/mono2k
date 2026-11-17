@@ -633,7 +633,8 @@
   <p class="sub">Mutes, solos, fills, the bus's effects and sweeps that come back, under one hand.</p>
   <ol class="steps">
     <li>Double-tap GLO: white 1–6 mute, 9–14 solo while held, 7 fills the next loop, 8 taps the tempo, 15 unmutes all. The keys light for the tracks heard.</li>
-    <li>Hold FX for PERFORM: a black key repeats, reverses, stops or kills the mix while held. OCT+ for bank B. Double-tap FX to keep it under both hands.</li>
+    <li>Hold FX for PERFORM: a black key repeats, reverses, stops or kills the mix while held. OCT+ for bank B. Double-tap FX to keep it under both hands, on every page.</li>
+    <li>Tap a black key twice: its effect stays on. Tap it again to let go.</li>
     <li>Hold LFO and sweep a knob: it comes back when you let go.</li>
     <li>Tap the latched button again to let go.</li>
   </ol>
@@ -641,6 +642,8 @@
     <figure class="fig"><canvas data-scr="29f_perform"></canvas><figcaption>FX held: PERFORM, the bus's effects on the black keys.</figcaption></figure>
     <figure class="fig"><canvas data-scr="29f_perform_b"></canvas><figcaption>FX, then OCT+: bank B, FREEZE held.</figcaption></figure>
     <figure class="fig"><canvas data-scr="29i_seq_latched"></canvas><figcaption>SEQ double-tapped: its tools and knobs stay; its button blinks.</figcaption></figure>
+    <figure class="fig"><canvas data-scr="29p_perform_away"></canvas><figcaption>FX latched, then FILT: FILT's knobs, FX in the header, CRUSH latched on.</figcaption></figure>
+    <figure class="fig"><canvas data-scr="29q_perform_peek"></canvas><figcaption>FX held there: PERFORM's own view, CRUSH on.</figcaption></figure>
   </div>
   <h2 id="perform">PERFORM</h2>
   <p>The black keys play the bus's effects while held; the white keys still play the track. OCT− is bank A, OCT+ bank B; a held effect keeps going when you switch. The knobs are the bus's: DCAY, DAMP, ADPC and DRIV. Nothing clicks, and the repeats land on the beat even if you press late.</p>
@@ -661,14 +664,18 @@
     </tbody>
   </table>
   <p>Below 85 BPM a quarter is too long for the memory: RPT 1/4 repeats an eighth. DUB borrows a track's delay that is off; if every delay is in use it says so.</p>
+  <h2 id="stays">An effect that stays on</h2>
+  <p>Tap a black key twice, quickly: its effect stays on after you let go, its key lit. Tap it again to let go. It stacks with what you hold; the one-at-a-time effects (bank A's 1–7, bank B's 1–5 and 11) give way to the next one pressed. KILL and STOP can stay on too. A repeat that stays on keeps landing on the beat.</p>
+  <p>Leaving PERFORM (FX let go, or tapped when latched) lets go of every effect, the ones that stay on too: nothing keeps playing once its key is out of reach.</p>
   <h2 id="latch">Double-tap: a layer latched</h2>
-  <p>Tap GLO, SEQ, HOME or FX twice, quickly: the layer stays as if you held it. Its button blinks and its map says LATCHED. The keys and the knobs are the layer's; copy, paste and clear still want the button held. Tap it again, or any other page button, to let go.</p>
+  <p>Tap GLO, SEQ, HOME or FX twice, quickly: the layer stays as if you held it. Its button blinks and its map says LATCHED. The keys and the knobs are the layer's; copy, paste and clear still want the button held. Tap it again, or any other page button, to let go (FX's stays: below).</p>
   <ul>
     <li>GLO latched: mutes, solos, the fill and the tap tempo under one hand.</li>
     <li>HOME latched: patterns picked and queued as you play.</li>
-    <li>FX latched: PERFORM with both hands on the keys.</li>
+    <li>FX latched: PERFORM with both hands on the keys, and on every page (below).</li>
     <li>SEQ latched: the tools and the sequencer's knobs.</li>
   </ul>
+  <p><b>FX latched stays across pages.</b> A page button, GRID or GLO's pages keep it: the black keys stay PERFORM's effects and the white keys play the track (GRID's steps in GRID). The knobs, OCT− and OCT+ and the screen are the page's own, so you can shape a sound while the effects run; FX in the header says it is latched. Hold FX for PERFORM's own view again (the bus's knobs, the banks); let go and you are back on the page. Tap FX to let go. Latching GLO, SEQ or HOME takes its place: one layer latches at a time.</p>
   <h2>Solos and the tempo</h2>
   <p>GLO + white 9–14 solo tracks 1–6 while held, several adding up; playing, from the next bar, and a tap solos one bar. GLO + white 8 taps the tempo. Hold LFO for sweeps that come back; OCT+ while held keeps the change.</p>
 </article>
@@ -760,8 +767,8 @@
     <li><b>Again undoes.</b> The same paste or clear a second time puts things back (on one pattern; several at once stay done). GLO + OCT− undoes the last edit, GLO + OCT+ redoes it.</li>
     <li><b>Hold the clear for INIT.</b> Keep SEQ down a second: a ring fills on the screen and the pattern (or the patterns, or the track) goes INIT.</li>
     <li><b>Only the flash asks.</b> Writing a sound over another, wiping every pattern, the demos back and loading a project ask first: OCT+ YES, OCT− NO.</li>
-    <li><b>Tap for the page, hold for the layer.</b> Double-tap GLO, SEQ, HOME or FX and the layer stays without holding.</li>
-    <li><b>Held is for now.</b> Solos, PERFORM's effects and LFO's knobs last while held; mutes, tools and edits stay.</li>
+    <li><b>Tap for the page, hold for the layer.</b> Double-tap GLO, SEQ, HOME or FX and the layer stays without holding; FX's stays on every page.</li>
+    <li><b>Held is for now.</b> Solos, PERFORM's effects and LFO's knobs last while held; mutes, tools and edits stay. An effect's key tapped twice stays on until tapped again or PERFORM goes.</li>
   </ol>
   <h2>Buttons alone</h2>
   <table>
@@ -847,7 +854,7 @@
     </tbody>
   </table>
   <h2>Hold FX, hold LFO</h2>
-  <p>FX held: PERFORM, the bus's effects on the black keys, OCT− bank A and OCT+ bank B, the knobs DCAY DAMP ADPC DRIV (every effect: <a href="#perform">Play it live</a>). LFO held: what the knobs move comes back when it is let go; OCT+ while it is held keeps the change.</p>
+  <p>FX held: PERFORM, the bus's effects on the black keys, OCT− bank A and OCT+ bank B, the knobs DCAY DAMP ADPC DRIV (every effect: <a href="#perform">Play it live</a>); a black key tapped twice stays on, and FX double-tapped stays on every page (<a href="#latch">Double-tap</a>). LFO held: what the knobs move comes back when it is let go; OCT+ while it is held keeps the change.</p>
   <h2>A step held in GRID</h2>
   <table>
     <thead><tr><th>Hold a step and</th><th>Does</th></tr></thead>

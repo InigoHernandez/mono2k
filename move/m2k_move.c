@@ -434,6 +434,7 @@ static int view_string(char *o)
     e = ap(e, " hjog="); e = s_int(e, v.scr.held.jog);
     e = ap(e, " focus="); e = s_int(e, v.focus);
     e = ap(e, " perf="); e = s_int(e, (int)v.perf_on);
+    e = ap(e, " plat="); e = s_int(e, (int)ui.pf_lat);    /* (the effects latched: a key double-tapped) */
     e = ap(e, " pkeys="); e = s_int(e, v.perf); *e++ = ','; e = s_int(e, v.perf_pg);
     e = ap(e, " kpads="); e = s_int(e, v.kpads);
     e = ap(e, " capn="); e = s_int(e, v.capn);

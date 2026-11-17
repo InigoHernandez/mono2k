@@ -56,6 +56,7 @@ static struct {
     uint8_t sdown[16], sstep[16];      /* each step key: held, and the step it holds */
     uint32_t st0[16];
     uint8_t pkind[32], parg[32], ptrk[32];   /* each pad: 1 a note (arg), 2 a PERFORM effect (arg); on which track */
+    uint32_t pt0[16];                  /* each keyboard pad's press (ui.now): a quick one is a tap (an effect's double) */
 } mc;
 
 /* Capture's ring: every note played on the keyboard, the latest MV_CAP_N. A run is a stretch of one state (playing or
@@ -106,7 +107,7 @@ static void cat_left(void)
 }
 
 /* a page pad (16 + j): its page; SOUNDS opens the catalogue (again: the track's own sound back, the page before);
- * PERFORM puts its effects on the keyboard (again: the keyboard back) */
+ * PERFORM puts its effects on the keyboard (again: the keyboard back, the effects latched let go: pf_unlatch) */
 static void page_pad(int j)
 {
     const int pg = MS_PAD_PAGE[j & 15];
@@ -122,7 +123,7 @@ static void page_pad(int j)
     }
     if (cat.open) cat_back();          /* (leaving SOUNDS for a page: the track's own sound, as the FM-1's) */
     if (pg == MS_PERF) {
-        if (mc.perf) { mc.perf = 0; if (!page_plain(mc.page)) mc.page = mc.prev; return; }
+        if (mc.perf) { mc.perf = 0; pf_unlatch(); if (!page_plain(mc.page)) mc.page = mc.prev; return; }
         if (page_plain(mc.page)) mc.prev = mc.page;
         mc.perf = 1;
         mc.perf_pg = 0;
@@ -692,7 +693,7 @@ static void mv_pad(int i, int vel, int down)
     if (!down) {
         int kind = mc.pkind[i], a = mc.parg[i], t = mc.ptrk[i];
         mc.pkind[i] = 0;
-        if (kind == 2 && perf.on[a]) bus_perform(a, 0);
+        if (kind == 2) pf_released(a, ui.now - mc.pt0[i & 15]);   /* (latched meanwhile: on; a tap: for a double) */
         else if (kind == 1)
             for (int k = 0; k < sq.nkeys[t]; k++)
                 if (sq.keys[t][k] == a) { live_off_t(t, a); break; }   /* (a track left meanwhile let go of it) */
@@ -700,11 +701,12 @@ static void mv_pad(int i, int vel, int down)
     }
     if (mc.pkind[i]) mv_pad(i, 0, 0); /* (a press without its release: let go first) */
     if (i >= MS_PAD0) { page_pad(i - MS_PAD0); return; }
-    if (mc.perf) {                     /* PERFORM: held, its effect plays */
+    if (mc.perf) {                     /* PERFORM: held, its effect plays; tapped twice, it stays on (pf_press) */
         int e = perf_of_key(i);
         if (e < 0) return;
-        if (bus_perform(e, 1)) { mc.pkind[i] = 2; mc.parg[i] = (uint8_t)e; }
-        else toast(PF_NAME[e], "NO DELAY FREE");
+        const int r = pf_press(e);
+        if (!r) { mc.pkind[i] = 2; mc.parg[i] = (uint8_t)e; mc.pt0[i] = ui.now; }
+        else if (r < 0) toast(PF_NAME[e], "NO DELAY FREE");
         return;
     }
     if (mc.kpads) {                    /* PADS: the bottom row the tracks, the row over it their mutes */

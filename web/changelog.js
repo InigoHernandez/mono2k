@@ -21,6 +21,10 @@ window.M2K_CHANGES = [
       ["workflow", "1.11: GLO > PLAY, KNOB 2, REST: which track rests when one must. AUTO, the quietest for what it costs, never the track you are on; T1–T6, that track first; NONE, no track rests (the sound may then drop: DROP counts it). FM-1 only."],
       ["sound", "1.11: With POLY, before a whole track rests, one note of a chord fades out: on the keys the oldest you hold, from the steps the quietest, never the lead's. Its next note plays as ever, and a chord keeps at least one. A key you press takes a voice the guard is not cutting."],
       ["screen", "1.11: CPU FULL says what it did: T2 TAIL CUT, T5 VOICE CUT, or T2 RESTS, T4 HEAVIEST. On GLO > PLAY a cut tail or voice shows CUT for a moment, a resting track REST. In the browser, GLO > PLAY's MOTN moved to KNOB 3."],
+      ["workflow", "1.11: PERFORM latched stays on every page. Double-tap FX, then go to any page: the black keys stay its effects, the white keys play the track, and the knobs and screen are the page's, with FX in the header. Hold FX for PERFORM's own knobs and banks; tap FX to let go."],
+      ["workflow", "1.11: An effect that stays on: tap its black key twice and it plays after you let go, its key lit. Tap it again to let go. They stack with the ones you hold; a repeat or another one-at-a-time effect takes over from it. When PERFORM goes, they go too."],
+      ["sound", "1.11: A repeat keeps landing on the beat however long it plays: its loop is now the step's exact length (it drifted up to 5 ms a minute)."],
+      ["workflow", "1.11: GLO > HELP: PERFORM's page has the new latches, and a LIVE page has the mutes, solos, fill and tap tempo."],
     ],
   },
   {

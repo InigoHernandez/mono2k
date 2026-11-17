@@ -288,6 +288,7 @@ static struct {
     /* glitch: the ring (half rate) and the one event it plays, a PERFORM key's */
     uint32_t gw;                       /* the ring's write place */
     uint32_t g_start, g_len;           /* the slice (or, stopping, the read's start) and its length */
+    uint32_t g_lenq;                   /* a repeat's lap, Q12: the sixteenth's own, to a 4096th of a sample */
     uint32_t g_pos, g_rate;            /* the read: Q12 into the slice; its step Q24 (1 << 24 at pitch) */
     uint32_t g_dec;                    /* a stop's slowing */
     int32_t g_env, g_wet;              /* its level, Q10, fading in and out; the wet's, Q15 (it takes the dry's place) */
@@ -386,6 +387,7 @@ static void gl_start(uint32_t start, uint32_t len, uint32_t pos, int mode, int32
 {
     bus.g_start = start;
     bus.g_len = len;
+    bus.g_lenq = len << 12;
     bus.g_pos = pos << 12;
     bus.g_rate = G_UNITY;
     bus.g_held = 1;
@@ -470,16 +472,19 @@ static void gl_perform(int k)
     }
     static const uint8_t EIGHTHS[7] = {32, 16, 8, 4, 32, 0, 4};   /* the slice in eighths of a sixteenth */
     static const uint8_t GRID[7] = {2, 1, 0, 0, 2, 0, 0};         /* locked to the last beat, eighth, sixteenth */
-    uint32_t len = (six * EIGHTHS[k]) >> 3;
+    /* its lap to a 4096th of a sample, as the sequencer's sixteenth is (bsps, Q8): a lap of whole samples drifted off
+     * the beat, up to 5 ms a minute at 120 BPM, heard once a repeat could be latched for minutes (1.11) */
+    uint32_t lq = bsps * EIGHTHS[k], len = lq >> 12;      /* (bsps * 32 under 2^28 down to 30 BPM: a word) */
     int res = GRID[k];
-    while (len > GL_MAX) { len >>= 1; if (res) res--; }   /* (slower than 85 BPM a quarter is too long: an eighth) */
-    if (len < 32) len = 32;
+    while (len > GL_MAX) { lq >>= 1; len = lq >> 12; if (res) res--; }   /* (slower than 85 BPM a quarter is too long: an eighth) */
+    if (len < 32) { len = 32; lq = 32u << 12; }
     uint32_t space = six << res, e = bus.gw - bus.g_grid[res];
     if (!brun || e >= space + (six >> 1)) e = 0, bus.g_grid[res] = bus.gw;   /* no grid: from now */
     /* a repeat's slice begins on the grid (its first time round the live sound coming in, so it starts on the
      * attack); the reverse plays the beat that ended there */
     uint32_t at = bus.g_grid[res] - (k == PF_REV ? len : 0);
     gl_start(at, len, e % len, mk >= 0 ? mk : k == PF_REV ? GM_REV : k == PF_STUT ? GM_GATE : GM_RPT, 32768);
+    bus.g_lenq = lq;
     bus.g_sc[0] = bus.g_sc[1] = (uint8_t)((e % len) / (len >> 2));   /* (a scatter starts where it is, a beat back) */
     bus.g_rl = 0;
     bus.g_pk = (uint8_t)((mk == GM_SCAT ? PF_SCAT : mk == GM_PROLL ? PF_ROLL : k) + 1);
@@ -732,10 +737,15 @@ static void gl_tick(void)
     bus.gout_l = l;
     bus.gout_r = r;
     bus.g_pos += bus.g_rate >> 12;
-    if (mode != GM_STOP && (bus.g_pos >> 12) >= len) {
-        bus.g_pos -= len << 12;
+    if (mode != GM_STOP && bus.g_pos >= bus.g_lenq) {     /* (a lap a sample longer now and then: its read reaches
+                                                           * len, the seam's crossfade then wholly its start's) */
+        bus.g_pos -= bus.g_lenq;
         /* ROLL: halved once its laps make a beat (a quarter, two eighths, four sixteenths), to a 1/32 */
-        if (mode == GM_PROLL && ++bus.g_rl >= (bsps >> 9) * 4 / len && len > (bsps >> 10)) { bus.g_len = len >> 1; bus.g_rl = 0; }
+        if (mode == GM_PROLL && ++bus.g_rl >= (bsps >> 9) * 4 / len && len > (bsps >> 10)) {
+            bus.g_lenq >>= 1;
+            bus.g_len = bus.g_lenq >> 12;
+            bus.g_rl = 0;
+        }
     }
 }
 

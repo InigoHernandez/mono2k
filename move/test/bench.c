@@ -1136,10 +1136,34 @@ static int do_ctl(void)
     pad(0, 0, 0); blocks(2);
     vlist(view(), "pads", pads, 32);
     check(pads[6] == 0 && pads[0] == 115 && pads[8] == 109, "the moves magenta, the colours pink, a key with no effect dark");
+    /* 1.11, an effect latched: its key tapped twice stays on after it, lit white; tapped again, off; colours stack; a move
+     * takes a latched move's place, as a held one's; slow taps latch nothing; PERFORM off lets go of them all (RPT 1/8
+     * bit 1, R4 0, LPF 16, DRIVE 9) */
+    tap(54);                                           /* (Down: the first moves) */
+    pad(1, 1, 100); blocks(2); pad(1, 0, 0); blocks(2); pad(1, 1, 100); blocks(2); pad(1, 0, 0); blocks(40);
+    v = view();
+    vlist(v, "pads", pads, 32);
+    check(vint(v, "perf") == 1 << 1 && vint(v, "plat") == 1 << 1 && pads[1] == 120,
+          "PERFORM: a move's key twice stays on after it (RPT 1/8), lit white");
+    pad(8, 1, 100); blocks(2); pad(8, 0, 0); blocks(2); pad(8, 1, 100); blocks(2); pad(8, 0, 0); blocks(2);
+    pad(13, 1, 100); blocks(2); pad(13, 0, 0); blocks(2); pad(13, 1, 100); blocks(2); pad(13, 0, 0); blocks(2);
+    check(vint(view(), "perf") == (1 << 1 | 1 << 16 | 1 << 9) && vint(view(), "plat") == (1 << 1 | 1 << 16 | 1 << 9),
+          "colours latched stack with it (LPF, DRIVE)");
+    pad(0, 1, 100); blocks(4);                         /* RPT 1/4 held: the latched move's place */
+    check(vint(view(), "perf") == (1 << 0 | 1 << 16 | 1 << 9) && vint(view(), "plat") == (1 << 16 | 1 << 9),
+          "a move held takes the latched move's place; the colours stay");
+    pad(0, 0, 0); blocks(2);
+    check(vint(view(), "perf") == (1 << 16 | 1 << 9), "let go: the colours alone");
+    pad(8, 1, 100); blocks(2); pad(8, 0, 0); blocks(2);
+    check(vint(view(), "perf") == 1 << 9 && vint(view(), "plat") == 1 << 9, "a latched colour tapped again: off (DRIVE on)");
+    pad(2, 1, 100); blocks(2); pad(2, 0, 0); blocks(110); pad(2, 1, 100); blocks(2); pad(2, 0, 0); blocks(2);
+    check(vint(view(), "perf") == 1 << 9 && vint(view(), "plat") == 1 << 9, "taps 0.3 s apart: no latch");
     page(MS_FILT);
-    check(vint(view(), "pg") == MS_FILT && !strcmp(vstr(view(), "pkeys", s, sizeof s), "1,1"), "a page: PERFORM's keys stay on");
+    check(vint(view(), "pg") == MS_FILT && !strcmp(vstr(view(), "pkeys", s, sizeof s), "1,0") && vint(view(), "perf") == 1 << 9,
+          "a page: PERFORM's keys stay on, the latched effect too");
     page(MS_PERF);
-    check(vint(view(), "pg") == MS_FILT && !strcmp(vstr(view(), "pkeys", s, sizeof s), "0,1"), "its pad again: the keyboard back");
+    check(vint(view(), "pg") == MS_FILT && !strcmp(vstr(view(), "pkeys", s, sizeof s), "0,0"), "its pad again: the keyboard back");
+    check(vint(view(), "perf") == 0 && vint(view(), "plat") == 0, "PERFORM off: the effects latched let go");
     page(MS_PERF); page(MS_CAT); page(MS_CAT);
     check(vint(view(), "pg") == MS_PERF, "SOUNDS opened over PERFORM and closed: PERFORM's page again");
     page(MS_PERF);

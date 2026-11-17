@@ -21,6 +21,8 @@
 #  6. the FM-1's CPU guard (1.11): the guard bench (host/m2k_guard_bench.c: the FM-1's ring, interrupt and main loop
 #     against load traces, 1.7's rule beside it), with no warning and under ASan + UBSan; and its mutants
 #     (tools/guard_mutants.py: each caught by the bench or the self-test's GUARD, made in copies, nothing in place)
+#  7. PERFORM latched (1.11): FX's latch across pages, the effects latched, a repeat's exact lap mutated
+#     (tools/perform_mutants.py: each caught by the self-test, made in copies)
 set -u
 B=build/check
 mkdir -p "$B"
@@ -132,6 +134,9 @@ clang $SAN -w $I -Ifirmware/fm1 -o "$B/m2k_guard_bench_san" host/m2k_guard_bench
 rep=$(grep -E "runtime error|ERROR: AddressSanitizer|FAIL" "$B/guard_san.log" | sort | uniq -c)
 if [ -n "$rep" ]; then echo "$rep"; FAIL=1; else echo "  the bench under ASan + UBSan: clean"; fi
 .venv/bin/python tools/guard_mutants.py > "$B/guard_mut.log" 2>&1 && tail -1 "$B/guard_mut.log" | sed 's/^/  /' || { grep -E "SURVIVED|MISSING|BUILD" "$B/guard_mut.log"; FAIL=1; }
+
+echo "== PERFORM latched"
+.venv/bin/python tools/perform_mutants.py > "$B/perform_mut.log" 2>&1 && tail -1 "$B/perform_mut.log" | sed 's/^/  /' || { grep -E "SURVIVED|MISSING|BUILD" "$B/perform_mut.log"; FAIL=1; }
 
 [ "$FAIL" -eq 0 ] && echo "check: passed" || echo "check: FAILED"
 exit "$FAIL"

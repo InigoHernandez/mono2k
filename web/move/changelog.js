@@ -15,6 +15,8 @@ window.M2K_CHANGES = [
       ["sequencer", "Rec while playing, or Capture: a chord's lowest note goes on the lead's step and the others on its voices' steps. The lead's step decides the chord: its condition, chance, trig type, accent and locks."],
       ["screen", "TRK on POLY shows the voices and their notes; HOME brackets the voices to their lead, and a voice's track button shows the lead."],
       ["patterns", "Your patterns and sounds load and play exactly as before."],
+      ["workflow", "An effect that stays on: in PERFORM, tap a key twice and its effect plays after you let go, lit white. Tap it again to let go. Colours stack; a move gives way to the next move. The PERFORM pad again lets go of them all."],
+      ["sound", "A repeat keeps landing on the beat however long it plays: its loop is now the step's exact length (it drifted up to 5 ms a minute)."],
       ["screen", "SYN shows the machine's mark, the FM-1's 3D picture of it, beside its name: it sways in time with the music and hops on the track's hits, higher for a louder one. SWAV-SAW's three teeth rise and fall with its level while it plays."],
     ],
   },

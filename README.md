@@ -46,6 +46,9 @@ WebAssembly, with sound).
   moves only the screen. GLO > PLAY's REST picks the track: AUTO, T1–T6 or NONE (FM-1 only). With POLY, one voice
   of a chord fades before a whole track rests (on the keys the oldest note, from the steps the quietest, never the
   lead's), its next note as ever.
+- **PERFORM that stays** (1.11; the Move's 0.6). FX double-tapped stays on every page of the FM-1: the black keys stay
+  its effects while the knobs and screen are the page's, FX in the header; hold FX for its own knobs, tap it to let go.
+  On both, an effect's key tapped twice stays on until tapped again or PERFORM goes; a repeat stays on the beat.
 - **The machines' marks on the Move** (the Move's 0.6). SYN draws the track's machine as the FM-1's 3D mark, beside its
   name: it sways in time with the music and hops on the track's hits, higher for a louder one.
 
