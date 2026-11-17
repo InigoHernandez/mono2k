@@ -7,7 +7,7 @@ window.M2K_KINDS = {
 };
 window.M2K_CHANGES = [
   {
-    date: "2026-11-17", title: "MONO2K 1.11: POLY, and a calmer CPU guard",
+    date: "2026-11-17", title: "MONO2K 1.11: POLY, a calmer CPU guard, effects that stay on",
     items: [
       ["sequencer", "1.11: POLY plays chords on one track. On ARP, turn MODE to POLY: the track becomes a lead and the tracks after it its voices, as many as KNOB 2 (VOIC) says. T4 on three plays T4, T5 and T6; T1 to T3 play on as always."],
       ["sound", "1.11: Every voice plays the lead's machine and its whole sound: every knob, its locks, its LFOs and its effects. The voices' own sounds wait unheard and come back when POLY is off."],

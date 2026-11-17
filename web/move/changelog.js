@@ -7,7 +7,7 @@ window.M2K_KINDS = window.M2K_KINDS || {
 };
 window.M2K_CHANGES = [
   {
-    date: "2026-11-17", title: "MONO2K for the Move 0.6: POLY, and the machines' marks",
+    date: "2026-11-17", title: "MONO2K for the Move 0.6: POLY, the machines' marks, effects that stay on",
     items: [
       ["sequencer", "POLY plays chords on one track. On TRK, turn MODE to POLY: the track becomes a lead and the tracks after it its voices, as many as VOIC (knob 4) says, up to eight. T1 on four plays T1 to T4; the rest play on as always."],
       ["sound", "Every voice plays the lead's machine and its whole sound: every knob, its locks, its LFOs and its effects. The voices' own sounds wait unheard and come back when POLY is off."],
