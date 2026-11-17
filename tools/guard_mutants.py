@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
 # Mutation tests of the FM-1's CPU guard (1.11): each mutant is one small change to the guard (the core's m2k_guard in
-# m2k_ui.c, its fades in m2k_dsp.c and m2k_fx.c, the glue's pacing in firmware/fm1/m2k_pace.h); the guard bench
+# m2k_ui.c, its fades in m2k_dsp.c and m2k_fx.c, POLY's side of it in m2k_seq.c, the glue's pacing in
+# firmware/fm1/m2k_pace.h); the guard bench
 # (host/m2k_guard_bench.c) or the self-test's GUARD (no traces: m2k_host --selftest) must fail on every one, the check
 # the mutant aims at among its failures. A survivor is a rule neither holds. Each mutant is made in a copy under
 # build/guard_mut (the tree itself is never touched: a run cut short leaves nothing to restore).
@@ -11,6 +12,7 @@ W = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.d
 U = "firmware/src/m2k_ui.c"
 D = "firmware/src/m2k_dsp.c"
 X = "firmware/src/m2k_fx.c"
+S = "firmware/src/m2k_seq.c"
 P = "firmware/fm1/m2k_pace.h"
 M = [
  ("bank A sheds: danger from half the real time", U,
@@ -89,6 +91,43 @@ M = [
   "    if (trk[ui.trk].held && rs != ui.trk + 1) grd_back(ui.trk);",
   "    if (0 && trk[ui.trk].held && rs != ui.trk + 1) grd_back(ui.trk);",
   None, "GUARD"),
+ # POLY: a chord's voice cut (guard_voice_steal) between a tail and a rest; poly_pick and the guard agreeing
+ ("POLY's voices never cut: the hook not called", U,
+  "    if (t < 0 && (t = guard_voice_steal()) >= 0) what = GR_VOICE;",
+  "    if (t < 0 && 0 && (t = guard_voice_steal()) >= 0) what = GR_VOICE;",
+  ["poly6"], "a POLY chord from the steps"),
+ ("POLY's voices never cut: the hook finds none", U,
+  "    if (!pv.on) return -1;\n    int best = -1;",
+  "    if (pv.on) return -1;\n    int best = -1;",
+  ["poly6keys"], "a POLY chord held on the keys"),
+ ("voices that do not hold: no track rests for them", U,
+  "if (t < 0 && sound > 1 && rs != REST_NONE && grd.vfail_t && now - grd.vfail_t < 2 * GRD_SEC && (t = grd_rest(rs)) >= 0)",
+  "if (t < 0 && 0 && sound > 1 && rs != REST_NONE && grd.vfail_t && now - grd.vfail_t < 2 * GRD_SEC && (t = grd_rest(rs)) >= 0)",
+  ["poly6x"], "a POLY chord at 190 %"),
+ ("a cut voice rests", U,
+  "    else trk_park(t, trk_cost(t), what == GR_REST);",
+  "    else trk_park(t, trk_cost(t), what != GR_TAIL);",
+  None, "GUARD POLY"),
+ ("a cut voice keeps its key", S,
+  "    if (pv.key[v] == 0xFF) return;\n    pv.key[v] = 0xFF;",
+  "    if (pv.key[v] == 0xFF) return;\n    pv.key[v] = pv.key[v];",
+  None, "GUARD POLY"),
+ ("the lead's own note cut from a chord of steps", U,
+  "            for (int i = l + 1; i < l + pv.nv[l]; i++) {",
+  "            for (int i = l; i < l + pv.nv[l]; i++) {",
+  None, "GUARD POLY"),
+ ("a chord's last voice cut", U,
+  "            if (n < 2) continue;",
+  "            if (n < 1) continue;",
+  None, "GUARD POLY"),
+ ("a key takes the voice the guard is cutting", S,
+  "            if (pass < 2 && (trk[v].held || trk[v].park)) continue;",
+  "            if (pass < 2 && trk[v].held) continue;",
+  None, "GUARD POLY"),
+ ("a key takes a voice the guard rests", S,
+  "            if (pass < 2 && (trk[v].held || trk[v].park)) continue;",
+  "            if (pass < 2 && trk[v].park) continue;",
+  None, "GUARD POLY"),
 ]
 
 def main():

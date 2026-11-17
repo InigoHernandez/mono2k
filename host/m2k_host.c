@@ -6829,6 +6829,86 @@ static int selftest(void)
               "screen's; back after a second's room; no step in its fades; CPU FULL says what it did");
     }
     {
+        /* 1.11, the guard and POLY (guard_voice_steal, before a track rests). A chord held on the keys, T2 a lead of four
+         * on a sustain (no tail): over, the guard's first step fades the oldest note's voice (poly_oldest), not resting,
+         * its key freed (its release finds nothing); CPU FULL says T2 VOICE CUT. A key in the fade takes another voice
+         * (poly_pick: none free but that one, so the oldest note's), and after it the freed one, which plays. A voice
+         * resting is not taken while another can be. A chord from the steps gives up the quietest of its voices, never
+         * the lead's (made the quietest here), and its next trig plays; a chord keeps its last voice */
+        m2k_init(67);
+        m2k_pattern_t *q = bare(9);
+        q->glob[G_POLY1 + 1] = 4;                                    /* T2 the lead: T2..T5 */
+        q->kit[1][P_ATK] = 0; q->kit[1][P_SUS] = 100; q->kit[1][P_REL] = 60;
+        m_cpy(trk[1].eff, q->kit[1], P_COUNT);
+        poly_sync();
+        ui.trk = 1;
+        live_on_t(1, 60, 100); live_on_t(1, 64, 100); live_on_t(1, 67, 100); live_on_t(1, 71, 100);
+        eng_run(0.2);
+        const int v0 = poly_oldest(1);
+        int sh = 0, keys = v0 == 1 && m2k_guard(130, 0, 6, sh) == v0 && cpu.what == GR_VOICE && trk[v0].park == PARK_N + 1 &&
+                           !trk[v0].held && pv.key[v0] == 0xFF && pv.key[2] == 64 && poly_oldest(1) == 2;
+        live_on_t(1, 74, 100);                                       /* in the fade: not the fading voice */
+        keys &= pv.key[2] == 74 && pv.key[v0] == 0xFF && trk[v0].park;
+        eng_run(0.05);
+        keys &= !trk[v0].sounding && trk[2].sounding && trk[3].sounding && trk[4].sounding;
+        m2k_frame(20000);
+        int said = !strcmp(ui.toast, "CPU FULL") && !strcmp(ui.toast2, "T2 VOICE CUT");
+        live_off_t(1, 60);                                           /* (its key let go: nothing of it left) */
+        live_on_t(1, 76, 100);                                       /* after the fade: the freed voice, heard */
+        eng_run(0.05);
+        keys &= pv.key[v0] == 76 && trk[v0].sounding && trk[v0].peak > 0 && !trk[v0].held;
+        trk_park(4, trk_cost(4), 1);                                 /* T5 resting (a rest picked it), its key let go */
+        eng_run(0.05);                                               /* (its fade over: resting, no longer fading) */
+        live_off_t(1, 71);
+        live_on_t(1, 77, 100);                                       /* not the resting voice, though free: the oldest note's */
+        int rest = trk[4].held && !trk[4].park && pv.key[4] == 0xFF && pv.key[3] == 77;
+        /* a chord from the steps: four voices sounding on step 0; the lead made the quietest */
+        m2k_init(68);
+        q = bare(9);
+        q->glob[G_POLY1 + 1] = 4;
+        q->kit[1][P_ATK] = 0; q->kit[1][P_SUS] = 100; q->kit[1][P_GATE] = 127;
+        static const uint8_t CH[4] = {48, 55, 60, 64};
+        for (int i = 0; i < 4; i++) q->step[1 + i][0] = (m2k_step_t){CH[i], ST_TRIG, C_ALWAYS, 0};
+        q->step[1][4] = q->step[1][0];
+        for (int i = 1; i < 4; i++) q->step[1 + i][4] = q->step[1 + i][0];
+        lockmap_build();
+        poly_sync();
+        ui.trk = 0;
+        seq_play(1);
+        while (sq.step != 2) sblk();
+        trk[1].peak = 1;
+        const int vs = m2k_guard(130, 0, 6, 0);
+        int steps = vs > 1 && vs < 5 && cpu.what == GR_VOICE && trk[vs].park && !trk[vs].held && !trk[1].park;
+        while (sq.step != 4) sblk();
+        steps &= !trk[vs].sounding;
+        while (sq.step != 5) sblk();
+        sblk(); sblk();
+        steps &= trk[vs].sounding && !trk[vs].park;                  /* its next trig: as ever */
+        seq_play(0);
+        /* a chord keeps its last voice: a lead of two, one cut, then none */
+        m2k_init(69);
+        q = bare(9);
+        q->glob[G_POLY1 + 1] = 2;
+        q->kit[1][P_ATK] = 0; q->kit[1][P_SUS] = 100;
+        m_cpy(trk[1].eff, q->kit[1], P_COUNT);
+        poly_sync();
+        ui.trk = 1;
+        live_on_t(1, 60, 100); live_on_t(1, 67, 100);
+        eng_run(0.2);
+        m2k_setting(S_REST, enc(M2K_TRACKS6 + 1, M2K_TRACKS6 + 2));   /* (NONE: no rest after it either) */
+        int last = m2k_guard(130, 0, 6, 0) == 1;
+        for (int i = 0; i < GRD_SETTLE + 40; i++) m2k_guard(90, 6, 6, 0);
+        eng_run(0.05);
+        last &= m2k_guard(130, 0, 6, 0) == -1 && trk[2].sounding && !trk[1].sounding;
+        m2k_setting(S_REST, 0);
+        printf("     the guard and POLY: keys %d, said %d, rest %d, steps %d (T%d), last voice %d\n", keys, said, rest, steps,
+               vs + 1, last);
+        CHECK(keys && said && rest && steps && last,
+              "GUARD POLY: before a track rests a chord's voice fades, not resting (the keys' oldest note, freed; the steps' "
+              "quietest, never the lead's; its next note plays), CPU FULL T2 VOICE CUT; a key takes no voice the guard "
+              "cuts or rests while another can be; a chord keeps its last voice");
+    }
+    {
         /* 1.6.2: VO-6 faded in from near silence at every trig, as the Monomachine's (~150 ms to its level at C3): a
          * legato note was cut and a 1/16 came out quiet. A fresh note now rises 4 x as fast (VO_UPT), so from 50 ms each
          * 20 ms is within 3 dB of the held level on the vowels and notes that took longest (it was 6 .. 35 dB under);

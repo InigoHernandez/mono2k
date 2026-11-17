@@ -896,18 +896,21 @@ static void poly_sync(void)
 
 static inline int poly_older(uint32_t a, uint32_t b) { return (int32_t)(a - b) < 0; }
 
-/* the voice a key takes on lead t: the one holding it already; else a free one, let go longest (one the CPU guard rests
- * last); past VOIC, the oldest note's. A key held keeps its voice */
+/* the voice a key takes on lead t: the one holding it already; else a free one, let go longest; past VOIC, the oldest
+ * note's. A voice the CPU guard rests or is cutting (m2k_ui.c: held, park) only when every other is: a key on it would
+ * be silent, or bring back what the guard just took off (pass 0 free, 1 the oldest note's, then 2 and 3 the same with
+ * those). A key held keeps its voice */
 static int poly_pick(int t, int note)
 {
     const int n = pv.nv[t];
     int best = -1;
     for (int v = t; v < t + n; v++) if (pv.key[v] == note) return v;
-    for (int pass = 0; pass < 2 && best < 0; pass++)
-        for (int v = t; v < t + n; v++)
-            if (pv.key[v] == 0xFF && (pass || !trk[v].held) && (best < 0 || poly_older(pv.age[v], pv.age[best]))) best = v;
-    if (best >= 0) return best;
-    for (int v = t; v < t + n; v++) if (best < 0 || poly_older(pv.age[v], pv.age[best])) best = v;
+    for (int pass = 0; pass < 4 && best < 0; pass++)
+        for (int v = t; v < t + n; v++) {
+            if (!(pass & 1) && pv.key[v] != 0xFF) continue;
+            if (pass < 2 && (trk[v].held || trk[v].park)) continue;
+            if (best < 0 || poly_older(pv.age[v], pv.age[best])) best = v;
+        }
     return best;
 }
 
@@ -922,6 +925,16 @@ static int poly_oldest(int t)
     for (int v = t; v < t + pv.nv[t]; v++)
         if (pv.key[v] != 0xFF && (best < 0 || poly_older(pv.age[v], pv.age[best]))) best = v;
     return best;
+}
+
+/* the CPU guard took voice v of a chord (m2k_ui.c guard_voice_steal; its fade under way): its note let go, and the key
+ * it held freed, so the key's release finds nothing and the next key may take it (poly_pick: last while it fades) */
+static void poly_steal(int v)
+{
+    voice_off(v);
+    if (pv.key[v] == 0xFF) return;
+    pv.key[v] = 0xFF;
+    pv.age[v] = ++pv.clock;
 }
 
 /* lead t's voices let go of their keys (all, or those no longer down: HOLD off) */

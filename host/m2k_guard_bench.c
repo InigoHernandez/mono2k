@@ -19,6 +19,7 @@
 #include <string.h>
 #include "m2k_core.c"
 #include "m2k_dense.c"
+#include "m2k_poly.c"
 
 #define RING 6u
 #define BLK 128u
@@ -75,9 +76,20 @@ static void start(int p)
     m2k_par_begin = bench_begin; m2k_par_end = bench_end;
     m2k_clock = model_clock; m2k_clock_per_ms = 1000u * TPU;
     clk = 0; clk_open = 0; jrng = 1;
+    const int keys = p == 6;
     if (p == 4) { dense_pattern(&pat[46]); p = 46; }
+    else if (p >= 5) {                          /* POLY: T1 a lead of six VO-6 voices (m2k_poly.c), sustained: about
+                                                 * DENSE's render, the FM-1's whole real time */
+        poly_pattern(&pat[47], 2);
+        if (keys) for (int s = 0; s < M2K_STEPS; s++) for (int t = 0; t < M2K_TRACKS6; t++) pat[47].step[t][s].flags = 0;
+        p = 47;
+    }
     m2k_pattern(p);
     seq_play(1);
+    if (keys) {                                 /* (its chord held on the keys instead of its steps') */
+        static const uint8_t K[6] = {48, 55, 60, 64, 67, 71};
+        for (int i = 0; i < 6; i++) live_on_t(0, K[i], 100);
+    }
 }
 
 /* DENSE's render, the calibration: its mean wall a block, model units */
@@ -135,7 +147,8 @@ static int old_guard(int load_pct, int danger)
 /* ---- the traces */
 typedef struct {
     const char *name, *what;
-    int pn;                                     /* bank A's 0..3, DENSE 4 */
+    int pn;                                     /* bank A's 0..3, DENSE 4, POLY's six VO-6 voices 5 (from the steps), 6
+                                                 * (held on the keys) */
     double from, to;                            /* the load's scale, at the start and the end: a ramp between */
     double period;                              /* or s: FROM then TO in turn, this long each (bars heavy and light) */
     double step_at;                             /* or s: FROM until then, TO after (a busy part, then a light one) */
@@ -174,14 +187,18 @@ static const trace_t TR[] = {
     {"dense110", "DENSE at 110 %: over", 4, .from = 1.1, .to = 1.1},
     {"rest-t3", "DENSE at 110 %, REST T3", 4, .from = 1.1, .to = 1.1, .rest = 3},
     {"rest-none", "DENSE at 110 %, REST NONE", 4, .from = 1.1, .to = 1.1, .rest = 7},
+    {"poly6", "a POLY lead of six VO-6 voices, its chords from the steps (a beat each), at ~115 %", 5, .from = 1.15, .to = 1.15},
+    {"poly6keys", "the same six held on the keys, at ~115 %", 6, .from = 1.15, .to = 1.15},
+    {"poly6x", "the six from the steps at ~190 %: more than voices can save", 5, .from = 1.9, .to = 1.9},
 };
 #define NTR ((int)(sizeof TR / sizeof TR[0]))
 
 typedef struct {
-    int shorts, silent, tails, rests, frames;
+    int shorts, silent, tails, voices, rests, frames;
     double rested, longest, wide;
-    int first_kind, first_trk, first_rest, min_gap;   /* the first step (1 tail, 3 rest) and its track, the first rest's;
-                                                       * renders between steps */
+    int first_kind, first_trk, first_rest, min_gap;   /* the first step (1 tail, 2 a POLY voice, 3 rest) and its track,
+                                                       * the first rest's; renders between steps */
+    int voice_first;                            /* a POLY voice cut before any track rested */
     int ends_resting;                           /* tracks resting at the end */
     int cascades;                               /* rests the step before had made needless (note_step) */
     double last_back;                           /* when the last rested track came back, s */
@@ -260,7 +277,7 @@ static void note_step(int t, int kind, int renders)
     if (kind == 3 && last_step >= 0 && renders - last_step < GRD_SEC / 3 && since_n && since < 100) R.cascades++;
     if (verbose)
         printf("    %6.2f s  %s T%d  load %3d %%, true %3.0f %%, since the last %3.0f %% over %d, %u ahead\n", secs(),
-               kind == 3 ? "rest" : "tail", t + 1, (int)(ravg / (BLK_TICKS / 100u)), last_dt * 100.0 / BLK_TICKS, since,
+               kind == 3 ? "rest" : kind == 2 ? "voice" : "tail", t + 1, (int)(ravg / (BLK_TICKS / 100u)), last_dt * 100.0 / BLK_TICKS, since,
                since_n, ring_w - ring_r);
     since_sum = 0;
     since_n = -1;
@@ -268,7 +285,8 @@ static void note_step(int t, int kind, int renders)
     if (kind == 3 && R.first_rest < 0) R.first_rest = t;
     if (last_step >= 0 && renders - last_step < R.min_gap) R.min_gap = renders - last_step;
     last_step = renders;
-    if (kind == 3) R.rests++; else R.tails++;
+    if (kind == 2 && !R.rests) R.voice_first = 1;
+    if (kind == 3) R.rests++; else if (kind == 2) R.voices++; else R.tails++;
 }
 
 static void render_ahead(int *renders)
@@ -279,7 +297,7 @@ static void render_ahead(int *renders)
             uint8_t was[M2K_TRACKS];
             for (int t = 0; t < M2K_TRACKS; t++) was[t] = trk[t].held;
             int got = m2k_guard(pct, (int)(ring_w - ring_r), (int)RING, (int)shorts);
-            if (got >= 0) note_step(got, trk[got].held && !was[got] ? 3 : 1, *renders);
+            if (got >= 0) note_step(got, trk[got].held && !was[got] ? 3 : cpu.what == GR_VOICE ? 2 : 1, *renders);
         } else if (!neu) {
             int got = old_guard(pct, (ring_w - ring_r <= RING / 3u && pct > 95) || (shorts != shed_shorts && pct > 70));
             shed_shorts = shorts;
@@ -391,7 +409,7 @@ int main(int argc, char **argv)
     }
     calibrate();
     printf("the CPU guard on an FM-1 simulated (DENSE's render = its real time; 1 ms frames, 10 strips each)\n");
-    printf("  %-10s %-5s %7s %6s %6s %6s %9s %8s %5s %7s %7s  %s\n", "trace", "rule", "shorts", "silent", "tails", "rests",
+    printf("  %-10s %-5s %7s %6s %6s %6s %6s %9s %8s %5s %7s %7s  %s\n", "trace", "rule", "shorts", "silent", "tails", "voices", "rests",
            "rested s", "longest", "casc", "wide s", "frames", "(none: no guard at all; shorts: the interrupt's, as DROP counts)");
     res_t O[NTR], N[NTR], Z[NTR];
     int ran[NTR];
@@ -405,8 +423,8 @@ int main(int argc, char **argv)
         static const char *const RN[3] = {"none", "1.7", "1.11"};
         for (int k = 0; k < 3; k++) {
             const res_t *r = k == 2 ? &N[i] : k ? &O[i] : &Z[i];
-            printf("  %-10s %-5s %7d %6d %6d %6d %9.2f %8.2f %5d %7.2f %7d  %s\n", k ? "" : TR[i].name, RN[k],
-                   r->shorts, r->silent, r->tails, r->rests, r->rested, r->longest, r->cascades, r->wide, r->frames, k ? "" : TR[i].what);
+            printf("  %-10s %-5s %7d %6d %6d %6d %6d %9.2f %8.2f %5d %7.2f %7d  %s\n", k ? "" : TR[i].name, RN[k],
+                   r->shorts, r->silent, r->tails, r->voices, r->rests, r->rested, r->longest, r->cascades, r->wide, r->frames, k ? "" : TR[i].what);
         }
     }
     printf("checks\n");
@@ -434,6 +452,13 @@ int main(int argc, char **argv)
             check(N[i].rests > 0 && N[i].ends_resting == 0 && N[i].last_back < TR[i].step_at + 2,
                   "room again: the rested track is back within 2 s of the load's fall");
         if (!strcmp(TR[i].name, "rest-t3")) check(N[i].first_rest == 2, "REST T3: the first track to rest is T3");
+        if (!strcmp(TR[i].name, "poly6") || !strcmp(TR[i].name, "poly6keys"))
+            check(N[i].voices > 0 && N[i].first_kind == 2 && N[i].rests == 0 && N[i].shorts == 0,
+                  TR[i].pn == 5 ? "a POLY chord from the steps at 115 %: its voices cut, a few a beat, hold it (no rest, no short)"
+                                : "a POLY chord held on the keys at 115 %: its oldest note's voice cut holds it (no rest, no short)");
+        if (!strcmp(TR[i].name, "poly6x"))
+            check(N[i].voice_first && N[i].rests > 0 && N[i].rests <= O[i].rests && N[i].shorts <= O[i].shorts,
+                  "a POLY chord at 190 %: voices first; when they do not hold (a short after), tracks rest, no more than 1.7's");
         if (!strcmp(TR[i].name, "rest-none")) {
             int a = -1;
             for (int j = 0; j < NTR; j++) if (ran[j] && !strcmp(TR[j].name, "dense110")) a = j;

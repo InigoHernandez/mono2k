@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /* POLY's fixtures (1.11): the yardstick of a lead's six voices, every one sounding all the time (m2k_draw --poly-cpu,
- * --guard), and the two renders made for the owner (m2k_host DIR --poly-demo): a pad's chords held on an ADSR, and
+ * the guard bench's POLY traces), and the two renders made for the owner (m2k_host DIR --poly-demo): a pad's chords held on an ADSR, and
  * drums on T1-T3 under three voices on T4-T6. Chords written as POLY records them (poly_note's order: the lowest the
  * lead's step, the next T+1's). Included after m2k_core.c */
 

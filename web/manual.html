@@ -927,6 +927,7 @@
   <ol>
     <li><b>The screen.</b> Its frames come further apart. The sound is untouched.</li>
     <li><b>A tail.</b> A note that has ended and only rings (its release, its echoes) fades out in 3 ms. Its next note plays as ever. Its cell says CUT for a moment.</li>
+    <li><b>A voice of a chord.</b> With POLY, one note of a chord fades out in 3 ms: on the keys the oldest you hold (the one a new key would take), from the steps the quietest, never the lead's. Its next note plays as ever; the chord keeps at least one. If the sound still drops after, tracks rest instead.</li>
     <li><b>A track rests.</b> It fades out in 3 ms, its notes silent; its cell says REST. It plays again from its next note once there has been room for a second.</li>
   </ol>
   <p>A drop the sound did not cause (a flash write, a page turned) only moves the screen: nothing is cut for it.</p>
@@ -936,10 +937,10 @@
     <tbody>
       <tr><td>AUTO</td><td>The quietest for what it costs; a hit every beat counts as loud. Never the track you are on. The default.</td></tr>
       <tr><td>T1–T6</td><td>That track rests first, even the one you are on. Then AUTO.</td></tr>
-      <tr><td>NONE</td><td>No track rests. The screen and tails still give way; past them the sound may drop, and DROP counts it.</td></tr>
+      <tr><td>NONE</td><td>No track rests. The screen, tails and chords' voices still give way; past them the sound may drop, and DROP counts it.</td></tr>
     </tbody>
   </table>
-  <p>CPU FULL says what it did, at most every 5 seconds: <b>T2 TAIL CUT</b>, or <b>T2 RESTS, T4 HEAVIEST</b>. Lighten the heaviest one.</p>
+  <p>CPU FULL says what it did, at most every 5 seconds: <b>T2 TAIL CUT</b>, <b>T5 VOICE CUT</b>, or <b>T2 RESTS, T4 HEAVIEST</b>. Lighten the heaviest one.</p>
   <h2>What costs the most</h2>
   <table>
     <thead><tr><th>A plain track that sounds = 1</th><th>About</th></tr></thead>
@@ -955,7 +956,7 @@
     </tbody>
   </table>
   <p>A long release or HOLD keeps a track sounding, and costing, longer. The bus (reverb, ADPC, DRIV) runs on the second processor.</p>
-  <p><b>POLY:</b> each voice is a track playing the lead's sound, and costs what that sound costs on a track. Six voices of a plain machine weigh six plain tracks, about bank A's busiest part, a delay on the lead one line a voice; six of VO-6 or of SWAV-ENS with its chorus are more than the FM-1 carries, and it rests the quietest voices.</p>
+  <p><b>POLY:</b> each voice is a track playing the lead's sound, and costs what that sound costs on a track. Six voices of a plain machine weigh six plain tracks, about bank A's busiest part, a delay on the lead one line a voice; six of VO-6 or of SWAV-ENS with its chorus are more than the FM-1 carries: it cuts a voice of each chord first, and rests a voice's track only when that is not enough.</p>
 </article>
 
 <article id="credits" data-group="Reference">

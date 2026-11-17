@@ -43,7 +43,11 @@ WebAssembly, with sound).
   as format 24 (25 eight wide); every other one as before, byte for byte.
 - **A calmer CPU guard** (1.11). When the FM-1 is full it gives way a step at a time, the least heard first: the
   screen's frames further apart, a ringing tail faded, then a track rests; a drop it did not cause (a flash write)
-  moves only the screen. GLO > PLAY's REST picks the track: AUTO, T1–T6 or NONE (FM-1 only).
+  moves only the screen. GLO > PLAY's REST picks the track: AUTO, T1–T6 or NONE (FM-1 only). With POLY, one voice
+  of a chord fades before a whole track rests (on the keys the oldest note, from the steps the quietest, never the
+  lead's), its next note as ever.
+- **The machines' marks on the Move** (the Move's 0.6). SYN draws the track's machine as the FM-1's 3D mark, beside its
+  name: it sways in time with the music and hops on the track's hits, higher for a louder one.
 
 ## Run it
 

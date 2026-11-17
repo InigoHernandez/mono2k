@@ -202,9 +202,10 @@ void m2k_cpu(int core1_pct, int core2_pct, int shorts);
 /* the platform's CPU guard (the FM-1's), called before each render with the render's load (its time followed over ~8
  * renders, % of its real time), the blocks rendered ahead of the audio interrupt (AHEAD of RING) and the times the
  * interrupt found them gone since power-on (SHORTS). When the sound is about to run short and the render is the
- * cause, it lightens the sound one step at a time, the least heard first: a ringing tail faded out, then a track
- * rested (S_REST's; its trigs silent until there is room), and CPU FULL says what it did; while the screen could be
- * the cause it asks the screen to give way first (m2k_guard_gap: the least ms between frames meanwhile, 0 none).
+ * cause, it lightens the sound one step at a time, the least heard first: a ringing tail faded out, a voice of a
+ * POLY chord faded, then a track rested (S_REST's; its trigs silent until there is room), and CPU FULL says what it
+ * did; while the screen could be the cause it asks the screen to give way first (m2k_guard_gap: the least ms between
+ * frames meanwhile, 0 none).
  * Returns the track it faded, or -1. Elsewhere never called: the sound as ever */
 int m2k_guard(int load_pct, int ahead, int ring, int shorts);
 int m2k_guard_gap(void);

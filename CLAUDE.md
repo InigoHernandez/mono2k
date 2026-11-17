@@ -64,7 +64,9 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   `move.js`: the pads, PERFORM, the tempo, the numbers, and `../engines.js` loaded as the machines come near; `#move-gear`
   for `gear.js` / `gear.css`, the playable Move, with the pads' motion as a picture until it fills), its manual
   (`manual.html` on `../manual.js`, which finds its files beside itself; `changelog.js` the Move version's log) and
-  `install.html` (the download "Coming soon" until `RELEASE` is set in its script; set 2026-11-01 for 0.2, 2026-11-07 for 0.4 and 0.4.1). The Move's releases: tags `move-vX.Y.Z` (the version `move/module.json`'s), the package `mono2k-module.tar.gz` (`move/build.sh`; `MOVE_NATIVE=1` on an aarch64 bookworm), never marked Latest (the FM-1 Hub takes Latest), `release.json` at the root (Schwung Manager reads it: the version and the URL), `.github/workflows/move-release.yml` building and attaching on a tag when the release lacks the package. 0.2 released 2026-11-01 at the owner's "release it"; 0.4 2026-11-07 at "it works, merge and publish" and "share the new move firmware with all the changes", its notes everything since 0.2 (0.3 went no further than the owner's Move), its dsp.so the one the owner had just played; 0.4.1 the same day (a jog click turns the jog on a held step to its chance) at "much better" and "yes", its dsp.so again the one played. 0.5 2026-11-16 (the ADSRs, as the FM-1's 1.10) at the owner's "Both now" (the FM-1's and the Move's together), before a Move had run it: the owner's Move was off the network. The same day the owner ran it on their Move: "works very good". Its screens are stills of the Move's,
+  `install.html` (the download "Coming soon" until `RELEASE` is set in its script; set 2026-11-01 for 0.2, 2026-11-07 for 0.4 and 0.4.1). The Move's releases: tags `move-vX.Y.Z` (the version `move/module.json`'s), the package `mono2k-module.tar.gz` (`move/build.sh`; `MOVE_NATIVE=1` on an aarch64 bookworm), never marked Latest (the FM-1 Hub takes Latest), `release.json` at the root (Schwung Manager reads it: the version and the URL), `.github/workflows/move-release.yml` building and attaching on a tag when the release lacks the package. 0.2 released 2026-11-01 at the owner's "release it"; 0.4 2026-11-07 at "it works, merge and publish" and "share the new move firmware with all the changes", its notes everything since 0.2 (0.3 went no further than the owner's Move), its dsp.so the one the owner had just played; 0.4.1 the same day (a jog click turns the jog on a held step to its chance) at "much better" and "yes", its dsp.so again the one played. 0.5 2026-11-16 (the ADSRs, as the FM-1's 1.10) at the owner's "Both now" (the FM-1's and the Move's together), before a Move had run it: the owner's Move was off the network. The same day the owner ran it on their Move: "works very good". 0.6 (POLY on TRK, and the machines' marks on SYN:
+  `tools/gen_icons.py --move`, `move/screen/m2k_icons_move.h`, `g_mark` in m2k_screen.c) merged 2026-11-17 with the
+  FM-1's 1.11, its package sent as a test, not released. Its screens are stills of the Move's,
   `move/screens/*.png` (move/screen's sheets' PBMs as 1-bit PNGs, lit in the site's paper on its ink), `move/img/` the pad
   map and the pages' motion. Every page on both has the FM-1 | MOVE switch in its header (`switch.js`: the same page on
   the other device; the editor goes to the Move's home) and `wordmark.js` draws both homes' hero.
@@ -139,8 +141,8 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   locks; its LFOs aimed at the lead aimed at the voice, others off on it; `poly_lfo` at a voice's trig: their phases
   the lead's), its own kit, steps and settings kept. Another track's LFO aimed at the lead moves its voices too (`fanq`,
   apart from the LFOs' own queue, untouched). Keys (`poly_key_on`), MIDI on the lead's or a voice's channel and the
-  Move's pads take a voice (`poly_pick`: the one holding the key, a free one let go longest, one the CPU guard rests
-  last, past VOIC the oldest note's); ARP twice (the Move's Loop, CC 64) latches the chord until a key after all were
+  Move's pads take a voice (`poly_pick`: the one holding the key, a free one let go longest, past VOIC the oldest
+  note's; a voice the CPU guard rests or is cutting, `held` / `park`, only when every other is); ARP twice (the Move's Loop, CC 64) latches the chord until a key after all were
   let go. Recorded (`poly_note`: live REC, keys within 62 ms one chord; step entry, keys held together; the Move's
   Capture, a step's notes): sorted, the lowest the lead's step, then T+1's..., past VOIC dropped. The sequencer fires a
   voice only from its lead (`poly_fire`, the lead's step and clock): where the lead has a trig, its condition, PROB,
@@ -150,7 +152,7 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   GLO > PLAY name its lead, the Move's HOME brackets it. Its notes out on the lead's channel. A change of the leads (MODE,
   VOIC, a pattern) lets go of what the tracks it touches played. Without POLY none of it runs past one check a block
   (`pv.on`): bank A, DENSE and FXS render bit for bit (`m2k_draw --hash`), `--cpu` at its noise. `poly_lead_of`,
-  `poly_oldest`: the CPU guard's to ask. Fixtures: `host/m2k_poly.c` (`m2k_draw --poly-cpu`, `m2k_host DIR
+  `poly_oldest`: the CPU guard's to ask, `poly_steal` its one change (a cut voice's key freed). Fixtures: `host/m2k_poly.c` (`m2k_draw --poly-cpu`, `m2k_host DIR
   --poly-demo`).
   HOME has two pages (1.6, the owner's): HOME 1 LEVL PTCH BPM SWNG, HOME 2 the track in view's sequencing, TLEN SPD
   PROB LANE (the same globals as SEQ held's TLEN and SPD and ARP > LANES' LANE); its picture the six lanes, a trig on
@@ -202,7 +204,9 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   ("when you finish upload everything to website, github and for firmware hub"), before an FM-1 had run it. 2026-10-28 later: 1.3 (Grids, mutes on
   the bar, finer chances) likewise, at the owner's word ("Publish 1.3 now"); 1.3.1 (the splash's morph, the windows, FILT) at "looks good
   when you finish publish everything please"; 1.4 (PERFORM's second bank) at "publish"; 2026-10-29 the owner installed 1.4 on their FM-1: "it works"; later that day 1.4.2 (FILT's one curve, the cores split by any set, the screen paced by the sound and calm by default) ran on their FM-1 ("it works") and was published at their word ("Publish 1.4.2 now"); 1.4.1 was never released on its own. 2026-10-30: 1.5 (the new screen on the 4 px grid in Silkscreen, SELECT track / ALGORITHM machine / EDIT held catalogue, per-track lengths (format 19), the bus cut, the 96-sound library) on the installer and as the GitHub release at the owner's word ("upload"), before an FM-1 had run this build (earlier 1.5 tests had been sent). 2026-10-30 later: 1.6 (the owner's pixel font and Elektron-style knob pictures, HOME 2, PROB (format 20), the FM-1's CPU meter and CPU FULL, an exact engine pass) at the owner's word ("all good go ahead"), before an FM-1 had run it; the font's adaptation relicensed CC BY-SA 4.0 at the same word. 2026-10-31: 1.6.1 (the bus a block behind on the second core, the split by measure, an arp a track, the arps recorded) at the owner's word ("finish and push everything"), before an FM-1 had run it. 2026-11-01: 1.6.2 (no clicks on legato notes and accents, VO-6's level on short notes, long delays' first echo on time; the FM-1 still six tracks, `M2K_TRACKS` 8 only on the Move) at the owner's word ("yes"), before an FM-1 had run this build (a 1.6.2 test was sent). 2026-11-02: 1.7 (the CPU guard, CPU FULL naming the tracks, the manual's costs, the Hub's card picture from `fmhub.json`'s `image`) at the owner's word ("1 and 2 good for 1.7 can you publish"), FM-1 only, before an FM-1 had run it. 2026-11-07: 1.8 (a note's length, `span_tap`) at the owner's word ("it works, merge and publish"); a test build of the same code (0.0, sha cbf4829b) had been sent that day, and this file itself, version set, has not run on a device. 2026-11-08: 1.9 (the workflow after a player's review: PRESETS the sounds, pages remembered, knob speed, LFO's rows and GLO + LFO, HOME's note cells, a held step's card, GLO > HELP) at the owner's word ("it works, merge and publish") after a test build of the same code (sha 9aa60543) ran on their FM-1; mono2k-1.9.fwsc (sha 87c680b7) differs from it in 19 bytes, the version and checksums, and has not run on a device itself. 2026-11-09: 1.9.1 (SELECT picks LFO 1 2 3 on LFO's pages) at the owner's word ("yes") after its test build (0.0, sha 0a27b414) ran on their FM-1 ("work"); mono2k-1.9.1.fwsc (sha 4fb65f62) is the same code: a longer version moves the image (8293 bytes from the test build), so it was built again as 0.0.0, 22 bytes from 1.9.1. 2026-11-15: 1.9.2 (every FM-1, the newer units' UC25HQ80 flash `0xB36014` too: one chip check in the app, the rescue and the loader, slower chips waited for and reset, the watchdog and the installer's wait kept; PR 12) at the owner's word ("Tested, publish it") after their hardware tests; mono2k-1.9.2.fwsc (sha 55281dc2), the package they were given. 2026-11-16: 1.9.3 (the update on the FM-1's screen: the app's staging and the update loader draw the sectors filling, the waiting and stopped boxes, the isotype; the Installer's own screen while it writes, `installing.js`) at the owner's word ("when you finish upload"), before an FM-1 had run it: its loader drives the panel for the first time, and only the host's drawing and update test have run it. The same day the owner ran it on their FM-1: "1.9.3 runs on my FM-1". 2026-11-16 later: 1.10 (the amp's and the filter's envelopes as regular ADSRs: SUS, FSUS, FREL, format 22/23; SUS and FSUS at 0 the envelope as before, bank A rendered the same) at the owner's word ("all good, publish") after its test build (0.0, sha 1dd596e6) was sent; mono2k-1.10.fwsc (sha 075e231e) is the same code: built again from the merge, the test build gives 1dd596e6 to the byte. The installer page (`installer.html`, Felucca's `web/fm1/fm1ota.js`, `fm1pkg.js`, unchanged) installs
-  a package from a file meanwhile.
+  a package from a file meanwhile. 1.11 (POLY, and a calmer CPU guard, a chord's voice its rung between a tail and a
+  rest; one change log entry, 2026-11-17) was merged from its two branches on 2026-11-17 and sent as a test build;
+  not released.
 - The FM-1's budget: Felucca's heaviest patch is ~1570 Mac instructions a sample (its tests/cpu_baseline.txt) and
   runs on one core; count MONO2K's the same way, built as the FM-1 builds it (`cc -O2 -fno-builtin -fno-vectorize
   -fno-slp-vectorize -DM2K_MUL_OUT`, the 64-bit products out of line; `proc_pid_rusage` ri_instructions). The core's
@@ -242,23 +246,32 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   danger one step, then GRD_SETTLE (4) renders: a tail first (`grd_tail`: a note ended that only rings, astage 4 or 3
   past its gate, or its delay's echoes alone, `dcut`, the line faded over PARK_N and wiped), the quietest for what it
   saves, not resting (`trk_park(.., hold 0)`; `env_park` gives way to a note that comes in its fade); then
-  `guard_voice_steal()` (POLY's hook, -1 until it lands); then a rest (`held`), only when the danger is over / a
+  `guard_voice_steal()`: a voice of a POLY chord faded (`trk_park(.., 0)`, its next note as ever; a chord on the
+  keys gives up `poly_oldest`'s, the note POLY would give up for a new key, freed by `poly_steal`; a chord from the
+  steps, its notes started together, the quietest of its voices for what it saves, never the lead's; none through its
+  attack, `env_park` giving way to a note's start; a chord keeps its last voice; the chord in view last); voices cut
+  and a short within a second after (a chord's next onset brings them back: `grd.vfail_t`), tracks rest first for 2 s;
+  then a rest (`held`), only when the danger is over / a
   short / the ~64-render load over 100 %: REST's (`S_REST`, GLO > PLAY KNOB 2: AUTO, T1..T6 first, NONE never; an
   old store's 0 AUTO; the browser's MOTN on KNOB 3), AUTO the quietest for what it costs by `grd.lv` (its `lvl` held
   ~0.4 s, `GRD_FALL`, then followed ~1.5 s: a hit a beat counts as loud, a rare one little), never the track in view.
   Back from its next trig once for a second (`grd.calm`, doubled up to 8 s for one back only to rest again within
   4 s) nothing was in danger and the ~64-render load with its cost was under 85 %, the ring half full, the last to go
-  first; the track in view back at once unless REST names it. CPU FULL says what it did (`T2 TAIL CUT`, `T2 RESTS,
-  T4 HEAVIEST`; a rest after a tail's cut at once); GLO > PLAY's cells REST, and CUT 1.5 s. Never called elsewhere
+  first; the track in view back at once unless REST names it. CPU FULL says what it did (`T2 TAIL CUT`, `T5 VOICE
+  CUT`, `T2 RESTS, T4 HEAVIEST`; a rest after a tail's cut at once); GLO > PLAY's cells REST, and CUT 1.5 s. Never called elsewhere
   (the browser, the host, the Move): the sound bit for bit (`m2k_draw --hash`). The guard bench
   (`host/m2k_guard_bench.c`, check.sh): the FM-1's ring, interrupt, main loop (frames, strips, flash writes, stalls)
   and guard on the core's own render timed by its cost model through `m2k_clock` (DENSE's render = the FM-1's real
   time), 1.7's rule copied in for the comparison, no guard too; traces near the limit, spikes, a ramp, bars heavy and
-  light, a fall, stalls at 70-85 %, bank A as it is and 15 % slower, DENSE, REST T3 and NONE; it holds bank A never
-  shedding, shorts never above 1.7's, a stall cutting nothing, no cascade, no more rests or longer, a tail first, the
-  return, REST; `--wav DIR` writes each run, `-v` each step. `tools/guard_mutants.py` (check.sh): 19 mutants of the
-  guard, its fades and the glue, in copies under build/guard_mut, each caught by the bench or the self-test's GUARD
-  (the ladder, the fades without a step, a note in a tail's fade, REST, AUTO's level, CPU FULL's words).
+  light, a fall, stalls at 70-85 %, bank A as it is and 15 % slower, DENSE, REST T3 and NONE, a POLY lead of six SID
+  voices (`m2k_poly.c`'s) over the limit, its chords from the steps and held on the keys at ~115 % and from the steps
+  at ~190 %; it holds bank A never shedding, shorts never above 1.7's, a stall cutting nothing, no cascade, no more
+  rests or longer, a tail first, the return, REST, a POLY chord's voices cut holding 115 % with no rest, at 190 %
+  rests after them; `--wav DIR` writes each run, `-v` each step. `tools/guard_mutants.py` (check.sh): 28 mutants of
+  the guard, its fades, POLY's side and the glue, in copies under build/guard_mut, each caught by the bench or the
+  self-test's GUARD and GUARD POLY (the ladder, the fades without a step, a note in a tail's fade, REST, AUTO's level,
+  CPU FULL's words; the voice cut called, not resting, its key freed, never the lead's of a chord of steps, a chord's
+  last kept, `poly_pick` past what the guard cuts or rests).
   `--diag` packages show the same CPU, W (the second's) and F (drawing) in %
   over the screen's top. The 2026-10-29 owner: "dont make the sound engine worst": CPU savings must keep the sound
   bit for bit; 1.6's owner (a pattern of every track's effects, LFOs, chances and locks overloaded the FM-1): nothing

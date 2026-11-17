@@ -763,13 +763,14 @@ void m2k_cpu(int core1_pct, int core2_pct, int shorts)
  *   write's: the screen gives way, the sound as it is.
  * In danger one step, then GRD_SETTLE renders (its fade, the split's turn), the least heard first: a tail (a note
  * ended that only rings: its release, its decay past its gate, its delay's echoes alone) faded out, the quietest for
- * what it saves, its next note as ever; a voice of a poly chord (guard_voice_steal: POLY's); then a track rests, as
- * REST says (GLO > PLAY, S_REST): AUTO the quietest for what it costs (its level held ~0.4 s and followed ~1.5 s, so a
- * hit a beat counts as loud and a rare one little), never the track in view; T1..T6 that one first, then AUTO; NONE
- * none (the sound may run short: DROP counts it). A rested track plays again from its next trig once for a second
- * nothing was in danger and the load with it back stayed under 85 % (the ring half full), the last to go first (one
- * back only to rest again within 4 s, as bars heavy and light take turns: the next waits twice as long, up to 8 s); the
- * track in view never kept resting (but the one REST names) */
+ * what it saves, its next note as ever; a voice of a POLY chord (guard_voice_steal: faded, its next note as ever; when
+ * the sound still runs short within a second of one, tracks rest first for 2 s: a chord's onsets bring them back); then
+ * a track rests, as REST says (GLO > PLAY, S_REST): AUTO the quietest for what it costs (its level held ~0.4 s and
+ * followed ~1.5 s, so a hit a beat counts as loud and a rare one little), never the track in view; T1..T6 that one
+ * first, then AUTO; NONE none (the sound may run short: DROP counts it). A rested track plays again from its next
+ * trig once for a second nothing was in danger and the load with it back stayed under 85 % (the ring half full), the
+ * last to go first (one back only to rest again within 4 s, as bars heavy and light take turns: the next waits twice
+ * as long, up to 8 s); the track in view never kept resting (but the one REST names) */
 #define GRD_SEC 345                    /* renders a second (128 frames) */
 #define GRD_SETTLE 4                   /* renders after a step before the next */
 #define GRD_GAP 200                    /* ms between the screen's frames while it gives way */
@@ -780,6 +781,8 @@ static struct {
                                                                             * last short, the first of these shorts; the
                                                                             * screen given way until, since; the last in
                                                                             * danger; the last back */
+    uint32_t voice_t, vfail_t;         /* renders: the last POLY voice cut; the last short within a second of one (a
+                                        * chord's next onset brought them back: tracks rest first for 2 s) */
     int32_t credit, slow;              /* Q8 %: the last steps' saving its average has yet to show; the load followed */
     int32_t hold[M2K_TRACKS], lv[M2K_TRACKS];   /* each track's level, held (GRD_FALL), then followed ~1.5 s: AUTO's */
     uint16_t settle, calm;             /* renders: before the next step; with nothing in danger before one comes back */
@@ -845,9 +848,41 @@ static int grd_tail(int *dly)
     return best;
 }
 
-/* POLY's hook (a lead track borrowing the tracks after it as voices): the oldest voice of a poly chord faded, its
- * track returned, before a whole track rests. No chords here yet: none */
-static int guard_voice_steal(void) { return -1; }
+/* a voice of a POLY chord (m2k_seq.c), before a whole track rests: faded, not resting (its next note as ever). A chord
+ * on the keys gives up the voice POLY itself would take for a new key past VOIC (poly_oldest: the oldest note held),
+ * freed (poly_steal); a chord from the steps, whose notes start together, the quietest of its voices for what it saves,
+ * never the lead's own (the chord's lowest note, its step). One sounding through its attack is left (a fade gives way
+ * to a note's start, env_park), and a chord keeps its last voice; the chord in view the last, as a tail */
+static int grd_voice_ok(int v)
+{
+    const trk_t *k = &trk[v];
+    return k->sounding && k->astage > 1 && !k->park && !k->held && !k->dcut;
+}
+static int guard_voice_steal(void)
+{
+    if (!pv.on) return -1;
+    int best = -1;
+    uint32_t bs = 0;
+    for (int pass = 0; pass < 2 && best < 0; pass++)
+        for (int l = 0; l < M2K_TRACKS; l++) {
+            if (poly_lead_of(l) != l || pv.nv[l] < 2 || (l == ui.trk) != pass) continue;
+            int n = 0, v = poly_oldest(l);
+            for (int i = l; i < l + pv.nv[l]; i++) n += trk[i].sounding;
+            if (n < 2) continue;
+            if (v >= 0 && grd_voice_ok(v)) {        /* (the keys': POLY's own order first) */
+                if (best < 0 || pv.key[best] == 0xFF) { best = v; bs = 0; }
+                continue;
+            }
+            for (int i = l + 1; i < l + pv.nv[l]; i++) {
+                if (!grd_voice_ok(i) || (best >= 0 && pv.key[best] != 0xFF)) continue;
+                const int32_t sv = grd_saving(i, 0);
+                const uint32_t lv = ((uint32_t)CLAMP(trk[i].peak, 0, T_CLIP) * tq_u16(T_VOL, P8(&trk[i], P_LEVL))) >> 15;
+                const uint32_t q = (lv << 12) / (uint32_t)(sv > 0 ? sv : 1);   /* (2^29 at most, as grd_tail's) */
+                if (best < 0 || q < bs) { best = i; bs = q; }
+            }
+        }
+    return best;
+}
 
 /* the track to rest: REST's first (unless it rests), else the quietest for what it costs, never the track in view */
 static int grd_rest(int rs)
@@ -904,6 +939,7 @@ int m2k_guard(int load_pct, int ahead, int ring, int shorts)
             grd.ep = 1;
             grd.ep_t = now;
         } else if (eff > 90 || (eff > 80 && now - grd.ep_t >= GRD_SEC / 3)) sound = 2;   /* (the ring not refilling) */
+        if (grd.voice_t && now - grd.voice_t < GRD_SEC) grd.vfail_t = now;   /* (a chord's next onset: the voices back) */
         grd.ev_t = now;
         grd_wide(now);
     }
@@ -927,12 +963,15 @@ int m2k_guard(int load_pct, int ahead, int ring, int shorts)
         return -1;
     }
     int dly = 0, what = GR_TAIL, t = grd_tail(&dly);
+    if (t < 0 && sound > 1 && rs != REST_NONE && grd.vfail_t && now - grd.vfail_t < 2 * GRD_SEC && (t = grd_rest(rs)) >= 0)
+        what = GR_REST;                /* (voices cut, and still the sound ran short: they do not hold, a track rests) */
     if (t < 0 && (t = guard_voice_steal()) >= 0) what = GR_VOICE;
     if (t < 0 && sound > 1 && rs != REST_NONE && (t = grd_rest(rs)) >= 0) what = GR_REST;
     if (t < 0) return -1;
     grd.credit += grd_saving(t, dly);
     if (dly) trk[t].dcut = PARK_N + 1;
     else trk_park(t, trk_cost(t), what == GR_REST);
+    if (what == GR_VOICE) { poly_steal(t); grd.voice_t = now; }
     if (what == GR_REST) {
         grd.rest[grd.n++] = (int8_t)t;
         if (grd.back_t && now - grd.back_t < 4 * GRD_SEC) grd.calm = (uint16_t)CLAMP(2 * (grd.calm ? grd.calm : GRD_SEC), 0, 8 * GRD_SEC);
