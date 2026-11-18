@@ -12,7 +12,7 @@
 <meta name="description" content="Install MONO2K on the M-VAVE FM-1 from the browser over USB, see what your FM-1 runs, and go back to the official firmware.">
 <script>try { const t = localStorage.getItem("mono2k.theme"); if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t); } catch (e) {}</script>
 <link rel="icon" href="brand/mono2k-iso.svg" type="image/svg+xml">
-<link rel="stylesheet" href="style.css?v=61">
+<link rel="stylesheet" href="style.css?v=62">
 </head>
 <body>
 <!-- the controls' glitch (style.css): rows slipped sideways, in hard bands -->
@@ -33,14 +33,14 @@
 <section class="phead">
   <p class="sec__n">FM-1</p>
   <div class="sec__body">
-    <h1 class="display" style="margin:0">Installer</h1>
-    <p class="lede">MONO2K onto the FM-1 over USB, from this page, in Chrome or Edge. No extra hardware, and a way back to the official firmware.</p>
+    <h1 class="display">Installer</h1>
+    <p class="lede">MONO2K onto the FM-1 over USB, in Chrome or Edge. No extra hardware, and a way back to the official firmware.</p>
   </div>
 </section>
 
 <section class="inst">
   <aside class="side doc">
-    <table>
+    <table class="table--fixed">
       <thead><tr><th colspan="2">Your FM-1</th></tr></thead>
       <tbody>
         <tr><td>Link</td><td id="st-link">Not connected</td></tr>
@@ -48,48 +48,54 @@
         <tr><td>Identity</td><td id="st-id">–</td></tr>
       </tbody>
     </table>
-    <table>
+    <table class="table--fixed">
       <thead><tr><th colspan="2">MONO2K for the FM-1</th></tr></thead>
       <tbody>
-        <tr><td>Package</td><td id="st-pkg">Looking…</td></tr>
+        <tr><td>Package</td><td id="st-pkg" class="skel">Looking…</td></tr>
         <tr><td>In the browser</td><td>Runs</td></tr>
       </tbody>
     </table>
   </aside>
   <div class="main doc">
-    <h2 style="margin-top:0">1 · Connect</h2>
-    <p>Plug the FM-1 into the computer with a USB cable that carries data, switch it on, and press Connect. The browser asks to allow MIDI with system exclusive messages: allow it, that is how the FM-1 answers. Close anything else using the FM-1's MIDI port first: a DAW, or the <a href="./">emulator</a> with the FM-1 selected.</p>
-    <button class="bigbtn" id="connect" type="button">Connect<small id="connect-sub">Ask the FM-1 what it runs</small></button>
+    <h2>1 · Connect</h2>
+    <p>Plug the FM-1 in with a USB cable that carries data, switch it on and press Connect. Allow MIDI with system exclusive messages: that is how the FM-1 answers.</p>
+    <p class="small muted">Close anything else using its MIDI port first: a DAW, or the <a href="./">emulator</a> with the FM-1 selected.</p>
+    <button class="btn btn--lg" id="connect" type="button">Connect<small id="connect-sub" data-swap>Ask the FM-1 what it runs</small></button>
     <div class="inst__log" id="say" role="status" aria-live="polite">Not connected.</div>
 
     <h2>2 · Install MONO2K</h2>
-    <p id="pkg-note">Looking for the package…</p>
-    <button class="bigbtn" id="install" type="button" disabled>Install<small id="install-sub">Not available yet</small></button>
+    <p id="pkg-note" class="skel">Looking for the package…</p>
+    <button class="btn btn--lg beam" id="install" type="button" disabled>Install<small id="install-sub" data-swap>Not available yet</small></button>
     <progress class="inst__bar" id="bar" max="100" value="0" hidden></progress>
     <ol class="steps">
-      <li>Press Install and leave the cable and this page alone until it says it is done.</li>
-      <li>The running firmware checks the package and stages the update loader, then the FM-1 restarts into its update mode.</li>
+      <li>Press Install, then leave the cable and this page alone until it says done.</li>
+      <li>The running firmware checks the package and stages the update loader; the FM-1 restarts into its update mode.</li>
       <li>The loader writes MONO2K, about a minute, and the FM-1 starts again into it.</li>
     </ol>
-    <details class="params" id="local">
+    <details class="acc" id="local">
       <summary>Install a package from this computer</summary>
-      <p>A build of your own, or one the author sends you to test: a <code>.fwsc</code> made by <code>tools/fm1/build.py</code>. Only packages with the open FM-1 update loader are taken.</p>
-      <p><input id="file" type="file" accept=".fwsc"></p>
+      <div class="acc__body">
+        <p>A build of your own, or one the author sends you to test: a <code>.fwsc</code> made by <code>tools/fm1/build.py</code>. Only packages with the open FM-1 update loader are taken.</p>
+        <p><input id="file" type="file" accept=".fwsc"></p>
+      </div>
+    </details>
+    <details class="acc">
+      <summary>If it stops</summary>
+      <div class="acc__body">
+        <table>
+          <tbody>
+            <tr><td>Not found</td><td>Check the cable carries data, nothing else holds the FM-1's MIDI port, and that you allowed MIDI. Reload the page and connect again.</td></tr>
+            <tr><td>Stopped writing</td><td>The FM-1 stays in its update mode until the write is complete. Replug the cable and press Install again: the page finishes the write first.</td></tr>
+            <tr><td>No screen</td><td>Switch it off and on. If it still shows nothing, hold <kbd>OCT−</kbd> while switching it on: it starts in a USB rescue mode, sound off, from which this page (and any FM-1 installer) works again.</td></tr>
+          </tbody>
+        </table>
+      </div>
     </details>
 
-    <h2>If it stops</h2>
-    <table>
-      <tbody>
-        <tr><td>Not found</td><td>Check the cable carries data, nothing else holds the FM-1's MIDI port, and that you allowed MIDI. Reload the page and connect again.</td></tr>
-        <tr><td>Stopped writing</td><td>The FM-1 stays in its update mode until the write is complete. Replug the cable and press Install again: the page finishes the write first.</td></tr>
-        <tr><td>No screen</td><td>Switch it off and on. If it still shows nothing, hold <kbd>OCT−</kbd> while switching it on: it starts in a USB rescue mode, sound off, from which this page (and any FM-1 installer) works again.</td></tr>
-      </tbody>
-    </table>
-
     <h2>3 · Back to the official firmware</h2>
-    <p>M-VAVE's own updater takes the FM-1 back at any time. This page can too: get the official FM-1 V15 from M-VAVE and choose its unmodified <code>FM-1.fwsc</code>. The file is checked in your browser against V15's fingerprint and sent nowhere.</p>
+    <p>M-VAVE's own updater takes the FM-1 back at any time, and so can this page: get the official FM-1 V15 from M-VAVE and choose its unmodified <code>FM-1.fwsc</code>. It is checked in your browser against V15's fingerprint and sent nowhere.</p>
     <p><input id="stock-file" type="file" accept=".fwsc"></p>
-    <button class="bigbtn alt" id="stock" type="button" disabled>Back to V15<small id="stock-sub">Choose the official file first</small></button>
+    <button class="btn btn--lg alt" id="stock" type="button" disabled>Back to V15<small id="stock-sub" data-swap>Choose the official file first</small></button>
 
     <div class="callout"><b>At your own risk</b><p>Installing firmware other than the FM-1's own is at your own risk; the rescue above and M-VAVE's updater are the ways back. MONO2K's patterns live in the FM-1's flash, not on the computer: they do not survive going back. MONO2K is not affiliated with M-VAVE or Elektron.</p></div>
     <p class="small">The update protocol and its code are Felucca's (<code>fm1ota.js</code>, <code>fm1pkg.js</code>, Leo Kuroshita, Hügelton Instruments), GPL-3.0, as is MONO2K. The FM-1 build stands on the open FM-1 platform: Felucca, SLOOP, Dinghy, FM-106 and CS-1.</p>
@@ -98,13 +104,15 @@
 
 <footer class="bar foot">
   <span class="label">MONO2K</span><span class="label">Installer</span><a class="label kofi" href="https://ko-fi.com/sequencist" target="_blank" rel="noopener">Support on Ko-fi</a><span class="label r">2026</span>
+  <p class="foot__credit">The page's parts after <a href="https://ui.shadcn.com" target="_blank" rel="noopener">shadcn/ui</a>, its motion after <a href="https://transitions.dev" target="_blank" rel="noopener">transitions.dev</a>, the beam and the mosaic after <a href="https://libraries.dev" target="_blank" rel="noopener">Libraries.dev</a>.</p>
 </footer>
 <script src="site.js?v=4"></script>
 <script src="switch.js?v=2"></script>
+<script src="ui.js?v=1"></script>
 <script type="module">
 import { Updater } from "./fm1/fm1ota.js?v=1";
 import { productOf, logicalImage, validateStockPackage, sha256hex } from "./fm1/fm1pkg.js?v=1";
-import { Live } from "./installing.js?v=1";
+import { Live } from "./installing.js?v=2";
 
 const $ = (id) => document.getElementById(id);
 const MONO2K = /^FM-1_980$/;                           /* MONO2K's identity, every release (FM-1_981, _983 are others') */

@@ -7,7 +7,13 @@ window.M2K_KINDS = {
 };
 window.M2K_CHANGES = [
   {
-    date: "2026-11-17", title: "MONO2K 1.12: four new performance effects",
+    date: "2026-11-18", title: "MONO2K 1.13: the Move's reverb patterns",
+    items: [
+      ["patterns", "1.13: A pattern made on the Move with one of its PS1-era reverbs (MONO2K for the Move 0.8) opens on the FM-1 and in the Patch Editor, and plays with MONO2K's own reverb. Your patterns and sounds play exactly as before."],
+    ],
+  },
+  {
+    date: "2026-11-18", title: "MONO2K 1.12: four new performance effects",
     items: [
       ["workflow", "1.12: PERFORM has a third bank. Hold FX and press OCT+ twice: bank C, with both OCT keys lit. OCT− steps back to B, then A. Banks A and B are where they were."],
       ["sound", "1.12: SKIP (black 1 of bank C): a CD that can't read. At every sixteenth, nine times in ten, the sixteenth just played repeats once to three times, its pitch sagging as the laser seeks, then the music goes on."],
@@ -16,6 +22,7 @@ window.M2K_CHANGES = [
       ["sound", "1.12: LO-FI (black 4): an unsteady converter. The mix held at 11 kHz by a clock that wanders, in 10 bits."],
       ["workflow", "1.12: They play as the others do: held, or tapped twice to stay on, with FX latched on every page. SKIP takes turns with the repeats; CONSOLE, DUCK and LO-FI stack with anything. Keys 5 to 11 of bank C are empty and stay dark."],
       ["patterns", "1.12: Nothing to convert: your patterns and sounds play exactly as before. GLO > HELP's PERFORM page names the three banks."],
+      ["web", "The site redrawn on the device screen's 4 px grid: one set of buttons, cards and tables, sliding tabs, folding sections, copy buttons that confirm, the screens arriving as a pixel mosaic and a beam around Install."],
     ],
   },
   {

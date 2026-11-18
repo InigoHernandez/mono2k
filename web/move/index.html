@@ -12,7 +12,7 @@
 <meta name="description" content="MONO2K on the Ableton Move: the Monomachine-style groovebox from the FM-1, on eight tracks, every page one pad away. Runs on Schwung.">
 <script>try { const t = localStorage.getItem("mono2k.theme"); if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t); } catch (e) {}</script>
 <link rel="icon" href="../brand/mono2k-iso.svg" type="image/svg+xml">
-<link rel="stylesheet" href="../style.css?v=61">
+<link rel="stylesheet" href="../style.css?v=62">
 </head>
 <body>
 <!-- the controls' glitch (style.css): rows slipped sideways, in hard bands -->
@@ -33,7 +33,7 @@
   <canvas id="wordmark" aria-label="MONO2K"></canvas>
   <div class="hero__sub">
     <p class="lede hero__line">The Monomachine-style groovebox, started on the FM-1, now on the Ableton Move, with 8 tracks.</p>
-    <p class="hero__acts"><a class="btn" href="#play">Play</a><a class="btn ghost" href="#pads">Pads</a><a class="btn ghost" href="install.html">Install</a></p>
+    <p class="hero__acts"><a class="btn" href="#play">Play</a><a class="btn btn--outline" href="#pads">Pads</a><a class="btn btn--outline" href="install.html">Install</a></p>
   </div>
 </section>
 
@@ -64,9 +64,9 @@
       <div class="mx__trk" id="mx-trk" role="group" aria-label="Track buttons"></div>
       <div class="mx__pads" id="mx-pads" role="group" aria-label="The 32 pads"></div>
       <div class="mx__steps" id="mx-steps" role="group" aria-label="The 16 steps"></div>
-      <div class="mx__foot"><span class="small">Point at a pad; the steps play on every page.</span><button class="pbtn" id="mx-shift" type="button" aria-pressed="false">Shift</button></div>
+      <div class="mx__foot"><span class="small">Point at a pad; the steps play on every page.</span><button class="btn btn--outline btn--sm" id="mx-shift" type="button" aria-pressed="false">Shift</button></div>
     </div>
-    <noscript><img src="img/padmap.png?v=3" width="1406" height="2250" alt="The Move's pads under MONO2K, lit" style="grid-column:1/-1;width:100%;height:auto"></noscript>
+    <noscript><img src="img/padmap.png?v=4" width="1406" height="2250" alt="The Move's pads under MONO2K, lit" style="grid-column:1/-1;width:100%;height:auto"></noscript>
   </div>
 </section>
 
@@ -82,8 +82,8 @@
     <li class="tile"><b data-count="19">19</b><span>Machines</span></li>
   </ul>
   <div class="ofigs">
-    <figure class="ofig scan"><img class="oled" src="screens/02_home_play.png" width="128" height="64" alt="HOME: eight lanes, each playhead its own" loading="lazy"><figcaption><b>HOME</b>Eight lanes at a glance.</figcaption></figure>
-    <figure class="ofig scan"><img class="oled" src="screens/13_mix.png" width="128" height="64" alt="MIX: eight levels, live" loading="lazy"><figcaption><b>MIX</b>Eight levels on the eight knobs.</figcaption></figure>
+    <figure class="ofig"><img class="oled" src="screens/02_home_play.png" width="128" height="64" alt="HOME: eight lanes, each playhead its own" loading="lazy"><figcaption><b>HOME</b>Eight lanes at a glance.</figcaption></figure>
+    <figure class="ofig"><img class="oled" src="screens/13_mix.png" width="128" height="64" alt="MIX: eight levels, live" loading="lazy"><figcaption><b>MIX</b>Eight levels on the eight knobs.</figcaption></figure>
   </div>
 </section>
 
@@ -95,12 +95,12 @@
     <p class="lbls"><span>PERFORM pad</span><span>The keys, held</span><span>Up: ten more</span></p>
   </div>
   <div class="pf" id="pf">
-    <figure class="ofig scan"><img class="oled" src="screens/20_perf_one.png" width="128" height="64" alt="PERFORM on the Move's screen: RPT 1/8 held" loading="lazy"><figcaption><b>PERFORM</b>The keys are its effects.</figcaption></figure>
+    <figure class="ofig"><img class="oled" src="screens/20_perf_one.png" width="128" height="64" alt="PERFORM on the Move's screen: RPT 1/8 held" loading="lazy"><figcaption><b>PERFORM</b>The keys are its effects.</figcaption></figure>
     <div class="pf__board">
       <p class="pf__now" id="pf-now" aria-live="polite">Hold a key</p>
       <div class="pf__row c" id="pf-c" role="group" aria-label="The colours, top row"><span class="label">Colours</span></div>
       <div class="pf__row m" id="pf-m" role="group" aria-label="The moves, bottom row"><span class="label">Moves</span></div>
-      <div class="pf__acts"><button class="pbtn" id="pf-up" type="button" aria-pressed="false">Up</button><span class="small">Held on the Move; tapped here.</span></div>
+      <div class="pf__acts"><button class="btn btn--outline btn--sm" id="pf-up" type="button" aria-pressed="false">Up</button><span class="small">Held on the Move; tapped here.</span></div>
     </div>
   </div>
 </section>
@@ -127,8 +127,8 @@
     <p class="lede">96 sounds, a pad away: the jog plays each on the track.</p>
   </div>
   <div class="ofigs">
-    <figure class="ofig scan"><img class="oled" src="screens/18_cat.png" width="128" height="64" alt="SOUNDS: the library's rows, the one heard lit" loading="lazy"><figcaption><b>Jog</b>Each sound heard as you land on it; a click keeps it.</figcaption></figure>
-    <figure class="ofig scan"><img class="oled" src="screens/18_cat_cat.png" width="128" height="64" alt="SOUNDS: a category picked" loading="lazy"><figcaption><b>Knob 2</b>A category.</figcaption></figure>
+    <figure class="ofig"><img class="oled" src="screens/18_cat.png" width="128" height="64" alt="SOUNDS: the library's rows, the one heard lit" loading="lazy"><figcaption><b>Jog</b>Each sound heard as you land on it; a click keeps it.</figcaption></figure>
+    <figure class="ofig"><img class="oled" src="screens/18_cat_cat.png" width="128" height="64" alt="SOUNDS: a category picked" loading="lazy"><figcaption><b>Knob 2</b>A category.</figcaption></figure>
   </div>
 </section>
 
@@ -165,7 +165,7 @@
         <div class="eng__knobs" id="eng-knobs"></div>
         <div class="eng__acts">
           <button class="hit" id="eng-hit" type="button"><canvas id="eng-mark" width="64" height="64" aria-hidden="true"></canvas><span>Hit</span><small id="eng-hit-n">INIT · C3</small></button>
-          <button class="pbtn" id="eng-reset" type="button">INIT</button>
+          <button class="btn btn--outline btn--sm" id="eng-reset" type="button">INIT</button>
         </div>
       </div>
     </div>
@@ -176,7 +176,7 @@
   <p class="sec__n">07</p>
   <div class="sec__body">
     <h2 class="display">Status</h2>
-    <p class="lede">0.6, out now. It runs on <a href="https://schwung.dev" target="_blank" rel="noopener">Schwung</a>, unofficial: <a href="install.html">how it installs</a>.</p>
+    <p class="lede">0.7, out now. It runs on <a href="https://schwung.dev" target="_blank" rel="noopener">Schwung</a>, unofficial: <a href="install.html">how it installs</a>.</p>
   </div>
 </section>
 
@@ -191,14 +191,16 @@
 
 <footer class="bar foot">
   <span class="label nar">MONO2K for Move</span><span class="label wide">Not affiliated with Ableton, M-VAVE or Elektron; runs on Schwung (unofficial)</span><a class="label kofi" href="https://ko-fi.com/sequencist" target="_blank" rel="noopener">Support on Ko-fi</a><span class="label r nar">2026</span>
+  <p class="foot__credit">The page's parts after <a href="https://ui.shadcn.com" target="_blank" rel="noopener">shadcn/ui</a>, its motion after <a href="https://transitions.dev" target="_blank" rel="noopener">transitions.dev</a>, the beam and the mosaic after <a href="https://libraries.dev" target="_blank" rel="noopener">Libraries.dev</a>.</p>
 </footer>
 
 <script src="../site.js?v=4"></script>
 <script src="../switch.js?v=2"></script>
+<script src="../ui.js?v=1"></script>
 <script src="../panel.js?v=2"></script>
 <script src="../wordmark.js?v=1"></script>
-<script src="move.js?v=12"></script>
-<script src="gear.js?v=15"></script>
+<script src="move.js?v=13"></script>
+<script src="gear.js?v=16"></script>
 <script>if (window.MoveGear) MoveGear.init(document.getElementById("move-gear"));   /* gear.js loads its own gear.css */</script>
 </body>
 </html>

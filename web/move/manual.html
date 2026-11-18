@@ -13,7 +13,7 @@
 <meta name="description" content="The MONO2K manual for the Ableton Move: getting in and out with Schwung, the pads, every control, the pages and their knobs, PERFORM, the tempo, saving and the patterns.">
 <script>try { const t = localStorage.getItem("mono2k.theme"); if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t); } catch (e) {}</script>
 <link rel="icon" href="../brand/mono2k-iso.svg" type="image/svg+xml">
-<link rel="stylesheet" href="../style.css?v=61">
+<link rel="stylesheet" href="../style.css?v=62">
 </head>
 <body class="noscript-all">
 <!-- the controls' glitch (style.css): rows slipped sideways, in hard bands -->
@@ -100,7 +100,7 @@
 
 <article id="status" data-group="Start here">
   <h1>Install</h1>
-  <p class="sub">0.6: from Schwung Manager or the install page.</p>
+  <p class="sub">0.7: from Schwung Manager or the install page.</p>
   <p>The <a href="install.html">install page</a> says how it installs. It runs on Schwung, which is unofficial: not made, approved or supported by Ableton. Back up your sets before installing Schwung or anything on it.</p>
   <p>MONO2K never touches Move's sets. Its own patterns are kept in one file, apart from Move's (<a href="#saving">Saving</a>).</p>
   <div class="callout"><b>Note</b><p>MONO2K is not affiliated with Ableton, M-VAVE or Elektron. Move is Ableton's; Monomachine is Elektron's. Its machines are written from scratch and measured against a Monomachine's output.</p></div>
@@ -131,7 +131,7 @@
     <li><b>The track buttons pick the track</b> (Shift + a button for 5–8); every page shows the track in view.</li>
     <li><b>The steps are the sequencer on every page.</b> Hold one and turn a knob: a lock.</li>
   </ol>
-  <figure class="fig" style="margin-top:var(--s3)"><img src="img/padmap.png?v=3" width="1406" height="2250" alt="The Move's pads under MONO2K, lit as it lights them: HOME in view; three keys held with the arp; PERFORM on, and its page 2; PADS" style="display:block;width:100%;height:auto;border:1px solid var(--ink)" loading="lazy"><figcaption style="max-width:none">The pads as MONO2K lights them: HOME in view; keys held on TRK; PERFORM on; Up, its page 2; PADS.</figcaption></figure>
+  <figure class="fig" style="margin-top:var(--s3)"><img src="img/padmap.png?v=4" width="1406" height="2250" alt="The Move's pads under MONO2K, lit as it lights them: HOME in view; three keys held with the arp; PERFORM on, and its page 2; PADS" style="display:block;width:100%;height:auto;border:1px solid var(--ink)" loading="lazy"><figcaption style="max-width:none">The pads as MONO2K lights them: HOME in view; keys held on TRK; PERFORM on; Up, its page 2; PADS.</figcaption></figure>
   <table>
     <thead><tr><th>Row</th><th>Pads</th></tr></thead>
     <tbody>
@@ -277,7 +277,7 @@
       <tr><td>DELAY</td><td>One echo, on the tempo; DCAY up, it repeats.</td></tr>
     </tbody>
   </table>
-  <p>DCAY and DAMP keep their meaning: the reverb's length and how dark it falls. Each type sounds exactly as the chip had it at one setting of the two. SPACE ECHO, ECHO and DELAY land on the beat: on the musical length nearest their own (a sixteenth to a whole note), gliding to a new tempo. A new type takes over at once while the old one rings out for a moment. The pattern keeps its type; an FM-1 plays such a pattern with its own reverb.</p>
+  <p>DCAY and DAMP keep their meaning: the reverb's length and how dark it falls. Each type sounds exactly as the chip had it at one setting of the two. SPACE ECHO, ECHO and DELAY land on the beat: on the musical length nearest their own (a sixteenth to a whole note), gliding to a new tempo. A new type takes over at once while the old one rings out for a moment. The pattern keeps its type; an FM-1 from 1.13 plays such a pattern with MONO2K's own reverb.</p>
 </article>
 
 <article id="movement" data-group="Make a track">
@@ -507,6 +507,7 @@
   <p class="sub">Free software, on Schwung.</p>
   <p>MONO2K is by Sequencist, and free software under the GNU General Public License, version 3 only. Its source and this site are on <a href="https://github.com/InigoHernandez/mono2k" target="_blank" rel="noopener">GitHub</a>.</p>
   <p>On the Move it runs on <a href="https://github.com/charlesvestal/schwung" target="_blank" rel="noopener">Schwung</a> (MIT), an unofficial framework for Move's modules, not made, approved or supported by Ableton. Type: Elektron Pixel Font by savingaurora (FontStruct), CC BY-SA 3.0; MONO2K's adaptation is under CC BY-SA 4.0. Orbitron (the wordmark) and Inter Tight are under the SIL Open Font License. GRIDS is Émilie Gillet's Grids (Mutable Instruments), its map and rules ported from its source (GPL-3.0). The DRM- drums' voice design is after the Erica Synths LXR drum voices (GPL-3.0-only; originally Julian Schmidt's Sonic Potions LXR): their laws, not their code or samples. PERFORM's SKIP, CONSOLE and LO-FI are after AFFINE (Sequencist's break chopper for the FM-1, MPL-2.0), DUCK after CHOPPAH's idea (Laurens Profittlich): written again from their laws, none of their code. GRIT and the PS1-era reverbs are after AFFINE's too, on the sound chip's documented numbers from psx-spx (psx-spx.consoledev.net): its reverbs' register sets, their resampler, its ADPCM filters and its interpolation table, credited; no ROM, BIOS, SDK or emulator code. The digital waves are the author's own.</p>
+  <p>The site's components and spacing follow <a href="https://github.com/shadcn-ui/ui" target="_blank" rel="noopener">shadcn/ui</a> (MIT), its motion <a href="https://transitions.dev" target="_blank" rel="noopener">transitions.dev</a>'s free transitions, and the beam and the screens' mosaic <a href="https://libraries.dev" target="_blank" rel="noopener">Libraries.dev</a>'s ideas (MIT), all written again for this site.</p>
   <p>The machines were measured against a Monomachine: the FM-1 manual's <a href="../manual.html#credits">credits</a> say how. Ableton and Move are trademarks of Ableton; Monomachine and Machinedrum of Elektron; M-VAVE and FM-1 of their owners. MONO2K is not affiliated with Ableton, M-VAVE or Elektron. If it is useful to you, you can <a href="https://ko-fi.com/sequencist" target="_blank" rel="noopener">support it on Ko-fi</a>.</p>
 </article>
 
@@ -526,7 +527,8 @@
 </footer>
 <script src="../site.js?v=4"></script>
 <script src="../switch.js?v=2"></script>
-<script src="changelog.js?v=11"></script>
-<script src="../manual.js?v=68"></script>
+<script src="../ui.js?v=1"></script>
+<script src="changelog.js?v=12"></script>
+<script src="../manual.js?v=69"></script>
 </body>
 </html>

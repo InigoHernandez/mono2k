@@ -9,7 +9,7 @@
   const cstr = (x, p) => { const m = new Uint8Array(x.memory.buffer); let s = ""; while (m[p]) s += String.fromCharCode(m[p++]); return s; };
   const css = () => getComputedStyle(document.documentElement);
   const hex = (c) => { const m = c.replace("#", ""); return [parseInt(m.slice(0, 2), 16), parseInt(m.slice(2, 4), 16), parseInt(m.slice(4, 6), 16)]; };
-  const status = (s) => { $("ed-status").textContent = s; };
+  const status = (s, toast) => { $("ed-status").textContent = s; if (toast && window.M2K_UI) window.M2K_UI.toast(s); };   /* a save: a toast too (ui.js), the line being out of sight */
 
   /* the saves: this browser's, shared with the emulator page, or the FM-1's patterns read over the link, kept apart */
   const STORE_KEY = "mono2k.store.v2", FM1_KEY = "mono2k.fm1.v1", SESSION_KEY = "mono2k.editor.session", WHEN_KEY = "mono2k.fm1.when";
@@ -132,7 +132,7 @@
   });
   const tap = (b) => { send({ t: "btn", b, d: 1 }); send({ t: "btn", b, d: 0 }); };
   $("ed-play").addEventListener("click", () => tap(10));
-  $("ed-save").addEventListener("click", () => { tap(7); status(`Saved ${$("ed-pat").textContent} in the project.`); });
+  $("ed-save").addEventListener("click", () => { tap(7); status(`Saved ${$("ed-pat").textContent} in the project.`, true); });
 
   // -------------------------------------------------------------------------------------------- audition
   const NOTE = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
@@ -403,7 +403,7 @@
     a.click();
     a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-    status(`Saved ${a.download}: ${m.fm1 ? "the FM-1's patterns and its sounds" : "this browser's projects and sounds"}.`);
+    status(`Saved ${a.download}: ${m.fm1 ? "the FM-1's patterns and its sounds" : "this browser's projects and sounds"}.`, true);
   }
 
   $("ed-fm1-go").addEventListener("click", fm1Connect);
@@ -433,7 +433,7 @@
 
   // -------------------------------------------------------------------------------------------- the core
   async function boot() {
-    const r = await fetch("m2k.wasm?v=122");
+    const r = await fetch("m2k.wasm?v=123");
     wasmBytes = await r.arrayBuffer();
     pre = new WebAssembly.Instance(new WebAssembly.Module(wasmBytes), {}).exports;
     if (pre._initialize) pre._initialize();

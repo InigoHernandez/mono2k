@@ -2,7 +2,8 @@
 
 Two of AFFINE's PS1-era sounds, on the Move alone (the owner, 2026-11-17: too heavy for the FM-1, whose builds must not
 change). Phase 1 built and measured the DSP; phase 2 (2026-11-18) wired it into the bus and the Move's controls with
-the owner's defaults (below), on top of PERFORM bank C. This is the record as built.
+the owner's defaults (below), on top of PERFORM bank C. This is the record as built. Bank C went out as the FM-1's
+1.12 and the Move's 0.7 meanwhile, so this is the Move's 0.8, and the FM-1's 1.13 for the reading alone.
 
 ## What is where
 
@@ -54,7 +55,7 @@ the owner's defaults (below), on top of PERFORM bank C. This is the record as bu
 - **Formats 26 and 27** are 24's and 25's layouts with the type's byte after the globals.
   - A pattern packs as 26/27 only when its choice is a type. The knob's FDN, a byte of 6, packs as before and comes back
     0: the same choice.
-  - Every build reads 26 and 27. A build without the flag (the FM-1's 1.12, the browser's) passes the byte over, so the
+  - Every build reads 26 and 27. A build without the flag (the FM-1's from 1.13, the browser's) passes the byte over, so the
     pattern plays its FDN.
   - `BLOB_ANY` grows by one byte (4321), so a store holding a format-27 pattern is read anywhere.
   - The FM-1's only change is this reading.
