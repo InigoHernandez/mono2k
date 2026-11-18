@@ -5835,6 +5835,22 @@ static int selftest(void)
                     q->step[3][0].note == 53 + k1 + o && (q->step[3][0].flags & ST_TRIG) && q->step[1][1].note == 53 + k4 + o &&
                     (q->step[1][1].flags & ST_TRIG) && !(q->step[2][1].flags & ST_TRIG) && ui.cursor == 2;
         sq.rec = 0;
+        /* a step key (GRID's, the Move's steps) on the lead: the last chord its keys played, the lowest the lead's;
+         * one key after all were let go a chord of one (the voices' steps there none) */
+        m2k_init(67);
+        q = bare(9);
+        q->glob[G_POLY1 + 1] = 3;
+        poly_sync();
+        ui.trk = 1; sq.ktrk = 1;
+        live_on_t(1, 64, 100); live_on_t(1, 60, 100); live_on_t(1, 67, 100);
+        live_off_t(1, 64); live_off_t(1, 60); live_off_t(1, 67);
+        trig_place(1, 5);
+        int grid = q->step[1][5].note == 60 && (q->step[1][5].flags & ST_TRIG) && q->step[2][5].note == 64 &&
+                   (q->step[2][5].flags & ST_TRIG) && q->step[3][5].note == 67 && (q->step[3][5].flags & ST_TRIG);
+        live_on_t(1, 62, 100); live_off_t(1, 62);
+        trig_place(1, 6);
+        grid &= q->step[1][6].note == 62 && (q->step[1][6].flags & ST_TRIG) && !(q->step[2][6].flags & ST_TRIG) &&
+                !(q->step[3][6].flags & ST_TRIG);
         /* played: the lead's step 0 the chord's, on the first of two loops, accented, BASE locked, three hits */
         m2k_init(66);
         q = bare(9);
@@ -5886,11 +5902,11 @@ static int selftest(void)
         for (int i = 0; i < 64; i++) sblk();
         off &= t3 && trk[2].eff[P_LEVL] == 33 && trk[2].mach == q->machine[2];
         seq_play(0);
-        printf("     POLY recorded: live %d, step entry %d; played: the lead's step %d (loops %d %d %d / %d %d %d), mutes %d; off %d\n",
-               live, entry, gov, h[0][1], h[0][2], h[0][3], h[1][1], h[1][2], h[1][3], mute, off);
-        CHECK(live && entry && gov && mute && off,
-              "POLY: a chord recorded live and in step entry, lead first; the lead's step governs its chord; mutes; "
-              "MODE OFF leaves the notes, each track its own sound");
+        printf("     POLY recorded: live %d, step entry %d, a step key %d; played: the lead's step %d (loops %d %d %d / %d %d %d), "
+               "mutes %d; off %d\n", live, entry, grid, gov, h[0][1], h[0][2], h[0][3], h[1][1], h[1][2], h[1][3], mute, off);
+        CHECK(live && entry && grid && gov && mute && off,
+              "POLY: a chord recorded live, in step entry and by a step key (the last chord played), lead first; the lead's "
+              "step governs its chord; mutes; MODE OFF leaves the notes, each track its own sound");
     }
     /* POLY on the panel: MODE OFF POLY UP..: POLY sets the voices (three), KNOB 2 VOIC as many as there are, RNG none;
      * the last track passes POLY by; a voice is never in view (SELECT passes them, a black key or the web's cell shows

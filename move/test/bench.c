@@ -535,6 +535,60 @@ static void ctl_poly(void)
     api->destroy_instance(inst);
 }
 
+/* chords into the steps (2026-11-18, the owner's): a step pressed on a POLY lead places the last chord played; a step
+ * held and keys played writes their chord into it (the first key after all were let go starts it again; the step let
+ * go keeps its trig), a mono track's the note. READY: Rec while stopped waits; the first note starts the pattern on
+ * MONO2K's own clock (INT) and is recorded on the first step; Rec again lets it go */
+static void ctl_chord_steps(void)
+{
+    int ld[8];
+    inst = open_at(15, 2000);                               /* A16: a blank, 16 steps; stopped */
+    blocks(4);
+    const int c = 60 + 12 * vint(view(), "oct");
+    page(MS_TRK);
+    knob(2, 1); blocks(1);                                  /* MODE: POLY, three voices (T1 T2 T3) */
+    vlist(dump(), "lead", ld, 8);
+    check(ld[1] == 0 && ld[2] == 0 && ld[3] == 3, "POLY on T1: three voices");
+    pad(0, 1, 100); A_render(); pad(2, 1, 100); A_render(); pad(4, 1, 100); blocks(2);   /* C E G, let go */
+    pad(0, 0, 0); pad(2, 0, 0); pad(4, 0, 0); blocks(2);
+    step_tap(6);
+    int n = -1, f = dump_step(6, &n);
+    check((f & 1) && n == c && voice_note(0, 6) == c + 4 && voice_note(1, 6) == c + 7,
+          "a step pressed on a POLY lead: the last chord played (C the lead's, E T2's, G T3's)");
+    step(6, 1); A_render();                                 /* step 7 held: F and A together, its chord now */
+    pad(3, 1, 100); A_render(); pad(5, 1, 100); blocks(2);
+    pad(3, 0, 0); pad(5, 0, 0); blocks(1);
+    step(6, 0); A_render();
+    n = -1; f = dump_step(6, &n);
+    check((f & 1) && n == c + 5 && voice_note(0, 6) == c + 9 && voice_note(1, 6) <= 0,
+          "a step held, two keys together: its chord F A (G's voice let go), the trig kept on letting go");
+    step(6, 1); A_render();                                 /* again, one key: a chord of one, the first key after */
+    pad(7, 1, 100); blocks(2); pad(7, 0, 0); blocks(1);
+    step(6, 0); A_render();
+    n = -1; f = dump_step(6, &n);
+    check((f & 1) && n == c + 12 && voice_note(0, 6) <= 0, "held again, one key: that note alone (a new chord)");
+    view_track(4);                                          /* T5, mono */
+    const int c5 = 60 + 12 * vint(view(), "oct");
+    step(2, 1); A_render(); pad(4, 1, 100); blocks(2); pad(4, 0, 0); blocks(1); step(2, 0); A_render();
+    n = -1; f = dump_step(2, &n);
+    check((f & 1) && n == c5 + 7, "a mono track: a step held and a key, its note (G)");
+    view_track(0);
+    tap(86); blocks(2);                                     /* READY */
+    const char *v = view();
+    check(strstr(v, " toast=READY|FIRST NOTE STARTS IT") && vint(v, "play") == 0, "Rec while stopped: READY, nothing moves");
+    blocks(200);
+    check(vint(view(), "play") == 0, "READY: still stopped half a second on");
+    pad(0, 1, 100); blocks(2); pad(0, 0, 0); blocks(4);
+    v = view();
+    n = -1; f = dump_step(0, &n);
+    check(vint(v, "play") == 1 && vint(v, "sync") == MV_SYNC_INT && (f & 1) && n == c,
+          "READY's first note: the pattern plays (on MONO2K's own clock, INT), the note recorded on step 1");
+    tap(86); A_set("play", "0"); blocks(4);
+    tap(86); blocks(1); tap(86); blocks(1);
+    check(vint(view(), "play") == 0 && strstr(view(), " toast=REC OFF|"), "Rec again: READY let go (REC OFF), stopped");
+    api->destroy_instance(inst);
+}
+
 /* Capture (CC 52): stopped and playing, whole bars, the track's length, overdub, one Undo, PADS' several tracks */
 static void ctl_capture(void)
 {
@@ -1317,6 +1371,7 @@ static int do_ctl(void)
     ctl_pads();
     ctl_capture();
     ctl_poly();
+    ctl_chord_steps();
     printf("  ctl: %d checks, %d failed\n", checks, fails);
     return fails != 0;
 }

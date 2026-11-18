@@ -27,6 +27,8 @@
 #include <sys/types.h>
 #include <time.h>
 #include <unistd.h>
+static void mv_ready_start(void);      /* READY's first note: on MONO2K's own clock (m2k_move_glue.c) */
+#define M2K_READY_START() mv_ready_start()
 #include "../firmware/src/m2k_core.c"
 #include "vendor/schwung/plugin_api_v1.h"
 

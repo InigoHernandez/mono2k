@@ -1728,6 +1728,22 @@ static int page_length(int pg)
 /* a trig taken away: its condition (chance, A:B...), ratchet and locks go with it, so a trig put there later
  * starts plain (the owner: "when I removed the note or trigger, the probability should be removed too") */
 static void step_pop(int t, int s) { ui.pop_t = ui.now | 1u; ui.pop_s = (uint8_t)s; ui.pop_trk = (uint8_t)t; }
+/* a trig placed by a step key (GRID's, the Move's steps): the last note played on the track; on a POLY lead the last
+ * chord played on its keys (pv.lc: its lowest on the lead's step, the others on its voices', as REC writes one; the
+ * chord REC may be writing meanwhile kept) */
+static void trig_place(int t, int s)
+{
+    m2k_step_t *st = &PAT(cur_pat)->step[t][s];
+    st->flags = ST_TRIG;
+    st->note = ui.note[t];
+    if (pv.nv[t] > 1 && pv.nlc[t]) {
+        const uint8_t ct = pv.ct, cs = pv.cs;
+        const uint32_t ck = pv.ctick;
+        for (int i = 0; i < pv.nlc[t]; i++) poly_note(t, s, pv.lc[t][i], 0, !i);
+        pv.ct = ct; pv.cs = cs; pv.ctick = ck;
+    }
+    step_pop(t, s);
+}
 static void step_remove(int t, int s)
 {
     step_pop(t, s);
@@ -2063,10 +2079,8 @@ static void key_event(int k, int down)
     m2k_step_t *st = &p->step[ui.trk][s];
     int added = 0;
     if (!(st->flags & ST_TRIG)) {
-        st->flags = ST_TRIG;
-        st->note = ui.note[ui.trk];
+        trig_place(ui.trk, s);         /* (a POLY lead's: its last chord) */
         added = 1;
-        step_pop(ui.trk, s);
     }
     if (!ui.nheld) { ui.held_edit = 0; ui.held_t = ui.now; }
     ui.held[ui.nheld] = (uint8_t)s;
@@ -2857,7 +2871,7 @@ static void button_event(int b, int down)
     case B_PLAY:
         if (!sq.playing && sq.rec && !ui.grid && !sq.ready && !clk_from()) {   /* Ready (Demake's): the first */
             sq.ready = 1;                                                        /* note starts it, recorded */
-            toast("READY", "THE FIRST NOTE STARTS IT");
+            toast("READY", "FIRST NOTE STARTS IT");
         } else seq_play(!sq.playing);  /* (Ready: PLAY again starts it now) */
         break;
     case B_OCTD: case B_OCTU: {
