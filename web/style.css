@@ -114,8 +114,8 @@ p, h2, h3, dl, dd, ol { margin: 0; }
 a.label { color: var(--ink); text-decoration: none; }
 .small { font: var(--small); }
 .muted { color: var(--muted-fg); }
-.lede { font: var(--body); max-width: var(--measure); text-wrap: pretty; }   /* (no last line of a word or two) */
-.nw { white-space: nowrap; }                       /* a word kept whole at its hyphen (FM-1: never FM- / 1) */
+.lede { font: var(--body); max-width: var(--measure); }
+.nw { white-space: nowrap; }                       /* a phrase kept whole (FM-1: never FM- / 1) */
 .title { font: var(--title); text-transform: uppercase; letter-spacing: 0.01em; }
 .display { font: var(--display); text-transform: uppercase; letter-spacing: 0; }
 code { font: var(--code); }
@@ -432,8 +432,9 @@ input[type="file"]::file-selector-button { height: var(--h-sm); margin-right: va
 #wordmark { display: block; width: 100%; height: auto; image-rendering: pixelated; }
 .hero::after { content: ""; display: block; height: var(--space-6); margin-top: var(--space-4); background: var(--g-across) 0 0 / 100% 100% no-repeat; image-rendering: pixelated; }
 .hero__sub { padding: var(--space-6) 0 var(--space-8); border-top: var(--rule-bold); margin-top: var(--space-4); }
-.hero__line { grid-column: 1 / span 7; align-self: center; font: var(--lead); text-wrap: balance; }   /* (no line of one word) */
-.hero__acts { grid-column: 8 / span 5; display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: var(--space-2); }
+.hero__line { grid-column: 1 / span 8; align-self: center; font: var(--lead); max-width: none; }   /* its phrases (.nw) whole: a
+               * line breaks before "and" or "for", never inside one (the owner's) */
+.hero__acts { grid-column: 9 / span 4; display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: var(--space-2); }
 
 /* the instrument: the FM-1 across the page, as wide as the window lets it stand whole with its bar under it; the bar:
  * the status line (what the pointer is over) and the tools that have no other home; each tool a drawer under it */
