@@ -197,6 +197,7 @@ static struct {
                                         * oldest note taken */
     uint8_t ct, cs, cc, cn[8];         /* the chord being written: its lead (0xFF none), its step, its notes */
     uint32_t ctick;                    /* (when its first came) */
+    uint8_t lc[M2K_TRACKS][8], nlc[M2K_TRACKS];   /* the last chord played on each lead's keys (a step key places it) */
 } pv;
 /* the machine each track renders this block: its own, a POLY voice its lead's (the sequencer's, every block: the
  * tracks read it as they read the pattern's before, so their code is the same) */

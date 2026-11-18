@@ -238,6 +238,19 @@ static void ck_tempo(void)
 }
 
 /* a PLAY press seen (ui.js): Move answers it with a start or a stop when it sends its clock; else MONO2K plays alone */
+/* READY's first note (Rec while stopped arms it): the pattern starts at once, on MONO2K's own clock, as a Play Move
+ * did not answer (INT); Move's next start brings SYNC back. A Move build cannot hold Play back (it is passed through),
+ * so the first note, not Play, is what starts it */
+static void mv_ready_start(void)
+{
+    ck.sync = MV_SYNC_INT;
+    tq.state = MV_TQ_NONE;
+    ck.free = 0;
+    ck.play_wait = 0;
+    seq_play(1);
+    mv.touched = 1;
+}
+
 static void mv_play_press(void)
 {
     if (ck.sync == MV_SYNC_INT) { seq_play(!sq.playing); return; }

@@ -991,6 +991,10 @@ static void poly_key_on(int t, int note, int vel)
     int in = 0;
     for (int i = 0; i < sq.nkeys[t]; i++) in |= sq.keys[t][i] == note;
     if (!in && sq.nkeys[t] < 8) sq.keys[t][sq.nkeys[t]++] = (uint8_t)note;
+    if (fresh) pv.nlc[t] = 0;          /* the last chord: the keys down together, from the first after all let go */
+    in = 0;
+    for (int i = 0; i < pv.nlc[t]; i++) in |= pv.lc[t][i] == note;
+    if (!in && pv.nlc[t] < 8) pv.lc[t][pv.nlc[t]++] = (uint8_t)note;
     if (sq.arp_hold[t] && fresh) { poly_release(t, 1); sq.nheld[t] = 0; }
     in = 0;
     for (int i = 0; i < sq.nheld[t]; i++) in |= sq.held[t][i] == note;
@@ -1024,7 +1028,11 @@ static void poly_key_off(int t, int note)
 }
 
 /* Ready: the first note (a key, a pad, MIDI in) starts the pattern from its first step, and is recorded there */
-static void ready_go(void) { if (sq.ready && !sq.playing) seq_play(1); }
+/* Ready's first note starts the pattern (a build may start it its own way: the Move's on MONO2K's own clock) */
+#ifndef M2K_READY_START
+#define M2K_READY_START() seq_play(1)
+#endif
+static void ready_go(void) { if (sq.ready && !sq.playing) M2K_READY_START(); }
 
 /* a note on track t (the panel's keys: the track in view; MIDI: its channel's): its arp's when its MODE is on */
 static void live_on_t(int t, int note, int vel)

@@ -880,7 +880,7 @@ void m2k_screen_gather(ms_view_t *v, const m2k_scr_t *s)
     v->mutes = 0;
     for (int k = 0; k < M2K_TRACKS && k < 8; k++) if (mute_will(k)) v->mutes |= (uint8_t)(1u << k);
     v->playing = sq.playing;
-    v->rec = sq.rec;
+    v->rec = sq.rec && !(sq.ready && ((ui.now >> 8) & 1));   /* (READY: blinking) */
     v->shift = s->shift;
     v->mute = s->mute;
     v->clk_int = (uint8_t)!s->sync;

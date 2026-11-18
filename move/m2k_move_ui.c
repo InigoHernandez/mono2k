@@ -429,10 +429,8 @@ static void mv_step(int k, int down)
     if (ui.nheld >= 8) return;
     int added = 0;
     if (!(st->flags & ST_TRIG)) {
-        st->flags = ST_TRIG;
-        st->note = ui.note[ui.trk];
+        trig_place(ui.trk, s);         /* (a POLY lead's: its last chord) */
         added = 1;
-        step_pop(ui.trk, s);
     }
     held_add(s, added);
     mc.sdown[k] = 1;
@@ -695,6 +693,27 @@ static void capture(void)
     toast(a, o);
 }
 
+/* a key with steps held (the Move's; the FM-1's keys are its steps there): its note into each held step, as the jog
+ * sets one; on a POLY lead the keys held together its chord (the first key after all were let go starts it again: its
+ * lowest on the lead's step, the others on its voices'), each step's accent and slide kept */
+static void held_keys(int t, int n)
+{
+    poly_sync();
+    m2k_pattern_t *p = PAT(cur_pat);
+    const int chord = pv.lead[t] == t && pv.nv[t] > 1, fresh = sq.nkeys[pv.lead[t]] == 0;
+    const uint8_t ct = pv.ct, cs = pv.cs;
+    const uint32_t ck = pv.ctick;
+    for (int i = 0; i < ui.nheld; i++) {
+        m2k_step_t *st = &p->step[t][ui.held[i]];
+        const uint8_t f = st->flags;
+        if (chord) poly_note(t, ui.held[i], n, 0, fresh);
+        else st->note = (uint8_t)n;
+        st->flags |= (uint8_t)(f | ST_TRIG);
+    }
+    pv.ct = ct; pv.cs = cs; pv.ctick = ck;
+    ui.held_edit = 1;                  /* (the step let go keeps its trig) */
+}
+
 static void mv_pad(int i, int vel, int down)
 {
     if (i < 0 || i >= 32) return;
@@ -734,7 +753,10 @@ static void mv_pad(int i, int vel, int down)
     const int t = ui.trk, n = key_note(i);
     if (n < 0) return;
     sq.ktrk = (uint8_t)t;
+    const uint8_t rec = sq.rec;
+    if (ui.nheld) { held_keys(t, n); sq.rec = 0; }   /* steps held: the note into them, heard, not REC's too */
     live_on_t(t, n, vel);
+    sq.rec = rec;
     cap_note(t, n, vel);
     ui.note[t] = (uint8_t)n;           /* (new trigs take the last note played, as from the FM-1's keys) */
     mc.pkind[i] = 1;
@@ -856,8 +878,12 @@ static void mv_button(int cc, int v)
     case 86:                                                                   /* Rec: REC; Shift + Rec saves */
         if (mc.shift) { mc.used = 1; mv_save_request(1); break; }
         sq.rec ^= 1;
-        if (!sq.rec) sq.ready = 0;
-        toast(sq.rec ? "REC" : "REC OFF", 0);
+        sq.ready = 0;
+        if (sq.rec && !sq.playing) {   /* READY (the FM-1's): stopped, Rec waits for the first note to start it,
+                                        * recorded on the first step; Play starts it as ever */
+            sq.ready = 1;
+            toast("READY", "FIRST NOTE STARTS IT");
+        } else toast(sq.rec ? "REC" : "REC OFF", 0);
         break;
     case 56: undo_do(mc.shift); if (mc.shift) mc.used = 1; break;             /* Undo; Shift + Undo redoes */
     case 118:                                                                  /* Sample: the keyboard, piano <-> PADS */
@@ -984,7 +1010,7 @@ static void mv_leds(mv_view_t *v)
         l->trk[b] = tt >= M2K_TRACKS ? C_OFF : tt == t ? C_WHITE : mute_will(tt) ? C_DRED : C_DAZURE;
     }
     const int last = v->npage ? v->npage - 1 : 0;
-    l->btn[0] = sq.rec ? C_RED : C_OFF;                                       /* Rec */
+    l->btn[0] = sq.rec && !(sq.ready && ((ui.now >> 8) & 1)) ? C_RED : C_OFF;  /* Rec (READY: blinking) */
     l->btn[1] = mc.mute ? W_ON : v->mutes ? W_MID : W_DIM;                     /* Mute */
     l->btn[2] = undo.ok ? W_MID : W_DIM;                                       /* Undo */
     l->btn[3] = mc.copy ? W_ON : W_DIM;                                        /* Copy */

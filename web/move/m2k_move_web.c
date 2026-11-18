@@ -7,6 +7,8 @@
  * What differs from the Move: no Move here, so MONO2K plays on its own clock (INT: Play just plays, the tempo knob the
  * pattern's own, nothing asked of anyone) and nothing is saved (each visit opens the factory's bank A). Everything else
  * is the Move's: the same controller, the same screen, the same LEDs, the same samples. */
+static void mv_ready_start(void);      /* READY's first note: on MONO2K's own clock (m2k_move_glue.c) */
+#define M2K_READY_START() mv_ready_start()
 #include "../../firmware/src/m2k_core.c"
 #include "../../move/m2k_move_glue.c"
 
