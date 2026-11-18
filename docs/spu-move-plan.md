@@ -104,10 +104,10 @@ Against AFFINE's float model of the same registers, built read-only in a scratch
   it read, and the renders changed by 3 LSB at 2.8 s. Fixed.
 - **The test harness's lengths must be whole blocks.** A key pressed at `f == FS / 2` never fires when f steps by 16.
 
-## Open, for the owner's ear
+## The owner's verdict
 
-- The character of GRIT (renders of the three in `build/move/spu/`).
-- The DCAY and DAMP laws on the console's types, and the lock (`build/move/spu2/`).
+2026-11-18, after 0.8 went out: "all good". GRIT stays 11K; DCAY and DAMP keep their meaning on every type; DELAY,
+ECHO and SPACE ECHO stay locked to the tempo.
 
 ## Credits
 

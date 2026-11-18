@@ -15,7 +15,7 @@ and numbers only, and written again here in integers. Brief: `../AFFINE-EFFECTS-
 - Off, each costs one test a block and the sound is bank A's byte for byte (`m2k_draw --hash`, the 30 s renders).
 - Memory: no new buffer; SKIP reads `gl_buf` as the repeats do. About 100 bytes of state in `bus`.
 - The alternatives rendered for the owner's ears: DUCK at 1.0 (AFFINE's amount), and a second LO-FI (8 kHz, jitter
-  0.8, 8 bits).
+  0.8, 8 bits). The owner, 2026-11-18: "all good", so DUCK stays 0.7 and LO-FI as built.
 - FM-1: PERFORM's third bank C (OCT+ from B; OCT- back C, B, A; both OCT lit on C); its keys 5-11 empty, unlit.
 - Move: Up swaps both rows: page 2's top row CONSOLE, DUCK, LO-FI, the 4th kept for GRIT; its bottom row as before with
   SKIP in the 7th.
