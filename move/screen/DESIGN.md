@@ -125,24 +125,24 @@ Calm: pages cut, no transitions, no glitches. What moves is the sound: HOME's pl
 | 2nd 5 | MIX (a proposal) | the 8 tracks' LEVL, a knob a track | a strip a track: its number, its level live, a muted one's speaker |
 | 2nd 6 | GLO | DCY DMP ADP DRV MUTE | the reverb's tail across the width |
 | 2nd 7 | SOUNDS | (jog, knob 1 the slot, knob 2 the category) | the library's rows, the one heard lit; the category picked (else the track) in the header |
-| 2nd 8 | PERFORM | DCY DMP ADP DRV | the keys as the pads lay them (bank B over bank A), the effects playing lit; what plays named |
+| 2nd 8 | PERFORM | DCY DMP ADP DRV | the keys as the pads lay them (the colours over the moves, PAGE 1 or 2), the effects playing lit; what plays named |
 | (jog) | PATTERNS | | the patterns' rows, the one open with the transport's mark, the one queued NEXT |
 
 A message (the octave, a copy, a save) shows a moment in a dark box over the stage, its first line at x2 where it fits (else x1), each line 104 px at most (`MS_TOAST_TW`). Changing patterns shows none: the header says it. PADS and Capture say theirs: PADS / T1-T8, MUTES ABOVE; KEYS / PLAY THE TRACK (under PERFORM: WHEN PERFORM IS OFF); CAPTURED 2 BARS / T1 T2 T3; NOTHING TO CAPTURE. Capture's tracks are written to fit (`m2k_screen_text_w`; runs, T1-T8, if a list were too wide), and the audit says every one of them, the fullest (4 bars, all 8 tracks) among them, fits.
 
 ## The pads
 
-The top two rows lead to the pages; the bottom two are the keyboard (or PADS); the 16 steps are the sequencer. `padmap.png` shows four states as they light: HOME, keys held, PERFORM, PADS.
+The top two rows lead to the pages; the bottom two are the keyboard (or PADS); the 16 steps are the sequencer. `padmap.png` shows five states as they light: HOME, keys held, PERFORM, its page 2, PADS.
 
 | Row | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | Colour (in view / not) |
 |---|---|---|---|---|---|---|---|---|---|
 | Top | SYN | AMP | FILT | EFX | DSTR | LFO1 | LFO2 | LFO3 | orange 3 / 69 |
 | 2nd | HOME | TRK | PAT | GRID | MIX | GLO | SOUNDS | PERFORM | azure 16 / 95; the two functions magenta 26 / 115 |
-| 3rd | C# | D# | · | F# | G# | A# | · | · | dark grey 119; PERFORM: bank B, pink 109 |
-| Bottom | C | D | E | F | G | A | B | C | grey 123; PERFORM: bank A, magenta 115 |
+| 3rd | C# | D# | · | F# | G# | A# | · | · | dark grey 119; PERFORM: the colours, pink 109 |
+| Bottom | C | D | E | F | G | A | B | C | grey 123; PERFORM: the moves, magenta 115 |
 
 - The keyboard's root is lit orange (the sound's colour), the notes played white, by hand or by the sequencer. The pads no key has are dark.
-- With PERFORM on, its 11 + 11 effects play from the keyboard rows 8 at a time (bank A on the bottom row, B on the top); Up shows each bank's 9–11, Down their 1–8.
+- With PERFORM on, its effects play from the keyboard rows 8 at a time: the colours on the top row, the moves on the bottom; Up swaps both rows for their second page (CONSOLE DUCK LO-FI, the 4th kept for GRIT; FREEZE SCATTER OCT DN OCT UP SPIN KILL SKIP), Down back.
 - **PADS** (the Sample button, the owner's, 2026-11-02): the bottom row the 8 tracks, each at its root, dim azure 95, white 120 while sounding; the row over it their mutes, azure 16 heard, dark red 66 muted (Mute's layer's colours), a mute waiting for the bar blinking dark every 128 ms (the FM-1's GLO > PLAY). PERFORM still takes both rows while it is on. Sample's own LED azure while PADS is on.
 - The steps keep step 2's colours: a trig azure, a locked trig dimmer, the playhead and a held step white, a beat's first step faint.
 - **Why these:** a pad a page puts every page one press away (the owner's "no eternal pagination"); the sound on the top row, the row nearest the screen and the knobs; HOME first on the row under it, where the hand starts; the two functions at the right end, apart in their own colour; MIX next to GLO (the mix and the bus). The piano's rows keep the Elektron trig-key shape the owner named; the root in the sound's orange ties the keyboard to the sound pages above it.

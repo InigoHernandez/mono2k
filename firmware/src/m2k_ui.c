@@ -633,7 +633,7 @@ static struct {
     /* a section button held (HOME, EDIT): its keys and buttons (held_combo) */
     uint32_t hold_t0;                  /* HOME or EDIT pressed */
     uint8_t hold_used, pbank, pick[M2K_PATTERNS / 8], hclr;   /* the bank shown, the patterns picked, a first clear */
-    uint8_t pfb;                       /* PERFORM's bank on the black keys: 0 A, 1 B (FX held: OCT- A, OCT+ B) */
+    uint8_t pfb;                       /* PERFORM's bank on the black keys: 0 A, 1 B, 2 C (FX held: OCT+ on, OCT- back) */
     uint32_t seq_t0;                   /* SEQ pressed: a tap is GRID, held it is the SEQ layer */
     uint8_t seq_used;
     uint32_t lay_t0[2];                /* FX, LFO pressed: a tap is the page, held the layer (PERFORM, momentary knobs) */
@@ -1957,7 +1957,8 @@ static void key_event(int k, int down)
     }
     if (perf_layer() && b >= 0) {      /* FX held: the black keys are PERFORM's effects, while held */
         int e = b + ui.pfb * PF_BANK;  /* the bank shown; its release lets go of this one, whichever is shown then */
-        const int r = b < PF_BANK ? pf_press(e) : 1;   /* (a double tap latches it: pf_press) */
+        const int r = b < PF_BANK && e < PF_COUNT ? pf_press(e) : 1;   /* (a double tap latches it: pf_press; bank C's
+                                                                        * keys past its four: none) */
         if (!r) { ui.kact[k] = KA_PERF; ui.karg[k] = (uint8_t)e; }
         else if (r < 0) toast(PF_NAME[e], "NO DELAY FREE");
         ui.lay_used[0] = 1;
@@ -2697,8 +2698,9 @@ static void button_event(int b, int down)
         }
         return;
     }
-    if ((b == B_OCTU || b == B_OCTD) && perf_own()) {     /* PERFORM's banks: OCT- A, OCT+ B (held effects go on) */
-        if (down) { ui.pfb = b == B_OCTU; ui.lay_used[0] = 1; }
+    if ((b == B_OCTU || b == B_OCTD) && perf_own()) {     /* PERFORM's banks: OCT+ on (A, B, C), OCT- back (held effects
+                                                           * go on) */
+        if (down) { ui.pfb = b == B_OCTU ? (ui.pfb + 1 < PF_BANKS ? ui.pfb + 1 : ui.pfb) : (ui.pfb ? ui.pfb - 1 : 0); ui.lay_used[0] = 1; }
         if (b == B_OCTD) { ui.octd = 0; ui.octd_used = 1; }   /* (its release, FX let go first: nothing) */
         return;
     }
@@ -4561,7 +4563,7 @@ static const char *const HELP[HELP_N][7] = {
      "GLO + REC COPY, PLAY PASTE", "GLO + SEQ CLEAR"},
     {"RECORD", "PLAY, REC: NOTES LAND", "REC, STOPPED: NOTE BY NOTE", "EDIT RESTS, PRESETS MOVES", "REC HELD: FILL",
      "KNOBS WHILE REC: LOCKS", 0},
-    {"PERFORM", "FX HELD: BLACK KEYS, FX", "OCT- OCT+: THEIR TWO BANKS", "FX TWICE: STAYS, ANY PAGE",
+    {"PERFORM", "FX HELD: BLACK KEYS, FX", "OCT- OCT+: BANKS A B C", "FX TWICE: STAYS, ANY PAGE",
      "HOLD FX: ITS KNOBS AGAIN", "BLACK KEY TWICE: STAYS ON", "TAP IT AGAIN: LET GO"},
     {"SAVE", "SAVE: KEEP THE PATTERN", "GLO + SAVE: BACK TO IT", "SAVE HELD: THE PROJECT", "GLO + OCT- UNDO",
      "GLO + OCT+ REDO", 0},
@@ -5116,28 +5118,31 @@ static void lay_help(void)
         hints(P_X + P_IN + 3, P_B0 + 20, SX1 - P_IN, P, 1);
         return;
     }
-    /* the bank shown, its eleven black keys a table (1-6 down the left, 7-11 the right), an effect on solid; both banks
-     * on OCT- and OCT+ at the foot, the one shown solid */
-    const int x = P_X + P_IN, w = P_W - 2 * P_IN, cw = (w - 8) / 2;
-    int b = panel(P_X, P_TOP, P_W, P_H, latch_title(B_FX) ? "PERFORM LATCHED" : ui.pfb ? "PERFORM BANK B" : "PERFORM BANK A", 1);
+    /* the bank shown, its black keys a table (1-6 down the left, 7-11 the right; bank C's four down the left), an
+     * effect on solid; at the foot OCT- and OCT+ round the three banks, the one shown solid */
+    const int x = P_X + P_IN, w = P_W - 2 * P_IN, cw = (w - 8) / 2, k0 = ui.pfb * PF_BANK;
+    const int nk = PF_COUNT - k0 < PF_BANK ? PF_COUNT - k0 : PF_BANK, cols = nk < PF_BANK ? 1 : 2;
+    static const char *const TI[PF_BANKS] = {"PERFORM BANK A", "PERFORM BANK B", "PERFORM BANK C"};
+    int b = panel(P_X, P_TOP, P_W, P_H, latch_title(B_FX) ? "PERFORM LATCHED" : TI[ui.pfb], 1);
     static const char N[PF_BANK][3] = {"1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11"};
-    const char *kv[2 * PF_BANK];                       /* (filled row by row: item j is key j / 2 or 7 + j / 2) */
-    for (int j = 0; j < PF_BANK; j++) {
-        int s = (j & 1) ? 6 + (j >> 1) : j >> 1, k = s + ui.pfb * PF_BANK;
+    const char *kv[2 * PF_BANK];                       /* (two columns filled row by row: item j is key j / 2 or 7 + j / 2) */
+    for (int j = 0; j < nk; j++) {
+        int s = cols == 1 ? j : (j & 1) ? 6 + (j >> 1) : j >> 1, k = s + k0;
         kv[2 * j] = N[s];
         kv[2 * j + 1] = perf.on[k] ? "" : PF_NAME[k];
     }
-    pairs(x, b, w, kv, PF_BANK, 2);
-    const int kt = pair_key_w(kv, PF_BANK);
-    for (int j = 0; j < PF_BANK; j++) {                /* the effects on: their names solid */
-        int s = (j & 1) ? 6 + (j >> 1) : j >> 1, k = s + ui.pfb * PF_BANK;
-        if (perf.on[k]) inv_tag(&F_S, x + (j & 1) * (cw + 8) + kt + 10, b + (j >> 1) * P_ROW, PF_NAME[k]);
+    pairs(x, b, cols == 1 ? cw : w, kv, nk, cols);
+    const int kt = pair_key_w(kv, nk);
+    for (int j = 0; j < nk; j++) {                     /* the effects on: their names solid */
+        int s = cols == 1 ? j : (j & 1) ? 6 + (j >> 1) : j >> 1, k = s + k0, c = cols == 1 ? 0 : j & 1;
+        if (perf.on[k]) inv_tag(&F_S, x + c * (cw + 8) + kt + 10, b + (cols == 1 ? j : j >> 1) * P_ROW, PF_NAME[k]);
     }
-    static const char *const B[4] = {"OCT-", "BANK A", "OCT+", "BANK B"};
-    for (int k = 0, bx = x + 3; k < 2; k++) {
-        bx += key_tag(bx, P_FB, B[2 * k]) + 7;
-        bx += (k == ui.pfb ? inv_tag(&F_S, bx + 2, P_FB, B[2 * k + 1]) + 2 : tx_b(&F_S, bx, P_FB, B[2 * k + 1], 1)) + 12;
-    }
+    static const char *const BK[PF_BANKS] = {"A", "B", "C"};
+    int bx = x + 3;
+    bx += key_tag(bx, P_FB, "OCT-") + 13;
+    for (int k = 0; k < PF_BANKS; k++)
+        bx += (k == ui.pfb ? inv_tag(&F_S, bx, P_FB, BK[k]) : tx_b(&F_S, bx, P_FB, BK[k], 1)) + 12;
+    key_tag(bx + 1, P_FB, "OCT+");
 }
 
 /* a button's card (card_up): its tap, then what it does with the others, a row each */
@@ -5410,10 +5415,15 @@ const uint8_t *m2k_leds(void)
             else if (w == 14) v = mute_pending() ? (fast ? 255 : 16) : p->mute || sq.solo ? 90 : 16;
         } else if (lay == 1 && (b == BK_MONO || b == BK_POLY)) {
             v = (pv.nv[ui.trk] > 1) == (b == BK_POLY) ? 255 : 16;   /* (the one the track in view is: POLY or MONO) */
-        } else if (lay == 2) {         /* (90: the other bank's, held or latched; the white keys the page's, below) */
-            if (b >= 0 && b < PF_BANK)
-                v = perf.on[b + ui.pfb * PF_BANK] ? 255 : ui.kact[k] == KA_PERF || (ui.pf_lat >> (b + (1 - ui.pfb) * PF_BANK) & 1) ? 90 : 24;
-            else if (w >= 0) continue;
+        } else if (lay == 2) {         /* (90: another bank's, held or latched; bank C's empty keys dark; the white keys
+                                        * the page's, below) */
+            if (b >= 0 && b < PF_BANK) {
+                const int e = b + ui.pfb * PF_BANK;
+                int other = ui.kact[k] == KA_PERF;
+                for (int j = 0; j < PF_BANKS; j++)
+                    if (j != ui.pfb && b + j * PF_BANK < PF_COUNT) other |= ui.pf_lat >> (b + j * PF_BANK) & 1;
+                v = e < PF_COUNT && perf.on[e] ? 255 : other ? 90 : e < PF_COUNT ? 24 : 0;
+            } else if (w >= 0) continue;
         } else if (lay == 3) {
             if (w >= 0 && w < 8) v = 200;
         } else if (lay == 4) {
@@ -5467,7 +5477,7 @@ const uint8_t *m2k_leds(void)
     B[B_PLAY] = sq.playing ? ((play_step() & 3) == 0 ? 255 : 70) : sq.ready && blink ? 255 : 0;   /* Ready: blinks */
     B[B_REC] = sq.rec ? 255 : 0;
     const int pown = lay == 2 && perf_own();
-    B[B_OCTD] = pown ? (ui.pfb ? 24 : 255) : ui.oct[ui.trk] < 0 ? 200 : 0;   /* PERFORM: the bank shown lit */
+    B[B_OCTD] = pown ? (ui.pfb != 1 ? 255 : 24) : ui.oct[ui.trk] < 0 ? 200 : 0;   /* PERFORM: A OCT- lit, B OCT+, C both */
     B[B_OCTU] = pown ? (ui.pfb ? 255 : 24) : ui.oct[ui.trk] > 0 ? 200 : 0;
     if (ui.latch) B[ui.latch - 1] = blink ? 255 : 0;   /* a latched layer's button blinks */
     return L;

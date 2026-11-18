@@ -8,7 +8,8 @@
 #   png/NAME_grid.png   the same with a 1 px gap between the pixels (the grid visible)
 #   overview.png        every frame x3 on one sheet, labelled underneath (the owner's first look)
 #   padmap.png          the Move's 32 pads, 16 steps and 4 track buttons, labelled and lit as the controller lights
-#                       them, beside the screen, in four states (HOME in view; keys held; PERFORM on; PADS)
+#                       them, beside the screen, in five states (HOME in view; keys held; PERFORM on, its page 2;
+#                       PADS)
 #   motion_*.gif        the motions (a knob touched, the page pads pressed, the playhead), the screen beside the pads
 #                       and the steps as they light, at the screen's pace (34.8 ms a frame)
 #   knob_rows.png       every page's knob row (SYN on every machine, a step's locks, a knob touched), rows 45..63 x6
@@ -220,9 +221,10 @@ def main():
         d.text((x, y + ch + 10), label.upper(), font=font, fill=170)
     sheet.save(os.path.join(src, "overview.png"))
 
-    # the pad map: four states, each the screen beside the device
+    # the pad map: five states, each the screen beside the device
     states = [("home", "HOME IN VIEW: THE PAGES, THE KEYBOARD"), ("keys", "TRK, THREE KEYS HELD (C E G), THE ARP"),
               ("perform", "PERFORM ON: THE KEYS ARE ITS EFFECTS"),
+              ("perform2", "PERFORM, UP: BOTH ROWS' PAGE 2 (CONSOLE AND SKIP HELD)"),
               ("pads", "PADS (SAMPLE): THE TRACKS, THEIR MUTES OVER THEM (T4 MUTED, T1 HELD)")]
     states = [s for s in states if os.path.exists(os.path.join(src, "padmap_%s.tsv" % s[0]))]
     PADP, GAPP, SZ = 72, 10, 3
@@ -244,8 +246,8 @@ def main():
         device(d, dx, y0 + 34, leds, labels, PADP, GAPP, [font, small])
         for r in range(4):
             lab = rowlab[r]
-            if st == "perform" and r >= 2:
-                lab = ["BANK B", "BANK A"][r - 2]
+            if st.startswith("perform") and r >= 2:
+                lab = ["COLOURS", "MOVES"][r - 2]
             if st == "pads" and r >= 2:
                 lab = ["MUTES", "TRACKS"][r - 2]
             d.text((dx + dev_w + 20, y0 + 34 + r * (PADP + GAPP) + PADP // 2), lab, font=font, fill=(150, 150, 150),

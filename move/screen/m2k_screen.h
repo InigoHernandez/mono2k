@@ -80,7 +80,7 @@ typedef struct {
     uint16_t bpm10;             /* the tempo heard, tenths (0: the pattern's) */
     uint8_t shift, mute;        /* Shift, Mute held */
     uint8_t bank;               /* the bank Shift + steps pick from */
-    uint8_t perf, perf_pg;      /* PERFORM's keys on the keyboard; their page (0 each bank's 1-8, 1 its 9-11) */
+    uint8_t perf, perf_pg;      /* PERFORM's keys on the keyboard; their page (Up: both rows' second) */
     uint8_t pads;               /* the keyboard rows are PADS (the tracks, their mutes): the header marks it */
     const char *toast, *toast2; /* a message a moment after an action (0 or "" none) */
     uint32_t ms;                /* the time in ms: the meters' fall, the modulation's sweep */

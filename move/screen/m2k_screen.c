@@ -1499,7 +1499,7 @@ static void d_perf(const ms_view_t *v)
             if (e < 0) { ms_px(x + 3, y + 3, 1); continue; }
             if ((v->st.perf.on >> e) & 1) ms_rect(x, y, 6, 6, 1); else ms_frame(x, y, 6, 6, 1);
         }
-    ms_text(X, MS_ST_B - 1, pg ? "MOVES 2" : "MOVES 1", 1);
+    ms_text(X, MS_ST_B - 1, pg ? "PAGE 2" : "PAGE 1", 1);
     int n = 0, last = -1;
     for (int k = 0; k < PF_COUNT; k++) if ((v->st.perf.on >> k) & 1) { n++; last = k; }
     if (!v->perf) { ms_text(2, MS_ST_T + 7, "KEYS OFF", 1); return; }

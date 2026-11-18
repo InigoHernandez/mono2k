@@ -47,9 +47,11 @@
   const SHORT = { SOUNDS: "SNDS", PERFORM: "PERF", SHIMMER: "SHIM", STUTTER: "STUT", REVERSE: "REV", SCATTER: "SCAT" };   /* a phone's narrow pads */
   const label = (n) => SHORT[n] ? `<span><i class="lng">${esc(n)}</i><i class="sht">${SHORT[n]}</i></span>` : `<span>${esc(n)}</span>`;
   const BLACK = ["C#", "D#", "", "F#", "G#", "A#", "", ""], WHITE = ["C", "D", "E", "F", "G", "A", "B", "C"];
-  const COLOURS = ["LPF", "DUB", "HPF", "GATE", "CRUSH", "DRIVE", "WOW", "SHIMMER"];
+  /* PERFORM's keys (m2k_move_ui.c MV_PERF_TOP, MV_PERF_LOW): Up swaps both rows; page 2's 4th colour kept for GRIT */
+  const COLOURS = [["LPF", "DUB", "HPF", "GATE", "CRUSH", "DRIVE", "WOW", "SHIMMER"],
+                   ["CONSOLE", "DUCK", "LO-FI", "", "", "", "", ""]];
   const MOVES = [["RPT 1/4", "RPT 1/8", "RPT 1/16", "RPT 1/32", "ROLL", "STUTTER", "REVERSE", "STOP"],
-                 ["FREEZE", "SCATTER", "OCT DN", "OCT UP", "SPIN", "KILL", "", ""]];
+                 ["FREEZE", "SCATTER", "OCT DN", "OCT UP", "SPIN", "KILL", "SKIP", ""]];
   const mx = $("mx");
   if (mx) {
     const oled = $("mx-oled"), cap = $("mx-cap"), padsEl = $("mx-pads"), stepsEl = $("mx-steps"), trkEl = $("mx-trk"), shiftBtn = $("mx-shift");
@@ -100,7 +102,7 @@
     function keys() {
       keyEls.forEach((b) => {
         const r = +b.dataset.r, c = +b.dataset.c;
-        const name = perf ? (r === 0 ? COLOURS[c] : MOVES[0][c]) : (r === 0 ? BLACK[c] : WHITE[c]);
+        const name = perf ? (r === 0 ? COLOURS[0][c] : MOVES[0][c]) : (r === 0 ? BLACK[c] : WHITE[c]);
         b.className = "mpad " + (!name ? "none" : perf ? (r === 0 ? "pc" : "pm") : r === 0 ? "blk" : "wht") + (!perf && r === 1 && c === 0 ? " root" : "");
         b.innerHTML = name ? label(name) : "";
         b.dataset.name = name;
@@ -152,7 +154,7 @@
     const on = new Set();
     let movePage = 0, move = "";
     const say = () => {
-      const names = COLOURS.filter((c) => on.has(c));
+      const names = COLOURS.flat().filter((c) => c && on.has(c));
       if (move) names.unshift(move);
       now.textContent = names.length ? names.join(" + ") : "Hold a key";
     };
@@ -162,11 +164,15 @@
       row.appendChild(b);
       return b;
     };
-    COLOURS.forEach((n) => {
+    const cKeys = Array.from({ length: 8 }, (_, i) => {   /* (colours on stay on across the pages, as on the Move) */
       const b = mk(pfC);
-      b.innerHTML = `<span>${esc(n)}</span>`;
-      b.setAttribute("aria-pressed", "false");
-      b.addEventListener("click", () => { if (on.has(n)) on.delete(n); else on.add(n); b.setAttribute("aria-pressed", String(on.has(n))); say(); });
+      b.addEventListener("click", () => {
+        const n = COLOURS[movePage][i];
+        if (!n) return;
+        if (on.has(n)) on.delete(n); else on.add(n);
+        paintMoves(); say();
+      });
+      return b;
     });
     const mKeys = Array.from({ length: 8 }, (_, i) => {
       const b = mk(pfM);
@@ -179,6 +185,12 @@
       return b;
     });
     function paintMoves() {
+      cKeys.forEach((b, i) => {
+        const n = COLOURS[movePage][i];
+        b.innerHTML = n ? `<span>${esc(n)}</span>` : "";
+        b.disabled = !n;
+        b.setAttribute("aria-pressed", String(!!n && on.has(n)));
+      });
       mKeys.forEach((b, i) => {
         const n = MOVES[movePage][i];
         b.innerHTML = n ? `<span>${esc(n)}</span>` : "";
@@ -241,9 +253,9 @@
     const load = () => {
       if (loaded) return;
       loaded = true;
-      const bytes = fetch("../m2k.wasm?v=121").then((r) => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); });
+      const bytes = fetch("../m2k.wasm?v=122").then((r) => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); });
       window.M2K_CORE = window.M2K_CORE || { bytes, module: bytes.then((b) => WebAssembly.compile(b)) };
-      const chain = ["../help.js?v=14", "../screens.js?v=3", "../engines.js?v=4"];
+      const chain = ["../help.js?v=15", "../screens.js?v=3", "../engines.js?v=4"];
       const next = (i) => { if (i >= chain.length) return; const s = document.createElement("script"); s.src = chain[i]; s.onload = () => next(i + 1); document.body.appendChild(s); };
       next(0);
     };
