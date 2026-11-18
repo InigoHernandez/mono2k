@@ -105,6 +105,7 @@ static uint32_t fg_at(const uint32_t *T, int32_t pos)
 
 typedef struct {
     uint8_t note, gate, vel, sounding, slide, let_go;   /* let_go: a key or a MIDI note-off, not the sequencer */
+    uint8_t dip;                       /* blocks left of the last note's fall to silence before an attack (voice_trig) */
     int32_t pitch, ptarget;            /* 1/64 semitones */
     uint8_t astage, fstage;            /* the amp's 1 attack 2 hold 3 decay (and sustain) 4 release; the filter's 1 attack
                                         * 2 decay (and sustain) 3 release */
@@ -1349,16 +1350,13 @@ static inline uint32_t fsus_of(int32_t fs8) { return (uint32_t)fs8 * 33026u; }
  * that comes meanwhile: it plays as ever */
 static inline void env_park(trk_t *t)
 {
-    if (t->park) {
-        if (t->astage == 1 && !t->held) t->park = 0;
+    if (t->park) {                     /* (a note that comes in it ends the fade: voice_trig) */
+        if (t->park == 1) { t->aenv = 0; t->astage = 0; }
         else {
-            if (t->park == 1) { t->aenv = 0; t->astage = 0; }
-            else {
-                uint32_t cap = (t->park_lv / PARK_N) * (uint32_t)(t->park - 2);   /* (2^30 at most) */
-                if (t->aenv > cap) t->aenv = cap;
-            }
-            t->park--;
+            uint32_t cap = (t->park_lv / PARK_N) * (uint32_t)(t->park - 2);   /* (2^30 at most) */
+            if (t->aenv > cap) t->aenv = cap;
         }
+        t->park--;
     }
     if (t->astage == 0) t->sounding = 0;
 }
@@ -1376,6 +1374,7 @@ static __attribute__((noinline)) void env_adsr(trk_t *t)
     const int32_t s8 = P8(t, P_SUS), end = t->let_go || !t->gate;
     switch (t->astage) {
     case 1:
+        if (t->dip) { t->aenv -= t->aenv / t->dip--; break; }   /* the last note out first (voice_trig) */
         if (s8 && end) { t->astage = 4; break; }
         t->aph += T_AATK_INC[t->eff[P_ATK]];
         t->aenv = t->eff[P_ATK] ? mulu_hi(t->aph, t->aph, 30) : t->aph;
@@ -1446,6 +1445,8 @@ static void env_block(trk_t *t)
      * while the gate is open), decay (127: none) and release on note-off straight in dB to -60 at their times */
     switch (t->astage) {
     case 1:
+        if (t->dip) { t->aenv -= t->aenv / t->dip--; break; }   /* the last note out first, straight to silence in XF_N
+                                                                 * blocks (voice_trig) */
         t->aph += T_AATK_INC[t->eff[P_ATK]];        /* (2^30 at most, twice: a word) */
         t->aenv = t->eff[P_ATK] ? mulu_hi(t->aph, t->aph, 30) : t->aph;   /* 0: the Monomachine's straight 1 ms */
         if (t->aph >= (1u << 30)) {
@@ -1678,16 +1679,20 @@ static void voice_trig(int ti, int note, int vel, int slide, unsigned skip)
     if (!t->sounding || t->eff[P_PORT] == 0) t->pitch = t->ptarget;
     if (t->held) return;               /* (resting for the CPU guard: the note moves, nothing sounds) */
     if (!(skip & ST_NOAMP)) {
-        /* over a note still heard: a soft onset (ATK past 0) goes on from where it is, so any restart steps there; ATK
-         * 0's hit masks one under XF_HIT (a hit over a quiet tail restarts as it always has, as the drums do) */
+        /* over a note still heard: the machine crossfades its restart (mach_trig); ATK 0's hit masks one under XF_HIT
+         * (a hit over a quiet tail restarts as it always has, as the drums do) */
         int legato = t->sounding && (t->aenv >> 15) >= XF_MIN && (t->eff[P_ATK] || t->peak >= XF_HIT);
         t->gate = 1;
         t->let_go = 0;
         t->sounding = 1;
         t->astage = 1;
-        /* ATK 0: percussive, from zero (its 1 ms rise the hit's edge, as bank A's drums have it); a slower attack goes
-         * on from where the last note is, no step */
-        t->aph = t->eff[P_ATK] ? atk_from(t->aenv) : 0;
+        /* every attack from silence, its whole time heard on every note (the owner's, 2026-11-18: one carried on from
+         * where the last note was came in short, a note played soon after another). ATK 0: percussive, its 1 ms rise
+         * the hit's edge, as bank A's drums have it; a slower attack over a note still heard first lets that note fall
+         * to silence, straight, in XF_N blocks (2.9 ms, while the machine crossfades): no step */
+        t->aph = 0;
+        t->dip = (uint8_t)(t->eff[P_ATK] && legato ? XF_N : 0);
+        t->park = 0;                   /* a tail's fade (the guard's) gives way to the note: it plays as ever */
         mach_trig(t, PAT(cur_pat)->machine[pv.lead[ti]], legato);
     }
     if (!(skip & ST_NOFLT)) {

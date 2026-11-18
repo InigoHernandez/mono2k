@@ -6751,15 +6751,22 @@ static int selftest(void)
               fabs(T_ADEC_MS10[127] / 200000.0 - 1) < 0.05;
         CHECK(ok, "AMP: the time shown is the time heard (ATK to full, DEC and REL to -60 dB), the attack swelling, on the "
                   "owner's laws (ATK 0.4 s at 64, 10 s at 127; DEC and REL 0.8 s at 64, 20 s at 127)");
-        /* a trig over a sounding note: an attack goes on from where the note is (no step down); ATK 0 starts from
-         * zero, the percussive edge, as before. (The amp itself from the trig; what is heard past the oscillators'
-         * crossfade, 1.6.2's: two sines half a cycle apart cross through less while it runs) */
-        int n = 260, cont = 1;
+        /* a trig over a sounding note (the owner's, 2026-11-18): the note falls to silence first, straight, in XF_N
+         * blocks (no step: each block's fall an XF_N-th of its level at the trig), then the attack from silence, its
+         * whole time: a fresh note's curve, XF_N blocks on; ATK 0 starts from zero, the percussive edge, as before.
+         * (The amp itself from the trig; what is heard past the oscillators' crossfade, 1.6.2's) */
+        enum { NA = 260 };
+        static int32_t fresh[NA];
+        int n = NA, cont = 1;
+        amp_probe(12, 127, 127, 30, -1, -1, lv, n);                     /* a fresh note, from silence */
+        m_cpy(fresh, amp_ae, sizeof fresh);
         amp_probe(12, 127, 127, 30, 60, 160, lv, n);                    /* ATK 14 ms, REL 0.12 s: -18 dB at the trig */
-        for (int j = 160; j < n - 1; j++)
-            cont &= amp_ae[j + 1] >= amp_ae[j] && (j < 162 + XF_N || lv[j + 1] >= lv[j] * 99 / 100);
+        const int32_t at = amp_ae[159];
+        for (int j = 160; j < 160 + XF_N; j++) cont &= amp_ae[j] <= amp_ae[j - 1] && amp_ae[j - 1] - amp_ae[j] <= at / XF_N + 2;
+        cont &= at > 0 && amp_ae[160 + XF_N - 1] == 0;
+        for (int j = 160 + XF_N; j < n; j++) cont &= amp_ae[j] == fresh[j - 160 - XF_N];
         CHECK(cont && lv[159] < lv[59] / 2 && lv[n - 1] > lv[59] * 98 / 100,
-              "AMP: a trig on a releasing note rises from where it is to full, no step down (ATK 12)");
+              "AMP: a trig on a releasing note: the note to silence in 2.9 ms, no step, then the whole attack (ATK 12)");
     }
     /* the ADSRs (format 22, the owner's): SUS 0 and FSUS 0 the one-shot amp and the filter's AD as ever, the gate unheard
      * (the same with the note ended early as never); SUS past 0 the decay falls on DEC's law to (SUS / 127)^2 of full and

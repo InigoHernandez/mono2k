@@ -874,12 +874,13 @@ static int grd_tail(int *dly)
 /* a voice of a POLY chord (m2k_seq.c), before a whole track rests: faded, not resting (its next note as ever). A chord
  * on the keys gives up the voice POLY itself would take for a new key past VOIC (poly_oldest: the oldest note held),
  * freed (poly_steal); a chord from the steps, whose notes start together, the quietest of its voices for what it saves,
- * never the lead's own (the chord's lowest note, its step). One sounding through its attack is left (a fade gives way
- * to a note's start, env_park), and a chord keeps its last voice; the chord in view the last, as a tail */
+ * never the lead's own (the chord's lowest note, its step). A hit's onset (ATK 0) is left; a swell (ATK past 0) may go
+ * in its attack, quiet there (every attack runs its whole time from silence since 2026-11-18: a chord's voices sit in
+ * theirs at each onset), and a chord keeps its last voice; the chord in view the last, as a tail */
 static int grd_voice_ok(int v)
 {
     const trk_t *k = &trk[v];
-    return k->sounding && k->astage > 1 && !k->park && !k->held && !k->dcut;
+    return k->sounding && (k->astage > 1 || (k->astage == 1 && k->eff[P_ATK])) && !k->park && !k->held && !k->dcut;
 }
 static int guard_voice_steal(void)
 {
