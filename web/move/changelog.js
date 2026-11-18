@@ -14,7 +14,7 @@ window.M2K_CHANGES = [
       ["sound", "DCAY and DAMP keep their meaning on every type: its length and how dark it falls. Each type sounds exactly as the chip had it at one setting of the two."],
       ["sound", "SPACE ECHO, ECHO and DELAY play on the beat: each at the musical length nearest its own, gliding to a new tempo without a click."],
       ["sound", "A new reverb type takes over at once, while the old one rings out for a moment."],
-      ["patterns", "A pattern keeps its reverb type; on FDN it saves as before. An FM-1 from 1.13, or the Patch Editor, plays such a pattern with MONO2K's own reverb."],
+      ["patterns", "A pattern keeps its reverb type; on FDN it saves as before. The Patch Editor opens such a pattern and plays it with MONO2K's own reverb."],
     ],
   },
   {

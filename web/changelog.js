@@ -7,12 +7,6 @@ window.M2K_KINDS = {
 };
 window.M2K_CHANGES = [
   {
-    date: "2026-11-18", title: "MONO2K 1.13: the Move's reverb patterns",
-    items: [
-      ["patterns", "1.13: A pattern made on the Move with one of its PS1-era reverbs (MONO2K for the Move 0.8) opens on the FM-1 and in the Patch Editor, and plays with MONO2K's own reverb. Your patterns and sounds play exactly as before."],
-    ],
-  },
-  {
     date: "2026-11-18", title: "MONO2K 1.12: four new performance effects",
     items: [
       ["workflow", "1.12: PERFORM has a third bank. Hold FX and press OCT+ twice: bank C, with both OCT keys lit. OCT− steps back to B, then A. Banks A and B are where they were."],

@@ -203,7 +203,7 @@ static int pat_rvty(const m2k_pattern_t *p) { return (p->glob[G_RVTY] * (SRV_N +
  * blank's: the stores' demos and blanks still match, and 1.4 reads it); one with a length, as 19; one with a track's
  * chance under 100 %, as 20 (1.5 reads 19); one that uses the ADSR's three (pat_adsr), as 22 (1.9 reads 20 and 21);
  * one with a track on POLY (pat_poly), as 24 (1.10 reads 22 and before); one that plays the Move's reverb type
- * (pat_rvty, M2K_SPU), as 26 (1.12 reads it, the type dropped); one that uses a track past the sixth (a build of
+ * (pat_rvty, M2K_SPU), as 26 (the browser reads it, the type dropped); one that uses a track past the sixth (a build of
  * eight), as 21, or as 23 with the ADSR's, 25 with POLY, 27 with the type */
 static int pat_pack(const m2k_pattern_t *p, uint8_t *o)
 {
