@@ -598,6 +598,13 @@ def v9_conv(f, o):          # the new value that sounds as old value o: nearest 
     return 0 if o == 0 else nearest_v(lambda v: math.log(max(f(v), 1e-9)), math.log(o), 1)
 out.append(arr("T_DRIV", "uint16_t", [round(256 + 10 * bus_exp(v, 10)) for v in range(128)]))    # the bus's gain, Q8
 out.append(arr("T_ADPC_DIV", "uint16_t", [adpc_div(v) for v in range(128)]))
+# CONSOLE (PERFORM, 1.12; AFFINE's CONSOLE OUT, its law): the low-pass's two one-poles (TPT: G = t / (1 + t), t =
+# tan(pi fc / SR)) at 20 kHz 2^(-1.3219 a), the amount a from 0 to 1 in 32 steps (20 kHz to 8 kHz), Q12 (the states
+# run past the input near 20 kHz: G / (1 - G) of it at most, under 2^18)
+def con_g(i):
+    t = math.tan(math.pi * 20000 * 2 ** (-1.3219 * i / 32) / SR)
+    return round(4096 * t / (1 + t))
+out.append(arr("T_CON_G", "uint16_t", [con_g(i) for i in range(33)]))
 out.append(arr("T_V9_GLCH", "uint8_t", [v9_conv(lambda v: bus_exp(v, 10), o) for o in range(128)], 16))
 out.append(arr("T_V9_DRIV", "uint8_t", [v9_conv(lambda v: bus_exp(v, 10), o) for o in range(128)], 16))
 out.append(arr("T_V9_HISS", "uint8_t", [v9_conv(lambda v: bus_exp(v, 10), o) for o in range(128)], 16))

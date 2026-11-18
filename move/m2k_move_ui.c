@@ -48,7 +48,7 @@ static struct {
     int8_t focus;
     uint8_t tempo_focus;               /* what is shown large is the tempo (Shift + knob 1) */
     uint32_t focus_t;
-    uint8_t perf, perf_pg;             /* PERFORM's effects on the keyboard; the moves' page (Up: the rest) */
+    uint8_t perf, perf_pg;             /* PERFORM's effects on the keyboard; their page (Up: both rows' second) */
     uint8_t kpads;                     /* the keyboard rows are PADS (Sample): kept under PERFORM, back after it */
     uint8_t plist, pat_sel;            /* the patterns' list (the jog's), its cursor */
     uint8_t hjog;                      /* the jog on a held step: 0 its note, 1 its condition (a click turns it; it stays) */
@@ -511,15 +511,18 @@ static int key_note(int i)
 
 /* PERFORM on the keyboard (the owner's, 2026-11-01): the top row the colours, which stack (held with anything), the
  * bottom row the moves, which share the ring (one at a time, the next taking over); each column a pair that plays
- * together; Up swaps the moves for the rest, the colours staying. -1: no key */
-static const int8_t MV_PERF_TOP[8] = {PF_LPF, PF_DUB, PF_HPF, PF_GATE, PF_CRSH, PF_DRIV, PF_WOW, PF_SHIM};
+ * together. Up swaps both rows for their second page (1.12, the owner's: bank C's colours CONSOLE DUCK LO-FI over the
+ * rest of the moves and SKIP), Down back; held and latched effects play on through it. -1: no key (page 2's 4th colour
+ * kept for GRIT, the Move's own) */
+static const int8_t MV_PERF_TOP[2][8] = {{PF_LPF, PF_DUB, PF_HPF, PF_GATE, PF_CRSH, PF_DRIV, PF_WOW, PF_SHIM},
+                                         {PF_CONS, PF_DUCK, PF_LOFI, -1, -1, -1, -1, -1}};
 static const int8_t MV_PERF_LOW[2][8] = {{PF_R4, PF_R8, PF_R16, PF_R32, PF_ROLL, PF_STUT, PF_REV, PF_STOP},
-                                         {PF_FRZ, PF_SCAT, PF_OCTD, PF_OCTU, PF_SPIN, PF_KILL, -1, -1}};
-/* key i of the keyboard (0..7 the bottom row, 8..15 the top), the moves' page pg: its effect, or -1 */
+                                         {PF_FRZ, PF_SCAT, PF_OCTD, PF_OCTU, PF_SPIN, PF_KILL, PF_SKIP, -1}};
+/* key i of the keyboard (0..7 the bottom row, 8..15 the top), PERFORM's page pg: its effect, or -1 */
 static int mv_perf_key(int i, int pg)
 {
     if (i < 0 || i >= 16) return -1;
-    return i >= 8 ? MV_PERF_TOP[i - 8] : MV_PERF_LOW[pg ? 1 : 0][i];
+    return i >= 8 ? MV_PERF_TOP[pg ? 1 : 0][i - 8] : MV_PERF_LOW[pg ? 1 : 0][i];
 }
 
 /* PERFORM on the keyboard: the colours on the top row, the moves on the bottom */
@@ -862,9 +865,9 @@ static void mv_button(int cc, int v)
         int d = cc == 55 ? 1 : -1;
         if (cat.open) { if (d > 0) cat_keep(); else cat_back(); cat_left(); break; }
         if (ui.nheld) { held_step_edit(0, d); break; }                         /* a held step's ratchet */
-        if (mc.perf) {                                                         /* PERFORM's keys: 1-8, 9-11 */
+        if (mc.perf) {                                                         /* PERFORM's keys: both rows' pages */
             mc.perf_pg = (uint8_t)(d > 0);
-            toast("PERFORM", mc.perf_pg ? "MOVES 2" : "MOVES 1");
+            toast("PERFORM", mc.perf_pg ? "PAGE 2" : "PAGE 1");
             break;
         }
         int8_t *oc = &ui.oct[ui.trk];

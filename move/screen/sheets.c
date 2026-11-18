@@ -861,7 +861,10 @@ int main(int argc, char **argv)
     shot("20_perf_three", "PERFORM  THREE AT ONCE");
     pad(1, 0); pad(7, 0); pad(13, 0); blocks(4);
     tap(55); blocks(VW_EVERY + 600);
-    shot("20_perf_page2", "PERFORM  UP: EACH BANK'S 9-11");
+    pad(8, 1); pad(6, 1); run_ms(200);
+    shot("20_perf_page2", "PERFORM  UP: PAGE 2, CONSOLE AND SKIP HELD");
+    padmap("perform2");
+    pad(8, 0); pad(6, 0); blocks(4);
     page_go(MS_PERF);
 
     /* REC, a mute, the eighth track, Shift held */

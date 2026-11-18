@@ -135,8 +135,23 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   PERFORM pad: `pf_unlatch`) lets go of them all, held ones too. A repeat's lap is the sixteenth's to a 4096th of a
   sample (`g_lenq`, Q12 from `bsps`: whole samples drifted 5 ms a minute at 120 BPM). Self-test: PERFORM latched
   (pages, keys, LEDs, the peek, the header), effects latched, a latched RPT 1/16 on the grid after a minute;
-  `tools/perform_mutants.py` (check.sh, 13 mutants); the Move's bench ctl (latch, stack, a move's place, slow taps,
+  `tools/perform_mutants.py` (check.sh, 13 mutants then); the Move's bench ctl (latch, stack, a move's place, slow taps,
   across pages, the PERFORM pad letting go). Stills 29p (away) and 29q (FX held there).
+  PERFORM's bank C (1.12, the owner's picks from AFFINE, `docs/affine-effects-plan.md`; each key a fixed character, no
+  format change): `PF_SKIP` .. `PF_LOFI` (22..25, `PF_BANKS` 3; keys 5-11 of C none, dark). FX held: OCT+ steps A B C,
+  OCT- back (`ui.pfb` 0..2; the OCT LEDs A OCT-, B OCT+, C both), the panel PERFORM BANK C its four down the left, the
+  foot OCT- A B C OCT+. SKIP a ring move (`GM_SKIP`, `gl_skip`, out of line): at each sixteenth (the record's grid,
+  stopped a free one) 9 in 10 by `bus.grng` the sixteenth just played repeats 1-3 times, its read slowing 0.45 a slice
+  to a quarter (AFFINE's SEEK 0.3), restarts and its way in and out crossfaded over GL_XF, its level the event's
+  (`g_fi` 0); `gl_kept` keeps its slice only while it reads. CONSOLE, DUCK and LO-FI (`bus_colour`, out of line): a pass
+  over the bus's out after its limiter, run only while one is on or gliding (`bus.c_run`), so off is bank A's bytes and
+  costs a test a block: LO-FI an 11 kHz hold whose period wanders +-45 %, 10 bits TPDF-dithered; CONSOLE two TPT
+  one-poles 20 to 8 kHz (`T_CON_G`, Q12: their states run past the input), a 10 Hz DC blocker, mono over 93 ms,
+  x - 0.1 x^3, held and settled the sum through one side (`co_mono`); DUCK 1 - 0.7 (1 - the beat's place)^3, the dip in
+  on an S over 3 ms. The Move: Up swaps both rows (`MV_PERF_TOP[2]`: CONSOLE DUCK LO-FI, the 4th kept for GRIT; SKIP
+  the moves' 7th), PAGE 1 / PAGE 2. Self-test: bank C (gestures, LEDs, empty keys), each on A01 (heard, bounds, the dry's
+  again let go and unlatched), each law; `perform_mutants.py` 31; the bench ctl's page swap. Cost a sample while on
+  (`m2k_draw --perform`): SKIP +82 (a repeat's +60), CONSOLE +45 (settled), DUCK +47, LO-FI +27; off 0. Still 29f_perform_c.
   An arp a track (1.6.1, the owner's: "keep HOLD when switching to another track. So each arp per track"): each track
   its own keys, held notes, HOLD and clock (`sq.keys[t]`, `held[t]`, `arp_hold[t]`, `arp_block`), the panel's keys the
   track in view's, MIDI's their channel's; switching tracks lets go of the keys (a track without HOLD stops, nothing

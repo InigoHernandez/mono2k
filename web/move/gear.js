@@ -20,7 +20,7 @@
  * piano's white keys), W..O the row over it, Z / X Down / Up, Space Play, Shift Shift. */
 window.MoveGear = (() => {
   "use strict";
-  const V = { css: 4, worklet: 1, wasm: 9 };      /* bump with each changed file (the site's ?v= rule) */
+  const V = { css: 4, worklet: 1, wasm: 10 };      /* bump with each changed file (the site's ?v= rule) */
   const BASE = (() => {
     const s = document.currentScript && document.currentScript.src;
     return s ? s.replace(/[^/]*$/, "") : "";
@@ -69,9 +69,10 @@ window.MoveGear = (() => {
   const PAGE_PADS = ["HOME", "TRK", "PAT", "GRID", "MIX", "GLO", "SOUNDS", "PERFORM",
                      "SYN", "AMP", "FILT", "EFX", "DSTR", "LFO1", "LFO2", "LFO3"];
   const KEY_NOTE = ["C", "D", "E", "F", "G", "A", "B", "C", "C#", "D#", "", "F#", "G#", "A#", "", ""];
-  const PERF_TOP = ["LPF", "DUB", "HPF", "GATE", "CRUSH", "DRIVE", "WOW", "SHIMMER"];
+  const PERF_TOP = [["LPF", "DUB", "HPF", "GATE", "CRUSH", "DRIVE", "WOW", "SHIMMER"],
+                    ["CONSOLE", "DUCK", "LO-FI", "", "", "", "", ""]];   /* (Up swaps both rows; the 4th kept for GRIT) */
   const PERF_LOW = [["RPT 1/4", "RPT 1/8", "RPT 1/16", "RPT 1/32", "ROLL", "STUTTER", "REVERSE", "STOP"],
-                    ["FREEZE", "SCATTER", "OCT DN", "OCT UP", "SPIN", "KILL", "", ""]];
+                    ["FREEZE", "SCATTER", "OCT DN", "OCT UP", "SPIN", "KILL", "SKIP", ""]];
 
   /* the Move's LED palette (Schwung's constants.mjs, indices 0..127), shown lifted: an LED's low levels glow where a
    * screen's would be black */
@@ -524,7 +525,7 @@ window.MoveGear = (() => {
       const [kind, a] = key.split(":"), i = +a, st = last && last.st;
       if (kind === "pad") {
         if (i >= 16) return PAGE_PADS[i - 16] + (i - 16 === 6 ? " · the sounds" : i - 16 === 7 ? " · effects on the keys" : " page");
-        if (st && st[7]) { const n = i >= 8 ? PERF_TOP[i - 8] : PERF_LOW[st[15] ? 1 : 0][i]; return n ? "PERFORM · " + n : "PERFORM"; }
+        if (st && st[7]) { const n = i >= 8 ? PERF_TOP[st[15] ? 1 : 0][i - 8] : PERF_LOW[st[15] ? 1 : 0][i]; return n ? "PERFORM · " + n : "PERFORM"; }
         return KEY_NOTE[i] ? "Keys · " + KEY_NOTE[i] : "Keys";
       }
       if (kind === "step") return "Step " + (i + 1) + " · a trig · hold it and turn a knob: a lock";

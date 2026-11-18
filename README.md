@@ -49,6 +49,11 @@ WebAssembly, with sound).
 - **PERFORM that stays** (1.11; the Move's 0.6). FX double-tapped stays on every page of the FM-1: the black keys stay
   its effects while the knobs and screen are the page's, FX in the header; hold FX for its own knobs, tap it to let go.
   On both, an effect's key tapped twice stays on until tapped again or PERFORM goes; a repeat stays on the beat.
+- **Four effects from AFFINE** (1.12; the Move's 0.7). PERFORM's bank C on the FM-1 (OCT+ from bank B, both OCT keys
+  lit; OCT- back) and page 2 of the Move's keys (Up swaps both rows): SKIP (a CD that can't read: at each sixteenth,
+  nine times in ten, the last one repeats one to three times, its pitch sagging), CONSOLE (a TV speaker: 8 kHz, mono,
+  a soft clip), DUCK (the mix dips 0.7 deep at each beat and swells back) and LO-FI (an 11 kHz converter whose clock
+  wanders, 10 bits dithered). Each a fixed character; off, the sound is as before, sample for sample.
 - **The machines' marks on the Move** (the Move's 0.6). SYN draws the track's machine as the FM-1's 3D mark, beside its
   name: it sways in time with the music and hops on the track's hits, higher for a louder one.
 
@@ -80,7 +85,7 @@ cc -O2 -Wall -Wno-unused-function -Ifirmware/src -Ifirmware/gen -o build/host/m2
 | Projects | the modern Elektron way: 4 projects × 4 banks (A–D) × 16 patterns (on the FM-1, one project of 64), each pattern with its own sounds. SAVE keeps the pattern (its reload point), GLO + SAVE reloads it, SAVE held keeps the project; GLO + REC / PLAY / SEQ copy, paste, clear (the pattern on HOME, the track's sound on its pages); GLO > SET picks and loads a project. On the web: a project picker, export / import as `.m2kp` files. Stored packed (a typical pattern 0.5–1 KB; the DEMO project 32 KB) |
 | Factory | project DEMO, bank A: four parts, CIRCUIT, TIDE, SUSPEND and LANTERN (`docs/bank-a.md`: how they were made, key and idea of each), every sound picked by the owner from sound sheets; A05–A16 and banks B–D blank. A store saved with earlier demos takes the new ones where the old still stand |
 | Sequencer | 6 × 64 steps, note / accent / slide, a note's length (hold a step, tap a later one), parameter locks, the Monomachine's trig types (each step trigs the amp, the filter's envelope and the LFOs independently: step + VOL, ALL ... NONE, a trigless lock), trig conditions (chance, A:B, 1ST, PRE, FILL), ratchets, Grids' lanes (Mutable Instruments' map), each track's own length (polymeter, 1-64 steps) and speed, mutes on the bar, swing, live recording and step entry (REC while stopped), pages held to set the length, patterns queued at the bar; HOME in GRID the track's notes in cells, a beat a row; a step held a moment its card |
-| Bus | GLO > BUS: a feedback-delay-network reverb at 22 kHz (DCAY, RT60 0.3–24 s; DAMP, the top's decay 1/1–1/30), a 4-bit ADPCM crunch (ADPC) and a drive into the soft clip (DRIV), each on a law measured over its whole range; PERFORM's 22 effects over them (repeats, reverse, stop, stutter, crush, wow, freeze, scatter, octaves, filters, dub, shimmer, spin), every change crossfaded |
+| Bus | GLO > BUS: a feedback-delay-network reverb at 22 kHz (DCAY, RT60 0.3–24 s; DAMP, the top's decay 1/1–1/30), a 4-bit ADPCM crunch (ADPC) and a drive into the soft clip (DRIV), each on a law measured over its whole range; PERFORM's 26 effects over them in three banks (repeats, reverse, stop, stutter, crush, wow, freeze, scatter, octaves, filters, dub, shimmer, spin, skip, console, duck, lo-fi), every change crossfaded |
 | MIDI | tracks 1–6 on six channels from GLO > MIDI's CHAN (1–6 at first), the others play the track in view: notes and the Monomachine's CC map (SYN 48–55, AMP 56–63, FILT 72–79, FX 80–87, LFO 1/2/3 on 88/104/112, level 7, mute 3). SYNC IN follows a MIDI clock (its tempo, a step every sixth pulse, the swing kept; start, continue, stop) from USB, the TRS jack or both, SYNC OUT sends one (24 a beat, start, stop), NOTES OUT each track's trigs on its channel. GLO > IN: where notes and CCs come from (both, USB, TRS, none), and a thru of the jack's MIDI out over USB. The emulator picks a MIDI device in (as USB) and one out |
 | Screen | 240 × 240 at 1 bit (a 7.2 KB framebuffer): the owner's pixel font (Elektron Pixel Font, adapted) at whole scales (2x and 3x: crisp on the FM-1), each knob's value as a picture (dials, sliders, boxes, waves, curves) after Elektron's parameter pages, the Orbitron wordmark, Model:Cycles-style machine cards, machine marks as one family of isotypes on a 12-unit grid, each moving in its own way in time with the pattern, dissolves, glitches, live envelopes, filters, LFOs and scopes; light or dark (GLO > SET > SCRN; on the web it follows the page's theme) |
 
@@ -393,6 +398,11 @@ GRIDS (`firmware/src/m2k_grids.c`) is Émilie Gillet's Grids, Mutable Instrument
 ([pichenettes/eurorack](https://github.com/pichenettes/eurorack), `grids/`, GPL-3.0): its 25 nodes of pattern data
 and its rules (ReadDrumMap, EvaluateDrums) ported, with credit, to MONO2K's integer core; `tools/ref/grids_ref.py`
 holds the port to the original's rules. Grids is Mutable Instruments' name.
+
+PERFORM's bank C (1.12, `firmware/src/m2k_fx.c` `gl_skip`, `bus_colour`): SKIP, CONSOLE and LO-FI are after AFFINE
+([InigoHernandez/affine](https://github.com/InigoHernandez/affine), MPL-2.0: `app/dsp/psx.c`), DUCK after CHOPPAH's
+overlay (Laurens Profittlich, `app/dsp/ovl.c`): their laws and numbers read from the float code and written again in
+MONO2K's integers, none of their code copied.
 
 On the Move alone (`M2K_SPU`), GRIT and the PS1-era reverb (`firmware/src/m2k_spu.c`) are after AFFINE's PS1-era bus
 ([InigoHernandez/affine](https://github.com/InigoHernandez/affine), `app/dsp/psx.c`, MPL-2.0): its laws (the codec's

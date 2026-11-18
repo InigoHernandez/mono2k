@@ -7,6 +7,17 @@ window.M2K_KINDS = window.M2K_KINDS || {
 };
 window.M2K_CHANGES = [
   {
+    date: "2026-11-17", title: "MONO2K for the Move 0.7: four new performance effects",
+    items: [
+      ["workflow", "In PERFORM, Up now swaps both rows of keys: page 2 has three new colours on the top row and the rest of the moves with SKIP on the bottom. Down: page 1. What you hold or left on keeps playing across the swap."],
+      ["sound", "SKIP (the 7th move on page 2): a CD that can't read. At every sixteenth, nine times in ten, the sixteenth just played repeats once to three times, its pitch sagging, then the music goes on."],
+      ["sound", "CONSOLE (page 2's first colour): a TV speaker. The mix darkens to 8 kHz, folds to mono and rounds off softly, never louder."],
+      ["sound", "DUCK (the second): the mix dips at the start of every beat and swells back over it, like a sidechain without a kick."],
+      ["sound", "LO-FI (the third): an unsteady converter. The mix held at 11 kHz by a clock that wanders, in 10 bits."],
+      ["patterns", "Your patterns and sounds play exactly as before."],
+    ],
+  },
+  {
     date: "2026-11-17", title: "MONO2K for the Move 0.6: POLY, the machines' marks, effects that stay on",
     items: [
       ["sequencer", "POLY plays chords on one track. On TRK, turn MODE to POLY: the track becomes a lead and the tracks after it its voices, as many as VOIC (knob 4) says, up to eight. T1 on four plays T1 to T4; the rest play on as always."],

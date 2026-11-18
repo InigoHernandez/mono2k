@@ -104,7 +104,10 @@ static const ev_t MANUAL[] = {
     {16400, 'b', B_PLAY, 1, 0}, {16420, 'b', B_PLAY, 0, 0}, {17100, 'b', B_FX, 1, 0}, {17200, 'k', 5, 1, 0},
     {17800, 's', 0, 0, "29f_perform"}, {17900, 'k', 5, 0, 0},
     {17905, 'b', B_OCTU, 1, 0}, {17910, 'b', B_OCTU, 0, 0}, {17915, 'k', 1, 1, 0},   /* bank B, FREEZE held */
-    {17960, 's', 0, 0, "29f_perform_b"}, {17965, 'k', 1, 0, 0}, {17970, 'b', B_OCTD, 1, 0}, {17975, 'b', B_OCTD, 0, 0},
+    {17960, 's', 0, 0, "29f_perform_b"}, {17965, 'k', 1, 0, 0},
+    {17966, 'b', B_OCTU, 1, 0}, {17967, 'b', B_OCTU, 0, 0}, {17968, 'k', 3, 1, 0},   /* bank C, CONSOLE held */
+    {17980, 's', 0, 0, "29f_perform_c"}, {17981, 'k', 3, 0, 0}, {17982, 'b', B_OCTD, 1, 0}, {17983, 'b', B_OCTD, 0, 0},
+    {17984, 'b', B_OCTD, 1, 0}, {17985, 'b', B_OCTD, 0, 0},
     {17990, 'b', B_FX, 0, 0},
     {18000, 'b', B_LFO, 1, 0}, {18600, 's', 0, 0, "29g_lfo_held"}, {18700, 'b', B_LFO, 0, 0},
     {18800, 'b', B_GLO, 1, 0}, {19400, 's', 0, 0, "29h_glo_map"}, {19500, 'b', B_GLO, 0, 0},
@@ -7887,6 +7890,259 @@ static int selftest(void)
                " SHIMMER 10 s: %d at full scale, over after 4 s %d; DUB with no line %d\n", fs / ds, fresh, shfull, sh_over, nodub);
         CHECK(lv_ok && !full && seam && fresh == 2000 && !shfull && sh_over && nodub,
               "PERFORM bank B: levels in bounds on A01, none at full scale, FREEZE seamless, STOP live, SHIMMER bounded, DUB needs a line");
+    }
+    {
+        /* 1.12, PERFORM's bank C: FX held, OCT+ from B shows C (both OCT lit; again stays), OCT- steps back (C, B, A); its
+         * keys 1-4 SKIP CONSOLE DUCK LO-FI, 5-11 nothing (dark, a press holds none); an effect held goes on through a
+         * switch and its key's release ends it, not the bank shown's; one latched lights its key under another bank; FX
+         * let go lets go of all */
+        m2k_init(83);
+        ui.now = 1000;
+        seq_play(1);
+        static int16_t pb[256];
+        for (int f = 0; f < M2K_SR / 2; f += 128) m2k_render(pb, 128);
+        int bk[11];
+        for (int k = 0; k < M2K_KEYS; k++) if (ui.kb[k] >= 0 && ui.kb[k] < 11) bk[ui.kb[k]] = k;
+        const int oct = ui.oct[ui.trk];
+        m2k_button(B_FX, 1);
+        m2k_button(B_OCTU, 1); m2k_button(B_OCTU, 0);
+        m2k_button(B_OCTU, 1); m2k_button(B_OCTU, 0);
+        const uint8_t *L = m2k_leds();
+        int to_c = ui.pfb == 2 && L[M2K_KEYS + B_OCTU] == 255 && L[M2K_KEYS + B_OCTD] == 255 && ui.oct[ui.trk] == oct;
+        m2k_button(B_OCTU, 1); m2k_button(B_OCTU, 0);
+        to_c &= ui.pfb == 2;
+        int dark = 1;
+        for (int b = 0; b < 11; b++) dark &= L[bk[b]] == (b < 4 ? 24 : 0);
+        ui.now = 1100; m2k_key(bk[0], 1);                 /* SKIP held */
+        ui.now = 1200; m2k_key(bk[1], 1);                 /* CONSOLE with it */
+        const uint32_t tt = ui.toast_t;
+        ui.now = 1300; m2k_key(bk[5], 1);                 /* black 6: nothing (not even a message) */
+        int none = ui.kact[bk[5]] == KA_NONE && ui.toast_t == tt;
+        ui.now = 1350; m2k_key(bk[5], 0);
+        for (int f = 0; f < 4410; f += 128) m2k_render(pb, 128);
+        int n_on = 0;
+        for (int k = 0; k < PF_COUNT; k++) n_on += perf.on[k];
+        L = m2k_leds();
+        int held = perf.on[PF_SKIP] && perf.on[PF_CONS] && n_on == 2 && bus.g_pk == PF_SKIP + 1 && none &&
+                   L[bk[0]] == 255 && L[bk[1]] == 255 && L[bk[5]] == 0;
+        ui.now = 1500; m2k_button(B_OCTD, 1); m2k_button(B_OCTD, 0);   /* to B */
+        L = m2k_leds();
+        int to_b = ui.pfb == 1 && L[M2K_KEYS + B_OCTD] == 24 && L[M2K_KEYS + B_OCTU] == 255 && L[bk[0]] == 90;
+        ui.now = 1600; m2k_key(bk[0], 0);                 /* SKIP's key let go under B: SKIP off, FREEZE never on */
+        int rel = !perf.on[PF_SKIP] && !perf.on[PF_FRZ] && perf.on[PF_CONS];
+        ui.now = 1700; m2k_button(B_OCTD, 1); m2k_button(B_OCTD, 0);   /* to A */
+        L = m2k_leds();
+        int to_a = ui.pfb == 0 && L[M2K_KEYS + B_OCTD] == 255 && L[M2K_KEYS + B_OCTU] == 24 && ui.oct[ui.trk] == oct;
+        ui.now = 1800; m2k_key(bk[1], 0);                 /* CONSOLE's key let go under A */
+        rel &= !perf.on[PF_CONS] && !perf.on[PF_R8];
+        /* DUCK latched on C, seen under A */
+        m2k_button(B_OCTU, 1); m2k_button(B_OCTU, 0); m2k_button(B_OCTU, 1); m2k_button(B_OCTU, 0);
+        ui.now = 2000; m2k_key(bk[2], 1); ui.now = 2050; m2k_key(bk[2], 0);
+        ui.now = 2150; m2k_key(bk[2], 1); ui.now = 2200; m2k_key(bk[2], 0);
+        int lat = perf.on[PF_DUCK] && (ui.pf_lat >> PF_DUCK & 1);
+        m2k_button(B_OCTD, 1); m2k_button(B_OCTD, 0); m2k_button(B_OCTD, 1); m2k_button(B_OCTD, 0);
+        L = m2k_leds();
+        lat &= ui.pfb == 0 && L[bk[2]] == 90 && L[bk[3]] == 24 && perf.on[PF_DUCK];
+        ui.now = 3000; m2k_button(B_FX, 0);
+        lat &= !perf.on[PF_DUCK] && !ui.pf_lat;
+        seq_play(0);
+        printf("     PERFORM bank C: to C %d, dark %d, held %d, to B %d, released %d, to A %d, latched %d\n", to_c, dark, held,
+               to_b, rel, to_a, lat);
+        CHECK(to_c && dark && held && to_b && rel && to_a && lat,
+              "PERFORM bank C: OCT+ from B (both OCT lit), OCT- back C B A; SKIP CONSOLE DUCK LO-FI on keys 1-4, the rest dark");
+    }
+    {
+        /* 1.12, bank C's effects on A01 (a bar dry, two bars held from 40 ms past a beat, then on): each changes the
+         * sound while held, within its level's bounds, none at full scale; let go, after its way out (CONSOLE's narrowing
+         * 93 ms) the sound is the dry's sample for sample (off is silent: nothing left running). Then each latched under
+         * FX (its key twice) and FX let go (pf_unlatch): after its way out the dry's again */
+        static const int8_t LO[4] = {-3, -3, -4, -2}, HI[4] = {4, 1, 0, 1};      /* SKIP CONSOLE DUCK LO-FI */
+        const int n = 80 * (int)(sps_q8 >> 8) / 16 * 16 + 4 * M2K_SR;
+        int16_t *dr = malloc((size_t)(n + 16 * M2K_SR) * 4), *wt = malloc((size_t)(n + 16 * M2K_SR) * 4);
+        int lv_ok = 1, full = 0, chg = 1, back = 1, lback = 1, latch = 1;
+        int on = 0, off = 0;
+        for (int j = -1; j < 4; j++) {
+            const int k = j < 0 ? -1 : PF_SKIP + j;
+            m2k_init(2000);
+            cur_pat = 0; sq.queued = 0; lockmap_build();
+            for (int t = 0; t < M2K_TRACKS; t++) m_cpy(trk[t].eff, pat[0].kit[t], P_COUNT);
+            seq_play(1);
+            const int six = (int)(sps_q8 >> 8);
+            on = (16 * six + M2K_SR / 25) / 16 * 16; off = (48 * six + M2K_SR / 25) / 16 * 16;
+            int16_t *o = j < 0 ? dr : wt;
+            for (int f = 0; f < n; f += 16) {
+                if (k >= 0 && f == on) bus_perform(k, 1);
+                if (k >= 0 && f == off) bus_perform(k, 0);
+                m2k_render(o + 2 * f, 16);
+            }
+            if (j < 0) continue;
+            double s0 = 0, s1 = 0;
+            int d_in = 0, d_out = 0, d_pre = 0;
+            for (int i = 2 * (on + M2K_SR / 5); i < 2 * off; i++) { s0 += (double)dr[i] * dr[i]; s1 += (double)wt[i] * wt[i]; d_in += dr[i] != wt[i]; }
+            for (int i = 0; i < 2 * on; i++) d_pre += dr[i] != wt[i];
+            for (int i = 2 * (off + M2K_SR / 4); i < 2 * n; i++) d_out += dr[i] != wt[i];
+            for (int i = 0; i < 2 * n; i++) full += abs(wt[i]) >= 32767;
+            const double db = 10 * log10((s1 + 1) / (s0 + 1));
+            const int ok = db >= LO[j] && db <= HI[j];
+            lv_ok &= ok;
+            chg &= d_in > (off - on) / 4;
+            back &= !d_pre && !d_out;
+            printf("     A01 %-8s held %+.1f dB%s, %d samples changed held, %d after\n", PF_NAME[k], db, ok ? "" : " OUT OF BOUNDS",
+                   d_in, d_out);
+        }
+        /* latched: FX held 0.5 s in, the key twice, two seconds, FX let go; the dry the same without the key */
+        int lt = 0;
+        for (int j = -1; j < 4; j++) {
+            m2k_init(2000);
+            cur_pat = 0; sq.queued = 0; lockmap_build();
+            for (int t = 0; t < M2K_TRACKS; t++) m_cpy(trk[t].eff, pat[0].kit[t], P_COUNT);
+            seq_play(1);
+            int bk[11];
+            for (int k = 0; k < M2K_KEYS; k++) if (ui.kb[k] >= 0 && ui.kb[k] < 11) bk[ui.kb[k]] = k;
+            int16_t *o = j < 0 ? dr : wt;
+            const int tot = 4 * M2K_SR / 16 * 16;
+            for (int f = 0, nb = 0; f < tot; f += 16, nb++) {
+                if (nb == 1378) {                         /* (0.5 s) FX, bank C */
+                    ui.now = 10000; m2k_button(B_FX, 1);
+                    m2k_button(B_OCTU, 1); m2k_button(B_OCTU, 0); m2k_button(B_OCTU, 1); m2k_button(B_OCTU, 0);
+                    if (j >= 0) {
+                        ui.now = 10100; m2k_key(bk[j], 1); ui.now = 10150; m2k_key(bk[j], 0);
+                        ui.now = 10250; m2k_key(bk[j], 1); ui.now = 10300; m2k_key(bk[j], 0);
+                        latch &= perf.on[PF_SKIP + j] && (ui.pf_lat >> (PF_SKIP + j) & 1);
+                    }
+                }
+                if (nb == 1378 + 5512) { ui.now = 13000; m2k_button(B_FX, 0); lt = f; latch &= !ui.pf_lat && !perf.on[PF_SKIP + (j < 0 ? 0 : j)]; }
+                m2k_render(o + 2 * f, 16);
+            }
+            if (j < 0) continue;
+            int d = 0, dh = 0;
+            for (int i = 2 * (lt + M2K_SR / 4); i < 2 * tot; i++) d += dr[i] != wt[i];
+            for (int i = 2 * (lt - M2K_SR); i < 2 * lt; i++) dh += dr[i] != wt[i];
+            lback &= !d && dh > 0;
+        }
+        free(dr); free(wt);
+        printf("     bank C on A01: changed %d, the dry's again let go %d, latched %d, the dry's again unlatched %d, %d at full scale\n",
+               chg, back, latch, lback, full);
+        CHECK(lv_ok && !full && chg && back && latch && lback,
+              "PERFORM bank C on A01: each heard, levels in bounds, none at full scale; let go or unlatched, the dry's again");
+    }
+    {
+        /* 1.12, each one's law. SKIP on A01 held 6 s: skips at the sixteenths, 9 in 10 when free, one to three long, its
+         * read slowing (to under 0.7 of its speed, never under a quarter), from the sixteenth just played. CONSOLE on the
+         * held sine and on A01: mono once settled (left and right the same), the top darker (A01's second differences 6 dB
+         * down and more), the sine's level within 1 dB. DUCK on the sine at 120 BPM: 7 ms into each beat down 8..13 dB
+         * against its last 10 ms, in on an S (no step past 1.3 x the sine's own). LO-FI on the sine: every sample 10 bits
+         * (a step of 64), held a mean of four samples, the hold wandering (3 or less, 5 or more); on silence its dither */
+        static int16_t pb[2 * M2K_SUB];
+        m2k_init(2000);
+        cur_pat = 0; sq.queued = 0; lockmap_build();
+        for (int t = 0; t < M2K_TRACKS; t++) m_cpy(trk[t].eff, pat[0].kit[t], P_COUNT);
+        seq_play(1);
+        eng_run(1.0);
+        bus_perform(PF_SKIP, 1);
+        int skips = 0, len_seen = 0, was = 0, len = 0, bound = 1, grid = 1;
+        uint32_t rmin = G_UNITY;
+        for (int f = 0; f < 6 * M2K_SR; f += M2K_SUB) {
+            m2k_render(pb, M2K_SUB);
+            if (bus.sk_on && !was) {
+                skips++;
+                len = 0;
+                grid &= bus.g_start + bus.g_len == bus.g_grid[0] && bus.g_len == (sps_q8 >> 9);
+            }
+            if (bus.sk_on && bus.g_grid[0] == bus.gw - M2K_SUB / 2) len++;
+            if (!bus.sk_on && was && len >= 1 && len <= 3) len_seen |= 1 << len;
+            if (bus.sk_on && bus.g_rate < rmin) rmin = bus.g_rate;
+            if (bus.sk_on) bound &= bus.g_rate >= G_UNITY / 4;
+            was = bus.sk_on;
+        }
+        bus_perform(PF_SKIP, 0);
+        const int sixs = (int)(6.0 * M2K_SR / (sps_q8 / 256.0));
+        int skip = skips >= sixs / 6 && skips <= sixs / 2 && len_seen == 14 && rmin < (G_UNITY / 10) * 7 && bound && grid;
+        /* (and on the sine below: its skips crossfaded, no step past 1.3 x the sine's own) */
+        /* CONSOLE on A01, settled; the dry the same */
+        const int nc = 2 * M2K_SR / M2K_SUB * M2K_SUB;       /* (whole blocks: 2 s is 5512.5 of them) */
+        int16_t *a = malloc((size_t)nc * 4), *c = malloc((size_t)nc * 4);
+        for (int pass = 0; pass < 2; pass++) {
+            m2k_init(2000);
+            cur_pat = 0; sq.queued = 0; lockmap_build();
+            for (int t = 0; t < M2K_TRACKS; t++) m_cpy(trk[t].eff, pat[0].kit[t], P_COUNT);
+            seq_play(1);
+            eng_run(1.0);
+            if (pass) bus_perform(PF_CONS, 1);
+            eng_run(0.2);
+            int16_t *o = pass ? c : a;
+            for (int f = 0; f < nc; f += M2K_SUB) m2k_render(o + 2 * f, M2K_SUB);
+            if (pass) bus_perform(PF_CONS, 0);
+        }
+        int mono = 1;
+        for (int i = 0; i < nc; i++) mono &= c[2 * i] == c[2 * i + 1];
+        const double top = 10 * log10(hf_energy(c, 0, nc) / hf_energy(a, 0, nc));
+        free(a); free(c);
+        /* the sine: CONSOLE's level; DUCK; LO-FI */
+        static int16_t sb[2 * 3 * M2K_SR];
+        double cdb = 0, dk_lo = 0, dk_step = 0, ds = 0, sk_step = 0;
+        int bits = 1, runs = 0, nruns = 0, rmn = 99, rmx = 0, dith[2] = {0, 0};
+        for (int e = -1; e < 4; e++) {
+            m2k_pattern_t *q = eng_pat(78);
+            q->glob[G_VERB] = 0;
+            q->glob[G_TMPO] = 120 - 30;
+            q->glob[G_SWNG] = 0;
+            sine_track(q);
+            eng_go(q);
+            sine_on();
+            eng_run(1.0);
+            if (e >= 0) bus_perform(e == 0 ? PF_CONS : e == 1 ? PF_DUCK : e == 2 ? PF_LOFI : PF_SKIP, 1);
+            eng_run(0.3);
+            const int nf = 2 * M2K_SR / M2K_SUB * M2K_SUB;
+            int bts[16], nbt = 0;                         /* (the beats' starts: the bus's block on its grid's beat) */
+            for (int f = 0; f < nf; f += M2K_SUB) {
+                m2k_render(sb + 2 * f, M2K_SUB);
+                if (bus.g_grid[2] == bus.gw - M2K_SUB / 2 && nbt < 16) bts[nbt++] = f;
+            }
+            double ss = 0;
+            for (int i = 0; i < 2 * nf; i++) ss += (double)sb[i] * sb[i];
+            if (e < 0) { cdb = ss; ds = step_max(sb, 1, nf); continue; }
+            if (e == 0) cdb = 10 * log10(ss / cdb);
+            if (e == 3) sk_step = step_max(sb, 1, nf) / ds;   /* (SKIP's skips, their ways in and out, restarts) */
+            if (e == 1) {                                 /* the beats: a block on a beat's start, the bus's grid */
+                dk_step = step_max(sb, 1, nf) / ds;
+                double lo = 0;
+                for (int i = 0; i + 1 < nbt; i++) {
+                    double e0 = 0, e1 = 0;
+                    for (int x = bts[i] + 300; x < bts[i] + 741; x++) e0 += (double)sb[2 * x] * sb[2 * x];
+                    for (int x = bts[i + 1] - 441; x < bts[i + 1]; x++) e1 += (double)sb[2 * x] * sb[2 * x];
+                    double d = 10 * log10((e0 + 1) / (e1 + 1));
+                    if (d < lo) lo = d;
+                }
+                dk_lo = nbt >= 3 ? lo : 0;
+            }
+            if (e == 2) {
+                int r = 1;
+                for (int i = 0; i < nf; i++) {
+                    for (int ch = 0; ch < 2; ch++) bits &= abs(sb[2 * i + ch]) == 32767 || sb[2 * i + ch] % 64 == 0;
+                    if (i && sb[2 * i] == sb[2 * i - 2] && sb[2 * i + 1] == sb[2 * i - 1]) r++;
+                    else if (i) { if (i > 64) { runs += r; nruns++; if (r < rmn) rmn = r; if (r > rmx) rmx = r; } r = 1; }
+                }
+                /* on silence: the dither */
+                m2k_init(2000);
+                bus_perform(PF_LOFI, 1);
+                eng_run(0.5);
+                for (int f = 0; f < M2K_SR / 2; f += M2K_SUB) { m2k_render(pb, M2K_SUB); for (int i = 0; i < 2 * M2K_SUB; i++) dith[i & 1] += pb[i] != 0; }
+                bus_perform(PF_LOFI, 0);
+            }
+        }
+        const double mrun = nruns ? (double)runs / nruns : 0;
+        const int cons = mono && top < -6 && fabs(cdb) < 1, duck = dk_lo < -8 && dk_lo > -13 && dk_step < 1.3;
+        const int lofi = bits && mrun > 3.5 && mrun < 4.5 && rmn <= 3 && rmx >= 5 && dith[0] > 100 && dith[1] > 100;
+        skip &= sk_step < 1.3;
+        printf("     SKIP: %d skips in %d sixteenths, lengths seen %x, its speed to %.2f, from the last sixteenth %d; CONSOLE: mono %d,"
+               " the top %+.1f dB, the sine %+.1f dB; DUCK: a beat's start %+.1f dB, steps %.2f x; LO-FI: 10 bits %d, held %.2f"
+               " (%d .. %d), dither %d %d; SKIP on the sine: steps %.2f x\n", skips, sixs, len_seen, (double)rmin / G_UNITY, grid,
+               mono, top, cdb, dk_lo, dk_step, bits, mrun, rmn, rmx, dith[0], dith[1], sk_step);
+        CHECK(skip, "PERFORM SKIP: the last sixteenth repeated at the sixteenths, 9 in 10, one to three times, slowing as it seeks");
+        CHECK(cons, "PERFORM CONSOLE: mono once settled, the top darker, no gain");
+        CHECK(duck, "PERFORM DUCK: each beat's start ducked 0.7 deep, in on an S");
+        CHECK(lofi, "PERFORM LO-FI: 10 bits held at an unsteady 11 kHz, dithered");
     }
     {
         /* DSND's LFO across 64 leaves the lines' layout (it followed the modulated value: a 16 KB line wiped at every

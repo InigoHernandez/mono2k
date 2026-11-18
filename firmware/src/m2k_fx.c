@@ -327,6 +327,21 @@ static struct {
     uint8_t ad_perf, ad_warm;          /* CRUSH held (until its mix is back); blocks of its coder running unheard */
     /* drive: PERFORM's, glided, its level held to the dry's */
     int32_t dv, dv_e0, dv_e1, dv_g, dv_gp;   /* the gain now, Q8; the two levels; the hold, Q15, and where it ramped to */
+    /* bank C (1.12). SKIP (gl_skip): a skip on, its repeats to go, a restart's crossfade (samples left), its share
+     * (Q10), the grid seen, a free sixteenth's count, the read before a restart (Q12) and its speed (Q24) */
+    uint8_t sk_on, sk_reps, sk_xf;
+    int32_t sk_mix;
+    uint32_t sk_grid, sk_ph, sk_op, sk_or;
+    /* the colours (bus_colour): one still gliding; CONSOLE's amount (Q15) and narrowing (Q12, 4096 mono), its one-poles
+     * and their remainders, its DC blocker's low part and remainder; LO-FI's share (Q15), its clock and the period it
+     * waits for (Q16), the pair held; DUCK's depth (Q15), its beat's place with no grid; CONSOLE whole (the sum through
+     * its left side alone) */
+    uint8_t c_run, co_mono;
+    int32_t co_a, co_n, co_z[2][2], co_zr[2][2], co_dc[2], co_dr[2];
+    int32_t lf_mix, lf_h[2];
+    uint32_t lf_ph, lf_nx;
+    int32_t dk_d;
+    uint32_t dk_ph;
 } bus;
 
 static inline int32_t adpcm_step(int c, int32_t x)
@@ -349,9 +364,10 @@ static inline int32_t adpcm_step(int c, int32_t x)
 
 /* the glitch plays one event at a time from the ring, a PERFORM key's (bus_perform). Each fades in and out over
  * GL_XF, and a slice's seam (its end into its start) crossfades over as much, so nothing cuts. The modes: a slice
- * repeated, reversed, gated; the stop, the live sound slowed to a halt as a tape; and bank B's */
+ * repeated, reversed, gated; the stop, the live sound slowed to a halt as a tape; bank B's; and bank C's SKIP */
 enum { GM_RPT, GM_REV, GM_GATE, GM_STOP,                                           /* PERFORM's bank A */
-       GM_FRZ, GM_PSU, GM_PSD, GM_SCAT, GM_PROLL, GM_SPIN, GM_COUNT };             /* and bank B's */
+       GM_FRZ, GM_PSU, GM_PSD, GM_SCAT, GM_PROLL, GM_SPIN,                         /* bank B's */
+       GM_SKIP, GM_COUNT };                                                        /* and bank C's */
 #define GL_XF 64u                      /* 2.9 ms */
 #define GL_MAX (GL_LEN - 4 * GL_XF - 512)   /* the longest slice: a quarter from 85 BPM (slower, an eighth) */
 #define G_UNITY (1u << 24)
@@ -365,18 +381,26 @@ enum { GM_RPT, GM_REV, GM_GATE, GM_STOP,                                        
 /* Bank B (FX held, OCT+): a freeze (the last eighth held as a sustain, three Hann grains wandering in it), a scatter,
  * a roll, the bus an octave down or up (three Hann grains through the ring), a low-pass and a high-pass swept over a
  * bar while held (gliding open again let go), a gate, a dub throw, a shimmer and a vinyl spin-back */
+/* Bank C (1.12, OCT+ from B; AFFINE's, written again in integers: bus_colour, gl_skip): a disc that skips (SKIP), a TV
+ * speaker (CONSOLE), the mix pumping on the beat (DUCK, CHOPPAH's idea) and an unsteady converter (LO-FI); its other
+ * seven keys empty */
 enum { PF_R4, PF_R8, PF_R16, PF_R32, PF_REV, PF_STOP, PF_STUT, PF_CRSH, PF_WOW, PF_DRIV, PF_KILL,
-       PF_FRZ, PF_SCAT, PF_ROLL, PF_OCTD, PF_OCTU, PF_LPF, PF_HPF, PF_GATE, PF_DUB, PF_SHIM, PF_SPIN, PF_COUNT };
-#define PF_BANK 11                     /* the black keys: bank A's 0..10, bank B's 11..21 */
+       PF_FRZ, PF_SCAT, PF_ROLL, PF_OCTD, PF_OCTU, PF_LPF, PF_HPF, PF_GATE, PF_DUB, PF_SHIM, PF_SPIN,
+       PF_SKIP, PF_CONS, PF_DUCK, PF_LOFI, PF_COUNT };
+#define PF_BANK 11                     /* the black keys: bank A's 0..10, bank B's 11..21, bank C's 22..25 (26..32 none) */
+#define PF_BANKS 3
 #define WOW_Q8 32512                   /* WOW's tape depth, Q8: the old TAPE control's at 127 (+-40 c of wow) */
 static const char *const PF_NAME[PF_COUNT] = {"RPT 1/4", "RPT 1/8", "RPT 1/16", "RPT 1/32", "REVERSE", "STOP", "STUTTER",
                                               "CRUSH", "WOW", "DRIVE", "KILL", "FREEZE", "SCATTER", "ROLL", "OCT DN",
-                                              "OCT UP", "LPF", "HPF", "GATE", "DUB", "SHIMMER", "SPIN"};
+                                              "OCT UP", "LPF", "HPF", "GATE", "DUB", "SHIMMER", "SPIN", "SKIP",
+                                              "CONSOLE", "DUCK", "LO-FI"};
+_Static_assert(PF_COUNT <= PF_BANK * PF_BANKS && PF_COUNT <= 32, "the effects on the banks' keys, a latch bit each (ui.pf_lat)");
 static struct { uint8_t on[PF_COUNT]; int32_t kill; } perf = {{0}, 32767};
 /* the effects that play from the glitch ring, one at a time */
 static int pf_ring(int k)
 {
-    return k <= PF_STUT || k == PF_FRZ || k == PF_SCAT || k == PF_ROLL || k == PF_OCTD || k == PF_OCTU || k == PF_SPIN;
+    return k <= PF_STUT || k == PF_FRZ || k == PF_SCAT || k == PF_ROLL || k == PF_OCTD || k == PF_OCTU || k == PF_SPIN ||
+           k == PF_SKIP;
 }
 
 static int seq_running(void);
@@ -458,7 +482,18 @@ static void gl_perform(int k)
         bus.g_pk = (uint8_t)(k + 1);
         return;
     }
-    if (k > PF_STUT && k != PF_SCAT && k != PF_ROLL) return;   /* (the rest of bank B: no ring) */
+    if (k == PF_SKIP) {                                   /* the live sound, until a sixteenth's dice skip (gl_skip) */
+        gl_start(bus.gw, 0, 0, GM_SKIP, 32768);
+        bus.g_env = 0;
+        bus.g_fi = 0;                                     /* (its level gl_skip's; let go, out over 2.9 ms) */
+        bus.sk_on = bus.sk_xf = 0;
+        bus.sk_mix = 0;
+        bus.sk_ph = 0;
+        bus.sk_grid = bus.g_grid[0];                      /* (the first dice at the next sixteenth) */
+        bus.g_pk = (uint8_t)(k + 1);
+        return;
+    }
+    if (k > PF_STUT && k != PF_SCAT && k != PF_ROLL) return;   /* (the rest of bank B and C: no ring) */
     int mk = k == PF_SCAT ? GM_SCAT : k == PF_ROLL ? GM_PROLL : -1;
     if (k == PF_SCAT) k = PF_REV;                         /* (the scatter's slices: the beat the reverse plays) */
     if (k == PF_ROLL) k = PF_R4;                          /* (the roll's: the quarter's, halved a beat at a time) */
@@ -629,6 +664,72 @@ static inline uint32_t sc_at(uint32_t d, uint32_t o, uint32_t sl)
     return bus.g_start + (d & 3) * sl + pos;
 }
 
+/* SKIP (bank C, 1.12; AFFINE's, written again): a disc that can't read. At each sixteenth (the sequencer's, bus_step;
+ * stopped, a free one at the tempo) 9 times in 10 the sixteenth just played repeats, once to three times, its read
+ * slowing as the laser seeks (0.45 of its speed lost a slice, to a quarter at least: AFFINE's SEEK at 0.3, the pitch
+ * sagging with it), then the music goes on for a sixteenth at least. In and out, and every restart, crossfaded over
+ * GL_XF (AFFINE ramps each cut 32 samples to silence; its own dice are the bus's, bus.grng) */
+#define SK_CHANCE 922u                 /* of 1024: 0.9 */
+#define SK_SAG 7549747u                /* the speed lost over a slice, Q24: 1.5 x SEEK 0.3 */
+#define SK_MAX 4000u                   /* the longest slice (half rate; slower than 83 BPM, a 1/32): three repeats and the
+                                        * write on past them stay within the ring */
+static void sk_again(void)             /* the slice from its start, the read before it crossfaded out */
+{
+    bus.sk_op = bus.g_pos;
+    bus.sk_or = bus.g_rate;
+    bus.sk_xf = (uint8_t)GL_XF;
+    bus.g_pos = 0;
+}
+static __attribute__((noinline)) void gl_skip(void)
+{
+    const uint32_t M = GL_LEN - 1, six = (bsps >> 9) > 64 ? bsps >> 9 : 64;
+    int edge;
+    if (brun) { edge = bus.g_grid[0] != bus.sk_grid; bus.sk_grid = bus.g_grid[0]; }
+    else if ((edge = ++bus.sk_ph >= six)) bus.sk_ph = 0;
+    if (edge) {
+        if (bus.sk_on && bus.sk_reps) { bus.sk_reps--; sk_again(); }   /* again */
+        else if (bus.sk_on) bus.sk_on = 0;                /* the music goes on */
+        else if ((gl_rnd() & 1023u) < SK_CHANCE) {        /* the laser slips: the sixteenth just played, from its start */
+            uint32_t len = six;
+            while (len > SK_MAX) len >>= 1;
+            bus.g_start = (brun ? bus.g_grid[0] : bus.gw) - len;
+            bus.g_len = len;
+            bus.g_pos = 0;
+            bus.g_rate = G_UNITY;
+            bus.g_dec = SK_SAG / len;
+            bus.sk_reps = (uint8_t)(gl_rnd() % 3u);
+            bus.sk_on = 1;
+            bus.sk_xf = 0;
+        }
+    }
+    /* its share is the event's level (g_fi 0: bus_block leaves it to this while the key holds; let go, it fades) */
+    if (bus.sk_on) { if (bus.sk_mix < 1024) bus.sk_mix += 1024 / (int32_t)GL_XF; }
+    else if (bus.sk_mix) bus.sk_mix -= 1024 / (int32_t)GL_XF;
+    if (bus.g_held) bus.g_env = bus.sk_mix;
+    bus.gprev_l = bus.gout_l;
+    bus.gprev_r = bus.gout_r;
+    if (!bus.sk_mix) { bus.gout_l = bus.gout_r = 0; return; }   /* (the live sound: nothing read) */
+    uint32_t k = bus.g_start + (bus.g_pos >> 12);
+    int32_t fr = (int32_t)(bus.g_pos & 4095);
+    int32_t l = gl_buf[k & M][0] + (((gl_buf[(k + 1) & M][0] - gl_buf[k & M][0]) * fr) >> 12);
+    int32_t r = gl_buf[k & M][1] + (((gl_buf[(k + 1) & M][1] - gl_buf[k & M][1]) * fr) >> 12);
+    if (bus.sk_xf) {                                      /* a restart: the read before it goes on, fading out */
+        uint32_t j = bus.g_start + (bus.sk_op >> 12);
+        int32_t fo = (int32_t)(bus.sk_op & 4095), w = (int32_t)(GL_XF - bus.sk_xf) << 6;   /* (Q12) */
+        int32_t ol = gl_buf[j & M][0] + (((gl_buf[(j + 1) & M][0] - gl_buf[j & M][0]) * fo) >> 12);
+        int32_t orr = gl_buf[j & M][1] + (((gl_buf[(j + 1) & M][1] - gl_buf[j & M][1]) * fo) >> 12);
+        l = ol + (((l - ol) * w) >> 12);                  /* (|l - ol| < 2^17) */
+        r = orr + (((r - orr) * w) >> 12);
+        bus.sk_op += bus.sk_or >> 12;
+        bus.sk_xf--;
+    }
+    bus.gout_l = l;
+    bus.gout_r = r;
+    bus.g_pos += bus.g_rate >> 12;                        /* the laser seeks: slower each sample, to a quarter */
+    bus.g_rate = bus.g_rate > G_UNITY / 4 + bus.g_dec ? bus.g_rate - bus.g_dec : G_UNITY / 4;
+    if ((bus.g_pos >> 12) >= bus.g_len) { sk_again(); bus.g_rate = G_UNITY; }   /* (round a short slice: at speed) */
+}
+
 /* one half-rate sample of the event: the wet's next (gout), its read moved on */
 static void gl_tick(void)
 {
@@ -687,6 +788,7 @@ static void gl_tick(void)
         if ((bus.g_pos >> 12) >= len) bus.g_pos -= len << 12;
         return;
     }
+    if (mode == GM_SKIP) { gl_skip(); return; }           /* (out of line: the other modes' code as it was) */
     if (mode == GM_FRZ || mode == GM_PSU || mode == GM_PSD) {
         gl_grains(&l, &r);
         bus.gprev_l = bus.gout_l;
@@ -758,6 +860,7 @@ static inline int gl_kept(uint32_t w)
      * sound (gl_stop_land): it keeps nothing (it kept what was ahead of its read from the press, so it slowed down
      * the sound of a ring's lap before, 0.74 s) */
     if (bus.g_mode == GM_STOP) return 0;
+    if (bus.g_mode == GM_SKIP && !bus.sk_mix) return 0;  /* (between skips it reads nothing) */
     if (bus.g_mode == GM_SPIN) {                          /* what it spins back over, behind where it began */
         uint32_t d = w - (bus.g_start - bus.g_len - GL_XF);
         return d >= GL_LEN && (d & (GL_LEN - 1)) < bus.g_len + 2 * GL_XF;
@@ -1021,6 +1124,159 @@ static int bus_filters(void)
     return run;
 }
 
+/* bank C's colours (1.12; AFFINE's laws, CHOPPAH's DUCK, written again in integers): a pass over the bus's block after
+ * its limiter, so none runs (and none costs) while all are off and at rest, the block as it was. In order: LO-FI, an
+ * unsteady converter; CONSOLE, a TV speaker (the output's last colour, as AFFINE has it); DUCK, the mix pumping on the
+ * beat. Each glides in and out (its key's), each a fixed character */
+#ifndef LF_STEP
+#define LF_STEP 16384u                 /* LO-FI's clock: 11025 Hz of 44100, Q16 */
+#define LF_JIT 29491                   /* its period's wander, Q16: +-0.45 (AFFINE's jitter 0.5, x 0.9) */
+#define LF_SH 6                        /* 10 bits: a step of 64 */
+#endif
+#ifndef DK_A
+#define DK_A 22938                     /* DUCK's depth, Q15: 0.7 (AFFINE's 1.0 silences each beat's start) */
+#endif
+#define DK_FALL 132u                   /* its dip comes in on an S over 3 ms (the cubic alone falls at once: a click a beat) */
+#define CO_DC 1494                     /* CONSOLE's DC blocker, Q20: 2 pi 10 Hz / 44.1 kHz */
+static __attribute__((noinline)) void bus_colour(int16_t *out)
+{
+    int run = 0;
+    /* LO-FI: a sample held at a clock of 11 kHz whose period wanders (a new one each tick, 0.55 .. 1.45 of four
+     * samples), held as 10 bits dithered (TPDF, a step wide, two draws a side: bus.grng); its share in and out over
+     * 10 ms */
+    int32_t lf0 = bus.lf_mix;
+    { int32_t d = (perf.on[PF_LOFI] ? 32767 : 0) - lf0; bus.lf_mix += d > 1214 ? 1214 : d < -1214 ? -1214 : d; }
+    if (lf0 || bus.lf_mix) {
+        if (!lf0) { bus.lf_ph = 0; bus.lf_nx = 65536; bus.lf_h[0] = out[0]; bus.lf_h[1] = out[1]; }   /* (from rest) */
+        const int32_t m1 = bus.lf_mix, dm = m1 - lf0;
+        uint32_t ph = bus.lf_ph, nx = bus.lf_nx;
+        int32_t hl = bus.lf_h[0], hr = bus.lf_h[1];
+        for (int i = 0; i < M2K_SUB; i++) {
+            int32_t l = out[2 * i], r = out[2 * i + 1];
+            if ((ph += LF_STEP) >= nx) {                  /* the clock ticks: the pair taken, crushed */
+                ph -= nx;
+                const uint32_t q = gl_rnd();
+                /* (the top byte signed: -(q >> 24) + 128 folded into one constant read as a ROM address, build.py) */
+                nx = (uint32_t)(65536 + (((int32_t)(int8_t)(q >> 24) * LF_JIT) >> 7));
+                hl = sat16(((l + ((int32_t)(q & 63) - (int32_t)(q >> 6 & 63)) * (1 << (LF_SH - 6)) + (1 << (LF_SH - 1))) >> LF_SH) * (1 << LF_SH));
+                hr = sat16(((r + ((int32_t)(q >> 12 & 63) - (int32_t)(q >> 18 & 63)) * (1 << (LF_SH - 6)) + (1 << (LF_SH - 1))) >> LF_SH) * (1 << LF_SH));
+            }
+            if (m1 == 32767 && !dm) { l = hl; r = hr; }
+            else {
+                const int32_t m = lf0 + ((dm * (i + 1)) >> 4);
+                l += ((hl - l) * m) >> 15;                /* (|hl - l| < 2^16) */
+                r += ((hr - r) * m) >> 15;
+            }
+            out[2 * i] = (int16_t)l;
+            out[2 * i + 1] = (int16_t)r;
+        }
+        bus.lf_ph = ph; bus.lf_nx = nx; bus.lf_h[0] = hl; bus.lf_h[1] = hr;
+        run |= bus.lf_mix != 0;
+    }
+    /* CONSOLE: two one-poles (TPT) from 20 kHz down to 8 kHz with its amount, blended in by it; a DC blocker at 10 Hz,
+     * likewise; the sides narrowed to mono; then x - 0.1 a x^3 (no gain: 0.9 at full scale). Its amount in and out over
+     * 10 ms (the cutoff's step a block), the narrowing over 93 ms (no click) */
+    int32_t a = bus.co_a, n0 = bus.co_n;
+    { int32_t d = (perf.on[PF_CONS] ? 32768 : 0) - a; bus.co_a = a + (d > 1214 ? 1214 : d < -1214 ? -1214 : d); }
+    bus.co_n = perf.on[PF_CONS] ? (n0 < 4096 ? n0 + 16 : 4096) : (n0 > 16 ? n0 - 16 : 0);
+    const int whole = a >= 32768 && n0 >= 4096 && bus.co_a >= 32768 && bus.co_n >= 4096;
+    if (whole != bus.co_mono) {                           /* (whole, one side: the other's states as the sum's) */
+        bus.co_mono = (uint8_t)whole;
+        for (int k = 0; k < 2; k++) {
+            if (whole) { bus.co_z[0][k] = (bus.co_z[0][k] + bus.co_z[1][k]) >> 1; bus.co_zr[0][k] = (bus.co_zr[0][k] + bus.co_zr[1][k]) >> 1; }
+            else { bus.co_z[1][k] = bus.co_z[0][k]; bus.co_zr[1][k] = bus.co_zr[0][k]; }
+        }
+        if (whole) { bus.co_dc[0] = (bus.co_dc[0] + bus.co_dc[1]) >> 1; bus.co_dr[0] = (bus.co_dr[0] + bus.co_dr[1]) >> 1; }
+        else { bus.co_dc[1] = bus.co_dc[0]; bus.co_dr[1] = bus.co_dr[0]; }
+    }
+    if (whole) {                                          /* held, settled: mono, so the sum through one side (linear:
+                                                           * the same as both sides' then summed) */
+        const int32_t g = T_CON_G[32];
+        int32_t z0 = bus.co_z[0][0], z1 = bus.co_z[0][1], r0 = bus.co_zr[0][0], r1 = bus.co_zr[0][1];
+        int32_t dc = bus.co_dc[0], dr = bus.co_dr[0];
+        for (int i = 0; i < M2K_SUB; i++) {
+            int32_t v = (out[2 * i] + out[2 * i + 1]) >> 1;
+            int32_t t = (v - z0) * g + r0, y1 = z0 + (t >> 12);
+            r0 = t & 4095;
+            z0 = y1 + (t >> 12);
+            t = (y1 - z1) * g + r1;
+            v = z1 + (t >> 12);
+            r1 = t & 4095;
+            z1 = v + (t >> 12);
+            t = (v - dc) * CO_DC + dr;
+            dc += t >> 20;
+            dr = t & 0xFFFFF;
+            v = sat16(v - dc);
+            v -= (v * ((((v * v) >> 15) * 3277) >> 15)) >> 15;
+            out[2 * i] = out[2 * i + 1] = (int16_t)v;
+        }
+        bus.co_z[0][0] = z0; bus.co_z[0][1] = z1; bus.co_zr[0][0] = r0; bus.co_zr[0][1] = r1;
+        bus.co_dc[0] = dc; bus.co_dr[0] = dr;
+        run = 1;
+    } else if (a || n0 || bus.co_a || bus.co_n) {
+        if (!a && !n0) {                                  /* from rest: the low-pass where the sound is, no DC yet */
+            for (int c = 0; c < 2; c++) bus.co_z[c][0] = bus.co_z[c][1] = out[c];
+            m_set(bus.co_zr, 0, sizeof bus.co_zr);
+            bus.co_dc[0] = bus.co_dc[1] = bus.co_dr[0] = bus.co_dr[1] = 0;
+        }
+        a = bus.co_a;
+        const int32_t g = T_CON_G[(a + 512) >> 10], a12 = a >> 3, c3 = (3277 * a) >> 15, dn = bus.co_n - n0;
+        for (int i = 0; i < M2K_SUB; i++) {
+            int32_t x[2];
+            for (int c = 0; c < 2; c++) {
+                int32_t v = out[2 * i + c], *z = bus.co_z[c], *zr = bus.co_zr[c];
+                /* (the states run past the input near 20 kHz, G / (1 - G) of it at most: under 2^19, the products a word) */
+                int32_t t = (v - z[0]) * g + zr[0], y1 = z[0] + (t >> 12);
+                zr[0] = t & 4095;
+                z[0] = y1 + (t >> 12);
+                t = (y1 - z[1]) * g + zr[1];
+                int32_t y2 = z[1] + (t >> 12);
+                zr[1] = t & 4095;
+                z[1] = y2 + (t >> 12);
+                v = a >= 32768 ? y2 : v + (((y2 - v) * a12) >> 12);
+                t = (v - bus.co_dc[c]) * CO_DC + bus.co_dr[c];
+                bus.co_dc[c] += t >> 20;
+                bus.co_dr[c] = t & 0xFFFFF;
+                v -= a >= 32768 ? bus.co_dc[c] : (bus.co_dc[c] * a12) >> 12;
+                x[c] = sat16(v);
+            }
+            const int32_t nn = n0 + ((dn * (i + 1)) >> 4), mid = (x[0] + x[1]) >> 1;
+            int32_t sd = (x[0] - x[1]) >> 1;
+            sd -= (sd * nn) >> 12;                        /* (the sides narrowed: |sd| < 2^15) */
+            for (int c = 0; c < 2; c++) {
+                int32_t v = c ? mid - sd : mid + sd, k = (((v * v) >> 15) * c3) >> 15;
+                out[2 * i + c] = (int16_t)(v - ((v * k) >> 15));
+            }
+        }
+        run |= bus.co_a || bus.co_n;
+    }
+    /* DUCK: the mix's gain 1 - 0.7 (1 - its place in the beat)^3, from the beat's start (an S over 3 ms into it) back
+     * to whole at its end; the beat the sequencer's (bus_step), stopped a free one at the tempo; its depth in and out
+     * over 5 ms */
+    int32_t d0 = bus.dk_d;
+    bus.dk_d = perf.on[PF_DUCK] ? (d0 + 2400 > 32767 ? 32767 : d0 + 2400) : (d0 > 2400 ? d0 - 2400 : 0);
+    if (d0 || bus.dk_d) {
+        const uint32_t beat = (bsps >> 8) * 4u > 256u ? (bsps >> 8) * 4u : 256u, inv = (1u << 30) / beat;
+        uint32_t el = brun ? (bus.gw - M2K_SUB / 2 - bus.g_grid[2]) * 2u + bus.g_phase : bus.dk_ph;
+        if (!brun) bus.dk_ph = bus.dk_ph + M2K_SUB < beat ? bus.dk_ph + M2K_SUB : 0;
+        const int32_t dd = bus.dk_d - d0;
+        for (int i = 0; i < M2K_SUB; i++, el++) {
+            if (el >= beat) continue;                     /* (past the beat, no step yet: whole) */
+            int32_t u = (int32_t)(((beat - el) * inv) >> 15);              /* 1 - the place, Q15 (the product < 2^30) */
+            int32_t u3 = (((u * u) >> 15) * u) >> 15, dep = (DK_A * (d0 + ((dd * (i + 1)) >> 4))) >> 15;
+            int32_t dip = (u3 * dep) >> 15;
+            if (el < DK_FALL) {                           /* (u^2 (3 - 2u), as KILL's) */
+                int32_t w = (int32_t)el * (int32_t)(32768u / DK_FALL), s2 = (w * w) >> 15;
+                dip = (dip * ((s2 * ((98304 - 2 * w) >> 1)) >> 14)) >> 15;
+            }
+            out[2 * i] = (int16_t)((out[2 * i] * (32768 - dip)) >> 15);
+            out[2 * i + 1] = (int16_t)((out[2 * i + 1] * (32768 - dip)) >> 15);
+        }
+        run |= bus.dk_d != 0;
+    }
+    bus.c_run = (uint8_t)run;
+}
+
 static void bus_block(brec_t *b, int16_t *out)
 {
     int32_t *L = b->L, *R = b->R;
@@ -1274,6 +1530,7 @@ static void bus_block(brec_t *b, int16_t *out)
     }
     bus.g_phase = g_phase;
     mon.glitch = bus.g_on;
+    if (bus.c_run || perf.on[PF_LOFI] || perf.on[PF_CONS] || perf.on[PF_DUCK]) bus_colour(out);   /* (bank C's colours) */
 }
 
 /* ------------------------------------------------------------------------------------------- the render */
