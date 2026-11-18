@@ -307,6 +307,7 @@ export class Live {
     this.stats(this.pos ? `Stopped at ${this.pos}` : "");
     this.q(".lv__again").hidden = !this.retry;
     this.el.classList.add("is-fail");
+    if (window.M2K_UI) window.M2K_UI.shake(this.q(".lv__say"));   /* the error comes in with a shake (ui.js, transitions.dev's) */
     document.title = `Stopped · ${this.title}`;
     this.acts();
   }

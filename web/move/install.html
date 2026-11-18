@@ -11,7 +11,7 @@
 <meta name="description" content="Install MONO2K on the Ableton Move through Schwung: from Schwung Manager's catalog or as a custom module; open it, update it, remove it.">
 <script>try { const t = localStorage.getItem("mono2k.theme"); if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t); } catch (e) {}</script>
 <link rel="icon" href="../brand/mono2k-iso.svg" type="image/svg+xml">
-<link rel="stylesheet" href="../style.css?v=61">
+<link rel="stylesheet" href="../style.css?v=62">
 </head>
 <body>
 <!-- the controls' glitch (style.css): rows slipped sideways, in hard bands -->
@@ -31,14 +31,14 @@
 <section class="phead">
   <p class="sec__n">MOVE</p>
   <div class="sec__body">
-    <h1 class="display" style="margin:0">Install</h1>
+    <h1 class="display">Install</h1>
     <p class="lede">MONO2K onto the Ableton Move, through Schwung. A few minutes, over Wi-Fi.</p>
   </div>
 </section>
 
 <section class="inst">
   <aside class="side doc">
-    <table>
+    <table class="table--fixed">
       <thead><tr><th colspan="2">MONO2K for Move</th></tr></thead>
       <tbody>
         <tr><td>Package</td><td id="st-pkg"><span class="soon">Coming soon</span></td></tr>
@@ -49,7 +49,7 @@
     </table>
   </aside>
   <div class="main doc">
-    <h2 style="margin-top:0">1 · What you need</h2>
+    <h2>1 · What you need</h2>
     <ul>
       <li>An Ableton Move.</li>
       <li><a href="https://schwung.dev" target="_blank" rel="noopener">Schwung</a> installed on it. Schwung is unofficial, not made or supported by Ableton: <b>back up your sets first.</b></li>
@@ -57,10 +57,10 @@
     </ul>
 
     <h2>2 · Install MONO2K</h2>
-    <p><b>From the catalog.</b> Open Schwung Manager in a browser at <a href="http://move.local:7700" target="_blank" rel="noopener">move.local:7700</a>, find MONO2K and install it, once it is listed there.</p>
-    <p><b>As a custom module.</b> Download the package below, then in Schwung Manager choose Install Custom Module and pick the file.</p>
+    <p><b>From the catalog.</b> Open Schwung Manager at <a href="http://move.local:7700" target="_blank" rel="noopener">move.local:7700</a>, find MONO2K and install it, once it is listed there.</p>
+    <p><b>As a custom module.</b> Download the package, then in Schwung Manager choose Install Custom Module and pick the file.</p>
     <div class="dl" id="dl">
-      <a class="bigbtn" id="dl-btn" role="link" aria-disabled="true"><span>Download</span><small class="soon" id="dl-sub">Coming soon</small></a>
+      <a class="btn btn--lg beam" id="dl-btn" role="link" aria-disabled="true"><span>Download</span><small class="soon" id="dl-sub">Coming soon</small></a>
       <p class="small" id="dl-note">The package isn't public yet: it comes with MONO2K for Move's first release.</p>
     </div>
 
@@ -72,14 +72,25 @@
     </ol>
     <p>Then the <a href="manual.html">manual</a>: the <a href="manual.html#pads">pads</a> first.</p>
 
-    <h2>Updating</h2>
-    <p>Close MONO2K first with Shift + Back (a parked one keeps the old version loaded), then install the new package the same way. Your patterns and sounds stay: they live outside the module, in <code>/data/UserData/schwung/mono2k/</code>.</p>
-
-    <h2>Removing</h2>
-    <p>Remove MONO2K in Schwung Manager. Its saves stay in <code>/data/UserData/schwung/mono2k/</code>; delete that folder too to remove them. Removing Schwung itself is Schwung's own job: see its site.</p>
-
-    <h2>Tempo with Link (optional)</h2>
-    <p>MONO2K always follows Move's tempo. For MONO2K's tempo knob to set Move's too, turn on Link in Move's settings and Move->Schwung in Schwung's Global Settings, Audio. It has a cost: the <a href="manual.html#tempo">manual</a> says what.</p>
+    <details class="acc">
+      <summary>Updating</summary>
+      <div class="acc__body">
+        <p>Close MONO2K first with Shift + Back (a parked one keeps the old version loaded), then install the new package the same way. Your patterns and sounds stay: they live outside the module, in</p>
+        <p class="code"><code>/data/UserData/schwung/mono2k/</code><button class="btn btn--ghost btn--sm" type="button" data-copy><span class="t-morph">Copy</span></button></p>
+      </div>
+    </details>
+    <details class="acc">
+      <summary>Removing</summary>
+      <div class="acc__body">
+        <p>Remove MONO2K in Schwung Manager. Its saves stay in <code>/data/UserData/schwung/mono2k/</code>; delete that folder too to remove them. Removing Schwung itself is Schwung's own job: see its site.</p>
+      </div>
+    </details>
+    <details class="acc">
+      <summary>Tempo with Link (optional)</summary>
+      <div class="acc__body">
+        <p>MONO2K always follows Move's tempo. For MONO2K's tempo knob to set Move's too, turn on Link in Move's settings and Move-&gt;Schwung in Schwung's Global Settings, Audio. It has a cost: the <a href="manual.html#tempo">manual</a> says what.</p>
+      </div>
+    </details>
 
     <div class="callout"><b>At your own risk</b><p>Schwung and MONO2K are unofficial: Ableton doesn't support them. Back up your sets before you start. MONO2K is not affiliated with Ableton, M-VAVE or Elektron.</p></div>
     <p class="small">MONO2K runs on Schwung (MIT), an open framework for Move's modules. MONO2K itself is GPL-3.0-only; its source is on <a href="https://github.com/InigoHernandez/mono2k" target="_blank" rel="noopener">GitHub</a>.</p>
@@ -88,9 +99,11 @@
 
 <footer class="bar foot">
   <span class="label nar">MONO2K for Move</span><span class="label wide">Not affiliated with Ableton, M-VAVE or Elektron; runs on Schwung (unofficial)</span><a class="label kofi" href="https://ko-fi.com/sequencist" target="_blank" rel="noopener">Support on Ko-fi</a><span class="label r nar">2026</span>
+  <p class="foot__credit">The page's parts after <a href="https://ui.shadcn.com" target="_blank" rel="noopener">shadcn/ui</a>, its motion after <a href="https://transitions.dev" target="_blank" rel="noopener">transitions.dev</a>, the beam and the mosaic after <a href="https://libraries.dev" target="_blank" rel="noopener">Libraries.dev</a>.</p>
 </footer>
 <script src="../site.js?v=4"></script>
 <script src="../switch.js?v=2"></script>
+<script src="../ui.js?v=1"></script>
 <script>
 "use strict";
 /* THE FLAG: null while the package isn't public ("Coming soon"). To publish, set it, for example:
@@ -110,8 +123,12 @@ if (RELEASE) {
   btn.setAttribute("download", RELEASE.file);
   $("dl-sub").className = "";
   $("dl-sub").textContent = `${RELEASE.file} · ${RELEASE.date}`;
-  $("dl-note").innerHTML = "";
-  $("dl-note").append("SHA-256 ", Object.assign(document.createElement("code"), { className: "dl__file", textContent: RELEASE.sha256 || "–" }));
+  /* the package's fingerprint, to check the download by: a line to copy (ui.js) */
+  const sha = document.createElement("p");
+  sha.className = "code";
+  sha.innerHTML = '<span class="label">SHA-256</span><code></code><button class="btn btn--ghost btn--sm" type="button" data-copy><span class="t-morph">Copy</span></button>';
+  sha.querySelector("code").textContent = RELEASE.sha256 || "–";
+  $("dl-note").replaceWith(sha);
   $("st-pkg").textContent = `${RELEASE.version}, ${RELEASE.date}`;
   $("st-ver").textContent = RELEASE.version;
 }

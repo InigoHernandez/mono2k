@@ -10,7 +10,7 @@
 <meta name="description" content="MONO2K: six mono machines, a 64-step sequencer with parameter locks and trig conditions, and a lofi bus, for the M-VAVE FM-1. Running in your browser.">
 <script>try { const t = localStorage.getItem("mono2k.theme"); if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t); } catch (e) {}</script>
 <link rel="icon" href="brand/mono2k-iso.svg" type="image/svg+xml">
-<link rel="stylesheet" href="style.css?v=61">
+<link rel="stylesheet" href="style.css?v=62">
 </head>
 <body>
 <!-- the controls' glitch (style.css): rows slipped sideways, in hard bands -->
@@ -32,7 +32,7 @@
   <canvas id="wordmark" aria-label="MONO2K"></canvas>
   <div class="hero__sub">
     <p class="lede hero__line">Six mono machines and a 64-step sequencer for the M-VAVE FM-1.</p>
-    <p class="hero__acts"><a class="btn" href="#play">Play</a><a class="btn ghost" href="#guide">Guide</a><a class="btn ghost" href="installer.html">Install</a></p>
+    <p class="hero__acts"><a class="btn" href="#play">Play</a><a class="btn btn--outline" href="#guide">Guide</a><a class="btn btn--outline" href="installer.html">Install</a></p>
   </div>
 </section>
 
@@ -47,10 +47,10 @@
   <div class="playbar">
     <p class="status" id="status" role="status" aria-live="polite">Press Start, then point at a control.</p>
     <div class="playbar__acts">
-      <button class="pbtn" id="snd" type="button" aria-pressed="false">Sound off</button>
-      <button class="pbtn" id="midi-tog" type="button" aria-expanded="false" aria-controls="midi">MIDI</button>
-      <button class="pbtn" id="keys-tog" type="button" aria-expanded="false" aria-controls="keymap">Keys</button>
-      <button class="pbtn" id="reset" type="button" aria-expanded="false" aria-controls="reset-ask">Reset</button>
+      <button class="btn btn--outline btn--sm" id="snd" type="button" aria-pressed="false">Sound off</button>
+      <button class="btn btn--outline btn--sm" id="midi-tog" type="button" aria-expanded="false" aria-controls="midi">MIDI</button>
+      <button class="btn btn--outline btn--sm" id="keys-tog" type="button" aria-expanded="false" aria-controls="keymap">Keys</button>
+      <button class="btn btn--outline btn--sm" id="reset" type="button" aria-expanded="false" aria-controls="reset-ask">Reset</button>
     </div>
   </div>
   <div class="drawer" id="midi" hidden>
@@ -59,9 +59,9 @@
       <label>In<select id="midi-in" disabled><option value="">None</option></select></label>
       <label>Out<select id="midi-out" disabled><option value="">None</option></select></label>
       <div class="midi__sync" role="group" aria-label="GLO &gt; MIDI">
-        <button id="midi-syni" type="button" aria-pressed="false" title="GLO > MIDI, SYIN: follow the clock, start and stop that come in">Sync in</button>
-        <button id="midi-syno" type="button" aria-pressed="false" title="GLO > MIDI, SYOU: send the clock, start and stop">Sync out</button>
-        <button id="midi-noto" type="button" aria-pressed="false" title="GLO > MIDI, NOTE: send each track's notes on its channel">Notes out</button>
+        <button id="midi-syni" type="button" aria-pressed="false" data-tip="GLO > MIDI, SYIN: follow the clock, start and stop that come in">Sync in</button>
+        <button id="midi-syno" type="button" aria-pressed="false" data-tip="GLO > MIDI, SYOU: send the clock, start and stop">Sync out</button>
+        <button id="midi-noto" type="button" aria-pressed="false" data-tip="GLO > MIDI, NOTE: send each track's notes on its channel">Notes out</button>
       </div>
       <p class="midi__note" id="midi-note">Tracks 1–6 on channels 1–6; the Monomachine's CC numbers turn the knobs.</p>
     </div>
@@ -97,7 +97,7 @@
   <div class="drawer" id="reset-ask" hidden>
     <div class="drawer__in ask" role="group" aria-labelledby="reset-q">
       <p id="reset-q">Erase this browser's MONO2K saves and bring back the factory's demos?</p>
-      <p class="ask__acts"><button class="pbtn solid" id="reset-yes" type="button">Erase and restore</button><button class="pbtn" id="reset-no" type="button">Keep my saves</button></p>
+      <p class="ask__acts"><button class="btn btn--sm" id="reset-yes" type="button">Erase and restore</button><button class="btn btn--outline btn--sm" id="reset-no" type="button">Keep my saves</button></p>
     </div>
   </div>
 </section>
@@ -142,7 +142,7 @@
         <h3 class="title" id="eng-name">GND-SIN</h3>
       </div>
       <p class="eng__desc" id="eng-desc"></p>
-      <figure class="eng__screen scan">
+      <figure class="eng__screen">
         <canvas id="eng-lcd" width="240" height="240" role="img" aria-label="The FM-1's screen for this machine: EDIT, then ALGORITHM"></canvas>
       </figure>
     </div>
@@ -163,12 +163,12 @@
         <div class="eng__knobs" id="eng-knobs"></div>
         <div class="eng__acts">
           <button class="hit" id="eng-hit" type="button"><canvas id="eng-mark" width="64" height="64" aria-hidden="true"></canvas><span>Hit</span><small id="eng-hit-n">INIT · C3</small></button>
-          <button class="pbtn" id="eng-reset" type="button">INIT</button>
+          <button class="btn btn--outline btn--sm" id="eng-reset" type="button">INIT</button>
         </div>
       </div>
     </div>
   </div>
-  <details class="params" id="params">
+  <details class="acc params" id="params">
     <summary><span class="label">Every parameter</span><span class="label" id="pcount">Eight pages</span></summary>
     <div class="pgrid" id="pgrid"></div>
   </details>
@@ -180,8 +180,8 @@
     <h2 class="display">Sequencer</h2>
     <p class="lbls"><span>Parameter locks</span><span>Trig types</span><span>Conditions, ratchets</span></p>
     <div class="figs2">
-      <figure class="scr scan"><canvas width="240" height="240" data-screen="b PLAY; w 1600" role="img" aria-label="HOME while A01 plays"></canvas></figure>
-      <figure class="scr scan"><canvas width="240" height="240" data-screen="b SEQ; w 2300; kd 4; w 700" role="img" aria-label="A step held in GRID: its note, condition and ratchet"></canvas></figure>
+      <figure class="scr"><canvas width="240" height="240" data-screen="b PLAY; w 1600" role="img" aria-label="HOME while A01 plays"></canvas></figure>
+      <figure class="scr"><canvas width="240" height="240" data-screen="b SEQ; w 2300; kd 4; w 700" role="img" aria-label="A step held in GRID: its note, condition and ratchet"></canvas></figure>
     </div>
   </div>
 </section>
@@ -192,8 +192,8 @@
     <h2 class="display">Destroy</h2>
     <p class="lbls"><span>Monomachine chain</span><span>Lofi bus</span><span>PERFORM live</span></p>
     <div class="figs2">
-      <figure class="scr scan"><canvas width="240" height="240" data-screen="b GLO; w 100; e 1 1; w 500" role="img" aria-label="GLO's GLITCH page: tape, ADPCM, glitch, repeat size"></canvas></figure>
-      <figure class="scr scan"><canvas width="240" height="240" data-screen="b PLAY; w 600; B FX; w 900" role="img" aria-label="FX held: PERFORM's eleven effects on the black keys"></canvas></figure>
+      <figure class="scr"><canvas width="240" height="240" data-screen="b GLO; w 700; b GLO; w 800" role="img" aria-label="GLO's BUS page: the reverb's decay and damping, ADPCM, drive"></canvas></figure>
+      <figure class="scr"><canvas width="240" height="240" data-screen="b PLAY; w 600; B FX; w 900" role="img" aria-label="FX held: PERFORM's eleven effects on the black keys"></canvas></figure>
     </div>
   </div>
 </section>
@@ -215,7 +215,7 @@
     <figcaption><b>944 cases by group</b></figcaption>
     <div class="chart__legend" id="ch-suite-l"></div>
     <div class="chart__plot" id="ch-suite-p"></div>
-    <p><button class="pbtn" id="ch-suite-all" type="button" aria-expanded="false" aria-controls="ch-suite-p">Show all 33</button></p>
+    <p><button class="btn btn--outline btn--sm" id="ch-suite-all" type="button" aria-expanded="false" aria-controls="ch-suite-p">Show all 33</button></p>
   </figure>
   <figure class="chart wipe" id="ch-dist">
     <figcaption><b>Each machine's own clip, dB against GND-SIN's</b></figcaption>
@@ -232,7 +232,7 @@
   <p class="sec__n">06</p>
   <div class="sec__body">
     <h2 class="display">Status</h2>
-    <p class="lede">MONO2K 1.1, from <a href="https://thefirmwarehub.com" target="_blank" rel="noopener">The Firmware Hub</a> or the <a href="installer.html">installer</a>; built on Felucca.</p>
+    <p class="lede">MONO2K, from <a href="https://thefirmwarehub.com" target="_blank" rel="noopener">The Firmware Hub</a> or the <a href="installer.html">installer</a>; built on Felucca.</p>
   </div>
 </section>
 
@@ -247,6 +247,7 @@
 
 <footer class="bar foot">
   <span class="label">MONO2K</span><span class="label">Not affiliated with Elektron or M-VAVE</span><a class="label kofi" href="https://ko-fi.com/sequencist" target="_blank" rel="noopener">Support on Ko-fi</a><span class="label r">2026</span>
+  <p class="foot__credit">The page's parts after <a href="https://ui.shadcn.com" target="_blank" rel="noopener">shadcn/ui</a>, its motion after <a href="https://transitions.dev" target="_blank" rel="noopener">transitions.dev</a>, the beam and the mosaic after <a href="https://libraries.dev" target="_blank" rel="noopener">Libraries.dev</a>.</p>
 </footer>
 
 <script src="panel.js?v=2"></script>
@@ -258,5 +259,6 @@
 <script src="engines.js?v=4"></script>
 <script src="made.js?v=4"></script>
 <script src="switch.js?v=2"></script>
+<script src="ui.js?v=1"></script>
 </body>
 </html>

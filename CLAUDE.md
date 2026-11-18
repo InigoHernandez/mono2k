@@ -45,7 +45,7 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   scenes, `m2k_host DIR`, each PBM saved as a 1-bit PNG of the same name), the installer
   (`installer.html`: installs `web/firmware/mono2k.fwsc`, or a `.fwsc` from a file; while it writes, `installing.js` takes the page: the flash's 256 sectors filled from the updater's steps, one percentage, the four steps, MONO2K's isotype at the end; `?demo` rehearses it with nothing sent, `?demo=fail` stops it) and the patch editor (`editor.html`, `editor.js`: the same worklet and
   saves; the FM-1 link's client, the FM-1's patterns a session of their own under `mono2k.fm1.v1`, `.m2ks` store files).
-  `panel.js` is the FM-1's layout, `site.js` the subpages' theme and textures. On the emulator page `help.js` says what
+  `panel.js` is the FM-1's layout, `site.js` the subpages' theme and textures. `style.css` opens with the site's tokens on the device's 4 px grid and its components (buttons, cards, tables, accordions, tabs, tooltips, kbd), after shadcn/ui's system; `ui.js` (every page, 2026-11-18) their motion: tooltips, toasts, copy that confirms, number pop-in, error shake, skeleton, the border beam on Install / Download, the screens' mosaic, transitions.dev's free transitions with their comments kept and Libraries.dev's ideas written again; none of it under prefers-reduced-motion. On the emulator page `help.js` says what
   every control, page and layer does (the status line under the panel, the guide's list: from the manual and m2k_ui.c),
   `screens.js` runs copies of the core apart from the one that plays (from `app.js`'s compiled module; a script of
   panel actions each), `guide.js` is How to play, `engines.js` the machines' Hit (`w_audition`, `w_hit` in `m2k_web.c`:

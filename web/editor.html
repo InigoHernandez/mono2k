@@ -12,7 +12,7 @@
 <meta name="description" content="Edit MONO2K's sounds in the browser: every parameter of every track, heard as you move it, saved with the emulator.">
 <script>try { const t = localStorage.getItem("mono2k.theme"); if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t); } catch (e) {}</script>
 <link rel="icon" href="brand/mono2k-iso.svg" type="image/svg+xml">
-<link rel="stylesheet" href="style.css?v=61">
+<link rel="stylesheet" href="style.css?v=62">
 </head>
 <body>
 <!-- the controls' glitch (style.css): rows slipped sideways, in hard bands -->
@@ -31,17 +31,17 @@
 </nav>
 
 <section class="phead">
-  <p class="sec__n" id="ed-pat">A01</p>
+  <p class="sec__n" id="ed-pat" data-pop>A01</p>
   <div class="sec__body">
-    <h1 class="display" style="margin:0">Patch Editor</h1>
-    <p class="lede">Every parameter of the pattern's six tracks, heard as you move it. It edits this browser's saves, the <a class="label" href="./" style="font:inherit;text-transform:none;letter-spacing:0;text-decoration:underline">emulator</a>'s, or the patterns and sounds of an FM-1 running MONO2K, read over USB and sent back.</p>
+    <h1 class="display">Patch Editor</h1>
+    <p class="lede">Every parameter of the pattern's six tracks, heard as you move it: this browser's saves (the <a href="./">emulator</a>'s), or an FM-1 running MONO2K, read over USB and sent back.</p>
   </div>
 </section>
 
 <section class="ed">
   <div class="ed__start" id="ed-start">
-    <button class="bigbtn" type="button" id="ed-go">Start<small>Sound on, and the editor</small></button>
-    <p class="small">Loads the firmware and your saves from this browser. Two pages open at once each keep their own copy: edit in one at a time.</p>
+    <button class="btn btn--lg" type="button" id="ed-go">Start<small>Sound on, and the editor</small></button>
+    <p class="small muted">Loads the firmware and this browser's saves. Two pages open at once each keep their own copy: edit in one at a time.</p>
   </div>
 
   <div class="ed__main" id="ed-main" hidden>
@@ -51,21 +51,21 @@
         <p class="small" id="ed-link-state" aria-live="polite">Connect the FM-1 over USB, running MONO2K, in Chrome or Edge.</p>
       </div>
       <div class="ed__linkacts">
-        <button class="ed__btn" type="button" id="ed-fm1-go" aria-pressed="false">Connect</button>
-        <button class="ed__btn" type="button" id="ed-fm1-read" disabled>Read from FM-1</button>
-        <button class="ed__btn" type="button" id="ed-fm1-send" disabled>Send to FM-1</button>
+        <button class="btn btn--outline btn--sm" type="button" id="ed-fm1-go" aria-pressed="false">Connect</button>
+        <button class="btn btn--outline btn--sm" type="button" id="ed-fm1-read" disabled>Read from FM-1</button>
+        <button class="btn btn--outline btn--sm" type="button" id="ed-fm1-send" disabled>Send to FM-1</button>
         <span class="ed__sep" aria-hidden="true"></span>
-        <button class="ed__btn" type="button" id="ed-file-save">Save file</button>
-        <label class="ed__btn ed__file">Open file<input type="file" id="ed-file-open" accept=".m2ks"></label>
-        <button class="ed__btn" type="button" id="ed-src-back" hidden>Back to this browser's saves</button>
+        <button class="btn btn--outline btn--sm" type="button" id="ed-file-save">Save file</button>
+        <label class="btn btn--outline btn--sm ed__file">Open file<input type="file" id="ed-file-open" accept=".m2ks"></label>
+        <button class="btn btn--outline btn--sm" type="button" id="ed-src-back" hidden>Back to this browser's saves</button>
       </div>
       <p class="small ed__src" id="ed-src"></p>
       <progress class="inst__bar" id="ed-prog" max="1" value="0" hidden></progress>
     </section>
     <div class="ed__bar">
       <label class="ed__field"><span class="label">Pattern</span><span class="sel"><select id="ed-pattern" aria-label="Pattern"></select></span></label>
-      <button class="ed__btn" type="button" id="ed-play" aria-pressed="false">Play</button>
-      <button class="ed__btn" type="button" id="ed-save">Save pattern</button>
+      <button class="btn btn--outline btn--sm" type="button" id="ed-play" aria-pressed="false">Play</button>
+      <button class="btn btn--outline btn--sm" type="button" id="ed-save">Save pattern</button>
       <label class="ed__field ed__midi"><span class="label">MIDI out</span><span class="sel"><select id="ed-midi" aria-label="MIDI output"><option value="">None</option></select></span></label>
     </div>
     <ul class="tracks ed__tracks" id="ed-tracks" aria-label="Tracks"></ul>
@@ -79,16 +79,18 @@
     <div class="ed__keys">
       <p class="label">Audition the track: click the keys, or play Z–M and Q–U</p>
       <div class="ed__kb" id="ed-kb"></div>
-      <div class="ed__oct"><button class="ed__btn" type="button" id="ed-octd">Oct −</button><span class="label" id="ed-octv">C3</span><button class="ed__btn" type="button" id="ed-octu">Oct +</button></div>
+      <div class="ed__oct"><button class="btn btn--outline btn--sm" type="button" id="ed-octd">Oct −</button><span class="label" id="ed-octv" data-pop>C3</span><button class="btn btn--outline btn--sm" type="button" id="ed-octu">Oct +</button></div>
     </div>
   </div>
 </section>
 
 <footer class="bar foot">
   <span class="label">MONO2K</span><span class="label">Patch Editor</span><a class="label kofi" href="https://ko-fi.com/sequencist" target="_blank" rel="noopener">Support on Ko-fi</a><span class="label r">2026</span>
+  <p class="foot__credit">The page's parts after <a href="https://ui.shadcn.com" target="_blank" rel="noopener">shadcn/ui</a>, its motion after <a href="https://transitions.dev" target="_blank" rel="noopener">transitions.dev</a>, the beam and the mosaic after <a href="https://libraries.dev" target="_blank" rel="noopener">Libraries.dev</a>.</p>
 </footer>
 <script src="site.js?v=4"></script>
 <script src="switch.js?v=2"></script>
+<script src="ui.js?v=1"></script>
 <script src="editor.js?v=61"></script>
 </body>
 </html>
