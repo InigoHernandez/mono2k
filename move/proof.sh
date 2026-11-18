@@ -27,7 +27,7 @@ mkdir -p "$P/mac" "$P/linux" "$P/save" "$P/screens"
 
 echo "== the Mac: $(uname -m), $(cc --version | head -1)"
 cc -O2 -Wall -Wno-unused-function -Ifirmware/src -Ifirmware/gen -o "$P/mac/m2k_host" host/m2k_host.c -lm
-cc -O2 -Wall -Wno-unused-function -DM2K_TRACKS=8 -Ifirmware/src -Ifirmware/gen -o "$P/mac/m2k_host8" host/m2k_host.c -lm
+cc -O2 -Wall -Wno-unused-function -DM2K_TRACKS=8 -DM2K_SPU -Ifirmware/src -Ifirmware/gen -o "$P/mac/m2k_host8" host/m2k_host.c -lm
 cc -O2 -fno-builtin -fno-vectorize -fno-slp-vectorize -DM2K_MUL_OUT -Ifirmware/src -Ifirmware/gen \
     -o "$P/mac/m2k_draw" host/m2k_draw.c
 set +e

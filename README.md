@@ -394,6 +394,13 @@ GRIDS (`firmware/src/m2k_grids.c`) is Émilie Gillet's Grids, Mutable Instrument
 and its rules (ReadDrumMap, EvaluateDrums) ported, with credit, to MONO2K's integer core; `tools/ref/grids_ref.py`
 holds the port to the original's rules. Grids is Mutable Instruments' name.
 
+On the Move alone (`M2K_SPU`), GRIT and the PS1-era reverb (`firmware/src/m2k_spu.c`) are after AFFINE's PS1-era bus
+([InigoHernandez/affine](https://github.com/InigoHernandez/affine), `app/dsp/psx.c`, MPL-2.0): its laws (the codec's
+CRUNCH, the colour's rates and characters) read and written again in MONO2K's integer core, none of its code. The
+sound chip's numbers in them are psx-spx's documented ones ([psx-spx](https://psx-spx.consoledev.net/): the reverb's
+nine register sets, its 39-tap resampler, the ADPCM filters, the 4-point gaussian table), copied from its text with
+credit (`tools/gen_spu.py`); no ROM, BIOS, SDK or emulator code.
+
 The 64-wave bank (`assets/waves/mono2k64/`) is the project owner's own waveforms, licensed with the project
 (GPL-3.0-only) unless the owner says otherwise.
 

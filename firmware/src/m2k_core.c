@@ -131,6 +131,9 @@ static uint32_t prof_t;
 #endif
 
 #include "m2k_dsp.c"
+#ifdef M2K_SPU                         /* the Move's builds alone: GRIT and the chip's reverb (m2k_spu.c) */
+#include "m2k_spu.c"
+#endif
 #include "m2k_fx.c"
 #include "m2k_grids.c"
 #include "m2k_seq.c"

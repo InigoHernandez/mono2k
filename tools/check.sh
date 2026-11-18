@@ -41,7 +41,7 @@ for cc in clang $(ls /opt/homebrew/bin/gcc-[0-9]* /usr/local/bin/gcc-[0-9]* 2>/d
         echo "  $cc $src: $n warnings"
         [ "$n" -eq 0 ] || { printf "%s\n" "$out"; FAIL=1; }
     done
-    if ! out=$($cc -O2 $W -DM2K_TRACKS=8 $I -o "$B/m2k_host8" host/m2k_host.c -lm 2>&1); then   # (eight tracks: the Move's)
+    if ! out=$($cc -O2 $W -DM2K_TRACKS=8 -DM2K_SPU $I -o "$B/m2k_host8" host/m2k_host.c -lm 2>&1); then   # (eight tracks: the Move's)
         echo "  $cc host/m2k_host.c, eight tracks: DOES NOT BUILD"; printf "%s\n" "$out" | grep "error:" | head -5; FAIL=1; continue
     fi
     n=$(printf "%s" "$out" | grep -c "warning:")
@@ -98,7 +98,7 @@ echo "== eight tracks (M2K_TRACKS=8, the Move's build)"
 # screen's text and a sweep with T8 in view, under ASan + UBSan; bank A, DENSE and a pattern of six from their start
 # render as the build of six's, sample for sample (T7 and T8 silent beside them)
 rm -f "$B/m2k_host8_san"
-clang $SAN -w -DM2K_TRACKS=8 $I -o "$B/m2k_host8_san" host/m2k_host.c -lm || FAIL=1
+clang $SAN -w -DM2K_TRACKS=8 -DM2K_SPU $I -o "$B/m2k_host8_san" host/m2k_host.c -lm || FAIL=1
 mkdir -p "$B/screens8"
 {
     "$B/m2k_host8_san" --selftest

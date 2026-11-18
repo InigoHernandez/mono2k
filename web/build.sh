@@ -16,7 +16,7 @@ emcc -O3 -std=gnu11 -Wall -Wno-unused-function -Ifirmware/src -Ifirmware/gen "-D
 ls -l web/m2k.wasm
 # MONO2K on the Move, for the site's playable Move (web/move/gear.js): the Move's build (eight tracks, its controller and
 # 128 x 64 screen) through the glue its dsp.so shares (move/m2k_move_glue.c), on its own clock, nothing saved
-emcc -O3 -std=gnu11 -Wall -Wno-unused-function -DM2K_TRACKS=8 -Ifirmware/src -Ifirmware/gen "-DM2K_VER=\"$VER\"" \
+emcc -O3 -std=gnu11 -Wall -Wno-unused-function -DM2K_TRACKS=8 -DM2K_SPU -Ifirmware/src -Ifirmware/gen "-DM2K_VER=\"$VER\"" \
     web/move/m2k_move_web.c \
     -sSTANDALONE_WASM=1 --no-entry -sINITIAL_MEMORY=8388608 -sALLOW_MEMORY_GROWTH=0 -sSTACK_SIZE=131072 \
     -sEXPORTED_FUNCTIONS=_w_init,_w_audio,_w_render,_w_step,_w_pad,_w_knob,_w_touch,_w_jog,_w_button,_w_frame,_w_leds,_w_nleds,_w_state \
