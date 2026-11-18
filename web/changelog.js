@@ -7,6 +7,16 @@ window.M2K_KINDS = {
 };
 window.M2K_CHANGES = [
   {
+    date: "2026-11-18", title: "MONO2K 1.13: whole attacks, chords from a step key",
+    items: [
+      ["sound", "1.13: Every note's attack starts from silence and runs its whole time, however soon it follows the last. A long ATK came in short on a note played while the last still rang. The old note fades out in 3 ms first, so there's no click. With PORT up, overlapping keys still glide with no new attack."],
+      ["sequencer", "1.13: In GRID, an empty step pressed on a POLY lead places the last chord you played: its lowest note on the lead, the others on its voices."],
+      ["fixes", "1.13: READY's message reads FIRST NOTE STARTS IT (it was cut short)."],
+      ["fixes", "1.13: When the CPU is full under a POLY chord, the guard cuts one of its voices in their attack rather than resting a track."],
+      ["patterns", "1.13: A02, A03 and A04 have a few slow attacks that now swell in from silence. Your patterns open as before."],
+    ],
+  },
+  {
     date: "2026-11-18", title: "MONO2K 1.12: four new performance effects",
     items: [
       ["workflow", "1.12: PERFORM has a third bank. Hold FX and press OCT+ twice: bank C, with both OCT keys lit. OCT− steps back to B, then A. Banks A and B are where they were."],

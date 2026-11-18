@@ -428,6 +428,18 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   XFAIL, 3.2 dB on a 3 dB tolerance). Self-test: LEGATO (the high band about a trig against the same trig without its
   AMP part), ACCENT, VO-6, DELAY. Bank A: its legato tracks' clicks gone (A04's GND-SIN bass 18 dB less over 2 kHz),
   levels and the rest as they were, the drums and hits sample for sample.
+  Attacks from silence (2026-11-18, the owner's, on the Move: a long ATK came in short on a note played soon after
+  another): every attack starts at zero (aph 0) and runs its whole time; ATK past 0 over a note still heard first lets
+  it fall to silence, straight, in XF_N blocks (`trk_t.dip`, 2.9 ms) while the machine crossfades as above; ATK 0's hit
+  as ever; PORT with overlapping keys still slides. A02-A04 changed (their few slow attacks, -28..-32 dB under the
+  mix), A01 byte for byte. The CPU guard: a swell's voice (ATK past 0) may be faded in its attack (`grd_voice_ok`), a
+  hit's onset never; a fade gives way to a new note in voice_trig (`park = 0`), no longer env_park's every attack
+  block (guard bench poly6: 40 voices, no rest, as 1.11). Same day: a step key on a POLY lead places the last chord
+  played on its keys (`pv.lc`, `trig_place`: GRID's, the Move's steps); the Move's held step + keys writes them in
+  (`held_keys`); the Move's Rec while stopped arms READY, its first note starting the pattern on MONO2K's own clock
+  (`M2K_READY_START` -> `mv_ready_start`, INT: Play is passed through to Move); READY's message "FIRST NOTE STARTS IT"
+  (the old one, 24 characters, was cut in the 23 of `ui.toast2`). Test builds on the owner's Move and sent (FM-1);
+  for the FM-1's 1.13 and the Move's 0.9.
   A note's length (the OP-XY's gesture, the owner's 2026-11-07; `span_tap`, `span_of`, m2k_ui.c, the FM-1's GRID and the
   Move's steps alike): a step held past a tap (`TAP_MS`), a later empty step pressed: two of the step's locks, GATE
   (16 a step, 8 steps at most) and HOLD 127, the amp open that long whatever the kit's HOLD and DEC; on a sound with a
