@@ -1135,7 +1135,38 @@ static int do_ctl(void)
     check(vint(view(), "perf") == 1 << 11, "Up: the moves' second page (the bottom-left now FREEZE)");
     pad(0, 0, 0); blocks(2);
     vlist(view(), "pads", pads, 32);
-    check(pads[6] == 0 && pads[0] == 115 && pads[8] == 109, "the moves magenta, the colours pink, a key with no effect dark");
+    check(pads[7] == 0 && pads[11] == 0 && pads[0] == 115 && pads[8] == 109, "the moves magenta, the colours pink, a key with no effect dark");
+    /* 1.12: Up swaps both rows: the colours' second page CONSOLE DUCK LO-FI (bits 23-25), its 4th kept for GRIT (no
+     * key), SKIP (22) the moves' 7th; a key held through Down plays on and its release lets go of it; one latched stays */
+    enum { PF_CRSH = 7, PF_SKIP = 22, PF_CONS, PF_DUCK, PF_LOFI };   /* (m2k_fx.c's) */
+    pad(8, 1, 100); blocks(2);
+    check(vint(view(), "perf") == 1 << PF_CONS && !strcmp(vstr(view(), "pkeys", s, sizeof s), "1,1"),
+          "Up: the top row's second page too (the top-left now CONSOLE)");
+    tap(54);
+    check(vint(view(), "perf") == 1 << PF_CONS, "Down with CONSOLE held: it plays on");
+    pad(8, 0, 0); blocks(2);
+    check(vint(view(), "perf") == 0, "its key let go on the first page: CONSOLE off (not LPF's)");
+    tap(55);
+    pad(9, 1, 100); blocks(2);
+    check(vint(view(), "perf") == 1 << PF_DUCK, "DUCK, held");
+    pad(9, 0, 0); blocks(2); pad(9, 1, 100); blocks(2); pad(9, 0, 0); blocks(2);
+    pad(10, 1, 100); blocks(2); pad(10, 0, 0); blocks(2); pad(10, 1, 100); blocks(2); pad(10, 0, 0); blocks(2);
+    pad(11, 1, 100); blocks(2); pad(11, 0, 0); blocks(2);
+    pad(6, 1, 100); blocks(2);
+    check(vint(view(), "perf") == (1 << PF_DUCK | 1 << PF_LOFI | 1 << PF_SKIP) && vint(view(), "plat") == (1 << PF_DUCK | 1 << PF_LOFI),
+          "DUCK and LO-FI latched, the 4th colour no key, SKIP the 7th move held");
+    pad(6, 0, 0); blocks(2);
+    tap(54);
+    vlist(view(), "pads", pads, 32);
+    check(vint(view(), "perf") == (1 << PF_DUCK | 1 << PF_LOFI) && pads[8] == 109,
+          "Down: the first page, the latched colours on (LPF's key unlit)");
+    pad(12, 1, 100); blocks(2);
+    check(vint(view(), "perf") == (1 << PF_DUCK | 1 << PF_LOFI | 1 << PF_CRSH), "the first page's CRUSH held with them");
+    pad(12, 0, 0); blocks(2);
+    tap(55);
+    pad(9, 1, 100); blocks(2); pad(9, 0, 0); blocks(2); pad(10, 1, 100); blocks(2); pad(10, 0, 0); blocks(2);
+    check(vint(view(), "perf") == 0 && vint(view(), "plat") == 0, "page 2 again: tapped, DUCK and LO-FI let go");
+    tap(54);
     /* 1.11, an effect latched: its key tapped twice stays on after it, lit white; tapped again, off; colours stack; a move
      * takes a latched move's place, as a held one's; slow taps latch nothing; PERFORM off lets go of them all (RPT 1/8
      * bit 1, R4 0, LPF 16, DRIVE 9) */

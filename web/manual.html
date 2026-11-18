@@ -459,7 +459,7 @@
   <h2 id="fx-machines">A track as an effect: FX machines</h2>
   <p>FX-CHORUS, FX-RING and FX-DYNAMIX make no sound of their own: each takes the track before it (after that track's amp) and works on it. Put the source on track 3 and the FX on track 4; the FX hears the source before its VOL, so turn the source's VOL down to hear only the effect. The Monomachine's metal sounds are made this way: a plucky FM+PAR into FX-CHORUS with its feedback all the way up.</p>
   <h2>Under your hands: PERFORM</h2>
-  <p>Hold FX: the black keys repeat, reverse, stop, freeze, filter or kill the whole mix while held. Its two banks: <a href="#perform">Play it live</a>.</p>
+  <p>Hold FX: the black keys repeat, reverse, stop, freeze, filter or kill the whole mix while held. Its three banks: <a href="#perform">Play it live</a>.</p>
 </article>
 
 <article id="movement" data-group="Make a track">
@@ -633,7 +633,7 @@
   <p class="sub">Mutes, solos, fills, the bus's effects and sweeps that come back, under one hand.</p>
   <ol class="steps">
     <li>Double-tap GLO: white 1–6 mute, 9–14 solo while held, 7 fills the next loop, 8 taps the tempo, 15 unmutes all. The keys light for the tracks heard.</li>
-    <li>Hold FX for PERFORM: a black key repeats, reverses, stops or kills the mix while held. OCT+ for bank B. Double-tap FX to keep it under both hands, on every page.</li>
+    <li>Hold FX for PERFORM: a black key repeats, reverses, stops or kills the mix while held. OCT+ for bank B, again for bank C. Double-tap FX to keep it under both hands, on every page.</li>
     <li>Tap a black key twice: its effect stays on. Tap it again to let go.</li>
     <li>Hold LFO and sweep a knob: it comes back when you let go.</li>
     <li>Tap the latched button again to let go.</li>
@@ -641,31 +641,33 @@
   <div class="figs">
     <figure class="fig"><canvas data-scr="29f_perform"></canvas><figcaption>FX held: PERFORM, the bus's effects on the black keys.</figcaption></figure>
     <figure class="fig"><canvas data-scr="29f_perform_b"></canvas><figcaption>FX, then OCT+: bank B, FREEZE held.</figcaption></figure>
+    <figure class="fig"><canvas data-scr="29f_perform_c"></canvas><figcaption>OCT+ again: bank C, CONSOLE held. Both OCT keys lit.</figcaption></figure>
     <figure class="fig"><canvas data-scr="29i_seq_latched"></canvas><figcaption>SEQ double-tapped: its tools and knobs stay; its button blinks.</figcaption></figure>
     <figure class="fig"><canvas data-scr="29p_perform_away"></canvas><figcaption>FX latched, then FILT: FILT's knobs, FX in the header, CRUSH latched on.</figcaption></figure>
     <figure class="fig"><canvas data-scr="29q_perform_peek"></canvas><figcaption>FX held there: PERFORM's own view, CRUSH on.</figcaption></figure>
   </div>
   <h2 id="perform">PERFORM</h2>
-  <p>The black keys play the bus's effects while held; the white keys still play the track. OCT− is bank A, OCT+ bank B; a held effect keeps going when you switch. The knobs are the bus's: DCAY, DAMP, ADPC and DRIV. Nothing clicks, and the repeats land on the beat even if you press late.</p>
+  <p>The black keys play the bus's effects while held; the white keys still play the track. OCT+ steps on to bank B, then bank C; OCT− steps back. The OCT keys say which: OCT− lit for A, OCT+ for B, both for C. A held effect keeps going when you switch. The knobs are the bus's: DCAY, DAMP, ADPC and DRIV. Nothing clicks, and the repeats land on the beat even if you press late.</p>
   <table>
-    <thead><tr><th>Key</th><th>Bank A</th><th>Bank B</th></tr></thead>
+    <thead><tr><th>Key</th><th>Bank A</th><th>Bank B</th><th>Bank C</th></tr></thead>
     <tbody>
-      <tr><td>1</td><td>RPT 1/4: repeat the last beat</td><td>FREEZE: the last eighth held as a sustain</td></tr>
-      <tr><td>2</td><td>RPT 1/8</td><td>SCATTER: the last beat's sixteenths shuffled</td></tr>
-      <tr><td>3</td><td>RPT 1/16</td><td>ROLL: a repeat that halves every beat, to 1/32</td></tr>
-      <tr><td>4</td><td>RPT 1/32</td><td>OCT DN: the bus an octave down</td></tr>
-      <tr><td>5</td><td>REVERSE: the last beat backwards</td><td>OCT UP: the bus an octave up</td></tr>
-      <tr><td>6</td><td>STOP: a tape stop over a beat; let go, it spins up</td><td>LPF: a resonant low-pass closing over a bar</td></tr>
-      <tr><td>7</td><td>STUTTER: gated 1/32 hits</td><td>HPF: a resonant high-pass opening over a bar</td></tr>
-      <tr><td>8</td><td>CRUSH: the 4-bit crunch</td><td>GATE: a 1/16 trance gate</td></tr>
-      <tr><td>9</td><td>WOW: the tape's wow and flutter</td><td>DUB: a dotted-eighth echo that rings on</td></tr>
-      <tr><td>10</td><td>DRIVE: harder, never louder</td><td>SHIMMER: a long wash, octaves rising</td></tr>
-      <tr><td>11</td><td>KILL: silence</td><td>SPIN: a vinyl spin-back</td></tr>
+      <tr><td>1</td><td>RPT 1/4: repeat the last beat</td><td>FREEZE: the last eighth held as a sustain</td><td>SKIP: a CD that can't read; the last sixteenth repeats, its pitch sagging</td></tr>
+      <tr><td>2</td><td>RPT 1/8</td><td>SCATTER: the last beat's sixteenths shuffled</td><td>CONSOLE: a TV speaker; darker, mono, warm</td></tr>
+      <tr><td>3</td><td>RPT 1/16</td><td>ROLL: a repeat that halves every beat, to 1/32</td><td>DUCK: the mix dips on every beat and swells back</td></tr>
+      <tr><td>4</td><td>RPT 1/32</td><td>OCT DN: the bus an octave down</td><td>LO-FI: an unsteady 11 kHz converter, 10 bits</td></tr>
+      <tr><td>5</td><td>REVERSE: the last beat backwards</td><td>OCT UP: the bus an octave up</td><td>–</td></tr>
+      <tr><td>6</td><td>STOP: a tape stop over a beat; let go, it spins up</td><td>LPF: a resonant low-pass closing over a bar</td><td>–</td></tr>
+      <tr><td>7</td><td>STUTTER: gated 1/32 hits</td><td>HPF: a resonant high-pass opening over a bar</td><td>–</td></tr>
+      <tr><td>8</td><td>CRUSH: the 4-bit crunch</td><td>GATE: a 1/16 trance gate</td><td>–</td></tr>
+      <tr><td>9</td><td>WOW: the tape's wow and flutter</td><td>DUB: a dotted-eighth echo that rings on</td><td>–</td></tr>
+      <tr><td>10</td><td>DRIVE: harder, never louder</td><td>SHIMMER: a long wash, octaves rising</td><td>–</td></tr>
+      <tr><td>11</td><td>KILL: silence</td><td>SPIN: a vinyl spin-back</td><td>–</td></tr>
     </tbody>
   </table>
   <p>Below 85 BPM a quarter is too long for the memory: RPT 1/4 repeats an eighth. DUB borrows a track's delay that is off; if every delay is in use it says so.</p>
+  <p>Bank C is after AFFINE, MONO2K's sibling (a break chopper for the FM-1): SKIP, CONSOLE and LO-FI are its effects, and DUCK is CHOPPAH's idea (Laurens Profittlich). SKIP rolls a die at every sixteenth: nine times in ten the sixteenth just played repeats, one to three times, slowing as the laser seeks, then the music goes on. DUCK dips 0.7 deep at each beat's start and comes back over the beat.</p>
   <h2 id="stays">An effect that stays on</h2>
-  <p>Tap a black key twice, quickly: its effect stays on after you let go, its key lit. Tap it again to let go. It stacks with what you hold; the one-at-a-time effects (bank A's 1–7, bank B's 1–5 and 11) give way to the next one pressed. KILL and STOP can stay on too. A repeat that stays on keeps landing on the beat.</p>
+  <p>Tap a black key twice, quickly: its effect stays on after you let go, its key lit. Tap it again to let go. It stacks with what you hold; the one-at-a-time effects (bank A's 1–7, bank B's 1–5 and 11, bank C's SKIP) give way to the next one pressed. KILL and STOP can stay on too. A repeat that stays on keeps landing on the beat.</p>
   <p>Leaving PERFORM (FX let go, or tapped when latched) lets go of every effect, the ones that stay on too: nothing keeps playing once its key is out of reach.</p>
   <h2 id="latch">Double-tap: a layer latched</h2>
   <p>Tap GLO, SEQ, HOME or FX twice, quickly: the layer stays as if you held it. Its button blinks and its map says LATCHED. The keys and the knobs are the layer's; copy, paste and clear still want the button held. Tap it again, or any other page button, to let go (FX's stays: below).</p>
@@ -675,7 +677,7 @@
     <li>FX latched: PERFORM with both hands on the keys, and on every page (below).</li>
     <li>SEQ latched: the tools and the sequencer's knobs.</li>
   </ul>
-  <p><b>FX latched stays across pages.</b> A page button, GRID or GLO's pages keep it: the black keys stay PERFORM's effects and the white keys play the track (GRID's steps in GRID). The knobs, OCT− and OCT+ and the screen are the page's own, so you can shape a sound while the effects run; FX in the header says it is latched. Hold FX for PERFORM's own view again (the bus's knobs, the banks); let go and you are back on the page. Tap FX to let go. Latching GLO, SEQ or HOME takes its place: one layer latches at a time.</p>
+  <p><b>FX latched stays across pages.</b> A page button, GRID or GLO's pages keep it: the black keys stay PERFORM's effects and the white keys play the track (GRID's steps in GRID). The knobs, OCT− and OCT+ and the screen are the page's own, so you can shape a sound while the effects run; FX in the header says it is latched. Hold FX for PERFORM's own view again (the bus's knobs, the three banks); let go and you are back on the page. Tap FX to let go. Latching GLO, SEQ or HOME takes its place: one layer latches at a time.</p>
   <h2>Solos and the tempo</h2>
   <p>GLO + white 9–14 solo tracks 1–6 while held, several adding up; playing, from the next bar, and a tap solos one bar. GLO + white 8 taps the tempo. Hold LFO for sweeps that come back; OCT+ while held keeps the change.</p>
 </article>
@@ -854,7 +856,7 @@
     </tbody>
   </table>
   <h2>Hold FX, hold LFO</h2>
-  <p>FX held: PERFORM, the bus's effects on the black keys, OCT− bank A and OCT+ bank B, the knobs DCAY DAMP ADPC DRIV (every effect: <a href="#perform">Play it live</a>); a black key tapped twice stays on, and FX double-tapped stays on every page (<a href="#latch">Double-tap</a>). LFO held: what the knobs move comes back when it is let go; OCT+ while it is held keeps the change.</p>
+  <p>FX held: PERFORM, the bus's effects on the black keys, OCT+ on through banks A, B and C and OCT− back, the knobs DCAY DAMP ADPC DRIV (every effect: <a href="#perform">Play it live</a>); a black key tapped twice stays on, and FX double-tapped stays on every page (<a href="#latch">Double-tap</a>). LFO held: what the knobs move comes back when it is let go; OCT+ while it is held keeps the change.</p>
   <h2>A step held in GRID</h2>
   <table>
     <thead><tr><th>Hold a step and</th><th>Does</th></tr></thead>
@@ -970,7 +972,7 @@
   <h1>Credits and licence</h1>
   <p class="sub">Free software, built on the open FM-1 work.</p>
   <p>MONO2K is by Sequencist, and free software under the GNU General Public License, version 3 only. Its source, the tools that measure it and this site are on <a href="https://github.com/InigoHernandez/mono2k" target="_blank" rel="noopener">GitHub</a>.</p>
-  <p>It is built on the open FM-1 work: Felucca by Leo Kuroshita (Hügelton Instruments), whose platform the FM-1 build adds and whose installer it follows; CS-1, X0X, FoMni and the others. The FM-1's panel geometry is the one measured for CoralFlower's emulator. Type: Elektron Pixel Font by savingaurora (FontStruct), CC BY-SA 3.0; MONO2K's adaptation is under CC BY-SA 4.0. Orbitron (the wordmark) and Inter Tight are under the SIL Open Font License. The digital waves are the author's own. The DRM- drums' voice design is after the Erica Synths LXR drum voices (its desktop app's source, GPL-3.0-only; originally Julian Schmidt's Sonic Potions LXR): their laws, measured against a model of them, not their code or samples. GRIDS is Émilie Gillet's Grids (Mutable Instruments), its pattern map and its rules ported from its source (GPL-3.0).</p>
+  <p>It is built on the open FM-1 work: Felucca by Leo Kuroshita (Hügelton Instruments), whose platform the FM-1 build adds and whose installer it follows; CS-1, X0X, FoMni and the others. The FM-1's panel geometry is the one measured for CoralFlower's emulator. Type: Elektron Pixel Font by savingaurora (FontStruct), CC BY-SA 3.0; MONO2K's adaptation is under CC BY-SA 4.0. Orbitron (the wordmark) and Inter Tight are under the SIL Open Font License. The digital waves are the author's own. The DRM- drums' voice design is after the Erica Synths LXR drum voices (its desktop app's source, GPL-3.0-only; originally Julian Schmidt's Sonic Potions LXR): their laws, measured against a model of them, not their code or samples. GRIDS is Émilie Gillet's Grids (Mutable Instruments), its pattern map and its rules ported from its source (GPL-3.0). PERFORM's bank C is after AFFINE (Sequencist's break chopper for the FM-1, MPL-2.0): SKIP, CONSOLE and LO-FI are its effects, and DUCK is CHOPPAH's idea (Laurens Profittlich), each written again in MONO2K's integers from their laws, none of their code.</p>
   <p>MONO2K's machines were measured against a Monomachine running in Joe Landers' Monomachine emulator (gearmulator-md-mm, a fork of Gearmulator by The Usual Suspects), with the owner's own OS image: measurements only, none of the emulator's code or data and none of Elektron's code, waves or samples are in MONO2K. Monomachine and Machinedrum are trademarks of Elektron; M-VAVE and FM-1 are trademarks of their owners. MONO2K is not affiliated with Elektron or M-VAVE. If MONO2K is useful to you, you can <a href="https://ko-fi.com/sequencist" target="_blank" rel="noopener">support it on Ko-fi</a>.</p>
 </article>
 
@@ -991,7 +993,7 @@
 <script src="site.js?v=4"></script>
 <script src="switch.js?v=2"></script>
 <script src="panel.js?v=2"></script>
-<script src="changelog.js?v=61"></script>
-<script src="manual.js?v=67"></script>
+<script src="changelog.js?v=62"></script>
+<script src="manual.js?v=68"></script>
 </body>
 </html>

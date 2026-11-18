@@ -7,6 +7,18 @@ window.M2K_KINDS = {
 };
 window.M2K_CHANGES = [
   {
+    date: "2026-11-17", title: "MONO2K 1.12: four new performance effects",
+    items: [
+      ["workflow", "1.12: PERFORM has a third bank. Hold FX and press OCT+ twice: bank C, with both OCT keys lit. OCT− steps back to B, then A. Banks A and B are where they were."],
+      ["sound", "1.12: SKIP (black 1 of bank C): a CD that can't read. At every sixteenth, nine times in ten, the sixteenth just played repeats once to three times, its pitch sagging as the laser seeks, then the music goes on."],
+      ["sound", "1.12: CONSOLE (black 2): a TV speaker. The mix darkens to 8 kHz, folds to mono and rounds off softly, never louder."],
+      ["sound", "1.12: DUCK (black 3): the mix dips at the start of every beat and swells back over it, like a sidechain without a kick."],
+      ["sound", "1.12: LO-FI (black 4): an unsteady converter. The mix held at 11 kHz by a clock that wanders, in 10 bits."],
+      ["workflow", "1.12: They play as the others do: held, or tapped twice to stay on, with FX latched on every page. SKIP takes turns with the repeats; CONSOLE, DUCK and LO-FI stack with anything. Keys 5 to 11 of bank C are empty and stay dark."],
+      ["patterns", "1.12: Nothing to convert: your patterns and sounds play exactly as before. GLO > HELP's PERFORM page names the three banks."],
+    ],
+  },
+  {
     date: "2026-11-17", title: "MONO2K 1.11: POLY, a calmer CPU guard, effects that stay on",
     items: [
       ["sequencer", "1.11: POLY plays chords on one track. On ARP, turn MODE to POLY: the track becomes a lead and the tracks after it its voices, as many as KNOB 2 (VOIC) says. T4 on three plays T4, T5 and T6; T1 to T3 play on as always."],
