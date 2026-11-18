@@ -16,7 +16,7 @@
  * PADS and Capture say fits its box; a frame drawn later from the same view, with the core in another state, is the
  * same frame (the drawing reads the view alone).
  * move/screen/sheets.py makes the PNGs, the overview, the knob rows, the pad map and the GIFs.
- *   cc -O2 -DM2K_TRACKS=8 -Ifirmware/src -Ifirmware/gen -o build/move/screen_sheets move/screen/sheets.c
+ *   cc -O2 -DM2K_TRACKS=8 -DM2K_SPU -Ifirmware/src -Ifirmware/gen -o build/move/screen_sheets move/screen/sheets.c
  *   build/move/screen_sheets build/move/sheets */
 #include <stdio.h>
 #include <stdlib.h>

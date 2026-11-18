@@ -235,9 +235,13 @@ static int do_time(double sec)
     perf_open();
     printf("  one 128-frame block (2902 us of sound), %.0f s from 2 s in, one core:\n", sec);
     printf("  %-5s %8s %8s %8s %8s %7s %14s\n", "", "mean us", "p50", "p99", "most", "mean %", "instr/sample");
-    for (int p = 0; p < 4; p++) {
-        inst = open_at(p, 2000);
+    /* bank A as it is, then A04 with the Move's PS1-era DELAY (GLO's knob 6) and with GRIT held on it too (M2K_SPU) */
+    static const char *const TN[6] = {"A01", "A02", "A03", "A04", "+DELY", "+GRIT"};
+    for (int p = 0; p < 6; p++) {
+        inst = open_at(p < 4 ? p : 3, 2000);
         api->set_param(inst, "play", "1");
+        if (p >= 4) { page(MS_GLO); knob(5, 127); A_render(); }
+        if (p == 5) { page(MS_PERF); tap(55); pad(11, 1, 100); A_render(); }
         for (int f = 0; f < 2 * 44100; f += 128) api->render_block(inst, blk, 128);
         double sum = 0;
         uint64_t i0 = perf_read();
@@ -252,7 +256,7 @@ static int do_time(double sec)
         char is[24];
         if (perf_fd >= 0 && ins) snprintf(is, sizeof is, "%.0f", (double)ins / ((double)nb * 128));
         else snprintf(is, sizeof is, "n/a");
-        printf("  %-5s %8.1f %8.1f %8.1f %8.1f %6.1f%% %14s\n", NAME[p], sum / nb, us[nb / 2], us[nb * 99 / 100],
+        printf("  %-5s %8.1f %8.1f %8.1f %8.1f %6.1f%% %14s\n", TN[p], sum / nb, us[nb / 2], us[nb * 99 / 100],
                us[nb - 1], sum / nb / 2902.0 * 100, is);
         api->destroy_instance(inst);
     }
@@ -1071,6 +1075,27 @@ static int do_ctl(void)
     knob(4, 64); blocks(1);
     check(kv(4) >= 64, "GLO's knob 5: MUTES (a setting) turned");
     knob(4, -127); blocks(1);
+    /* the Move's PS1-era reverb (M2K_SPU): GLO's knob 6, VERB, the type (FDN, then the chip's nine); DELAY on the tempo:
+     * its loop scaled to the division nearest its 0.742 s that the area holds (twice it at most), at the tempo now */
+    knob(5, 127); blocks(2);
+    {
+        /* (the music's tempo, MONO2K's sequencer's: the view's bpm10 is Move's while it follows Move) */
+        const int sps = vint(view(), "sps");
+        const double six = sps / 256.0 / 44100.0, bpm = 15.0 / six, loop = 16360.0 / 22050;
+        static const double DIV[9] = {1, 1.5, 2, 3, 4, 6, 8, 12, 16};
+        double best = 1, bd = 1e9;
+        for (int k = 0; k < 9; k++) {
+            const double s = DIV[k] * six / loop, d = s >= 1 ? s : 1 / s;
+            if (s <= 2.0 && s >= 0.125 && d < bd) { bd = d; best = s; }
+        }
+        const double got = vint(view(), "rvsc") / 1024.0;
+        char what[160];
+        snprintf(what, sizeof what, "GLO's knob 6: VERB to DELAY, on the tempo (%.1f BPM: scale %.3f, the nearest division's %.3f)",
+                 bpm, got, best);
+        check(kv(5) >= 115 && vint(view(), "rv") == 9 && vint(view(), "rvsps") == sps && fabs(got - best) < 0.002, what);
+    }
+    knob(5, -127); blocks(20);
+    check(kv(5) <= 12 && vint(view(), "rv") == 0, "VERB back to the FDN: DELAY let go (out over 23 ms)");
     page(MS_HOME);
 
     /* the keyboard: a two-row piano, the white keys C..C on the bottom row, the black over them */
@@ -1135,10 +1160,11 @@ static int do_ctl(void)
     check(vint(view(), "perf") == 1 << 11, "Up: the moves' second page (the bottom-left now FREEZE)");
     pad(0, 0, 0); blocks(2);
     vlist(view(), "pads", pads, 32);
-    check(pads[7] == 0 && pads[11] == 0 && pads[0] == 115 && pads[8] == 109, "the moves magenta, the colours pink, a key with no effect dark");
+    check(pads[7] == 0 && pads[12] == 0 && pads[11] == 109 && pads[0] == 115 && pads[8] == 109,
+          "the moves magenta, the colours pink (GRIT the 4th), a key with no effect dark");
     /* 1.12: Up swaps both rows: the colours' second page CONSOLE DUCK LO-FI (bits 23-25), its 4th kept for GRIT (no
      * key), SKIP (22) the moves' 7th; a key held through Down plays on and its release lets go of it; one latched stays */
-    enum { PF_CRSH = 7, PF_SKIP = 22, PF_CONS, PF_DUCK, PF_LOFI };   /* (m2k_fx.c's) */
+    enum { PF_CRSH = 7, PF_SKIP = 22, PF_CONS, PF_DUCK, PF_LOFI, PF_GRIT };   /* (m2k_fx.c's; GRIT the Move's, M2K_SPU) */
     pad(8, 1, 100); blocks(2);
     check(vint(view(), "perf") == 1 << PF_CONS && !strcmp(vstr(view(), "pkeys", s, sizeof s), "1,1"),
           "Up: the top row's second page too (the top-left now CONSOLE)");
@@ -1154,7 +1180,7 @@ static int do_ctl(void)
     pad(11, 1, 100); blocks(2); pad(11, 0, 0); blocks(2);
     pad(6, 1, 100); blocks(2);
     check(vint(view(), "perf") == (1 << PF_DUCK | 1 << PF_LOFI | 1 << PF_SKIP) && vint(view(), "plat") == (1 << PF_DUCK | 1 << PF_LOFI),
-          "DUCK and LO-FI latched, the 4th colour no key, SKIP the 7th move held");
+          "DUCK and LO-FI latched, the 4th colour (GRIT) tapped once and gone, SKIP the 7th move held");
     pad(6, 0, 0); blocks(2);
     tap(54);
     vlist(view(), "pads", pads, 32);
@@ -1166,6 +1192,20 @@ static int do_ctl(void)
     tap(55);
     pad(9, 1, 100); blocks(2); pad(9, 0, 0); blocks(2); pad(10, 1, 100); blocks(2); pad(10, 0, 0); blocks(2);
     check(vint(view(), "perf") == 0 && vint(view(), "plat") == 0, "page 2 again: tapped, DUCK and LO-FI let go");
+    /* GRIT, the Move's own (M2K_SPU), page 2's 4th colour: held it runs; let go, it fades out (10 ms) and idles; tapped
+     * twice it stays on (latched); PERFORM's pad left lets go of it (pf_unlatch), and it fades out by itself */
+    pad(11, 1, 100); blocks(8);
+    check(vint(view(), "perf") == 1 << PF_GRIT && vint(view(), "grit") == 1, "page 2's 4th colour: GRIT, held, running");
+    pad(11, 0, 0); blocks(20);
+    check(vint(view(), "perf") == 0 && vint(view(), "grit") == 0, "GRIT let go: off, faded out and idle");
+    blocks(100);                                       /* (past a double tap's 250 ms: that press was a tap) */
+    pad(11, 1, 100); blocks(2); pad(11, 0, 0); blocks(2); pad(11, 1, 100); blocks(2); pad(11, 0, 0); blocks(8);
+    check(vint(view(), "perf") == 1 << PF_GRIT && vint(view(), "plat") == 1 << PF_GRIT && vint(view(), "grit") == 1,
+          "GRIT tapped twice: latched, on after its key");
+    page(MS_PERF); blocks(20);
+    check(vint(view(), "perf") == 0 && vint(view(), "plat") == 0 && vint(view(), "grit") == 0,
+          "PERFORM's pad left: GRIT let go (pf_unlatch), faded out and idle");
+    page(MS_PERF); blocks(2);
     tap(54);
     /* 1.11, an effect latched: its key tapped twice stays on after it, lit white; tapped again, off; colours stack; a move
      * takes a latched move's place, as a held one's; slow taps latch nothing; PERFORM off lets go of them all (RPT 1/8

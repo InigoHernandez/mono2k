@@ -63,7 +63,7 @@ INNER='
     # drawer, the saver and create / destroy use off the audio thread (threads, sleeps, the store'"'"'s file). Nothing that
     # allocates, locks or logs; that the audio thread reaches none of the rest the bench proves (bench rt, per thread)
     ok="_ITM_deregisterTMCloneTable _ITM_registerTMCloneTable __cxa_finalize __getauxval __gmon_start__ __stack_chk_fail __stack_chk_guard"
-    ok="$ok memcpy memset memcmp strlen strstr clock_gettime"
+    ok="$ok memcpy memmove memset memcmp strlen strstr clock_gettime"   # (memmove: an overlapping copy in m2k_spu.c, by gcc)
     ok="$ok pthread_create pthread_join sched_setscheduler sched_setaffinity nanosleep"
     ok="$ok fopen fopen64 fread fwrite fflush fileno fsync fclose rename unlink mkdir"
     bad=""

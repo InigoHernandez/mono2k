@@ -27,8 +27,10 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
 - Host: `cc -O2 -Wall -Wno-unused-function -Ifirmware/src -Ifirmware/gen -o build/host/m2k_host host/m2k_host.c -lm && build/host/m2k_host build/host`,
   then `.venv/bin/python tools/montage.py build/host build/screens.png 2` to see every page.
   `build/host/m2k_host --selftest` checks the projects (save, reload, store, export / import, full images);
-  `-DM2K_TRACKS=8 ... -o build/host/m2k_host8` is the eight-track host (the Move's; the FM-1 and the browser stay
-  six, bit for bit): its self-test, `--text-sweep`, and `--render-hash` (bank A, DENSE: the same as the six's).
+  `-DM2K_TRACKS=8 -DM2K_SPU ... -o build/host/m2k_host8` is the eight-track host (the Move's; the FM-1 and the browser
+  stay six, bit for bit): its self-test, `--text-sweep`, and `--render-hash` (bank A, DENSE: the same as the six's).
+  `host/m2k_spu_test.c` (built the same way) tests the Move's GRIT and PS1-era reverbs: its self-test, `--rt`, `--level`,
+  `--ir DIR`, `--measure WAV`, `--render DIR`, `--render2 DIR`, `--bench` (with the FM-1's flags).
   `build/host/m2k_host build/patterns --analyze` solos every track of bank A and writes each pattern's WAV.
   `build/host/m2k_host build/pitch --pitch` then `.venv/bin/python tools/demo_pitch.py build/pitch [--steps]`:
   each trig's pitch against its note, held notes, resonant rings against the key, semitone clashes; run it on
@@ -152,6 +154,21 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   the moves' 7th), PAGE 1 / PAGE 2. Self-test: bank C (gestures, LEDs, empty keys), each on A01 (heard, bounds, the dry's
   again let go and unlatched), each law; `perform_mutants.py` 31; the bench ctl's page swap. Cost a sample while on
   (`m2k_draw --perform`): SKIP +82 (a repeat's +60), CONSOLE +45 (settled), DUCK +47, LO-FI +27; off 0. Still 29f_perform_c.
+  The Move's own (`M2K_SPU`, a build flag the Move's builds alone set: `move/build.sh`, `web/build.sh`'s
+  `m2k_move.wasm`, the eight-track host in `move/proof.sh` and `check.sh`, the sheets; the owner's, 2026-11-17: too heavy
+  for the FM-1; `docs/spu-move-plan.md`): GRIT and the PS1-era reverbs, after AFFINE's bus (MPL-2.0, its laws written
+  again) on psx-spx's documented numbers (`tools/gen_spu.py` -> `firmware/gen/m2k_spu_tables.h`), `firmware/src/m2k_spu.c`
+  (`m2k_core.c` includes it under the flag). GRIT (`PF_GRIT`, under the flag; PERFORM page 2's 4th top key; `PF_KEYS`,
+  the FM-1's black keys' effects, leaves it out): the bus's output after the limiter, KILL and GATE, before bank C's
+  colours, through the chip's SPU-ADPCM round trip at 11 kHz (CRUNCH 0.2) and its gaussian, in and out over 10 ms,
+  idle while off. The reverb: `G_RVTY` (the pattern's, under the flag: (v * 10) >> 7, 0 the FDN, 1..9 ROOM STUDIO S M
+  L HALL HALF ECHO SPACE ECHO ECHO DELAY), GLO's knob 6 VERB; the type plays on the sends in `reverb_block`'s place
+  (the FDN rests; SHIMMER's wash stays on the FDN, on SHIMMER's send), 16-bit cells at 22 kHz between psx-spx's 39-tap
+  resampler's passes, two reverbs of 128 KB (a type changed, the old rings out 23 ms beside the new); DCAY and DAMP
+  keep their meaning (each type exact at its home); DELAY ECHO SPACE ECHO on the tempo (`bsps`: the division nearest
+  their loop the area holds, a new tempo glided); asleep once quiet. Type 0 and GRIT off: the bus as ever, byte for
+  byte. Tests: `host/m2k_spu_test.c` (check.sh), the self-test's format 26, `mutate_formats.py`'s four, the Move's
+  bench (VERB, GRIT, the lock).
   An arp a track (1.6.1, the owner's: "keep HOLD when switching to another track. So each arp per track"): each track
   its own keys, held notes, HOLD and clock (`sq.keys[t]`, `held[t]`, `arp_hold[t]`, `arp_block`), the panel's keys the
   track in view's, MIDI's their channel's; switching tracks lets go of the keys (a track without HOLD stops, nothing
@@ -379,6 +396,11 @@ ratchets, a lofi bus, a 1-bit dithered Swiss screen). Plan and status: README.md
   (`pat_wide` sees a POLY on T7 or T8). An older format loads with none; a voices' byte of 1 is none, past 8 is 8
   (`pat_clamp`); a build of six reads 25 as its first six, a lead's voices clamped to the tracks there. BLOB_MAX 3632
   since 24 (editor.js's), BLOB_ANY 4320. The store, the library and the sounds unchanged (POLY is the pattern's).
+  26 the Move's reverb type (1.12, `G_RVTY` under `M2K_SPU`): 24's layout with its byte after the globals, only for a
+  pattern on one of the chip's types (`pat_rvty`: the knob's FDN, a byte of 6, packs as before and comes back 0, the
+  same choice), else 18-25 byte for byte; 27 is 25 with it. Every build reads both; one without the flag (the FM-1's,
+  the browser's) passes the byte over and plays its FDN. BLOB_ANY 4321 since (a store with a format 27 read anywhere);
+  the self-test holds both ways (FMT21 widened as 25's), `mutate_formats.py` four mutants of the reading.
   The engine: `env_block` as it was where SUS and FSUS are 0 (and no LFO on them), bit for bit (`m2k_draw --hash`), one
   check before it (its cost at `--cpu`'s noise, +0..9 Mac instructions a sample: inlined, a fuller env_block cost +20);
   the rest out of line, `env_adsr`: SUS past 0 the decay

@@ -47,9 +47,9 @@
   const SHORT = { SOUNDS: "SNDS", PERFORM: "PERF", SHIMMER: "SHIM", STUTTER: "STUT", REVERSE: "REV", SCATTER: "SCAT" };   /* a phone's narrow pads */
   const label = (n) => SHORT[n] ? `<span><i class="lng">${esc(n)}</i><i class="sht">${SHORT[n]}</i></span>` : `<span>${esc(n)}</span>`;
   const BLACK = ["C#", "D#", "", "F#", "G#", "A#", "", ""], WHITE = ["C", "D", "E", "F", "G", "A", "B", "C"];
-  /* PERFORM's keys (m2k_move_ui.c MV_PERF_TOP, MV_PERF_LOW): Up swaps both rows; page 2's 4th colour kept for GRIT */
+  /* PERFORM's keys (m2k_move_ui.c MV_PERF_TOP, MV_PERF_LOW): Up swaps both rows; page 2's 4th colour GRIT */
   const COLOURS = [["LPF", "DUB", "HPF", "GATE", "CRUSH", "DRIVE", "WOW", "SHIMMER"],
-                   ["CONSOLE", "DUCK", "LO-FI", "", "", "", "", ""]];
+                   ["CONSOLE", "DUCK", "LO-FI", "GRIT", "", "", "", ""]];
   const MOVES = [["RPT 1/4", "RPT 1/8", "RPT 1/16", "RPT 1/32", "ROLL", "STUTTER", "REVERSE", "STOP"],
                  ["FREEZE", "SCATTER", "OCT DN", "OCT UP", "SPIN", "KILL", "SKIP", ""]];
   const mx = $("mx");

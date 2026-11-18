@@ -24,7 +24,10 @@ enum {
     K_TLEN,                                                                /* a track's own length (SEQ held) */
     K_PROB,                                                                /* its chance (HOME 2: 16 steps, 100 % first) */
     K_SUS, K_FSUS, K_FREL,                                                 /* the ADSR's: the levels, the filter's release */
-    K_PVOI                                                                 /* POLY's voices (ARP's KNOB 2 on POLY) */
+    K_PVOI,                                                                /* POLY's voices (ARP's KNOB 2 on POLY) */
+#ifdef M2K_SPU
+    K_RVTY,                                                                /* the Move's reverb type (G_RVTY) */
+#endif
 };
 typedef struct { const char *s4, *name; uint8_t kind; } pi_t;
 
@@ -71,6 +74,9 @@ static const pi_t PI_GLOB[G_COUNT] = {
     PI_TRK("TLEN", "LENGTH", K_TLEN),
     PI_TRK("PROB", "CHANCE", K_PROB),
     PI_TRK("VOIC", "POLY VOICES", K_PVOI),
+#ifdef M2K_SPU
+    {"VERB", "REVERB TYPE", K_RVTY},
+#endif
 };
 
 static const pi_t PI_SET[19] = {
@@ -242,6 +248,9 @@ static int kind_choices(int k)
     case K_PROJ: return M2K_PROJECTS;
     case K_VOIC: case K_LWAV: return 7;
     case K_TRK: return M2K_TRACKS;
+#ifdef M2K_SPU
+    case K_RVTY: return SRV_N + 1;     /* the FDN, then the PS1-era chip's nine */
+#endif
     case K_AMOD: return 7;
     case K_LTRG: return 5;
     case K_MULT: return 8;
@@ -530,6 +539,15 @@ static void fmt(const pi_t *pi, int t, int v, char *out, const char **unit)
     case K_LANE: { static const char *const N[4] = {"OFF", "BD", "SD", "HH"}, *const U[4] = {"", "KICK", "SNARE", "HATS"};
                    s_cpy(out, N[c]); *unit = U[c]; break; }
     case K_MUTQ: s_cpy(out, c ? "NOW" : "BAR"); *unit = c ? "AT ONCE" : "NEXT BAR"; break;
+#ifdef M2K_SPU
+    case K_RVTY: {                     /* the reverb: MONO2K's FDN, or one of the chip's nine (its name in full under) */
+        static const char *const N[SRV_N + 1] = {"FDN", "ROOM", "STD S", "STD M", "STD L", "HALL", "HALF", "SPACE",
+                                                 "ECHO", "DELAY"};
+        s_cpy(out, N[c]);
+        *unit = c ? T_SRV_NAME[c - 1] : "MONO2K'S OWN";
+        break;
+    }
+#endif
     case K_MOTN: s_cpy(out, c ? "GLTCH" : "CALM"); *unit = c ? "GLITCHES" : "CLEAN CUTS"; break;
     case K_REST:                       /* (the FM-1's CPU guard; elsewhere none runs) */
         if (!c) { s_cpy(out, "AUTO"); *unit = "THE QUIETEST"; }
@@ -1957,7 +1975,7 @@ static void key_event(int k, int down)
     }
     if (perf_layer() && b >= 0) {      /* FX held: the black keys are PERFORM's effects, while held */
         int e = b + ui.pfb * PF_BANK;  /* the bank shown; its release lets go of this one, whichever is shown then */
-        const int r = b < PF_BANK && e < PF_COUNT ? pf_press(e) : 1;   /* (a double tap latches it: pf_press; bank C's
+        const int r = b < PF_BANK && e < PF_KEYS ? pf_press(e) : 1;   /* (a double tap latches it: pf_press; bank C's
                                                                         * keys past its four: none) */
         if (!r) { ui.kact[k] = KA_PERF; ui.karg[k] = (uint8_t)e; }
         else if (r < 0) toast(PF_NAME[e], "NO DELAY FREE");
@@ -3276,6 +3294,9 @@ static int icon_of(const pi_t *pi)
     case K_SCRN: case K_ONOFF: case K_SYIN: case K_NTIN: case K_THRU: case K_MUTQ: case K_MOTN: case K_REST: case K_SCAT: case K_MODT:
     case K_WBNK: case K_SIDM: case K_MSRC: case K_GRES: case K_LANE: case K_PROJ: case K_SSEL: case K_LOAD: case K_SLOAD:
     case K_SSAVE: case K_WIPE: case K_DEMO:
+#ifdef M2K_SPU
+    case K_RVTY:
+#endif
         return IC_BOX;
     default: return IC_NUM;
     }
@@ -5121,7 +5142,7 @@ static void lay_help(void)
     /* the bank shown, its black keys a table (1-6 down the left, 7-11 the right; bank C's four down the left), an
      * effect on solid; at the foot OCT- and OCT+ round the three banks, the one shown solid */
     const int x = P_X + P_IN, w = P_W - 2 * P_IN, cw = (w - 8) / 2, k0 = ui.pfb * PF_BANK;
-    const int nk = PF_COUNT - k0 < PF_BANK ? PF_COUNT - k0 : PF_BANK, cols = nk < PF_BANK ? 1 : 2;
+    const int nk = PF_KEYS - k0 < PF_BANK ? PF_KEYS - k0 : PF_BANK, cols = nk < PF_BANK ? 1 : 2;
     static const char *const TI[PF_BANKS] = {"PERFORM BANK A", "PERFORM BANK B", "PERFORM BANK C"};
     int b = panel(P_X, P_TOP, P_W, P_H, latch_title(B_FX) ? "PERFORM LATCHED" : TI[ui.pfb], 1);
     static const char N[PF_BANK][3] = {"1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11"};
@@ -5421,8 +5442,8 @@ const uint8_t *m2k_leds(void)
                 const int e = b + ui.pfb * PF_BANK;
                 int other = ui.kact[k] == KA_PERF;
                 for (int j = 0; j < PF_BANKS; j++)
-                    if (j != ui.pfb && b + j * PF_BANK < PF_COUNT) other |= ui.pf_lat >> (b + j * PF_BANK) & 1;
-                v = e < PF_COUNT && perf.on[e] ? 255 : other ? 90 : e < PF_COUNT ? 24 : 0;
+                    if (j != ui.pfb && b + j * PF_BANK < PF_KEYS) other |= ui.pf_lat >> (b + j * PF_BANK) & 1;
+                v = e < PF_KEYS && perf.on[e] ? 255 : other ? 90 : e < PF_KEYS ? 24 : 0;
             } else if (w >= 0) continue;
         } else if (lay == 3) {
             if (w >= 0 && w < 8) v = 200;

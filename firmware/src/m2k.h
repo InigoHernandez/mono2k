@@ -81,14 +81,24 @@ enum {
                                               * (format 20) */
     G_POLY1 = G_TPRB1 + M2K_TRACKS,          /* + t: POLY (format 24): track t plays chords on itself and the tracks after
                                               * it, this many voices (2..8, as many as there are); 0 none */
+#ifdef M2K_SPU
+    G_RVTY = G_POLY1 + M2K_TRACKS,           /* the Move's alone (M2K_SPU): the reverb, (v * 10) >> 7: 0 the FDN, 1..9 the
+                                              * PS1-era chip's types (m2k_spu.c), formats 26 and 27 (m2k_proj.c) */
+    G_COUNT
+#else
     G_COUNT = G_POLY1 + M2K_TRACKS
+#endif
 };
 /* the globals a format packs, its per-track blocks NT wide (six before 21): before 15 those before the speeds, then
  * with them, from 18 with Grids' and the lanes, 19 the lengths, 20 the chances, 24 POLY (the pattern's own: NT
  * M2K_TRACKS) */
 #define G_COUNT_OF(ver, nt) ((ver) < 15 ? G_SPD1 : G_SPD1 + (nt) + ((ver) >= 18 ? G_LANE1 - G_GRX + (nt) : 0) + \
                              ((ver) >= 19 ? (nt) : 0) + ((ver) >= 20 ? (nt) : 0) + ((ver) >= 24 ? (nt) : 0))
+#ifdef M2K_SPU
+_Static_assert(G_COUNT_OF(24, M2K_TRACKS) + 1 == G_COUNT, "the globals' blocks, and the reverb's type (formats 26, 27)");
+#else
 _Static_assert(G_COUNT_OF(24, M2K_TRACKS) == G_COUNT, "the globals' blocks");
+#endif
 _Static_assert(G_COUNT <= 64, "a global's knob code is 0x80 | g, under the settings' 0xC0");
 #define G_COUNT_V14 G_SPD1                   /* the globals before the speeds */
 #define G_COUNT_V17 G_GRX                    /* and before Grids */

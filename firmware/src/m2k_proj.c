@@ -16,11 +16,15 @@
 /* the most a pattern of NT tracks packs to: its head (2 + 8 + NT + its globals + 1: six tracks fill the 66 since format
  * 24, the 60 since 20, the 54 since 19, the 48 since 18), every kit (74 wide since format 22), its trig mask, every step
  * a trig, every lock. BLOB_MAX is this build's (six: 3632, the Patch Editor's, editor.js's; 3626 before 24, 3608 before
- * 22), BLOB_ANY format 25's, eight wide (4320: what a store may hold) */
+ * 22; the Move's a byte more, the reverb's type), BLOB_ANY format 27's, eight wide (4321: what a store may hold) */
 #define BLOB_OF(nt) (2 + 8 + (nt) + G_COUNT_OF(24, nt) + 1 + (nt) * P_COUNT + (nt) * M2K_STEPS / 8 + \
                      (nt) * M2K_STEPS * 4 + 2 + M2K_LOCKS * 4)
+#ifdef M2K_SPU
+#define BLOB_MAX (BLOB_OF(M2K_TRACKS) + 1)
+#else
 #define BLOB_MAX BLOB_OF(M2K_TRACKS)
-#define BLOB_ANY BLOB_OF(M2K_TRACKS21)
+#endif
+#define BLOB_ANY (BLOB_OF(M2K_TRACKS21) + 1)
 _Static_assert(BLOB_OF(M2K_TRACKS6) == 3632, "a pattern of six packs to 3632 at most (editor.js's BLOB_MAX)");
 
 typedef struct {
@@ -37,9 +41,9 @@ static int cur_proj;
 
 /* -------------------------------------------------------------------------------------- one pattern, packed */
 
-/* a format's tracks: 21, 23 and 25 eight (a pattern that uses a track past the sixth, in a build of eight), 22, 24 and
- * every one before 21 six */
-static inline int fmt_nt(int ver) { return ver == 21 || ver == 23 || ver == 25 ? M2K_TRACKS21 : M2K_TRACKS6; }
+/* a format's tracks: 21, 23, 25 and 27 eight (a pattern that uses a track past the sixth, in a build of eight), 22, 24,
+ * 26 and every one before 21 six */
+static inline int fmt_nt(int ver) { return ver == 21 || ver == 23 || ver == 25 || ver == 27 ? M2K_TRACKS21 : M2K_TRACKS6; }
 /* a format's kit: from 22 the ADSR's three after the bank (74), from 8 the bank (71), from 3 the MOD effect (70) */
 static inline int fmt_kit(int ver) { return ver >= 22 ? P_COUNT : ver >= 8 ? P_COUNT_V21 : ver >= 3 ? P_WBNK : P_MODT; }
 
@@ -65,7 +69,8 @@ static void glob_io(const uint8_t *s, uint8_t *d, int gl, int nt, int out)
  * writes the older ones, 3..17; 3..7 kits 70 wide). Format 21 is 20 eight tracks wide: the machines, the per-track
  * globals, the mutes' bits, the kits, the trig mask, the trigs and the locks of eight; an LFO's TRCK past 127 aims past
  * the sixth. Format 22 is 20 with kits 74 wide (the ADSR's SUS FSUS FREL after the bank), 23 is 22 eight wide (21's).
- * Format 24 is 22 with POLY's voices after the chances (a track's each), 25 is 24 eight wide */
+ * Format 24 is 22 with POLY's voices after the chances (a track's each), 25 is 24 eight wide. 26 is 24 with a byte after
+ * the globals, the Move's reverb type (G_RVTY, M2K_SPU), 27 is 25 with it; a build without it writes 0 there */
 static int pat_pack_v(const m2k_pattern_t *p, uint8_t *o, int ver)
 {
     const int nt = fmt_nt(ver);        /* (no more than the build has: 21, 23 and 25 only in a build of eight) */
@@ -83,11 +88,17 @@ static int pat_pack_v(const m2k_pattern_t *p, uint8_t *o, int ver)
                                         * the tracks' own lengths, after the lanes; 20: the tracks' chances (PROB),
                                         * after the lengths; 21: eight tracks; 22: the amp's and the filter's ADSR
                                         * (SUS FSUS FREL, kits 74 wide); 23: 22 eight tracks wide; 24: POLY, after
-                                        * the chances; 25: 24 eight tracks wide */
+                                        * the chances; 25: 24 eight tracks wide; 26: the Move's reverb type after
+                                        * the globals; 27: 26 eight tracks wide */
     m_cpy(o + n, p->name, 8); n += 8;
     m_cpy(o + n, p->machine, (uint32_t)nt); n += nt;
     const int gl = G_COUNT_OF(ver, nt);
     glob_io(p->glob, o + n, gl, nt, 1); n += gl;
+#ifdef M2K_SPU
+    if (ver >= 26) o[n++] = p->glob[G_RVTY];
+#else
+    if (ver >= 26) o[n++] = 0;
+#endif
     o[n++] = p->mute;
     for (int t = 0; t < nt; t++) { m_cpy(o + n, p->kit[t], stride); n += stride; }
     uint8_t *mask = o + n;
@@ -182,16 +193,31 @@ static int pat_poly(const m2k_pattern_t *p)
     return 0;
 }
 
+#ifdef M2K_SPU
+/* a pattern that plays one of the Move's reverb types (format 26): its choice off the FDN (the knob's FDN, a byte of 6,
+ * packs as before and comes back 0: the same choice) */
+static int pat_rvty(const m2k_pattern_t *p) { return (p->glob[G_RVTY] * (SRV_N + 1)) >> 7 != 0; }
+#endif
+
 /* a pattern none of whose tracks has a length of its own packs as format 18, byte for byte as before (bank A's, a
  * blank's: the stores' demos and blanks still match, and 1.4 reads it); one with a length, as 19; one with a track's
  * chance under 100 %, as 20 (1.5 reads 19); one that uses the ADSR's three (pat_adsr), as 22 (1.9 reads 20 and 21);
- * one with a track on POLY (pat_poly), as 24 (1.10 reads 22 and before); one that uses a track past the sixth (a build
- * of eight), as 21, or as 23 with the ADSR's, 25 with POLY */
+ * one with a track on POLY (pat_poly), as 24 (1.10 reads 22 and before); one that plays the Move's reverb type
+ * (pat_rvty, M2K_SPU), as 26 (1.12 reads it, the type dropped); one that uses a track past the sixth (a build of
+ * eight), as 21, or as 23 with the ADSR's, 25 with POLY, 27 with the type */
 static int pat_pack(const m2k_pattern_t *p, uint8_t *o)
 {
     int own = 0, prb = 0;
     for (int t = 0; t < M2K_TRACKS; t++) { own |= p->glob[G_TLEN1 + t]; prb |= p->glob[G_TPRB1 + t]; }
     const int adsr = pat_adsr(p), poly = pat_poly(p);
+#ifdef M2K_SPU
+    if (pat_rvty(p)) {
+#if M2K_TRACKS > M2K_TRACKS6
+        if (pat_wide(p)) return pat_pack_v(p, o, 27);
+#endif
+        return pat_pack_v(p, o, 26);
+    }
+#endif
 #if M2K_TRACKS > M2K_TRACKS6
     if (pat_wide(p)) return pat_pack_v(p, o, poly ? 25 : adsr ? 23 : 21);
 #endif
@@ -263,16 +289,18 @@ static void trck_past(m2k_pattern_t *p)
 static int pat_unpack(m2k_pattern_t *p, const uint8_t *o, int len)
 {
     int n = 0;
-    if (len < 2 || o[0] != 'P' || o[1] < 1 || o[1] > 25) return 0;
+    if (len < 2 || o[0] != 'P' || o[1] < 1 || o[1] > 27) return 0;
     int ver = o[1], stride = fmt_kit(ver);    /* before 3 a kit ended before the MOD effect, before 8 before the bank,
                                                * before 22 before the ADSR's three */
     /* before 15 no speeds, 18 no Grids, 19 no lengths of the tracks' own (0: each the pattern's, as they played), 20
-     * no chances (0: every trig), 22 no ADSR (kit_v21: SUS 0, FSUS 0, FREL 32, as they played), 24 no POLY (0: none);
-     * before 21 (and 22, 24) six tracks (those past them blank, track_blank), 21, 23 and 25 eight (those past this
-     * build's passed over) */
+     * no chances (0: every trig), 22 no ADSR (kit_v21: SUS 0, FSUS 0, FREL 32, as they played), 24 no POLY (0: none),
+     * 26 no reverb type (0: the FDN; a build without the Move's types reads 26 and 27's and passes it over); before 21
+     * (and 22, 24, 26) six tracks (those past them blank, track_blank), 21, 23, 25 and 27 eight (those past this build's
+     * passed over) */
     const int nt = fmt_nt(ver), gl = G_COUNT_OF(ver, nt);
+    const int rv = ver >= 26;                                               /* (the reverb type's byte) */
     const int nc = ver >= 18 ? C_COUNT : C_COUNT_V17;                       /* (a condition past them was ALWAYS) */
-    const int head = 2 + 8 + nt + gl + 1 + nt * stride + nt * M2K_STEPS / 8 + 2;
+    const int head = 2 + 8 + nt + gl + rv + 1 + nt * stride + nt * M2K_STEPS / 8 + 2;
     if (len < head) return 0;
     m_set(p, 0, sizeof *p);
     n = 2;
@@ -280,6 +308,10 @@ static int pat_unpack(m2k_pattern_t *p, const uint8_t *o, int len)
     p->name[7] = 0;
     m_cpy(p->machine, o + n, (uint32_t)(nt < M2K_TRACKS ? nt : M2K_TRACKS)); n += nt;
     glob_io(o + n, p->glob, gl, nt, 0); n += gl;
+#ifdef M2K_SPU
+    if (rv) p->glob[G_RVTY] = o[n];
+#endif
+    n += rv;
     if (ver < 15) for (int t = 0; t < M2K_TRACKS; t++) p->glob[G_SPD1 + t] = SPD_1X;
     p->mute = o[n++];
     if (nt > M2K_TRACKS) p->mute &= (uint8_t)M2K_TMASK;

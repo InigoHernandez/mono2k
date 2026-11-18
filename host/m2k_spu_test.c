@@ -24,6 +24,7 @@
 #ifndef M2K_SPU
 #error "the Move's build: -DM2K_SPU -DM2K_TRACKS=8"
 #endif
+#define SRV_A (&srv[srv_on])                    /* the reverb taking the sends */
 
 #define FS 44100
 #define FR(sec) ((int)((sec) * FS) / 128 * 128)   /* whole blocks */
@@ -184,6 +185,7 @@ static double fdn_t60(int v) { return v ? 0.3 * pow(80.0, (v - 1) / 126.0) : 0; 
 /* the SPU reverb's impulse response, type t at DCAY dc and DAMP dm, its level out at unity (the cells' scale: an
  * impulse of 16384 sent, x SRV_IN, fills the input): left and right into l, r (frames); the frames it took to sleep, or
  * -1 */
+static uint32_t ir_sps;                 /* (the tempo the locked types play at: 0 their own registers) */
 static int ir_hann;                     /* (a 16-sample Hann pulse instead, its top under 5 kHz: to compare waveforms with
                                          * another implementation whatever its decimator's phase) */
 static int spu_ir(int t, int dc, int dm, double *l, double *r, int frames)
@@ -195,10 +197,10 @@ static int spu_ir(int t, int dc, int dm, double *l, double *r, int frames)
         if (!f && ir_hann)
             for (int i = 0; i < M2K_SUB; i++) rs[i] = (int32_t)lround(8192 * (1 - cos(2 * M_PI * (i + 0.5) / M2K_SUB)));
         else if (!f) rs[0] = 16384;
-        spu_rv_block(t, dc, dm, rs, L, R);
-        const double u = spu_r.gout ? 4096.0 / spu_r.gout : 0;  /* (the cells' own scale: unity out) */
+        spu_rv_block(t, dc, dm, ir_sps, rs, L, R);
+        const double u = SRV_A->gout ? 4096.0 / SRV_A->gout : 0;  /* (the cells' own scale: unity out) */
         for (int i = 0; i < M2K_SUB; i++) { l[f + i] = L[i] * u; r[f + i] = R[i] * u; }
-        if (spu_r.sleep && slept < 0) slept = f;
+        if (SRV_A->sleep && slept < 0) slept = f;
     }
     return slept;
 }
@@ -221,28 +223,33 @@ static void fdn_ir(int dc, int dm, double *l, double *r, int frames)
 static void play(int p) { m2k_init(2000); m2k_pattern(p); seq_play(1); }
 static int bpm_of(int p) { return 30 + PAT(p)->glob[G_TMPO]; }
 
-/* frames of pattern p into out, as phase 2 plays it: the SPU reverb's type t (0: the FDN, as today) in the FDN's place,
- * on the record of each block before its bus plays it a block later (its wet added into the tracks' sums there and the
- * record's DCAY 0, so the FDN rests), at DCAY dc and DAMP dm (-1: the pattern's own); GRIT (character g, -1 none) on
- * the bus's output, on while gon(frame) says so. sends: every track's VERB send set to it (-1: as the pattern has it).
- * rs_out: the sends, kept (a frame each) */
+/* frames of pattern p into out, as the Move plays it: the pattern's reverb type t (G_RVTY; 0 the FDN, as ever), at
+ * DCAY dc and DAMP dm (-1: the pattern's own); GRIT (character g, -1 none) on while gon(frame) says so: character 0
+ * PERFORM's own key (the bus's), the others on the bus's output after the render (where the bus puts GRIT: the same,
+ * bank C's colours off). sends: every track's VERB send set to it (-1: as the pattern has it). rs_out: the sends, kept
+ * (a frame each) */
 static int grit_toggle_frames;          /* GRIT's on and off every this many frames (0: on throughout) */
 static int gon(int f) { return !grit_toggle_frames || (f / grit_toggle_frames) % 2 == 0; }
 static void render(int p, int t, int dc, int dm, int g, int sends, int16_t *out, int frames, int32_t *rs_out)
 {
     play(p);
     if (sends >= 0) for (int k = 0; k < M2K_TRACKS; k++) { PAT(p)->kit[k][P_SPU] = (uint8_t)sends; trk[k].eff[P_SPU] = (uint8_t)sends; }
-    spu_reset();
-    for (int f = 0; f + M2K_SUB <= frames; f += M2K_SUB) {
-        m2k_render(out + 2 * f, M2K_SUB);
-        brec_t *rc = &brec[bcur ^ 1];                    /* (block n's record: its bus plays next call) */
-        if (rs_out) m_cpy(rs_out + f, rc->rs, sizeof rc->rs);
-        if (t) {
-            spu_rv_block(t, dc >= 0 ? dc : rc->glob[G_VERB], dm >= 0 ? dm : rc->glob[G_DAMP], rc->rs, rc->L, rc->R);
-            rc->glob[G_VERB] = 0;
-        }
-        if (g >= 0) spu_grit_block(out + 2 * f, M2K_SUB, gon(f), g);
+    m2k_pattern_t *q = PAT(p);
+    if (t) {
+        q->glob[G_RVTY] = enc(t, SRV_N + 1);
+        if (dc >= 0) q->glob[G_VERB] = (uint8_t)dc;
+        if (dm >= 0) q->glob[G_DAMP] = (uint8_t)dm;
     }
+    int held = 0;
+    spu_grit_chr = (uint8_t)(g > 0 ? g : 0);
+    for (int f = 0; f + M2K_SUB <= frames; f += M2K_SUB) {
+        const int on = g >= 0 && gon(f);
+        if (g >= 0 && on != held) { bus_perform(PF_GRIT, on); held = on; }
+        m2k_render(out + 2 * f, M2K_SUB);
+        if (rs_out) m_cpy(rs_out + f, brec[bcur ^ 1].rs, sizeof brec[0].rs);
+    }
+    if (held) bus_perform(PF_GRIT, 0);
+    spu_grit_chr = 0;
 }
 
 static uint32_t fnv_pcm(const int16_t *s, int n)
@@ -393,20 +400,20 @@ static void test_reverb(void)
     int touched = 0;
     for (int f = 0; f < FS; f += M2K_SUB) {
         for (int i = 0; i < M2K_SUB; i++) rs[i] = 1000, L[i] = R[i] = 7;
-        spu_rv_block(0, 64, 64, rs, L, R);
-        spu_rv_block(3, 0, 64, rs, L, R);
+        spu_rv_block(0, 64, 64, 0, rs, L, R);
+        spu_rv_block(3, 0, 64, 0, rs, L, R);
         for (int i = 0; i < M2K_SUB; i++) touched |= L[i] != 7 || R[i] != 7;
     }
-    check(!touched && !spu_r.type, "reverb off", "DCAY 0 or no type: the sums as they came");
+    check(!touched && !srv[0].type && !srv[1].type, "reverb off", "DCAY 0 or no type: the sums as they came");
     /* silence in: silence out, and asleep within a lap */
     for (int t = 1; t <= SRV_N; t++) {
         spu_reset();
         int nz = 0, at = -1;
         for (int f = 0; f < 3 * FS; f += M2K_SUB) {
             m_set(rs, 0, sizeof rs); m_set(L, 0, sizeof L); m_set(R, 0, sizeof R);
-            spu_rv_block(t, T_SRV_HOME_DCAY[t - 1], T_SRV_HOME_DAMP[t - 1], rs, L, R);
+            spu_rv_block(t, T_SRV_HOME_DCAY[t - 1], T_SRV_HOME_DAMP[t - 1], 0, rs, L, R);
             for (int i = 0; i < M2K_SUB; i++) nz += L[i] || R[i];
-            if (spu_r.sleep && at < 0) at = f;
+            if (SRV_A->sleep && at < 0) at = f;
         }
         check(!nz && at >= 0, "reverb silence", "%-10s 0 out, asleep at %.2f s", T_SRV_NAME[t - 1], at / (double)FS);
     }
@@ -437,7 +444,7 @@ static void test_reverb(void)
         int32_t big = 0;
         for (int f = 0; f < 4 * FS; f += M2K_SUB) {
             for (int i = 0; i < M2K_SUB; i++) rs[i] = ((f + i) / 37) & 1 ? 8 * 32244 : -8 * 32244, L[i] = R[i] = 0;
-            spu_rv_block(5, 127, 0, rs, L, R);
+            spu_rv_block(5, 127, 0, 0, rs, L, R);
             for (int i = 0; i < M2K_SUB; i++) big = abs(L[i]) > big ? abs(L[i]) : big;
         }
         check(big < 1 << 18, "reverb, a square of 8 ceilings", "HALL at DCAY 127: wet peak %d (bus units, the limiter's range 2^17)", big);
@@ -452,7 +459,7 @@ static void test_reverb(void)
             int t = f < 3 * FS ? 1 : f < 6 * FS ? 5 : 7, dc = f >= 9 * FS && f < 10 * FS ? 0 : 60;
             if (f >= 10 * FS) t = 1;
             m_set(L, 0, sizeof L); m_set(R, 0, sizeof R);
-            spu_rv_block(t, dc, 64, rsk + f, L, R);
+            spu_rv_block(t, dc, 64, 0, rsk + f, L, R);
             m_cpy(wl + f, L, sizeof L);
         }
         int st = d2max32(wl, FS, 3 * FS - 600);
@@ -472,6 +479,150 @@ static void test_reverb(void)
     }
     free(l);
     free(r);
+}
+
+/* samples a sixteenth at a tempo, Q8 (the sequencer's sps_q8) */
+static uint32_t sps_of(double bpm) { return (uint32_t)lround(44100.0 * 60 / bpm / 4 * 256); }
+/* the time of the left's loudest sample from start on, s */
+static double peak_at(const double *l, int start, int n)
+{
+    int at = start;
+    for (int i = start; i < n; i++) if (fabs(l[i]) > fabs(l[at])) at = i;
+    return (double)at / FS;
+}
+
+/* the tempo lock: DELAY, ECHO and SPACE ECHO on the division nearest their own loop that the area holds (DELAY's 0.742 s:
+ * at 120 BPM a dotted half, 0.75 s; at 140 a dotted quarter, 0.643 s; at 100 nine sixteenths' nearest, a dotted
+ * quarter of 0.9 s; SPACE ECHO's 0.2155 s: at 140 an eighth, at 100 a dotted sixteenth); its echo lands there; a new
+ * tempo glides (no click, done in about a second); the other six keep their registers whatever the tempo */
+static void test_lock(void)
+{
+    const int n = 3 * FS;
+    double *l = malloc(sizeof(double) * (size_t)n), *r = malloc(sizeof(double) * (size_t)n);
+    static const struct { int t; double bpm, div; } C[] = {
+        {9, 120, 0.75}, {9, 140, 6 * 60.0 / 140 / 4}, {9, 100, 0.9}, {8, 120, 0.75}, {7, 140, 0.5 * 60 / 140}, {7, 100, 1.5 * 60 / 100 / 4}};
+    spu_ir(9, T_SRV_HOME_DCAY[8], T_SRV_HOME_DAMP[8], l, r, n);
+    const double own = peak_at(l, FS / 4, n);           /* (its own: the loop, the all-passes and the resamplers) */
+    for (unsigned k = 0; k < sizeof C / sizeof C[0]; k++) {
+        ir_sps = sps_of(C[k].bpm);
+        spu_ir(C[k].t, C[k].t == 8 ? 20 : T_SRV_HOME_DCAY[C[k].t - 1], T_SRV_HOME_DAMP[C[k].t - 1], l, r, n);
+        const double loop = C[k].t == 7 ? 4752.0 / 22050 : 16360.0 / 22050, s = C[k].div / loop;
+        if (C[k].t == 7) {
+            const uint32_t st = srv_target(7, ir_sps);
+            check(fabs(st / (double)SRV_ONE - s) < 0.001, "lock: SPACE ECHO's scale", "%.0f BPM: %.4f, the division's %.4f",
+                  C[k].bpm, st / (double)SRV_ONE, s);
+        } else {
+            const double at = peak_at(l, FS / 4, n), want = own + (s - 1) * loop;
+            check(fabs(at - want) < 0.001, "lock: the echo on the division", "%-5s %.0f BPM: at %.4f s, the division's %.4f s",
+                  T_SRV_NAME[C[k].t - 1], C[k].bpm, at, want);
+        }
+    }
+    ir_sps = 0;
+    /* the six keep their registers: HALL at two tempos, the same */
+    {
+        int32_t rs[M2K_SUB], L[M2K_SUB], R[M2K_SUB];
+        double e0 = 0, e1 = 0;
+        for (int pass = 0; pass < 2; pass++) {
+            spu_reset();
+            double e = 0;
+            for (int f = 0; f < FS; f += M2K_SUB) {
+                m_set(rs, 0, sizeof rs); m_set(L, 0, sizeof L); m_set(R, 0, sizeof R);
+                if (!f) rs[0] = 16384;
+                spu_rv_block(5, 56, 65, sps_of(pass ? 97 : 151), rs, L, R);
+                for (int i = 0; i < M2K_SUB; i++) e += (double)L[i] * L[i] * (i + f + 1);
+            }
+            if (pass) e1 = e; else e0 = e;
+        }
+        check(e0 == e1, "lock: HALL ignores the tempo", "the same at 151 and 97 BPM");
+    }
+    /* a new tempo glides: DELAY fed A03's sends at its tempo, then 150 BPM: the scale on its way a block at a time, there
+     * in about a second, and no second difference past the echoes' own */
+    {
+        static int16_t o[2 * 12 * FS];
+        static int32_t rsk[12 * FS], wl[12 * FS];
+        render(2, 0, -1, -1, -1, 64, o, 12 * FS / 16 * 16, rsk);
+        int32_t L[M2K_SUB], R[M2K_SUB];
+        spu_reset();
+        int moved = 0, there = -1, steps = 0;
+        uint32_t s0 = 0;
+        for (int f = 0; f + M2K_SUB <= 12 * FS; f += M2K_SUB) {
+            m_set(L, 0, sizeof L); m_set(R, 0, sizeof R);
+            spu_rv_block(9, 90, 0, f < 5 * FS ? sps_of(120) : sps_of(150), rsk + f, L, R);
+            m_cpy(wl + f, L, sizeof L);
+            if (f == 5 * FS - M2K_SUB) s0 = SRV_A->sq;
+            if (f >= 5 * FS) { moved |= SRV_A->sq != s0; steps += SRV_A->glide; if (there < 0 && SRV_A->sq == SRV_A->st && moved) there = f; }
+        }
+        const int st = d2max32(wl, 2 * FS, 5 * FS - 600), gl = d2max32(wl, 5 * FS, 7 * FS);
+        const double want = 8 * 60.0 / 150 / 4 / (16360.0 / 22050);   /* (a half note at 150: 0.8 s) */
+        check(moved && there > 0 && there < 7 * FS && gl <= st + st / 4 + 16 && fabs(SRV_A->sq / (double)SRV_ONE - want) < 0.001,
+              "lock: a new tempo glides", "120 -> 150 BPM: there in %.2f s (%d blocks gliding), scale %.4f (want %.4f); "
+              "second difference gliding %d, steady %d", there > 0 ? (there - 5 * FS) / (double)FS : -1.0, steps,
+              SRV_A->sq / (double)SRV_ONE, want, gl, st);
+    }
+    free(l);
+    free(r);
+}
+
+/* the bus as wired: type 0 is the FDN as ever (the knob's FDN, a byte of 6, too); a type rests the FDN and plays the chip's
+ * reverb; SHIMMER over it plays its wash on the FDN; the locked types take the tempo from the bus's record; a type
+ * changed: the old one rings out its 23 ms beside the new; GRIT through PERFORM, let go: the sound as it was, sample for
+ * sample; pf_unlatch lets go of a latched GRIT */
+static void test_bus(void)
+{
+    const int n = FR(4);
+    static int16_t a[2 * 4 * FS], b[2 * 4 * FS];
+    play(2);
+    for (int f = 0; f < n; f += 128) m2k_render(a + 2 * f, 128);
+    play(2);
+    PAT(2)->glob[G_RVTY] = enc(0, SRV_N + 1);
+    for (int f = 0; f < n; f += 128) m2k_render(b + 2 * f, 128);
+    check(PAT(2)->glob[G_RVTY] == 6 && !memcmp(a, b, (size_t)n * 4) && !srv[0].type && !srv[1].type,
+          "bus: the knob's FDN is the FDN", "a byte of 6: sample for sample, the chip's at rest");
+    play(2);
+    PAT(2)->glob[G_RVTY] = enc(5, SRV_N + 1);
+    for (int f = 0; f < 2 * FS; f += 128) m2k_render(b, 128);
+    const int fdn_off = !bus.rv_v, hall = SRV_A->type == 5;
+    bus_perform(PF_SHIM, 1);
+    for (int f = 0; f < FS / 2; f += 128) m2k_render(b, 128);
+    const int wash = bus.rv_v != 0 && SRV_A->type == 5;
+    bus_perform(PF_SHIM, 0);
+    check(fdn_off && hall && wash, "bus: a type rests the FDN", "HALL sounding, the FDN off; SHIMMER's wash on the FDN beside it");
+    play(2);
+    PAT(2)->glob[G_RVTY] = enc(9, SRV_N + 1);
+    for (int f = 0; f < FS; f += 128) m2k_render(b, 128);
+    check(SRV_A->type == 9 && SRV_A->st == srv_target(9, bsps) && SRV_A->st != SRV_ONE, "bus: DELAY on the bus's tempo",
+          "%d BPM: scale %.4f", 30 + PAT(2)->glob[G_TMPO], SRV_A->st / (double)SRV_ONE);
+    /* a type changed while it sounds: both at once for the old one's 23 ms */
+    play(2);
+    PAT(2)->glob[G_RVTY] = enc(5, SRV_N + 1);
+    for (int f = 0; f < 2 * FS; f += 16) m2k_render(b, 16);
+    PAT(2)->glob[G_RVTY] = enc(1, SRV_N + 1);
+    int both = 0;
+    for (int f = 0; f < FS / 10; f += 16) { m2k_render(b, 16); both += srv[0].type && srv[1].type; }
+    check(both >= 60 && both <= 66 && SRV_A->type == 1 && !srv[srv_on ^ 1].type, "bus: a type changed, the old rings out",
+          "HALL -> ROOM: both %d blocks (23 ms), then ROOM alone", both);
+    /* GRIT through PERFORM: held 1 s; 30 ms after it is let go, the output as without it, sample for sample */
+    play(0);
+    for (int f = 0; f < n; f += 16) m2k_render(a + 2 * f, 16);
+    play(0);
+    for (int f = 0; f < n; f += 16) {
+        if (f == FR(0.5)) bus_perform(PF_GRIT, 1);
+        if (f == FR(1.5)) bus_perform(PF_GRIT, 0);
+        m2k_render(b + 2 * f, 16);
+    }
+    const int changed = memcmp(a + FS, b + FS, FS * 2) != 0, back = !memcmp(a + 2 * (FR(1.5) + FS / 30), b + 2 * (FR(1.5) + FS / 30),
+                                                                         (size_t)(n - FR(1.5) - FS / 30) * 4);
+    check(changed && back && !spu_g.run, "bus: GRIT held, then let go", "the sound changed while held; from 33 ms after, as without it");
+    /* latched, PERFORM left: pf_unlatch lets go of it, and it fades out by itself */
+    play(0);
+    pf_press(PF_GRIT);
+    ui.pf_lat |= 1u << PF_GRIT;
+    for (int f = 0; f < FS / 4; f += 128) m2k_render(b, 128);
+    const int was = perf.on[PF_GRIT] && spu_g.run;
+    pf_unlatch();
+    const int off = !perf.on[PF_GRIT];
+    for (int f = 0; f < FS / 20; f += 128) m2k_render(b, 128);
+    check(was && off && !spu_g.run, "bus: pf_unlatch lets GRIT go", "latched and on; let go, out in 10 ms and idle");
 }
 
 /* the eight-track build's own bank A as it is (the default: no type, no GRIT): render() with neither is m2k_render's */
@@ -606,7 +757,7 @@ static int level_mode(void)
             double es = 0;
             for (int f = 0; f < n; f += M2K_SUB) {
                 m_set(L, 0, sizeof L); m_set(R, 0, sizeof R);
-                spu_rv_block(t, hd, hm, rsk + f, L, R);
+                spu_rv_block(t, hd, hm, 0, rsk + f, L, R);
                 for (int i = 0; i < M2K_SUB; i++) es += (double)L[i] * L[i] + (double)R[i] * R[i];
             }
             sum[t - 1] += 10 * log10(es / eh);
@@ -692,6 +843,34 @@ static int render_mode(const char *dir)
     return 0;
 }
 
+/* --render2 DIR: the three types the tempo lock moves, on A03 SUSPEND (110 BPM) with every send at 64, 30 s each (their
+ * home DCAY and DAMP), and the FDN beside them at the pattern's own */
+static int render2_mode(const char *dir)
+{
+    const int n = FR(30);
+    int16_t *o = malloc((size_t)n * 4);
+    char path[512];
+    FILE *idx;
+    snprintf(path, sizeof path, "%s/renders.txt", dir);
+    if (!(idx = fopen(path, "w"))) { perror(path); return 1; }
+    static const int T[4] = {0, 7, 8, 9};
+    static const char *const NM[4] = {"a03_sends64_fdn", "a03_sends64_7_space_echo_locked", "a03_sends64_8_echo_locked",
+                                      "a03_sends64_9_delay_locked"};
+    for (int k = 0; k < 4; k++) {
+        const int t = T[k];
+        render(2, t, t ? T_SRV_HOME_DCAY[t - 1] : -1, t ? T_SRV_HOME_DAMP[t - 1] : -1, -1, 64, o, n, 0);
+        snprintf(path, sizeof path, "%s/%s.wav", dir, NM[k]);
+        wav_write(path, o, n);
+        const double sc = SRV_A->sq / (double)SRV_ONE;
+        fprintf(idx, "%-34s peak %5.1f dBFS, rms %5.1f dBFS%s", NM[k], peak_db(o, 2 * n), rms_db(o, 2 * n), t ? "" : "\n");
+        if (t) fprintf(idx, ", scale %.4f: its loop %.1f ms\n", sc, sc * (t == 7 ? 4752.0 : 16360.0) / 22.05);
+        printf("%-34s peak %5.1f dBFS, rms %5.1f dBFS\n", NM[k], peak_db(o, 2 * n), rms_db(o, 2 * n));
+    }
+    fclose(idx);
+    free(o);
+    return 0;
+}
+
 #ifdef __APPLE__
 static uint64_t instr(void)
 {
@@ -742,21 +921,33 @@ static int bench_mode(void)
         spu_reset();
         for (int f = 0; f < n; f += M2K_SUB) {
             m_set(L, 0, sizeof L); m_set(R, 0, sizeof R);
-            uint64_t a = instr(); spu_rv_block(t, T_SRV_HOME_DCAY[t - 1], T_SRV_HOME_DAMP[t - 1], rsk + f, L, R); tot += instr() - a - base;
+            uint64_t a = instr(); spu_rv_block(t, T_SRV_HOME_DCAY[t - 1], T_SRV_HOME_DAMP[t - 1], 0, rsk + f, L, R); tot += instr() - a - base;
         }
         printf("  reverb %-20s %6.1f   (A03's sends)\n", T_SRV_NAME[t - 1], (double)tot / n);
+    }
+    {                                                     /* DELAY gliding all the time: its tempo 110 / 150 BPM, by turns */
+        uint64_t tot = 0;
+        int glides = 0;
+        spu_reset();
+        for (int f = 0; f < n; f += M2K_SUB) {
+            m_set(L, 0, sizeof L); m_set(R, 0, sizeof R);
+            const uint32_t sps = (f / (FS / 2)) & 1 ? sps_of(150) : sps_of(110);
+            uint64_t a = instr(); spu_rv_block(9, 90, 0, sps, rsk + f, L, R); tot += instr() - a - base;
+            glides += SRV_A->glide;
+        }
+        printf("  reverb DELAY gliding        %6.1f   (%d of %d blocks between two scales)\n", (double)tot / n, glides, n / M2K_SUB);
     }
     {
         int32_t z[M2K_SUB];
         uint64_t tot = 0;
         m_set(z, 0, sizeof z);
         spu_reset();
-        for (int f = 0; f < 2 * FS; f += M2K_SUB) spu_rv_block(5, 68, 65, z, L, R);
-        { uint64_t a = instr(); for (int f = 0; f < n; f += M2K_SUB) spu_rv_block(5, 68, 65, z, L, R); tot = instr() - a; }
-        printf("  reverb asleep (HALL)        %6.1f   (%s)\n", (double)tot / n, spu_r.sleep ? "asleep" : "AWAKE");
+        for (int f = 0; f < 2 * FS; f += M2K_SUB) spu_rv_block(5, 68, 65, 0, z, L, R);
+        { uint64_t a = instr(); for (int f = 0; f < n; f += M2K_SUB) spu_rv_block(5, 68, 65, 0, z, L, R); tot = instr() - a; }
+        printf("  reverb asleep (HALL)        %6.1f   (%s)\n", (double)tot / n, SRV_A->sleep ? "asleep" : "AWAKE");
     }
-    printf("memory: the work area %u B, its state %u B, GRIT's %u B; tables: gaussian %u, registers %u, laws %u\n",
-           (unsigned)sizeof srv_wk, (unsigned)sizeof spu_r, (unsigned)sizeof spu_g, (unsigned)sizeof T_SPU_GAUSS,
+    printf("memory: two reverbs, each a work area of %u B and its state %u B; GRIT's %u B; tables: gaussian %u, registers %u, laws %u\n",
+           (unsigned)sizeof srv[0].wk, (unsigned)(sizeof srv[0] - sizeof srv[0].wk), (unsigned)sizeof spu_g, (unsigned)sizeof T_SPU_GAUSS,
            (unsigned)sizeof T_SRV_REG, (unsigned)(sizeof T_SRV_WALL + sizeof T_SRV_IIR + sizeof T_SRV_GOUT));
     return 0;
 }
@@ -772,10 +963,13 @@ int main(int argc, char **argv)
     if (argc > 2 && !strcmp(argv[1], "--measure")) return measure_mode(argc, argv);
     if (argc > 1 && !strcmp(argv[1], "--level")) return level_mode();
     if (argc > 2 && !strcmp(argv[1], "--render")) return render_mode(argv[2]);
+    if (argc > 2 && !strcmp(argv[1], "--render2")) return render2_mode(argv[2]);
     if (argc > 1 && !strcmp(argv[1], "--bench")) return bench_mode();
     test_tables();
     test_grit();
     test_reverb();
+    test_lock();
+    test_bus();
     test_bank_a();
     printf(fails ? "SPU TEST FAILED: %d\n" : "spu test: all passed\n", fails);
     return fails ? 1 : 0;

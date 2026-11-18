@@ -1424,6 +1424,9 @@ void m2k_init(uint32_t seed)
     rng = seed | 1u;
     m_set(trk, 0, sizeof trk);
     m_set(&bus, 0, sizeof bus);
+#ifdef M2K_SPU
+    spu_init();                                  /* the Move's GRIT and PS1-era reverb: silent, at rest */
+#endif
     m_set(&perf, 0, sizeof perf);
     perf.kill = 32767;
     m_set(&sq, 0, sizeof sq);

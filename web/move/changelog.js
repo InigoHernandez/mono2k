@@ -7,13 +7,19 @@ window.M2K_KINDS = window.M2K_KINDS || {
 };
 window.M2K_CHANGES = [
   {
-    date: "2026-11-17", title: "MONO2K for the Move 0.7: four new performance effects",
+    date: "2026-11-17", title: "MONO2K for the Move 0.7: five new performance effects and console reverbs",
     items: [
       ["workflow", "In PERFORM, Up now swaps both rows of keys: page 2 has three new colours on the top row and the rest of the moves with SKIP on the bottom. Down: page 1. What you hold or left on keeps playing across the swap."],
       ["sound", "SKIP (the 7th move on page 2): a CD that can't read. At every sixteenth, nine times in ten, the sixteenth just played repeats once to three times, its pitch sagging, then the music goes on."],
       ["sound", "CONSOLE (page 2's first colour): a TV speaker. The mix darkens to 8 kHz, folds to mono and rounds off softly, never louder."],
       ["sound", "DUCK (the second): the mix dips at the start of every beat and swells back over it, like a sidechain without a kick."],
       ["sound", "LO-FI (the third): an unsteady converter. The mix held at 11 kHz by a clock that wanders, in 10 bits."],
+      ["sound", "GRIT (the fourth, the Move's own): the whole mix through a PS1-era sound chip's sample codec at 11 kHz. A soft, velvety top with grain on the tails. It glides in and out in 10 ms."],
+      ["sound", "Nine PS1-era reverbs beside MONO2K's own: GLO's knob 6, VERB, picks ROOM, STUDIO S, M or L, HALL, HALF ECHO, SPACE ECHO, ECHO or DELAY for the pattern. They're bright, grainy and 16-bit, at 22 kHz."],
+      ["sound", "DCAY and DAMP keep their meaning on every type: its length and how dark it falls. Each type sounds exactly as the chip had it at one setting of the two."],
+      ["sound", "SPACE ECHO, ECHO and DELAY play on the beat: each at the musical length nearest its own, gliding to a new tempo without a click."],
+      ["sound", "A new reverb type takes over at once, while the old one rings out for a moment."],
+      ["patterns", "A pattern keeps its reverb type. An FM-1 plays such a pattern with its own reverb."],
       ["patterns", "Your patterns and sounds play exactly as before."],
     ],
   },

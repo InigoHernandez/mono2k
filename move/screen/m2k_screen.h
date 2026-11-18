@@ -138,7 +138,7 @@ typedef union {
     struct { uint16_t bpm10; uint8_t sync, len, tlen; int8_t beat, ppos, tpos; } tm;
     struct { uint8_t x8, y8, lane, cyc; int8_t kn; uint8_t lv[3][32]; uint32_t hit[3]; } grid;
     struct { uint8_t meter[8]; } mix;
-    struct { uint8_t verb, damp, adpc, driv; } glo;
+    struct { uint8_t verb, damp, adpc, driv, rvty; } glo;   /* (rvty: the reverb's type, M2K_SPU's; 0 the FDN) */
     struct { uint32_t on; uint8_t pg; } perf;
     struct { uint8_t n, first, at; ms_row_t row[MS_NROW]; char cat[8]; } list;
 } ms_stage_t;

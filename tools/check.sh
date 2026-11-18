@@ -14,6 +14,8 @@
 #     the power test's loop under ASan + UBSan; any report fails the run
 #  3b. eight tracks: the host of eight's self-test, screens and text sweep under the sanitizers; its renders of bank A,
 #     DENSE and a pattern of six (--render-hash) the same as the six-track host's
+#  3c. the Move's GRIT and PS1-era reverb (M2K_SPU, host/m2k_spu_test.c): its self-test with no warning and under ASan +
+#     UBSan
 #  4. the pattern format's conversions mutated (tools/ref/mutate_formats.py): the self-test catches every mutant of
 #     fm_v9 and sid_v10 but the equivalent one
 #  5. the wave banks (tools/wave_check.py); the bus's controls, every value as recorded and every old value as it
@@ -110,6 +112,21 @@ r6=$("$B/m2k_host" --render-hash 20 2>&1); r8=$("$B/m2k_host8" --render-hash 20 
 if [ -n "$rep" ]; then echo "$rep"; FAIL=1;
 elif [ -z "$r6" ] || [ "$r6" != "$r8" ]; then echo "  the renders differ from six tracks':"; printf "%s\n%s\n" "$r6" "$r8"; FAIL=1;
 else echo "  self-test, screens and their text: clean; bank A, DENSE, a pattern of six: 20 s each as six tracks render them"; fi
+
+echo "== the Move's GRIT and PS1-era reverb (M2K_SPU)"
+# host/m2k_spu_test.c: the codec, the reverbs, the tempo lock and the bus as wired, with no warning, then under ASan + UBSan
+rm -f "$B/m2k_spu_test" "$B/m2k_spu_test_san"
+if out=$(clang -O2 $W -DM2K_TRACKS=8 -DM2K_SPU $I -o "$B/m2k_spu_test" host/m2k_spu_test.c -lm 2>&1); then
+    n=$(printf "%s" "$out" | grep -c "warning:")
+    [ "$n" -eq 0 ] || { printf "%s\n" "$out"; FAIL=1; }
+    "$B/m2k_spu_test" > "$B/spu.log" 2>&1 && tail -1 "$B/spu.log" | sed 's/^/  /' || { grep -E "^FAIL" "$B/spu.log"; FAIL=1; }
+else
+    echo "  host/m2k_spu_test.c: DOES NOT BUILD"; printf "%s\n" "$out" | grep "error:" | head -5; FAIL=1
+fi
+clang $SAN -w -DM2K_TRACKS=8 -DM2K_SPU $I -o "$B/m2k_spu_test_san" host/m2k_spu_test.c -lm &&
+    "$B/m2k_spu_test_san" > "$B/spu_san.log" 2>&1 || FAIL=1
+rep=$(grep -E "runtime error|ERROR: AddressSanitizer|^FAIL|SPU TEST FAILED" "$B/spu_san.log" | sort | uniq -c)
+if [ -n "$rep" ]; then echo "$rep"; FAIL=1; else echo "  the same under ASan + UBSan: clean"; fi
 
 echo "== the format's conversions, mutated"
 .venv/bin/python tools/ref/mutate_formats.py > "$B/mutate.log" 2>&1 && tail -1 "$B/mutate.log" | sed 's/^/  /' || { grep -E "SURVIVED|MISSING|unmutated" "$B/mutate.log"; FAIL=1; }

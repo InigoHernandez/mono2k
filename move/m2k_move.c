@@ -435,6 +435,13 @@ static int view_string(char *o)
     e = ap(e, " focus="); e = s_int(e, v.focus);
     e = ap(e, " perf="); e = s_int(e, (int)v.perf_on);
     e = ap(e, " plat="); e = s_int(e, (int)ui.pf_lat);    /* (the effects latched: a key double-tapped) */
+#ifdef M2K_SPU
+    e = ap(e, " rv="); e = s_int(e, srv[srv_on].type);    /* (the PS1-era reverb: its type sounding, its scale Q10, */
+    e = ap(e, " rvsc="); e = s_int(e, (int)(srv[srv_on].sq >> 14));
+    e = ap(e, " rvsps="); e = s_int(e, (int)srv[srv_on].sps);   /* the tempo it was set at, and the sequencer's (Q8) */
+    e = ap(e, " sps="); e = s_int(e, (int)sps_q8);
+    e = ap(e, " grit="); e = s_int(e, spu_g.run);         /* GRIT running) */
+#endif
     e = ap(e, " pkeys="); e = s_int(e, v.perf); *e++ = ','; e = s_int(e, v.perf_pg);
     e = ap(e, " kpads="); e = s_int(e, v.kpads);
     e = ap(e, " capn="); e = s_int(e, v.capn);

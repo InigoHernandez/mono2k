@@ -386,14 +386,27 @@ enum { GM_RPT, GM_REV, GM_GATE, GM_STOP,                                        
  * seven keys empty */
 enum { PF_R4, PF_R8, PF_R16, PF_R32, PF_REV, PF_STOP, PF_STUT, PF_CRSH, PF_WOW, PF_DRIV, PF_KILL,
        PF_FRZ, PF_SCAT, PF_ROLL, PF_OCTD, PF_OCTU, PF_LPF, PF_HPF, PF_GATE, PF_DUB, PF_SHIM, PF_SPIN,
-       PF_SKIP, PF_CONS, PF_DUCK, PF_LOFI, PF_COUNT };
+       PF_SKIP, PF_CONS, PF_DUCK, PF_LOFI,
+#ifdef M2K_SPU
+       PF_GRIT,                        /* the Move's alone (m2k_spu.c): the bus through the PS1-era chip's sample codec */
+#endif
+       PF_COUNT };
+#ifdef M2K_SPU
+#define PF_KEYS PF_GRIT                /* the effects on the FM-1's black keys: all but the Move's own (GRIT) */
+#else
+#define PF_KEYS PF_COUNT
+#endif
 #define PF_BANK 11                     /* the black keys: bank A's 0..10, bank B's 11..21, bank C's 22..25 (26..32 none) */
 #define PF_BANKS 3
 #define WOW_Q8 32512                   /* WOW's tape depth, Q8: the old TAPE control's at 127 (+-40 c of wow) */
 static const char *const PF_NAME[PF_COUNT] = {"RPT 1/4", "RPT 1/8", "RPT 1/16", "RPT 1/32", "REVERSE", "STOP", "STUTTER",
                                               "CRUSH", "WOW", "DRIVE", "KILL", "FREEZE", "SCATTER", "ROLL", "OCT DN",
                                               "OCT UP", "LPF", "HPF", "GATE", "DUB", "SHIMMER", "SPIN", "SKIP",
-                                              "CONSOLE", "DUCK", "LO-FI"};
+                                              "CONSOLE", "DUCK", "LO-FI",
+#ifdef M2K_SPU
+                                              "GRIT",
+#endif
+                                              };
 _Static_assert(PF_COUNT <= PF_BANK * PF_BANKS && PF_COUNT <= 32, "the effects on the banks' keys, a latch bit each (ui.pf_lat)");
 static struct { uint8_t on[PF_COUNT]; int32_t kill; } perf = {{0}, 32767};
 /* the effects that play from the glitch ring, one at a time */
@@ -1313,6 +1326,17 @@ static void bus_block(brec_t *b, int16_t *out)
         damp = SH_D;
         shim = SH_FB;
     }
+#ifdef M2K_SPU
+    /* the Move's: a pattern's reverb type (G_RVTY) plays the PS1-era chip's reverb on the pattern's sends, DCAY and DAMP
+     * (m2k_spu.c); the FDN then rests (DCAY 0's fade), or plays SHIMMER's wash alone on SHIMMER's send. Type 0, the
+     * FDN: none of this runs past the chip's first test (at rest), the FDN's path as ever */
+    const int rvty = (g[G_RVTY] * (SRV_N + 1)) >> 7;
+    spu_rv_block(rvty, g[G_VERB], g[G_DAMP], bsps, rsend, L, R);
+    if (rvty) {
+        if (!bus.sh_on) verb = 0;
+        else for (int i = 0; i < M2K_SUB; i++) rs2[i] -= rsend[i];
+    }
+#endif
     reverb_block(verb, damp, rs, L, R, shim);
     if (bus.sh_on && perf.on[PF_SHIM]) bus.sh_q = 0;
     else if (bus.sh_on && !bus.sh_snd && ++bus.sh_q > 4u * M2K_SR / M2K_SUB) bus.sh_on = 0, bus.sh_q = 0;   /* (4 s on) */
@@ -1530,6 +1554,11 @@ static void bus_block(brec_t *b, int16_t *out)
     }
     bus.g_phase = g_phase;
     mon.glitch = bus.g_on;
+#ifdef M2K_SPU
+    /* GRIT (the Move's): the bus's output through the PS1-era chip's sample codec, after the limiter, KILL and GATE and
+     * before bank C's colours (AFFINE's order: the codec, then the console); 10 ms in and out, idle while off */
+    if (perf.on[PF_GRIT] || spu_g.run) spu_grit_block(out, M2K_SUB, perf.on[PF_GRIT], spu_grit_chr);
+#endif
     if (bus.c_run || perf.on[PF_LOFI] || perf.on[PF_CONS] || perf.on[PF_DUCK]) bus_colour(out);   /* (bank C's colours) */
 }
 

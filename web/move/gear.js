@@ -70,7 +70,7 @@ window.MoveGear = (() => {
                      "SYN", "AMP", "FILT", "EFX", "DSTR", "LFO1", "LFO2", "LFO3"];
   const KEY_NOTE = ["C", "D", "E", "F", "G", "A", "B", "C", "C#", "D#", "", "F#", "G#", "A#", "", ""];
   const PERF_TOP = [["LPF", "DUB", "HPF", "GATE", "CRUSH", "DRIVE", "WOW", "SHIMMER"],
-                    ["CONSOLE", "DUCK", "LO-FI", "", "", "", "", ""]];   /* (Up swaps both rows; the 4th kept for GRIT) */
+                    ["CONSOLE", "DUCK", "LO-FI", "GRIT", "", "", "", ""]];   /* (Up swaps both rows; GRIT the Move's own) */
   const PERF_LOW = [["RPT 1/4", "RPT 1/8", "RPT 1/16", "RPT 1/32", "ROLL", "STUTTER", "REVERSE", "STOP"],
                     ["FREEZE", "SCATTER", "OCT DN", "OCT UP", "SPIN", "KILL", "SKIP", ""]];
 

@@ -5,7 +5,7 @@ MONO2K's pages for the Ableton Move's OLED, white on black, and the pads that le
 **Look first:** `build/move/sheets/overview.png` (every page), `knob_rows.png` (every page's knob row, SYN on every machine, x6), `padmap.png` (the pads, lit), then `motion_pages.gif` (the page pads pressed), `motion_knob.gif` (a knob touched and turned), `motion_play.gif` (the playhead). `png/*.png` are each frame x6 (`*_grid.png` with the pixel grid).
 
 ```sh
-cc -O2 -DM2K_TRACKS=8 -Ifirmware/src -Ifirmware/gen -o build/move/screen_sheets move/screen/sheets.c
+cc -O2 -DM2K_TRACKS=8 -DM2K_SPU -Ifirmware/src -Ifirmware/gen -o build/move/screen_sheets move/screen/sheets.c
 build/move/screen_sheets build/move/sheets          # frames, LEDs, the knob rows, the audits, the cost a frame
 .venv/bin/python move/screen/sheets.py build/move/sheets [--before OLD]   # OLD: another build's sheets: knobs_before_after.png
 ```

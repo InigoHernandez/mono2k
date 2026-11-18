@@ -512,10 +512,15 @@ static int key_note(int i)
 /* PERFORM on the keyboard (the owner's, 2026-11-01): the top row the colours, which stack (held with anything), the
  * bottom row the moves, which share the ring (one at a time, the next taking over); each column a pair that plays
  * together. Up swaps both rows for their second page (1.12, the owner's: bank C's colours CONSOLE DUCK LO-FI over the
- * rest of the moves and SKIP), Down back; held and latched effects play on through it. -1: no key (page 2's 4th colour
- * kept for GRIT, the Move's own) */
+ * rest of the moves and SKIP), Down back; held and latched effects play on through it. -1: no key. Page 2's 4th colour
+ * GRIT, the Move's own (M2K_SPU: the bus through the PS1-era chip's sample codec) */
+#ifdef M2K_SPU
+#define MV_PF_GRIT PF_GRIT
+#else
+#define MV_PF_GRIT -1
+#endif
 static const int8_t MV_PERF_TOP[2][8] = {{PF_LPF, PF_DUB, PF_HPF, PF_GATE, PF_CRSH, PF_DRIV, PF_WOW, PF_SHIM},
-                                         {PF_CONS, PF_DUCK, PF_LOFI, -1, -1, -1, -1, -1}};
+                                         {PF_CONS, PF_DUCK, PF_LOFI, MV_PF_GRIT, -1, -1, -1, -1}};
 static const int8_t MV_PERF_LOW[2][8] = {{PF_R4, PF_R8, PF_R16, PF_R32, PF_ROLL, PF_STUT, PF_REV, PF_STOP},
                                          {PF_FRZ, PF_SCAT, PF_OCTD, PF_OCTU, PF_SPIN, PF_KILL, PF_SKIP, -1}};
 /* key i of the keyboard (0..7 the bottom row, 8..15 the top), PERFORM's page pg: its effect, or -1 */

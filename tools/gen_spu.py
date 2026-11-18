@@ -190,7 +190,7 @@ SV = [
  R_MLCOMB1, R_MRCOMB1, R_MLCOMB2, R_MRCOMB2, R_DLSAME, R_DRSAME, R_MLDIFF, R_MRDIFF, R_MLCOMB3, R_MRCOMB3, R_MLCOMB4,
  R_MRCOMB4, R_DLDIFF, R_DRDIFF, R_MLAPF1, R_MRAPF1, R_MLAPF2, R_MRAPF2, R_VLIN, R_VRIN) = range(32)
 REG = [hexes(t) for _, _, t in SV]
-SV_CELLS = 32768                        # the work area, 16-bit cells: 64 KB, a power of two
+SV_CELLS = 65536                        # the work area, 16-bit cells: 128 KB on the Move, a power of two
 WRITES = (R_MLSAME, R_MRSAME, R_MLDIFF, R_MRDIFF, R_MLAPF1, R_MRAPF1, R_MLAPF2, R_MRAPF2)
 READS = (R_DLSAME, R_DRSAME, R_DLDIFF, R_DRDIFF, R_MLCOMB1, R_MRCOMB1, R_MLCOMB2, R_MRCOMB2, R_MLCOMB3, R_MRCOMB3,
          R_MLCOMB4, R_MRCOMB4)

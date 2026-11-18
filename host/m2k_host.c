@@ -5661,6 +5661,62 @@ static int selftest(void)
         CHECK(before && uses && old && clamp && w25 && kept,
               "format: 24 POLY's voices (none: packed as before, byte for byte), older formats with none; 25 eight wide; a store keeps it");
     }
+    /* the Move's reverb type, format 26 (27 eight wide; G_RVTY, M2K_SPU): 24's and 25's layouts with a byte after the
+     * globals. Both ways: a build with the type (the Move's) packs a pattern on one of the chip's types as 26 (27 wide)
+     * and reads it back the same, the knob's FDN (a byte of 6) as before, coming back 0 (the same choice), and a store
+     * keeps it; a build without it (the FM-1's, the browser's) reads 26 and 27 and passes the byte over, the rest as the
+     * pattern is without it (bank A's and x8_pattern's bytes, FMT21 widened as 25's test widens it) */
+    {
+        static m2k_pattern_t w, w2, e;
+        static uint8_t b[BLOB_ANY + 32], b2[BLOB_ANY + 32], fx[BLOB_ANY], f25[BLOB_ANY + 32], f26[BLOB_ANY + 32], f27[BLOB_ANY + 32];
+        m2k_init(64);
+        int before = 1;
+        for (int i = 0; i < 16; i++) before &= pat_pack(&pat[i], b) > 0 && b[1] <= 20;
+        x8_pattern(&w, 0);
+        const int n24 = pat_pack_v(&w, b2, 24), at = 2 + 8 + M2K_TRACKS6 + G_COUNT_OF(24, M2K_TRACKS6), n26 = n24 + 1;
+        m_cpy(f26, b2, (uint32_t)at); f26[1] = 26; f26[at] = 72;   /* (HALL: (72 x 10) >> 7) */
+        m_cpy(f26 + at + 1, b2 + at, (uint32_t)(n24 - at));
+        /* 25 from FMT21 as format 24's test builds it (T2 three voices, T7 two), then 27 with a byte after its globals */
+        static const uint8_t PV[M2K_TRACKS21] = {0, 3, 0, 0, 0, 0, 2, 0};
+        const int fn = x8_hex(FMT21, fx), hd = 2 + 8 + M2K_TRACKS21 + G_COUNT_OF(21, M2K_TRACKS21);
+        int o = hd;
+        m_cpy(f25, fx, (uint32_t)hd);
+        f25[1] = 25;
+        m_cpy(f25 + o, PV, M2K_TRACKS21); o += M2K_TRACKS21;
+        f25[o++] = fx[hd];
+        for (int t = 0; t < M2K_TRACKS21; t++) {
+            m_cpy(f25 + o, fx + hd + 1 + t * P_COUNT_V21, P_COUNT_V21); o += P_COUNT_V21;
+            f25[o++] = 0; f25[o++] = 0; f25[o++] = FREL_DEF;
+        }
+        m_cpy(f25 + o, fx + hd + 1 + M2K_TRACKS21 * P_COUNT_V21, (uint32_t)(fn - hd - 1 - M2K_TRACKS21 * P_COUNT_V21));
+        const int n25 = fn + 3 * M2K_TRACKS21 + M2K_TRACKS21, at27 = hd + M2K_TRACKS21, n27 = n25 + 1;
+        m_cpy(f27, f25, (uint32_t)at27); f27[1] = 27; f27[at27] = 127;   /* (DELAY) */
+        m_cpy(f27 + at27 + 1, f25 + at27, (uint32_t)(n25 - at27));
+        int six = 0, wide = 0, fdn = 1, kept = 1;
+#ifdef M2K_SPU
+        m_cpy(&e, &w, sizeof e);
+        e.glob[G_RVTY] = 72;
+        int n = pat_pack(&e, b);
+        six = b[1] == 26 && n == n26 && !memcmp(b, f26, (size_t)n) && pat_unpack(&w2, b, n) && !memcmp(&w2, &e, sizeof e);
+        e.glob[G_RVTY] = 6;
+        n = pat_pack(&e, b);
+        fdn = b[1] == 20 && pat_unpack(&w2, b, n) && !w2.glob[G_RVTY];
+        wide = pat_unpack(&w2, f27, n27) && w2.glob[G_RVTY] == 127 && pat_unpack(&e, f25, n25) && !e.glob[G_RVTY];
+        e.glob[G_RVTY] = 127;
+        wide &= !memcmp(&w2, &e, sizeof e) && pat_pack(&w2, b) == n27 && !memcmp(b, f27, (size_t)n27);
+        m2k_init(65);
+        pat[7].glob[G_RVTY] = 100;
+        int sn = m2k_store_pack();
+        m2k_init(66);
+        kept = sn > 0 && m2k_store_unpack(sn) == 1 && pat[7].glob[G_RVTY] == 100 && !pat[6].glob[G_RVTY];
+#else
+        six = pat_unpack(&w2, f26, n26) && !memcmp(&w2, &w, sizeof w) && pat_pack(&w2, b) == pat_pack(&w, b2) && !memcmp(b, b2, X6_LEN);
+        wide = pat_unpack(&w2, f27, n27) && pat_unpack(&e, f25, n25) && !memcmp(&w2, &e, sizeof e);
+#endif
+        printf("     format 26: as before %d, 26 %d, the knob's FDN %d, 27 %d, store %d\n", before, six, fdn, wide, kept);
+        CHECK(before && six && fdn && wide && kept,
+              "format: 26 the Move's reverb type (none: packed as before, byte for byte); 27 eight wide; a build without the type reads both, the byte passed over; a store keeps it");
+    }
     /* POLY's voices: a lead takes VOIC tracks from itself, as many as there are (the last none), a track inside a lead's
      * voices waits; keys: a free voice first, past VOIC the oldest note's, a key held keeps its voice, a free one let go
      * longest first; the voices play the lead's machine and sound, its LFOs on each, another track's LFO on the lead on

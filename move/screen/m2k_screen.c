@@ -297,7 +297,11 @@ int m2k_screen_param(int page, int t, int k)
                    return k < 4 ? GL(g[k]) : GL(g[k] + t); }   /* (the pattern's time, then the track's: the FM-1's SEQ) */
     case MS_GRID: return k < 7 ? GL(G_GRX + k) : GL(G_LANE1 + t);
     case MS_MIX: return k < M2K_TRACKS ? P_LEVL : NONE;
+#ifdef M2K_SPU
+    case MS_GLO: return k < 4 ? BUS_K[k] : k == 4 ? SETTING(S_MUTQ) : k == 5 ? GL(G_RVTY) : NONE;   /* (VERB: the reverb's type) */
+#else
     case MS_GLO: return k < 4 ? BUS_K[k] : k == 4 ? SETTING(S_MUTQ) : NONE;
+#endif
     case MS_PERF: return k < 4 ? BUS_K[k] : NONE;     /* (the bus's four, as on the FM-1's PERFORM) */
     default: return NONE;
     }
@@ -806,6 +810,9 @@ static void g_stage(ms_view_t *v, const m2k_scr_t *s)
     case MS_GLO:
         st->glo.verb = p->glob[G_VERB]; st->glo.damp = p->glob[G_DAMP];
         st->glo.adpc = p->glob[G_ADPC]; st->glo.driv = p->glob[G_DRIV];
+#ifdef M2K_SPU
+        st->glo.rvty = (uint8_t)((p->glob[G_RVTY] * (SRV_N + 1)) >> 7);
+#endif
         break;
     case MS_PERF:
         for (int k = 0; k < PF_COUNT && k < 32; k++) if (perf.on[k]) st->perf.on |= 1u << k;
@@ -1485,6 +1492,14 @@ static void d_glo(const ms_view_t *v)
         if (yh <= dh && !((X + i + top + yh) & 1)) ms_px(X + i, top + yh, 1);
     }
     ms_dots_h(X, ty + 1, W);
+#ifdef M2K_SPU
+    if (v->st.glo.rvty) {                             /* the PS1-era chip's type: its name at the tail's far end, on paper */
+        const char *nm = T_SRV_NAME[v->st.glo.rvty - 1];
+        const int w = ms_tw(nm);
+        ms_rect(X + W - w - 3, top, w + 3, 9, 0);
+        ms_text(X + W - w - 1, top + 7, nm, 1);
+    }
+#endif
 }
 
 /* PERFORM: the keyboard's two rows as the Move has them, the colours over the moves (the moves' page the arrows
