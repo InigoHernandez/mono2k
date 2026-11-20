@@ -7,7 +7,7 @@ window.M2K_KINDS = window.M2K_KINDS || {
 };
 window.M2K_CHANGES = [
   {
-    date: "2026-11-18", title: "MONO2K for the Move 0.9: whole attacks, chords into steps, READY",
+    date: "2026-11-20", title: "MONO2K for the Move 0.9: whole attacks, chords into steps, READY",
     items: [
       ["sound", "Every note's attack starts from silence and runs its whole time, however soon it follows the last. A long ATK came in short on a note played while the last still rang. The old note fades out in 3 ms first, so there's no click. With PORT up, overlapping keys still glide with no new attack."],
       ["sequencer", "A step pressed on a POLY lead places the last chord you played: its lowest note on the lead, the others on its voices. The lead's step plays the whole chord."],

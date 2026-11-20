@@ -7,7 +7,7 @@ window.M2K_KINDS = {
 };
 window.M2K_CHANGES = [
   {
-    date: "2026-11-18", title: "MONO2K 1.13: whole attacks, chords from a step key",
+    date: "2026-11-20", title: "MONO2K 1.13: whole attacks, chords from a step key",
     items: [
       ["sound", "1.13: Every note's attack starts from silence and runs its whole time, however soon it follows the last. A long ATK came in short on a note played while the last still rang. The old note fades out in 3 ms first, so there's no click. With PORT up, overlapping keys still glide with no new attack."],
       ["sequencer", "1.13: In GRID, an empty step pressed on a POLY lead places the last chord you played: its lowest note on the lead, the others on its voices."],
